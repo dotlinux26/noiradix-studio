@@ -38,3 +38,4 @@ Noiradix Studio utilizes two complementary autosave triggers:
     - **Restore Session:** Restores the in-memory document state, open cell tabs, active zoom level, and color swatches.
     - **Discard:** Clears the autosave record from `localStorage`.
 - Corrupt recovery records are safely caught, discarded, and flagged without crashing the application.
+

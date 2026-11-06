@@ -44,3 +44,4 @@ Noiradix Studio implements a progressive, feature-detected file loading strategy
 - Window `beforeunload` listener intercepts tab closure when dirty:
   - Prompts user to prevent accidental data loss.
 - Document title in header displays an asterisk (`*`) when dirty.
+

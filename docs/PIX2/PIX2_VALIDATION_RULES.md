@@ -26,3 +26,4 @@
 | `PIX2_ERR_PALETTE_KEY` | Error | Cell references undefined palette index. | Define the index in `@palette` or use direct hex. |
 | `PIX2_ERR_ANIM_FRAME` | Warning | Animation references missing cell ID. | Ensure cell is defined under `@cell` block. |
 | `PIX2_ERR_DUPLICATE_ID` | Warning | Cell identifier declared more than once. | Provide unique identifiers for all `@cell` blocks. |
+

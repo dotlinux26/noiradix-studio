@@ -66,3 +66,4 @@ interface Pix2Animation {
   2. Coordinate match: `cell.row === r && cell.col === c`.
   3. Direction & frame tag match: `cell.direction === dirMap[r] && cell.frame === c`.
   4. Animation frame binding: `doc.animations[rowAnim].frames[c]`.
+

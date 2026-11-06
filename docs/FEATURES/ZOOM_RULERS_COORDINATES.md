@@ -17,3 +17,4 @@
 - Bottom status bar reports live cursor coordinates:
   `Frame: [Cell ID] | Pixel: [X: 4, Y: 7] (16×16 = 256 px) | Color: #504a67`
 - Accurately accounts for viewport scrolling, device pixel ratio (DPR), and ruler offsets.
+

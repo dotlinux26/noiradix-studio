@@ -910,9 +910,9 @@
   // GRID OVERVIEW RENDERING & ACTIONS (Zero Overlap, Generous Spacing)
   // ===========================================================================
 
-  // Layout metrics for Grid Overview (Generous vertical spacing to prevent cramped layout)
+  // Layout metrics for Grid Overview (Generous horizontal & vertical spacing to prevent cramped layout)
   const GRID_LAYOUT = {
-    leftHeaderW: 164,
+    leftHeaderW: 192,
     topHeaderH: 56,
     cellGapX: 28,
     cellGapY: 52,
@@ -6281,6 +6281,19 @@ namespace NOIRADIX.Editor
           cell.direction = e.target.value;
           triggerEventAutosave();
         }
+      });
+    }
+
+    // Primary & Secondary Color Swatch Pair (Click or 'X' to Swap)
+    const colorPair = document.querySelector('.color-indicator-pair');
+    if (colorPair) {
+      colorPair.style.cursor = 'pointer';
+      colorPair.addEventListener('click', () => {
+        const tmp = state.primaryColor;
+        state.primaryColor = state.secondaryColor;
+        state.secondaryColor = tmp;
+        updateColorUI();
+        showToast('Swapped Primary / Secondary Colors (X)');
       });
     }
 

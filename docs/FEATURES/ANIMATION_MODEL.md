@@ -15,3 +15,4 @@
 - **Directional Pad (D-Pad):** 4-way and 8-way interactive D-pad for testing walk/run cycles with keyboard arrow keys.
 - **Onion Skinning:** Toggles translucent overlays of previous and next animation frames to assist pixel-art animators with motion arc and easing.
 - **Floating Animation Preview Window:** Dockable and draggable preview window that remains visible while working in the Cell Editor or Grid Overview.
+

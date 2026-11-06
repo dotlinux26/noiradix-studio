@@ -29,3 +29,4 @@ The **Generate from Artwork** engine extracts palettes directly from drawn pixel
   - `Add to Palette`: Preserves existing palette entries, appending missing colors to the next available indices.
   - `Replace Palette`: Atomically updates `@palette` with detected colors and remaps existing cell pixels.
 - **Undo/Redo Guarantee:** Applying a generated palette is recorded as a single snapshot in the history stack.
+

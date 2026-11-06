@@ -14,3 +14,4 @@
 
 ## 3. GitHub Language Statistic Bar
 - GitHub uses the `github/linguist` gem to calculate language percentages. Because `.pix2` is a newly formalized DSL, it does not yet appear in GitHub's official global `languages.yml` database. Repository badges and TextMate YAML grammar provide immediate syntax highlighting and branding.
+

@@ -21,3 +21,4 @@ To maintain 100% interoperability between Noiradix-generated sprite sheets and e
 
 ## 3. Label Marquee Scrolling
 - When row titles or cell IDs exceed available pill bounds, the canvas and HTML badges apply smooth marquee text scrolling, preventing awkward multi-line text wrapping.
+

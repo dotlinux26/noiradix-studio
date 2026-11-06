@@ -21,3 +21,4 @@
   `hitbox damage: [2,4, 12,14]`
   `hurtbox body: [4,2, 8,14]`
 - Serialized under `@meta` or per-cell extensions without corrupting core pixel parsers.
+

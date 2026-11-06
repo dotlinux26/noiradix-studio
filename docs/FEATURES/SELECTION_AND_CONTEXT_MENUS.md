@@ -16,3 +16,4 @@
 - **Safety Standard:**
   - Right-clicking never accidentally paints a pixel.
   - Menus clamp within browser window viewport bounds.
+

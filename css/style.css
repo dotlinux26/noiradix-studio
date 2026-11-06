@@ -200,6 +200,10 @@ body {
   width: 100%;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .modern-select {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -272,12 +276,12 @@ body {
 .brand-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
+  gap: 10px;
+  height: 44px;
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.2px;
-  margin-right: 4px;
+  margin-right: 6px;
   color: var(--text-main);
   flex-shrink: 0;
 }
@@ -288,12 +292,12 @@ body {
 }
 
 .brand-logo-img {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.18));
   flex-shrink: 0;
 }
 
@@ -1743,7 +1747,7 @@ body {
   accent-color: var(--accent-primary);
 }
 
-.btn-xs {
+.icon-round-btn.btn-xs {
   width: 24px !important;
   height: 24px !important;
   min-width: 24px !important;
@@ -1751,6 +1755,7 @@ body {
   max-width: 24px !important;
   max-height: 24px !important;
   font-size: 10px !important;
+  padding: 0 !important;
 }
 
 /* ==========================================================================

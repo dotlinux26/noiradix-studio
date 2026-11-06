@@ -24,3 +24,4 @@
   - Standard JSON atlas export maps directly to `SpriteFrames` resource.
 - **Aseprite / PyxelEdit:**
   - PNG spritesheet export with 1px bleed protection spacing prevents color bleeding during bilinear or point scaling.
+

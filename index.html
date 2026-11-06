@@ -332,9 +332,9 @@
           <div class="card-body">
             <!-- Active Color Previews -->
             <div class="color-swatch-row">
-              <div class="color-indicator-pair" title="Click or press (X) to swap primary/secondary; (D) to reset">
-                <div id="color-primary" class="color-box primary" title="Primary (Left Click)"></div>
-                <div id="color-secondary" class="color-box secondary" title="Secondary (Right Click)"></div>
+              <div class="color-indicator-pair" title="Click or press (X) to swap Primary/Secondary colors; (D) to reset defaults">
+                <div id="color-primary" class="color-box primary" title="Primary Color — Press (X) to swap; (D) to reset defaults"></div>
+                <div id="color-secondary" class="color-box secondary" title="Secondary Color — Press (X) to swap; (D) to reset defaults"></div>
               </div>
 
               <input type="color" id="color-picker-input" class="modern-color-input" value="#57546f">
@@ -376,20 +376,20 @@
                   </div>
                 </div>
 
-                <button id="btn-analyze-artwork" class="btn btn-xs btn-primary full-width" style="margin-top: 8px;" title="Scan pixels and detect unique colors">
+                <button id="btn-analyze-artwork" class="btn btn-sm btn-primary full-width" style="margin-top: 10px; height: 28px; font-weight: 600;" title="Scan pixels and detect unique colors">
                   <i class="fa-solid fa-magnifying-glass"></i> Analyze Artwork
                 </button>
 
-                <div id="palette-gen-results" class="palette-gen-results hidden" style="margin-top: 8px;">
-                  <div class="results-summary flex-between" style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">
+                <div id="palette-gen-results" class="palette-gen-results hidden" style="margin-top: 10px;">
+                  <div class="results-summary flex-between" style="font-size: 11px; font-weight: 600; margin-bottom: 6px;">
                     <span id="palette-gen-count">Detected: 0 colors</span>
                   </div>
                   <div id="palette-gen-preview-swatches" class="palette-swatches-grid" style="margin-bottom: 8px; max-height: 80px; overflow-y: auto;"></div>
-                  <div class="flex-row gap-6">
-                    <button id="btn-apply-add-palette" class="btn btn-xs btn-accent flex-1" title="Preserve existing palette and add missing unique colors">
+                  <div class="flex-column gap-6">
+                    <button id="btn-apply-add-palette" class="btn btn-sm btn-accent full-width" style="height: 28px; font-weight: 600;" title="Preserve existing palette and add missing unique colors">
                       <i class="fa-solid fa-plus"></i> Add to Palette
                     </button>
-                    <button id="btn-apply-replace-palette" class="btn btn-xs btn-secondary flex-1" title="Replace entire palette and remap cell pixels atomically">
+                    <button id="btn-apply-replace-palette" class="btn btn-sm btn-secondary full-width" style="height: 28px; font-weight: 600;" title="Replace entire palette and remap cell pixels atomically">
                       <i class="fa-solid fa-rotate"></i> Replace Palette
                     </button>
                   </div>
