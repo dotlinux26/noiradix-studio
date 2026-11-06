@@ -1282,8 +1282,47 @@ body {
   align-items: center;
 }
 
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
 .gap-4 { gap: 4px; }
+.gap-6 { gap: 6px; }
 .gap-8 { gap: 8px; }
+
+/* Header Autosave Status Pill */
+.autosave-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 3px 8px;
+  user-select: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.autosave-pill.saving {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background-color: rgba(99, 102, 241, 0.08);
+}
+
+.autosave-pill.saved {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.autosave-pill i {
+  font-size: 10px;
+}
 
 /* ==========================================================================
    VIEW 3: CODE & AI STUDIO

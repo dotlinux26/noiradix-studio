@@ -29,6 +29,11 @@
       <div class="title-input-wrapper">
         <input type="text" id="project-title-input" class="modern-input" value="Player Wispling" title="Rename project">
       </div>
+
+      <div id="autosave-status-pill" class="autosave-pill saved" title="Automatic Background Recovery & Cloudless Autosave">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <span id="autosave-status-text">Autosaved</span>
+      </div>
     </div>
 
     <div class="header-center">
@@ -319,14 +324,19 @@
 
         <!-- Color Palette Card -->
         <div class="sidebar-card palette-card">
-          <div class="card-header">
+          <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-palette"></i> Palette</span>
-            <select id="palette-select" class="modern-select">
-              <option value="wispling">Wispling Ghost</option>
-              <option value="pico8">Pico-8</option>
-              <option value="gameboy">GameBoy</option>
-              <option value="endesga32">Endesga 32</option>
-            </select>
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <select id="palette-select" class="modern-select select-xs" style="max-width: 120px;" title="Palette Presets Library">
+                <option value="wispling">Wispling Ghost</option>
+                <option value="pico8">Pico-8</option>
+                <option value="gameboy">GameBoy</option>
+                <option value="endesga32">Endesga 32</option>
+              </select>
+              <button id="btn-save-palette-preset" class="btn btn-xs btn-secondary" title="Save current document palette as new preset in library" style="height: 22px; padding: 0 6px;">
+                <i class="fa-solid fa-bookmark"></i>
+              </button>
+            </div>
           </div>
 
           <div class="card-body">
@@ -385,7 +395,7 @@
                     <span id="palette-gen-count">Detected: 0 colors</span>
                   </div>
                   <div id="palette-gen-preview-swatches" class="palette-swatches-grid" style="margin-bottom: 8px;"></div>
-                  <div class="flex-column gap-6">
+                  <div class="flex-column" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
                     <button id="btn-apply-add-palette" class="btn btn-sm btn-accent full-width" style="height: 28px; font-weight: 600;" title="Preserve existing palette and add missing unique colors">
                       <i class="fa-solid fa-plus"></i> Add to Palette
                     </button>

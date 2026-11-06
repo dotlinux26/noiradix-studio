@@ -74,7 +74,17 @@
     initCanvasPanningAndZoom();
     initAutosave();
 
+    // Populate custom palette presets library
+    const customPalettes = loadCustomPalettes();
+    for (const key in customPalettes) {
+      if (state.presetPalettes) {
+        state.presetPalettes[`custom_${key}`] = [...customPalettes[key].colors];
+      }
+    }
+    populatePaletteDropdown();
+
     await initAppSession();
+    updateAutosaveIndicator('saved', Date.now());
     initFileWatcher();
     updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
   });
@@ -572,6 +582,10 @@
       dom.inputProjectTitle.title = dirty ? `${fileName} (Unsaved Changes)` : `${fileName} (Saved)`;
     }
 
+    if (!dirty) {
+      updateAutosaveIndicator('saved', Date.now());
+    }
+
     updateFileStatusUI();
   }
 
@@ -646,6 +660,22 @@
     }
   }
 
+  function updateAutosaveIndicator(status, time) {
+    const pill = document.getElementById('autosave-status-pill');
+    const textEl = document.getElementById('autosave-status-text');
+    if (!pill || !textEl) return;
+
+    if (status === 'saving') {
+      pill.className = 'autosave-pill saving';
+      pill.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> <span id="autosave-status-text">Saving...</span>';
+    } else if (status === 'saved') {
+      pill.className = 'autosave-pill saved';
+      const timeStr = time ? new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Just now';
+      pill.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <span id="autosave-status-text">Autosaved ${timeStr}</span>`;
+      pill.title = `Project changes safely recorded in autosave recovery at ${timeStr}.`;
+    }
+  }
+
   function initAutosave() {
     if (periodicAutosaveTimer) clearInterval(periodicAutosaveTimer);
     periodicAutosaveTimer = setInterval(() => {
@@ -657,22 +687,25 @@
 
   function triggerEventAutosave() {
     setDirty(true);
+    updateAutosaveIndicator('saving');
     if (debouncedAutosaveTimer) clearTimeout(debouncedAutosaveTimer);
     debouncedAutosaveTimer = setTimeout(() => {
       saveRecoverySnapshot();
-    }, 1500); // 1500ms debounce
+    }, 1200); // 1200ms debounce
   }
 
   function saveRecoverySnapshot() {
     if (!state.doc) return;
     try {
       const text = PIX2.serialize(state.doc);
+      const now = Date.now();
       const snapshot = {
-        timestamp: Date.now(),
+        timestamp: now,
         title: state.doc.meta.title || 'Untitled',
         data: text
       };
       localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
+      updateAutosaveIndicator('saved', now);
     } catch (err) {
       console.warn('Autosave snapshot failed:', err);
     }
@@ -3034,8 +3067,130 @@
   }
 
   // ===========================================================================
-  // PALETTE UI
+  // PALETTE UI & PRESETS LIBRARY (Custom Library + Built-in Presets)
   // ===========================================================================
+
+  const CUSTOM_PALETTES_STORAGE_KEY = 'noiradix_custom_palettes';
+
+  function loadCustomPalettes() {
+    try {
+      const raw = localStorage.getItem(CUSTOM_PALETTES_STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveCustomPalettes(palettesObj) {
+    try {
+      localStorage.setItem(CUSTOM_PALETTES_STORAGE_KEY, JSON.stringify(palettesObj));
+    } catch (err) {
+      console.warn('Failed to save custom palettes to storage:', err);
+    }
+  }
+
+  function populatePaletteDropdown() {
+    if (!dom.paletteSelect) return;
+    const prevVal = dom.paletteSelect.value;
+    dom.paletteSelect.innerHTML = '';
+
+    // 1. Built-in presets
+    const builtInGroup = document.createElement('optgroup');
+    builtInGroup.label = 'Built-in Presets';
+    const builtIns = [
+      { id: 'wispling', name: 'Wispling Ghost', count: 8 },
+      { id: 'pico8', name: 'Pico-8', count: 16 },
+      { id: 'gameboy', name: 'GameBoy', count: 4 },
+      { id: 'endesga32', name: 'Endesga 32', count: 32 }
+    ];
+    builtIns.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = `${b.name} (${b.count})`;
+      builtInGroup.appendChild(opt);
+    });
+    dom.paletteSelect.appendChild(builtInGroup);
+
+    // 2. Custom Library presets
+    const customPalettes = loadCustomPalettes();
+    const customKeys = Object.keys(customPalettes);
+    if (customKeys.length > 0) {
+      const customGroup = document.createElement('optgroup');
+      customGroup.label = 'Custom Library';
+      customKeys.forEach(k => {
+        const item = customPalettes[k];
+        const opt = document.createElement('option');
+        opt.value = `custom_${k}`;
+        opt.textContent = `${item.name} (${item.colors ? item.colors.length : 0})`;
+        customGroup.appendChild(opt);
+      });
+      dom.paletteSelect.appendChild(customGroup);
+    }
+
+    // 3. Action option
+    const actionGroup = document.createElement('optgroup');
+    actionGroup.label = 'Actions';
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new_preset__';
+    newOpt.textContent = '+ Save Current Palette...';
+    actionGroup.appendChild(newOpt);
+    dom.paletteSelect.appendChild(actionGroup);
+
+    if (prevVal && dom.paletteSelect.querySelector(`option[value="${prevVal}"]`)) {
+      dom.paletteSelect.value = prevVal;
+    }
+  }
+
+  function promptAndSavePalettePreset() {
+    if (!state.doc || !state.doc.palette) {
+      showToast('No active document palette to save.', 'error');
+      return;
+    }
+
+    const colors = [];
+    for (const id in state.doc.palette) {
+      const col = state.doc.palette[id];
+      if (typeof col === 'string' && col.startsWith('#')) {
+        const normalized = (typeof PIX2 !== 'undefined') ? PIX2.normalizeHex(col) : col;
+        if (!colors.includes(normalized)) colors.push(normalized);
+      }
+    }
+
+    if (colors.length === 0) {
+      showToast('Document palette has no valid colors to save.', 'error');
+      return;
+    }
+
+    const defaultName = `${state.doc.meta.title || 'Custom'} Palette`;
+    const inputName = prompt(`Save ${colors.length} colors to your Palette Library.\nEnter preset name:`, defaultName);
+    if (inputName === null) {
+      populatePaletteDropdown();
+      return;
+    }
+    const finalName = inputName.trim() || defaultName;
+
+    const key = finalName.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || `palette_${Date.now()}`;
+    const customPalettes = loadCustomPalettes();
+    customPalettes[key] = {
+      name: finalName,
+      colors: colors,
+      created: Date.now()
+    };
+    saveCustomPalettes(customPalettes);
+
+    if (state.presetPalettes) {
+      state.presetPalettes[`custom_${key}`] = [...colors];
+    }
+
+    populatePaletteDropdown();
+    if (dom.paletteSelect) {
+      dom.paletteSelect.value = `custom_${key}`;
+    }
+
+    showToast(`Saved palette preset "${finalName}" (${colors.length} colors) to library!`, 'success');
+  }
 
   function renderPalette() {
     if (!state.doc || !dom.paletteSwatches) return;
@@ -6333,12 +6488,47 @@ namespace NOIRADIX.Editor
     if (dom.paletteSelect) {
       dom.paletteSelect.addEventListener('change', (e) => {
         const val = e.target.value;
-        if (state.presetPalettes[val] && state.doc) {
-          state.doc.palette = { ...state.presetPalettes[val] };
+        if (val === '__new_preset__') {
+          promptAndSavePalettePreset();
+          return;
+        }
+
+        if (val.startsWith('custom_')) {
+          const key = val.replace('custom_', '');
+          const customPalettes = loadCustomPalettes();
+          const item = customPalettes[key];
+          if (item && item.colors && state.doc) {
+            state.beginStroke();
+            state.doc.palette = {};
+            item.colors.forEach((col, idx) => {
+              state.doc.palette[idx + 1] = col;
+            });
+            state.endStroke(`Load Palette "${item.name}"`);
+            renderPalette();
+            triggerEventAutosave();
+            showToast(`Loaded palette: "${item.name}" (${item.colors.length} colors)!`, 'success');
+          }
+          return;
+        }
+
+        if (state.presetPalettes && state.presetPalettes[val] && state.doc) {
+          state.beginStroke();
+          state.doc.palette = {};
+          state.presetPalettes[val].forEach((col, idx) => {
+            state.doc.palette[idx + 1] = col;
+          });
+          state.endStroke(`Load Preset Palette "${val}"`);
           renderPalette();
           triggerEventAutosave();
-          showToast(`Loaded palette: ${val}`);
+          showToast(`Loaded palette: ${val}!`, 'success');
         }
+      });
+    }
+
+    const btnSavePalPreset = document.getElementById('btn-save-palette-preset');
+    if (btnSavePalPreset) {
+      btnSavePalPreset.addEventListener('click', () => {
+        promptAndSavePalettePreset();
       });
     }
 
