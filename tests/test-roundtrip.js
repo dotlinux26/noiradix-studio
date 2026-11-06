@@ -391,6 +391,35 @@ function computeFullPath(baseDir, fileName) {
 const fullVnPath = computeFullPath('D:/ghoster/WISPLINGS/Assets', safeVnFileName);
 assert(fullVnPath === 'D:/ghoster/WISPLINGS/Assets/Dũng Sĩ Bóng Đêm_ Phiên Bản Mới _ Special_.pix2', 'Full path correctly joins base path and UTF-8 filename');
 
+// TEST 11: Cross-Platform (Windows, Linux, macOS) Interoperability
+console.log('\nTest 11: Cross-Platform Interoperability (Windows, Linux, macOS)');
+
+// 1. macOS NFD vs Windows/Linux NFC Normalization Equivalence
+// macOS APFS decomposes characters into NFD (u + combining tilde), while Windows/Linux use NFC
+const nfdMacString = 'D\u0075\u0303ng S\u0129.pix2'; // Decomposed NFD
+const nfcWinString = 'D\u0169ng S\u0129.pix2';       // Precomposed NFC
+assert(nfdMacString !== nfcWinString, 'Raw Mac NFD and Windows NFC strings have different byte structures without normalization');
+assert(nfdMacString.normalize('NFC') === nfcWinString.normalize('NFC'), 'NFC normalization reconciles Mac NFD and Windows NFC identically');
+
+const macHandle = { name: nfdMacString, createWritable: () => {} };
+const currentNfcName = nfcWinString;
+const macDirectValid = macHandle && (!currentNfcName || macHandle.name.normalize('NFC') === currentNfcName.normalize('NFC'));
+assert(macDirectValid === true, 'macOS file handle matches Windows/Linux input cleanly under NFC normalization');
+
+// 2. Linux / macOS Hidden File Safety (Leading dot stripping)
+assert(sanitizeSafeFilename('.hidden_character.pix2', '.pix2') === 'hidden_character.pix2', 'Linux hidden file leading dot stripped cleanly');
+
+// 3. Multi-OS EOL Parser Test (CRLF Windows, LF Linux, CR Classic Mac)
+const winCrlfText = "@pix2 1.0\r\n@meta\r\n  title: \"Win CRLF\"\r\n  grid: 1x1\r\n@end";
+const linuxLfText = "@pix2 1.0\n@meta\n  title: \"Linux LF\"\n  grid: 1x1\n@end";
+const macCrText = "@pix2 1.0\r@meta\r  title: \"Mac CR\"\r  grid: 1x1\r@end";
+const mixedEolText = "@pix2 1.0\r\n@meta\n  title: \"Mixed EOL\"\r  grid: 1x1\r\n@end";
+
+assert(PIX2.parse(winCrlfText).meta.title === 'Win CRLF', 'Parser reads Windows CRLF files cleanly');
+assert(PIX2.parse(linuxLfText).meta.title === 'Linux LF', 'Parser reads Linux LF files cleanly');
+assert(PIX2.parse(macCrText).meta.title === 'Mac CR', 'Parser reads Classic Mac CR files cleanly');
+assert(PIX2.parse(mixedEolText).meta.title === 'Mixed EOL', 'Parser reads mixed EOL line endings cleanly');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);

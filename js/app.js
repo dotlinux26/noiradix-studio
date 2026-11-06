@@ -61,7 +61,7 @@
       return defaultExt ? `${fallback}${defaultExt}` : fallback;
     }
 
-    let name = raw.trim();
+    let name = String(raw).normalize('NFC').trim();
 
     // 1. Separate existing extension if defaultExt is provided
     if (defaultExt) {
@@ -771,7 +771,7 @@
       // Direct write to disk file if linked to matching filename
       const isDirectDiskValid = currentFileHandle &&
                                 'createWritable' in currentFileHandle &&
-                                (!currentFileName || currentFileHandle.name === currentFileName);
+                                (!currentFileName || currentFileHandle.name.normalize('NFC') === currentFileName.normalize('NFC'));
 
       if (isDirectDiskValid) {
         try {
@@ -4440,7 +4440,7 @@
     // Direct Save to existing handle (Only if filename still matches and not forced to Save As)
     const isDirectHandleValid = currentFileHandle &&
                                 'createWritable' in currentFileHandle &&
-                                (!currentFileName || currentFileHandle.name === currentFileName);
+                                (!currentFileName || currentFileHandle.name.normalize('NFC') === currentFileName.normalize('NFC'));
 
     if (!forceSaveAs && isDirectHandleValid) {
       try {
@@ -7371,11 +7371,13 @@ namespace NOIRADIX.Editor
       container.addEventListener('pointercancel', stopDrag);
 
       container.addEventListener('wheel', (e) => {
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+        const deltaX = e.deltaMode === 1 ? e.deltaX * 33 : e.deltaX;
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
           e.preventDefault();
-          container.scrollLeft += e.deltaY;
-        } else if (Math.abs(e.deltaX) > 0) {
-          container.scrollLeft += e.deltaX;
+          container.scrollLeft += deltaY;
+        } else if (Math.abs(deltaX) > 0) {
+          container.scrollLeft += deltaX;
         }
       }, { passive: false });
     }

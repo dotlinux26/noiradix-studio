@@ -185,7 +185,7 @@ const PIX2 = (function () {
 
     const doc = {
       meta: {
-        title: String(title || 'New Sprite').slice(0, 256),
+        title: String(title || 'New Sprite').normalize('NFC').slice(0, 256),
         author: 'User',
         version: '1.0',
         color_mode: 'RGBA',
@@ -277,7 +277,8 @@ const PIX2 = (function () {
       text = text.slice(0, MAX_FILE_SIZE);
     }
 
-    const lines = text.split(/\r?\n/);
+    // Universal cross-platform EOL normalization (\r\n Windows, \n Linux, \r Classic Mac) + Unicode NFC
+    const lines = (text || '').normalize('NFC').split(/\r\n|\r|\n/);
     const doc = {
       meta: {
         title: 'Untitled',
@@ -390,8 +391,8 @@ const PIX2 = (function () {
           const key = line.slice(0, colonIdx).trim().toLowerCase();
           const val = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
 
-          if (key === 'title' || key === 'name') doc.meta.title = val.slice(0, 256);
-          else if (key === 'author') doc.meta.author = val.slice(0, 128);
+          if (key === 'title' || key === 'name') doc.meta.title = val.normalize('NFC').slice(0, 256);
+          else if (key === 'author') doc.meta.author = val.normalize('NFC').slice(0, 128);
           else if (key === 'version') doc.meta.version = val.slice(0, 32);
           else if (key === 'color_mode') doc.meta.color_mode = val.slice(0, 32);
           else if (key === 'coordinate_origin') doc.meta.coordinate_origin = val.slice(0, 32);
