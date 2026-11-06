@@ -2537,7 +2537,8 @@
 
     const pal = state.doc.palette;
     for (const id in pal) {
-      const color = pal[id];
+      if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(id)) continue;
+      const color = (typeof PIX2 !== 'undefined') ? PIX2.normalizeHex(pal[id]) : pal[id];
       const swatch = document.createElement('div');
       swatch.className = `palette-swatch ${color === state.primaryColor ? 'active' : ''}`;
       swatch.style.backgroundColor = color;
@@ -4325,6 +4326,10 @@ namespace NOIRADIX.Editor
   }
 
   function slicePngToProject(img, filename) {
+    if (!img || !img.width || !img.height || img.width > 4096 || img.height > 4096) {
+      showToast('Image dimensions exceed supported 4096×4096 boundary.', 'error');
+      return;
+    }
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width = img.width;
     tmpCanvas.height = img.height;

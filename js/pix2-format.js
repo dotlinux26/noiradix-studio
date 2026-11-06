@@ -38,8 +38,14 @@ const PIX2 = (function () {
     if (!raw || typeof raw !== 'string') return fallback;
     const trimmed = raw.trim();
     if (!isSafeIdentifier(trimmed)) return fallback;
-    // Allow safe alphanumeric, underscore, dot, dash
-    const clean = trimmed.replace(/[^a-zA-Z0-9_\-\.]/g, '_').slice(0, 128);
+    // Allow safe alphanumeric, underscore, dash; strip path traversals
+    const clean = trimmed
+      .replace(/\\/g, '/')
+      .replace(/\0/g, '')
+      .replace(/\.\.+/g, '_')
+      .replace(/[^a-zA-Z0-9_\-\.]/g, '_')
+      .replace(/^\.+/, '')
+      .slice(0, 128);
     return clean || fallback;
   }
 

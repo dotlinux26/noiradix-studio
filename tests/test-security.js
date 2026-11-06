@@ -166,6 +166,38 @@ test('PIX2.validate flags illegal prototype keys', () => {
   assert.ok(result.errors.some(e => e.includes('prototype pollution')));
 });
 
+// ---------------------------------------------------------------------------
+// TEST GROUP 4: Client-Side XSS & Sanitization Defense
+// ---------------------------------------------------------------------------
+console.log('\nTest Group 4: Client-Side XSS & Sanitization Defense');
+
+test('Document parser preserves raw data while keeping DOM/Serializer safe', () => {
+  const xssPayload = `
+@pix2 1.0
+@meta
+  title: "<script>alert('xss')</script>"
+  author: "<img src=x onerror=alert(1)>"
+@cell cell_0_0
+  name: "<svg onload=alert(document.domain)>"
+  p 0,0 #ff0000
+@end
+`;
+  const doc = PIX2.parse(xssPayload);
+  assert.strictEqual(doc.meta.title, "<script>alert('xss')</script>");
+  const serialized = PIX2.serialize(doc);
+  assert.ok(serialized.includes('@cell cell_0_0'));
+});
+
+test('Identifier & key sanitizer eliminates prototype keys and traversal tokens', () => {
+  assert.strictEqual(PIX2.isSafeIdentifier('__proto__'), false);
+  assert.strictEqual(PIX2.isSafeIdentifier('constructor'), false);
+  assert.strictEqual(PIX2.isSafeIdentifier('prototype'), false);
+  assert.strictEqual(PIX2.isSafeIdentifier('normal_frame_0'), true);
+  const sanitized = PIX2.sanitizeKey('../../traversal', 'fallback');
+  assert.strictEqual(sanitized, '____traversal');
+  assert.strictEqual(sanitized.includes('..'), false);
+});
+
 console.log('\n====================================================');
 console.log(`SECURITY TEST RESULTS: ${passCount} / ${passCount} PASSED`);
 console.log('====================================================\n');
