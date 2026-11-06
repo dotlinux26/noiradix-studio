@@ -1013,6 +1013,63 @@
     }
   }
 
+  function getCellAtGrid(doc, r, c) {
+    if (!doc || !doc.cells) return null;
+    // 1. Direct standard cell ID: cell_r_c
+    const stdId = `cell_${r}_${c}`;
+    if (doc.cells[stdId]) return doc.cells[stdId];
+
+    // 2. Cell with explicit row & col
+    for (const cid in doc.cells) {
+      const cell = doc.cells[cid];
+      if (cell && cell.row === r && cell.col === c) return cell;
+    }
+
+    // 3. Direction & Frame mapping (0: down, 1: up, 2: right, 3: left, 4..7: diagonals)
+    const directions = ['down', 'up', 'right', 'left', 'down_left', 'down_right', 'up_left', 'up_right'];
+    const targetDir = directions[r];
+    if (targetDir) {
+      for (const cid in doc.cells) {
+        const cell = doc.cells[cid];
+        if (cell && cell.direction === targetDir && cell.frame === c) return cell;
+      }
+    }
+
+    // 4. Animation frame mapping: check if animation mapped to row r contains frame c
+    if (doc.animations) {
+      for (const aKey in doc.animations) {
+        const anim = doc.animations[aKey];
+        if (anim && anim.frames && anim.frames[c]) {
+          if (anim.direction === targetDir || aKey.includes(targetDir || `row_${r}`)) {
+            const fid = anim.frames[c];
+            if (doc.cells[fid]) return doc.cells[fid];
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function getCellRowCol(cellId) {
+    if (!state.doc || !state.doc.cells) return { r: 0, c: 0 };
+    const cell = state.doc.cells[cellId];
+    if (cell) {
+      if (typeof cell.row === 'number' && !isNaN(cell.row) && typeof cell.col === 'number' && !isNaN(cell.col)) {
+        return { r: cell.row, c: cell.col };
+      }
+      const dirMap = { 'down': 0, 'up': 1, 'right': 2, 'left': 3, 'down_left': 4, 'down_right': 5, 'up_left': 6, 'up_right': 7 };
+      if (cell.direction && dirMap[cell.direction] !== undefined) {
+        return { r: dirMap[cell.direction], c: typeof cell.frame === 'number' ? cell.frame : 0 };
+      }
+    }
+    const match = (cellId || '').match(/cell_(\d+)_(\d+)/);
+    if (match) {
+      return { r: parseInt(match[1], 10), c: parseInt(match[2], 10) };
+    }
+    return { r: 0, c: 0 };
+  }
+
   function renderGridOverview() {
     if (!state.doc || !dom.gridCanvas) return;
     const doc = state.doc;
@@ -1174,12 +1231,12 @@
 
       // Draw Cells in Row
       for (let c = 0; c < cols; c++) {
-        const cellId = `cell_${r}_${c}`;
-        const cell = doc.cells[cellId];
+        const cell = getCellAtGrid(doc, r, c);
+        const cellId = cell ? cell.id : `cell_${r}_${c}`;
         const cx = Math.round(leftHeaderW + c * (cw * zoom + cellGapX));
         const cy = Math.round(rowY);
 
-        const isSelected = (cellId === selectedGridCellId);
+        const isSelected = (cellId === selectedGridCellId || (!cell && selectedGridCellId === `cell_${r}_${c}`));
 
         // Checkerboard
         drawChecker(ctx, cx, cy, cw * zoom, ch * zoom, 4 * zoom);
@@ -1280,8 +1337,14 @@
     if (!state.doc) return 'Default';
     for (const animName in state.doc.animations) {
       const anim = state.doc.animations[animName];
-      if (anim.frames && anim.frames.some(fid => fid.startsWith(`cell_${rowIdx}_`))) {
-        return animName.replace(/_/g, ' ');
+      if (anim && anim.frames) {
+        if (anim.frames.some(fid => {
+          if (fid.startsWith(`cell_${rowIdx}_`)) return true;
+          const { r } = getCellRowCol(fid);
+          return r === rowIdx;
+        })) {
+          return anim.name || animName.replace(/_/g, ' ');
+        }
       }
     }
     const default4 = ['Down (S)', 'Up (W)', 'Right (D)', 'Left (A)'];
@@ -1321,7 +1384,8 @@
         const hitTop = cy - 6;
         const hitBottom = cy + ch * zoom + 32;
         if (mx >= hitLeft && mx <= hitRight && my >= hitTop && my <= hitBottom) {
-          return `cell_${r}_${c}`;
+          const cell = getCellAtGrid(doc, r, c);
+          return cell ? cell.id : `cell_${r}_${c}`;
         }
       }
     }
@@ -1465,6 +1529,8 @@
     for (let r = 0; r < rows; r++) {
       if (r === rowIdx) {
         for (let c = 0; c < cols; c++) {
+          const doomedCell = getCellAtGrid(doc, r, c);
+          if (doomedCell) idMapping[doomedCell.id] = null;
           idMapping[`cell_${r}_${c}`] = null;
         }
         continue;
@@ -1473,11 +1539,12 @@
       const newR = (r > rowIdx) ? (r - 1) : r;
 
       for (let c = 0; c < cols; c++) {
-        const oldId = `cell_${r}_${c}`;
+        const existingCell = getCellAtGrid(doc, r, c);
+        const oldId = existingCell ? existingCell.id : `cell_${r}_${c}`;
         const newId = `cell_${newR}_${c}`;
         idMapping[oldId] = newId;
 
-        const cell = doc.cells[oldId] || { id: oldId, name: `Frame ${r},${c}`, pixels: {}, row: r, col: c };
+        const cell = existingCell || { id: oldId, name: `Frame ${r},${c}`, pixels: {}, row: r, col: c };
         cell.id = newId;
         cell.row = newR;
         cell.col = c;
@@ -1536,6 +1603,8 @@
     for (let c = 0; c < cols; c++) {
       if (c === colIdx) {
         for (let r = 0; r < rows; r++) {
+          const doomedCell = getCellAtGrid(doc, r, c);
+          if (doomedCell) idMapping[doomedCell.id] = null;
           idMapping[`cell_${r}_${c}`] = null;
         }
         continue;
@@ -1544,11 +1613,12 @@
       const newC = (c > colIdx) ? (c - 1) : c;
 
       for (let r = 0; r < rows; r++) {
-        const oldId = `cell_${r}_${c}`;
+        const existingCell = getCellAtGrid(doc, r, c);
+        const oldId = existingCell ? existingCell.id : `cell_${r}_${c}`;
         const newId = `cell_${r}_${newC}`;
         idMapping[oldId] = newId;
 
-        const cell = doc.cells[oldId] || { id: oldId, name: `Frame ${r},${c}`, pixels: {}, row: r, col: c };
+        const cell = existingCell || { id: oldId, name: `Frame ${r},${c}`, pixels: {}, row: r, col: c };
         cell.id = newId;
         cell.row = r;
         cell.col = newC;
@@ -1584,15 +1654,13 @@
 
   function removeSelectedRow() {
     if (!state.doc) return;
-    const parts = (selectedGridCellId || 'cell_0_0').split('_');
-    const selR = (parts.length >= 3) ? parseInt(parts[1], 10) : 0;
+    const { r: selR } = getCellRowCol(selectedGridCellId);
     deleteSpecificRow(selR);
   }
 
   function removeSelectedCol() {
     if (!state.doc) return;
-    const parts = (selectedGridCellId || 'cell_0_0').split('_');
-    const selC = (parts.length >= 3) ? parseInt(parts[2], 10) : 0;
+    const { c: selC } = getCellRowCol(selectedGridCellId);
     deleteSpecificCol(selC);
   }
 
@@ -1608,8 +1676,8 @@
 
     let clipRow = 0;
     if (clip.frames && clip.frames.length > 0) {
-      const parts = clip.frames[0].split('_');
-      if (parts.length >= 3) clipRow = parseInt(parts[1], 10);
+      const { r } = getCellRowCol(clip.frames[0]);
+      clipRow = r;
     }
 
     if (dom.framePickerRowFilter) {
@@ -1810,16 +1878,21 @@
 
   function updateGridInspectorUI() {
     if (!state.doc || !dom.gridCellName) return;
-    const cell = state.doc.cells[selectedGridCellId];
+    let cell = state.doc.cells[selectedGridCellId];
+    if (!cell) {
+      const match = (selectedGridCellId || '').match(/cell_(\d+)_(\d+)/);
+      if (match) {
+        cell = getCellAtGrid(state.doc, parseInt(match[1], 10), parseInt(match[2], 10));
+        if (cell) selectedGridCellId = cell.id;
+      }
+    }
     if (!cell) return;
 
     if (dom.gridSelectedBadge) dom.gridSelectedBadge.textContent = selectedGridCellId;
     if (dom.gridCellIdInput) dom.gridCellIdInput.value = cell.id || selectedGridCellId;
     dom.gridCellName.value = cell.name || selectedGridCellId;
 
-    const parts = selectedGridCellId.split('_');
-    const selR = (parts.length >= 3) ? parseInt(parts[1], 10) : 0;
-    const selC = (parts.length >= 3) ? parseInt(parts[2], 10) : 0;
+    const { r: selR, c: selC } = getCellRowCol(selectedGridCellId);
 
     if (dom.gridInspectorRowLabel) {
       dom.gridInspectorRowLabel.textContent = `Row ${selR}`;
@@ -3314,13 +3387,15 @@
 
   function duplicateGridCellToNext(cellId) {
     if (!state.doc || !state.doc.cells[cellId]) return;
-    const parts = cellId.split('_');
-    const r = parseInt(parts[1], 10);
-    const c = parseInt(parts[2], 10);
+    const { r, c } = getCellRowCol(cellId);
     const nextC = c + 1;
     if (nextC < state.doc.meta.grid.cols) {
-      const nextId = `cell_${r}_${nextC}`;
+      const nextCell = getCellAtGrid(state.doc, r, nextC);
+      const nextId = nextCell ? nextCell.id : `cell_${r}_${nextC}`;
       state.beginStroke();
+      if (!state.doc.cells[nextId]) {
+        state.doc.cells[nextId] = { id: nextId, name: nextId, row: r, col: nextC, direction: 'none', frame: nextC, pixels: {} };
+      }
       state.doc.cells[nextId].pixels = JSON.parse(JSON.stringify(state.doc.cells[cellId].pixels || {}));
       state.endStroke(`Duplicate Frame to ${nextId}`);
       selectedGridCellId = nextId;
@@ -3394,9 +3469,7 @@
     if (!gridContextMenu) return;
     gridContextCellId = cellId;
 
-    const parts = (cellId || 'cell_0_0').split('_');
-    const r = (parts.length >= 3) ? parseInt(parts[1], 10) : 0;
-    const c = (parts.length >= 3) ? parseInt(parts[2], 10) : 0;
+    const { r, c } = getCellRowCol(cellId);
 
     const delRowLabel = document.getElementById('ctx-del-row-label');
     if (delRowLabel) delRowLabel.textContent = `Delete Row ${r}`;
@@ -4329,8 +4402,8 @@ ${serialized}
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const cid = `cell_${r}_${c}`;
-        const cell = doc.cells[cid];
+        const cell = getCellAtGrid(doc, r, c);
+        const cid = cell ? cell.id : `cell_${r}_${c}`;
         const ox = margin + c * (scw + spacing);
         const oy = margin + r * (sch + spacing);
 
@@ -5167,14 +5240,12 @@ namespace NOIRADIX.Editor
             clearGridCell(targetCellId);
             break;
           case 'delete-row': {
-            const parts = targetCellId.split('_');
-            const selR = (parts.length >= 3) ? parseInt(parts[1], 10) : 0;
+            const { r: selR } = getCellRowCol(targetCellId);
             deleteSpecificRow(selR);
             break;
           }
           case 'delete-col': {
-            const parts = targetCellId.split('_');
-            const selC = (parts.length >= 3) ? parseInt(parts[2], 10) : 0;
+            const { c: selC } = getCellRowCol(targetCellId);
             deleteSpecificCol(selC);
             break;
           }
@@ -5279,8 +5350,7 @@ namespace NOIRADIX.Editor
     if (dom.gridCellAnim) {
       dom.gridCellAnim.addEventListener('change', (e) => {
         const val = e.target.value;
-        const parts = (selectedGridCellId || 'cell_0_0').split('_');
-        const selR = (parts.length >= 3) ? parseInt(parts[1], 10) : 0;
+        const { r: selR } = getCellRowCol(selectedGridCellId);
 
         if (val === '__new__') {
           const newName = prompt('Enter new animation state name for this row (e.g. idle_down, attack, dash):');
@@ -5380,8 +5450,7 @@ namespace NOIRADIX.Editor
 
     if (dom.btnAddAnimClip) {
       dom.btnAddAnimClip.addEventListener('click', () => {
-        const parts = (selectedGridCellId || 'cell_0_0').split('_');
-        const selR = (parts.length >= 3) ? parseInt(parts[1], 10) : 0;
+        const { r: selR } = getCellRowCol(selectedGridCellId);
         const newName = prompt('New Animation State name for this row:', 'attack');
         if (newName && newName.trim()) {
           const key = newName.trim().toLowerCase().replace(/\s+/g, '_');

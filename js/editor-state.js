@@ -157,11 +157,44 @@ class EditorState {
 
   // Open a cell in tab bar
   openCellTab(cellId) {
-    if (!this.doc || !this.doc.cells[cellId]) return;
-    if (!this.openCellTabs.includes(cellId)) {
-      this.openCellTabs.push(cellId);
+    if (!this.doc) return;
+    let targetId = cellId;
+    if (!this.doc.cells[targetId]) {
+      // Try resolving standard cell_R_C to custom cell at (R, C)
+      const match = (cellId || '').match(/cell_(\d+)_(\d+)/);
+      if (match) {
+        const r = parseInt(match[1], 10);
+        const c = parseInt(match[2], 10);
+        for (const cid in this.doc.cells) {
+          const cell = this.doc.cells[cid];
+          if (cell && cell.row === r && cell.col === c) {
+            targetId = cid;
+            break;
+          }
+        }
+      }
     }
-    this.activeTabId = cellId;
+
+    // If still not found, initialize draft cell so user is never locked out of editor
+    if (!this.doc.cells[targetId]) {
+      const match = (targetId || '').match(/cell_(\d+)_(\d+)/);
+      const r = match ? parseInt(match[1], 10) : 0;
+      const c = match ? parseInt(match[2], 10) : 0;
+      this.doc.cells[targetId] = {
+        id: targetId,
+        name: targetId,
+        row: r,
+        col: c,
+        direction: 'none',
+        frame: c,
+        pixels: {}
+      };
+    }
+
+    if (!this.openCellTabs.includes(targetId)) {
+      this.openCellTabs.push(targetId);
+    }
+    this.activeTabId = targetId;
     this.selection = null;
   }
 

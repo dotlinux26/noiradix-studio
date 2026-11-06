@@ -95,6 +95,32 @@ if (fs.existsSync(samplePath)) {
   assert(sampleDoc.palette && Object.keys(sampleDoc.palette).length > 0, 'Player.pix2 palette loaded');
 }
 
+// TEST 4: Custom Cell Identifiers with grid_pos & Single-Line vs Multi-Line Pixels
+console.log('\nTest 4: Custom Cell Identifiers & grid_pos Mapping (ChatGPT File Test)');
+const testPix2Snippet = `@pix2 1.0
+@meta
+  title: "Ashen Reaper Test"
+  grid: 4x4
+  cell_size: 16x16
+@palette
+  1: #292438
+@cell reaper_down_0
+  name: "Reaper Down 1"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  pixel 4,0 1
+  pixel 5,0 1
+@animation walk_down
+  frames: [reaper_down_0]
+@end`;
+
+const customDoc = PIX2.parse(testPix2Snippet);
+assert(customDoc.cells['reaper_down_0'] !== undefined, 'Custom cell reaper_down_0 parsed');
+assert(customDoc.cells['reaper_down_0'].row === 0 && customDoc.cells['reaper_down_0'].col === 0, 'grid_pos 0,0 parsed into row/col 0,0');
+assert(customDoc.cells['reaper_down_0'].direction === 'down', 'Cell direction tag preserved');
+assert(customDoc.animations['walk_down'].frames.includes('reaper_down_0'), 'Animation references custom cell ID');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);
