@@ -178,9 +178,14 @@ const PIX2 = (function () {
    * Create a new PIX2 document
    */
   function createDocument(title = 'New Sprite', cols = 4, rows = 4, cellW = 16, cellH = 16) {
+    cols = Math.min(Math.max(1, parseInt(cols, 10) || 4), MAX_GRID_COLS);
+    rows = Math.min(Math.max(1, parseInt(rows, 10) || 4), MAX_GRID_ROWS);
+    cellW = Math.min(Math.max(MIN_CELL_DIM, parseInt(cellW, 10) || 16), MAX_CELL_DIM);
+    cellH = Math.min(Math.max(MIN_CELL_DIM, parseInt(cellH, 10) || 16), MAX_CELL_DIM);
+
     const doc = {
       meta: {
-        title: title,
+        title: String(title || 'New Sprite').slice(0, 256),
         author: 'User',
         version: '1.0',
         color_mode: 'RGBA',

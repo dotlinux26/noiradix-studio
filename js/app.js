@@ -1930,6 +1930,8 @@
 
   function ensureGridDimensions(targetRows, targetCols = 4) {
     if (!state.doc) return;
+    targetRows = Math.min(Math.max(1, parseInt(targetRows, 10) || 1), 256);
+    targetCols = Math.min(Math.max(1, parseInt(targetCols, 10) || 1), 128);
     const doc = state.doc;
 
     // 1. Expand columns if needed
@@ -2118,7 +2120,12 @@
       showToast('Please enter an action name!', 'error');
       return;
     }
-    const action = actionRaw.toLowerCase().replace(/\s+/g, '_');
+    if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(actionRaw)) {
+      showToast(`Action name contains reserved keyword "${actionRaw}".`, 'error');
+      return;
+    }
+    const safeAction = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(actionRaw.toLowerCase().replace(/\s+/g, '_'), 'idle') : actionRaw.toLowerCase().replace(/\s+/g, '_');
+    const action = safeAction;
     const actionTitle = action.charAt(0).toUpperCase() + action.slice(1);
     const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : DIRECTIONS_4;
     const cols = Math.max(1, parseInt(dom.templateColsInput?.value, 10) || 4);
@@ -3280,6 +3287,7 @@
     state.beginStroke();
     if (!cell.pixels) cell.pixels = {};
     for (const k in state.clipboard.pixels) {
+      if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(k)) continue;
       cell.pixels[k] = state.clipboard.pixels[k];
     }
     state.endStroke(`Paste Frame into ${cellId}`);
@@ -4291,6 +4299,10 @@ namespace NOIRADIX.Editor
 
   function handleFileOpen(file) {
     if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      showToast('File exceeds 25MB safety limit.', 'error');
+      return;
+    }
     if (isDocumentDirty) {
       if (!confirm('You have unsaved changes in current project. Discard changes and open new file?')) {
         return;
@@ -4366,6 +4378,8 @@ namespace NOIRADIX.Editor
 
   function setResolution(newW, newH) {
     if (!state.doc) return;
+    newW = Math.min(Math.max(1, parseInt(newW, 10) || 16), 512);
+    newH = Math.min(Math.max(1, parseInt(newH, 10) || 16), 512);
     const curW = state.doc.meta.cellSize.w;
     const curH = state.doc.meta.cellSize.h;
     if (curW === newW && curH === newH) return;
@@ -4607,7 +4621,14 @@ namespace NOIRADIX.Editor
 
     if (dom.gridCellIdInput) {
       dom.gridCellIdInput.addEventListener('change', (e) => {
-        const newId = e.target.value.trim();
+        const rawId = e.target.value.trim();
+        if (!rawId) return;
+        if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(rawId)) {
+          showToast(`Invalid cell ID: "${rawId}" is a reserved keyword.`, 'error');
+          e.target.value = selectedGridCellId;
+          return;
+        }
+        const newId = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(rawId, selectedGridCellId) : rawId;
         if (newId && state.doc && state.doc.cells[selectedGridCellId] && newId !== selectedGridCellId) {
           const cell = state.doc.cells[selectedGridCellId];
           delete state.doc.cells[selectedGridCellId];
@@ -4831,7 +4852,13 @@ namespace NOIRADIX.Editor
     // Dedicated Animation Studio bindings
     if (dom.btnStudioAddAnim) {
       dom.btnStudioAddAnim.addEventListener('click', () => {
-        const name = prompt('New Animation State name (e.g. attack, jump, death):', 'attack');
+        const rawName = prompt('New Animation State name (e.g. attack, jump, death):', 'attack');
+        if (!rawName) return;
+        if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(rawName)) {
+          showToast(`Invalid animation name: "${rawName}" is a reserved property.`, 'error');
+          return;
+        }
+        const name = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(rawName.trim(), 'anim') : rawName.trim();
         if (name && state.doc) {
           state.doc.animations[name] = { name, direction: 'none', frames: [], fps: 6, loop: true, mode: 'loop' };
           activeStudioClipId = name;
@@ -4844,7 +4871,14 @@ namespace NOIRADIX.Editor
 
     if (dom.studioClipName) {
       dom.studioClipName.addEventListener('change', (e) => {
-        const newName = e.target.value.trim();
+        const rawName = e.target.value.trim();
+        if (!rawName) return;
+        if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(rawName)) {
+          showToast(`Invalid animation name: "${rawName}" is a reserved property.`, 'error');
+          e.target.value = activeStudioClipId;
+          return;
+        }
+        const newName = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(rawName, activeStudioClipId) : rawName;
         if (newName && state.doc && state.doc.animations[activeStudioClipId] && newName !== activeStudioClipId) {
           const anim = state.doc.animations[activeStudioClipId];
           delete state.doc.animations[activeStudioClipId];
