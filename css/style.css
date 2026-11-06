@@ -2073,13 +2073,16 @@ body {
 
 /* Canvas Panning Cursor */
 .canvas-viewport.panning,
-.canvas-viewport.space-held {
+.canvas-viewport.space-held,
+.canvas-viewport.tool-pan,
+.canvas-viewport.tool-pan * {
   cursor: grab !important;
 }
 
-.canvas-viewport.is-panning {
+.canvas-viewport.is-panning,
+.canvas-viewport.is-panning * {
   cursor: grabbing !important;
-  user-select: none;
+  user-select: none !important;
 }
 
 /* ==========================================================================

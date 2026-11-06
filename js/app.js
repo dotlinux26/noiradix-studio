@@ -227,6 +227,7 @@
     dom.miniPreviewCanvas = document.getElementById('mini-preview-canvas');
     dom.animCanvas = document.getElementById('anim-canvas');
     dom.canvasViewport = document.getElementById('canvas-viewport');
+    dom.canvasContainerWithRulers = document.getElementById('canvas-container-with-rulers');
 
     // Tool buttons
     dom.toolButtons = document.querySelectorAll('[data-tool]');
@@ -3360,7 +3361,7 @@
   }
 
   function handleCellMouseDown(e) {
-    if (e.button === 1 || e.spaceKey) return;
+    if (e.button === 1 || e.spaceKey || state.currentTool === 'pan') return;
     if (e.button === 2) return; // Right-click handled by contextmenu listener
 
     const coords = getPixelCoords(e);
@@ -3448,6 +3449,11 @@
   function handleCellMouseMove(e) {
     const coords = getPixelCoords(e);
     updateStatusBarCoords(coords ? coords.x : null, coords ? coords.y : null);
+
+    if (state.currentTool === 'pan') {
+      dom.cellOverlay.style.cursor = 'grab';
+      return;
+    }
 
     // Hover cursor update: inside selection -> move cursor
     if (coords && state.selection && !isPointerDown) {
@@ -4189,13 +4195,17 @@
     window.addEventListener('keyup', (e) => {
       if (e.code === 'Space') {
         isSpacePressed = false;
-        isPanning = false;
-        dom.canvasViewport.classList.remove('space-held', 'is-panning');
+        if (isPanning && state.currentTool !== 'pan') {
+          isPanning = false;
+          dom.canvasViewport.classList.remove('is-panning');
+        }
+        dom.canvasViewport.classList.remove('space-held');
       }
     });
 
     dom.canvasViewport.addEventListener('mousedown', (e) => {
-      if (isSpacePressed || e.button === 1) { // Space + click OR Middle Click
+      // Pan with: Space + Left Click OR Middle Click OR Pan Tool (Button 0)
+      if (isSpacePressed || e.button === 1 || (state.currentTool === 'pan' && e.button === 0)) {
         isPanning = true;
         startX = e.clientX;
         startY = e.clientY;
@@ -5723,6 +5733,9 @@ namespace NOIRADIX.Editor
         dom.toolButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         state.currentTool = btn.dataset.tool;
+        if (dom.canvasViewport) {
+          dom.canvasViewport.classList.toggle('tool-pan', state.currentTool === 'pan');
+        }
         if (state.currentTool !== 'select') {
           commitFloatingSelection();
           state.selection = null;
@@ -5730,6 +5743,16 @@ namespace NOIRADIX.Editor
         }
         updateStatusBarCoords(null, null);
       });
+
+      if (btn.dataset.tool === 'pan') {
+        btn.addEventListener('dblclick', () => {
+          if (dom.canvasViewport) {
+            dom.canvasViewport.scrollLeft = Math.max(0, (dom.canvasViewport.scrollWidth - dom.canvasViewport.clientWidth) / 2);
+            dom.canvasViewport.scrollTop = Math.max(0, (dom.canvasViewport.scrollHeight - dom.canvasViewport.clientHeight) / 2);
+          }
+          showToast('Canvas centered');
+        });
+      }
     });
 
     // Cell Canvas Events
@@ -7043,6 +7066,10 @@ namespace NOIRADIX.Editor
         renderCellEditor();
         renderCellRulers();
         updateStatusBarCoords(null, null);
+        if (dom.canvasViewport) {
+          dom.canvasViewport.scrollLeft = Math.max(0, (dom.canvasViewport.scrollWidth - dom.canvasViewport.clientWidth) / 2);
+          dom.canvasViewport.scrollTop = Math.max(0, (dom.canvasViewport.scrollHeight - dom.canvasViewport.clientHeight) / 2);
+        }
         showToast('Zoom reset to 24× (Ctrl+0)');
         return;
       }
@@ -7154,6 +7181,7 @@ namespace NOIRADIX.Editor
         else if (key === 'l') selectTool('line');
         else if (key === 'u') selectTool('rect');
         else if (key === 'v' || key === 'm') selectTool('select');
+        else if (key === 'h') selectTool('pan');
         else if (key === 's') {
           const symBtn = document.getElementById('btn-symmetry-toggle');
           if (symBtn) symBtn.click();
