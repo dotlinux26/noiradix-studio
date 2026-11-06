@@ -921,7 +921,38 @@
 
   let gridRowDeleteButtons = [];
   let gridRowDuplicateButtons = [];
+  let gridRowMoveUpButtons = [];
+  let gridRowMoveDownButtons = [];
+  let gridRowCards = [];
   let gridColDeleteButtons = [];
+  let rowDragState = null;
+
+  function getRowMoveUpHit(mx, my) {
+    for (const btn of gridRowMoveUpButtons) {
+      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
+        return btn.row;
+      }
+    }
+    return null;
+  }
+
+  function getRowMoveDownHit(mx, my) {
+    for (const btn of gridRowMoveDownButtons) {
+      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
+        return btn.row;
+      }
+    }
+    return null;
+  }
+
+  function getRowCardHit(mx, my) {
+    for (const card of gridRowCards) {
+      if (mx >= card.x && mx <= card.x + card.w && my >= card.y && my <= card.y + card.h) {
+        return card.row;
+      }
+    }
+    return null;
+  }
 
   function getRowDuplicateHit(mx, my) {
     for (const btn of gridRowDuplicateButtons) {
@@ -1025,14 +1056,18 @@
 
   function getCellAtGrid(doc, r, c) {
     if (!doc || !doc.cells) return null;
-    // 1. Direct standard cell ID: cell_r_c
-    const stdId = `cell_${r}_${c}`;
-    if (doc.cells[stdId]) return doc.cells[stdId];
 
-    // 2. Cell with explicit row & col
+    // 1. Prioritize cell with explicit row & col matching this position
     for (const cid in doc.cells) {
       const cell = doc.cells[cid];
       if (cell && cell.row === r && cell.col === c) return cell;
+    }
+
+    // 2. Standard fallback cell ID cell_r_c (only if row/col match or are unset)
+    const stdId = `cell_${r}_${c}`;
+    if (doc.cells[stdId]) {
+      const cObj = doc.cells[stdId];
+      if (cObj.row === undefined || cObj.row === r) return cObj;
     }
 
     // 3. Direction & Frame mapping (0: down, 1: up, 2: right, 3: left, 4..7: diagonals)
@@ -1097,6 +1132,9 @@
     gridColDeleteButtons = [];
     gridRowDeleteButtons = [];
     gridRowDuplicateButtons = [];
+    gridRowMoveUpButtons = [];
+    gridRowMoveDownButtons = [];
+    gridRowCards = [];
 
     const sheetW = leftHeaderW + cols * (cw * zoom + cellGapX) + 36;
     const sheetH = topHeaderH + rows * (ch * zoom + cellGapY) + 40;
@@ -1167,10 +1205,12 @@
       const rowName = inferRowTitle(r);
 
       // High-Contrast Row Card on the left (vertically centered relative to sprite cells)
-      const cardW = 144;
-      const cardH = 50;
+      const cardW = 152;
+      const cardH = 56;
       const cardX = 10;
       const cardY = Math.round(rowY + (ch * zoom - cardH) / 2);
+
+      gridRowCards.push({ row: r, x: cardX, y: cardY, w: cardW, h: cardH });
 
       ctx.imageSmoothingEnabled = true;
       ctx.fillStyle = isDark ? '#1e2230' : '#ffffff';
@@ -1186,36 +1226,36 @@
       ctx.textBaseline = 'top';
       ctx.fillStyle = isDark ? '#a5b4fc' : '#3730a3';
       ctx.font = 'bold 12px "Segoe UI", system-ui, -apple-system, sans-serif';
-      ctx.fillText(`Row ${r}:`, cardX + 10, cardY + 8);
+      ctx.fillText(`Row ${r}:`, cardX + 8, cardY + 8);
 
       // '×' delete button on top-right of row card
-      const rowBtnW = 20;
-      const rowBtnH = 20;
-      const rowBtnX = cardX + cardW - rowBtnW - 6;
-      const rowBtnY = cardY + 6;
+      const delBtnW = 18;
+      const delBtnH = 18;
+      const delBtnX = cardX + cardW - delBtnW - 6;
+      const delBtnY = cardY + 6;
 
-      gridRowDeleteButtons.push({ row: r, x: rowBtnX, y: rowBtnY, w: rowBtnW, h: rowBtnH });
+      gridRowDeleteButtons.push({ row: r, x: delBtnX, y: delBtnY, w: delBtnW, h: delBtnH });
 
       ctx.fillStyle = isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.12)';
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(rowBtnX, rowBtnY, rowBtnW, rowBtnH, 4);
-      else ctx.rect(rowBtnX, rowBtnY, rowBtnW, rowBtnH);
+      if (ctx.roundRect) ctx.roundRect(delBtnX, delBtnY, delBtnW, delBtnH, 4);
+      else ctx.rect(delBtnX, delBtnY, delBtnW, delBtnH);
       ctx.fill();
 
       ctx.strokeStyle = isDark ? '#f87171' : '#ef4444';
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(rowBtnX + 5, rowBtnY + 5);
-      ctx.lineTo(rowBtnX + rowBtnW - 5, rowBtnY + rowBtnH - 5);
-      ctx.moveTo(rowBtnX + rowBtnW - 5, rowBtnY + 5);
-      ctx.lineTo(rowBtnX + 5, rowBtnY + rowBtnH - 5);
+      ctx.moveTo(delBtnX + 5, delBtnY + 5);
+      ctx.lineTo(delBtnX + delBtnW - 5, delBtnY + delBtnH - 5);
+      ctx.moveTo(delBtnX + delBtnW - 5, delBtnY + 5);
+      ctx.lineTo(delBtnX + 5, delBtnY + delBtnH - 5);
       ctx.stroke();
 
-      // Duplicate Row button directly to the left of the delete button (20x20 matching size)
-      const dupBtnW = 20;
-      const dupBtnH = 20;
-      const dupBtnX = rowBtnX - dupBtnW - 4;
-      const dupBtnY = rowBtnY;
+      // Duplicate Row button directly to the left of the delete button
+      const dupBtnW = 18;
+      const dupBtnH = 18;
+      const dupBtnX = delBtnX - dupBtnW - 4;
+      const dupBtnY = cardY + 6;
 
       gridRowDuplicateButtons.push({ row: r, x: dupBtnX, y: dupBtnY, w: dupBtnW, h: dupBtnH });
 
@@ -1227,29 +1267,76 @@
 
       // Duplicate icon: two crisp overlapping squares
       ctx.strokeStyle = isDark ? '#a5b4fc' : '#4f46e5';
-      ctx.lineWidth = 1.4;
-      // Back square (offset top-right: 7, 3.5, w: 7.5, h: 7.5)
-      ctx.strokeRect(dupBtnX + 7, dupBtnY + 3.5, 7.5, 7.5);
-      // Front square fill (to obscure back square overlap)
+      ctx.lineWidth = 1.3;
+      ctx.strokeRect(dupBtnX + 6.5, dupBtnY + 3.5, 7, 7);
       ctx.fillStyle = isDark ? '#1e2230' : '#ffffff';
-      ctx.fillRect(dupBtnX + 4.5, dupBtnY + 6.5, 7.5, 7.5);
-      // Front square stroke
-      ctx.strokeRect(dupBtnX + 4.5, dupBtnY + 6.5, 7.5, 7.5);
+      ctx.fillRect(dupBtnX + 4.5, dupBtnY + 6.5, 7, 7);
+      ctx.strokeRect(dupBtnX + 4.5, dupBtnY + 6.5, 7, 7);
 
+      // Move Down button [▼] (if not last row)
+      let downBtnX = dupBtnX;
+      if (r < rows - 1) {
+        const downBtnW = 18;
+        const downBtnH = 18;
+        downBtnX = dupBtnX - downBtnW - 4;
+        const downBtnY = cardY + 6;
+
+        gridRowMoveDownButtons.push({ row: r, x: downBtnX, y: downBtnY, w: downBtnW, h: downBtnH });
+
+        ctx.fillStyle = isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(100, 116, 139, 0.12)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(downBtnX, downBtnY, downBtnW, downBtnH, 4);
+        else ctx.rect(downBtnX, downBtnY, downBtnW, downBtnH);
+        ctx.fill();
+
+        ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
+        ctx.beginPath();
+        ctx.moveTo(downBtnX + 5, downBtnY + 6);
+        ctx.lineTo(downBtnX + downBtnW - 5, downBtnY + 6);
+        ctx.lineTo(downBtnX + downBtnW / 2, downBtnY + downBtnH - 5);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Move Up button [▲] (if not first row)
+      if (r > 0) {
+        const upBtnW = 18;
+        const upBtnH = 18;
+        const upBtnX = (r < rows - 1 ? downBtnX : dupBtnX) - upBtnW - 4;
+        const upBtnY = cardY + 6;
+
+        gridRowMoveUpButtons.push({ row: r, x: upBtnX, y: upBtnY, w: upBtnW, h: upBtnH });
+
+        ctx.fillStyle = isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(100, 116, 139, 0.12)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(upBtnX, upBtnY, upBtnW, upBtnH, 4);
+        else ctx.rect(upBtnX, upBtnY, upBtnW, upBtnH);
+        ctx.fill();
+
+        ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
+        ctx.beginPath();
+        ctx.moveTo(upBtnX + upBtnW / 2, upBtnY + 5);
+        ctx.lineTo(upBtnX + upBtnW - 5, upBtnY + upBtnH - 6);
+        ctx.lineTo(upBtnX + 5, upBtnY + upBtnH - 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Frame / Display name shifted comfortably lower (generous breathing room below buttons)
       ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
       ctx.font = '600 12px "Segoe UI", system-ui, -apple-system, sans-serif';
 
       const rowNameWidth = ctx.measureText(rowName).width;
-      const maxRowNameW = cardW - 32;
+      const maxRowNameW = cardW - 20;
 
       if (rowNameWidth <= maxRowNameW) {
         ctx.textAlign = 'left';
-        ctx.fillText(rowName, cardX + 10, cardY + 26);
+        ctx.fillText(rowName, cardX + 8, cardY + 34);
       } else {
         hasMarqueeLabels = true;
         ctx.save();
         ctx.beginPath();
-        ctx.rect(cardX + 10, cardY + 24, maxRowNameW, 22);
+        ctx.rect(cardX + 8, cardY + 32, maxRowNameW, 20);
         ctx.clip();
 
         const now = performance.now();
@@ -1257,11 +1344,11 @@
         const textGap = 20;
         const totalDist = rowNameWidth + textGap;
         const offset = (now * scrollSpeed) % totalDist;
-        const startX = (cardX + 10) - offset;
+        const startX = (cardX + 8) - offset;
 
         ctx.textAlign = 'left';
-        ctx.fillText(rowName, startX, cardY + 26);
-        ctx.fillText(rowName, startX + totalDist, cardY + 26);
+        ctx.fillText(rowName, startX, cardY + 34);
+        ctx.fillText(rowName, startX + totalDist, cardY + 34);
         ctx.restore();
       }
 
@@ -1351,6 +1438,42 @@
           ctx.restore();
         }
       }
+    }
+
+    // Render row drag indicator if dragging a row card
+    if (rowDragState && rowDragState.isDragging) {
+      const targetR = rowDragState.targetRow;
+      const targetRowY = topHeaderH + targetR * (ch * zoom + cellGapY);
+      const lineY = (targetR > rowDragState.fromRow)
+        ? (targetRowY + ch * zoom + cellGapY / 2)
+        : (targetRowY - cellGapY / 2);
+
+      ctx.save();
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(10, lineY);
+      ctx.lineTo(sheetW - 20, lineY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const badgeText = `Move to Row ${targetR}`;
+      ctx.font = 'bold 11px "Segoe UI", sans-serif';
+      const bTextW = ctx.measureText(badgeText).width;
+      const bW = bTextW + 16;
+      const bH = 22;
+      ctx.fillStyle = '#4f46e5';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(14, lineY - bH / 2, bW, bH, 4);
+      else ctx.rect(14, lineY - bH / 2, bW, bH);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.fillText(badgeText, 14 + bW / 2, lineY);
+      ctx.restore();
     }
 
     // Schedule next animation frame if there are long marquee labels in Grid Overview
@@ -1642,6 +1765,94 @@
     triggerEventAutosave();
     refreshAll();
     showToast(`Row ${sourceRowIdx} duplicated as "${finalName}" with ${cols} frames!`, 'success');
+  }
+
+  function moveRow(fromIdx, toIdx) {
+    if (!state.doc) return;
+    const doc = state.doc;
+    const rows = doc.meta.grid.rows;
+    const cols = doc.meta.grid.cols;
+    if (fromIdx < 0 || fromIdx >= rows || toIdx < 0 || toIdx >= rows || fromIdx === toIdx) return;
+
+    state.beginStroke();
+
+    // 1. Calculate row permutation
+    const order = [];
+    for (let r = 0; r < rows; r++) order.push(r);
+    const [moved] = order.splice(fromIdx, 1);
+    order.splice(toIdx, 0, moved);
+
+    const oldToNew = {};
+    order.forEach((oldR, newR) => { oldToNew[oldR] = newR; });
+
+    // 2. Collect cells by existing row
+    const cellsByOldRow = [];
+    for (let r = 0; r < rows; r++) {
+      const rowCells = [];
+      for (let c = 0; c < cols; c++) {
+        const cell = getCellAtGrid(doc, r, c);
+        rowCells.push(cell);
+      }
+      cellsByOldRow.push(rowCells);
+    }
+
+    // 3. Rename standard cells cell_R_C to prevent key collisions
+    const renameMap = {};
+    for (let oldR = 0; oldR < rows; oldR++) {
+      const newR = oldToNew[oldR];
+      if (oldR === newR) continue;
+      for (let c = 0; c < cols; c++) {
+        const cell = cellsByOldRow[oldR][c];
+        if (cell && cell.id.startsWith('cell_')) {
+          renameMap[cell.id] = `cell_${newR}_${c}`;
+        }
+      }
+    }
+
+    if (Object.keys(renameMap).length > 0) {
+      const newCells = {};
+      for (const cid in doc.cells) {
+        if (!renameMap[cid]) {
+          newCells[cid] = doc.cells[cid];
+        }
+      }
+      for (const oldId in renameMap) {
+        const cell = doc.cells[oldId];
+        const newId = renameMap[oldId];
+        cell.id = newId;
+        newCells[newId] = cell;
+      }
+      doc.cells = newCells;
+
+      for (const aName in doc.animations) {
+        const anim = doc.animations[aName];
+        if (anim && Array.isArray(anim.frames)) {
+          anim.frames = anim.frames.map(fid => renameMap[fid] || fid);
+        }
+      }
+
+      if (selectedGridCellId && renameMap[selectedGridCellId]) {
+        selectedGridCellId = renameMap[selectedGridCellId];
+      }
+    }
+
+    // 4. Update row index property on every cell
+    for (let oldR = 0; oldR < rows; oldR++) {
+      const newR = oldToNew[oldR];
+      for (let c = 0; c < cols; c++) {
+        const cell = cellsByOldRow[oldR][c];
+        if (cell) {
+          cell.row = newR;
+          cell.col = c;
+        }
+      }
+    }
+
+    const fromTitle = inferRowTitle(fromIdx) || `Row ${fromIdx}`;
+    state.endStroke(`Move Row ${fromIdx} to Row ${toIdx} ("${fromTitle}")`);
+    triggerEventAutosave();
+    refreshAll();
+    showToast(`Moved "${fromTitle}" to Row ${toIdx}!`, 'success');
   }
 
   function deleteSpecificRow(rowIdx, skipConfirm = false) {
@@ -2033,8 +2244,15 @@
 
     const availableW = maxW - 14;
     if (textWidth > availableW) {
-      const overflowDist = Math.ceil(textWidth - availableW + 8);
-      badgeEl.innerHTML = `<span class="badge-marquee-inner" style="--marquee-dist: -${overflowDist}px;">${text}</span>`;
+      badgeEl.innerHTML = `
+        <div class="badge-marquee-container">
+          <div class="badge-marquee-track">
+            <span class="marquee-text">${text}</span>
+            <span class="marquee-spacer"></span>
+            <span class="marquee-text">${text}</span>
+            <span class="marquee-spacer"></span>
+          </div>
+        </div>`;
       badgeEl.classList.add('has-marquee');
     } else {
       badgeEl.textContent = text;
@@ -2108,20 +2326,27 @@
     const cols = doc.meta.grid.cols;
     const rowCells = [];
 
+    // 1. Collect the ACTUAL existing cells currently at this row (preserving all artwork!)
     for (let c = 0; c < cols; c++) {
-      rowCells.push(`cell_${rowIdx}_${c}`);
+      const existing = getCellAtGrid(doc, rowIdx, c);
+      if (existing) {
+        rowCells.push(existing.id);
+      } else {
+        const fallbackId = `cell_${rowIdx}_${c}`;
+        rowCells.push(fallbackId);
+      }
     }
 
-    // 1. Detach all cells in this row from any animation
+    // 2. Detach these cells from any other animation
     for (const aName in doc.animations) {
-      if (doc.animations[aName].frames && Array.isArray(doc.animations[aName].frames)) {
+      if (aName !== animKey && doc.animations[aName].frames && Array.isArray(doc.animations[aName].frames)) {
         doc.animations[aName].frames = doc.animations[aName].frames.filter(id => !rowCells.includes(id));
       }
     }
 
     const dispName = customDisplayName || animKey.replace(/_/g, ' ');
 
-    // 2. Ensure target animation exists
+    // 3. Ensure target animation exists
     if (!doc.animations[animKey]) {
       doc.animations[animKey] = {
         name: dispName,
@@ -2133,27 +2358,36 @@
       };
     }
 
-    // 3. Assign all row cells to this animation
+    // 4. Assign all row cells to this animation
     doc.animations[animKey].frames = [...rowCells];
 
-    // 4. Update cell names in this row
+    // 5. Update cell metadata WITHOUT clearing or overwriting existing pixels!
     rowCells.forEach((cid, c) => {
-      if (!doc.cells[cid]) {
-        doc.cells[cid] = {
+      let cell = doc.cells[cid];
+      if (!cell) {
+        cell = {
           id: cid,
           name: `${dispName} ${c}`,
           row: rowIdx,
           col: c,
-          direction: 'none',
+          direction: doc.animations[animKey].direction || 'none',
           frame: c,
           pixels: {}
         };
+        doc.cells[cid] = cell;
       } else {
-        doc.cells[cid].name = `${dispName} ${c}`;
+        // Cell exists: update coordinates and name, KEEP PIXELS INTACT!
+        cell.row = rowIdx;
+        cell.col = c;
+        cell.frame = c;
+        cell.name = `${dispName} ${c}`;
+        if (doc.animations[animKey].direction && doc.animations[animKey].direction !== 'none') {
+          cell.direction = doc.animations[animKey].direction;
+        }
       }
     });
 
-    state.saveSnapshot(`Assign Row ${rowIdx} to ${animKey}`);
+    state.saveSnapshot(`Assign Row ${rowIdx} to "${dispName}"`);
     triggerEventAutosave();
     refreshAll();
     populateAnimDropdowns();
@@ -3670,6 +3904,17 @@
     gridContextCellId = cellId;
 
     const { r, c } = getCellRowCol(cellId);
+    const totalRows = state.doc ? state.doc.meta.grid.rows : 1;
+
+    const moveUpItem = gridContextMenu.querySelector('[data-grid-action="move-row-up"]');
+    const moveDownItem = gridContextMenu.querySelector('[data-grid-action="move-row-down"]');
+    const moveUpLabel = document.getElementById('ctx-move-up-label');
+    const moveDownLabel = document.getElementById('ctx-move-down-label');
+
+    if (moveUpLabel) moveUpLabel.textContent = `Move Row ${r} Up`;
+    if (moveDownLabel) moveDownLabel.textContent = `Move Row ${r} Down`;
+    if (moveUpItem) moveUpItem.style.display = (r > 0) ? 'flex' : 'none';
+    if (moveDownItem) moveDownItem.style.display = (r < totalRows - 1) ? 'flex' : 'none';
 
     const dupRowLabel = document.getElementById('ctx-dup-row-label');
     if (dupRowLabel) dupRowLabel.textContent = `Duplicate Row ${r}...`;
@@ -5306,7 +5551,7 @@ namespace NOIRADIX.Editor
       openContextMenu(e.clientX, e.clientY);
     });
 
-    // Grid Canvas Events (Instant 1-Click Selection & Delete Button Clicks)
+    // Grid Canvas Events (Instant 1-Click Selection, Move/Delete/Clone Buttons & Row Drag Reorder)
     const handleGridCellSelect = (e) => {
       const rect = dom.gridCanvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
@@ -5323,6 +5568,20 @@ namespace NOIRADIX.Editor
       const hitDupRow = getRowDuplicateHit(mx, my);
       if (hitDupRow !== null) {
         promptAndDuplicateRow(hitDupRow);
+        return;
+      }
+
+      // Check if clicked on a Row Move Up [▲] button
+      const hitUp = getRowMoveUpHit(mx, my);
+      if (hitUp !== null && hitUp > 0) {
+        moveRow(hitUp, hitUp - 1);
+        return;
+      }
+
+      // Check if clicked on a Row Move Down [▼] button
+      const hitDown = getRowMoveDownHit(mx, my);
+      if (hitDown !== null && state.doc && hitDown < state.doc.meta.grid.rows - 1) {
+        moveRow(hitDown, hitDown + 1);
         return;
       }
 
@@ -5343,22 +5602,92 @@ namespace NOIRADIX.Editor
     };
 
     dom.gridCanvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       const rect = dom.gridCanvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      if (getRowDeleteHit(mx, my) !== null || getColDeleteHit(mx, my) !== null || getRowDuplicateHit(mx, my) !== null) {
+
+      // Check button hits first
+      if (
+        getRowDeleteHit(mx, my) !== null ||
+        getColDeleteHit(mx, my) !== null ||
+        getRowDuplicateHit(mx, my) !== null ||
+        getRowMoveUpHit(mx, my) !== null ||
+        getRowMoveDownHit(mx, my) !== null
+      ) {
         return;
       }
+
+      // Check if initiated drag on a Row Card
+      const cardRow = getRowCardHit(mx, my);
+      if (cardRow !== null) {
+        rowDragState = {
+          fromRow: cardRow,
+          startY: my,
+          currentY: my,
+          targetRow: cardRow,
+          isDragging: false
+        };
+        return;
+      }
+
       handleGridCellSelect(e);
     });
+
     dom.gridCanvas.addEventListener('click', handleGridCellSelect);
 
     dom.gridCanvas.addEventListener('mousemove', (e) => {
       const rect = dom.gridCanvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      const isOverBtn = (getRowDeleteHit(mx, my) !== null || getColDeleteHit(mx, my) !== null || getRowDuplicateHit(mx, my) !== null);
-      dom.gridCanvas.style.cursor = isOverBtn ? 'pointer' : 'default';
+
+      if (rowDragState) {
+        if (!rowDragState.isDragging && Math.abs(my - rowDragState.startY) > 5) {
+          rowDragState.isDragging = true;
+        }
+        if (rowDragState.isDragging) {
+          rowDragState.currentY = my;
+          const rows = state.doc ? state.doc.meta.grid.rows : 1;
+          const { topHeaderH, cellGapY, zoom } = GRID_LAYOUT;
+          const rowH = (state.doc ? state.doc.meta.cellSize.h : 16) * zoom + cellGapY;
+          let targetR = Math.floor((my - topHeaderH + rowH / 2) / rowH);
+          targetR = Math.max(0, Math.min(rows - 1, targetR));
+          rowDragState.targetRow = targetR;
+          dom.gridCanvas.style.cursor = 'grabbing';
+          renderGridOverview();
+          return;
+        }
+      }
+
+      const isOverBtn = (
+        getRowDeleteHit(mx, my) !== null ||
+        getColDeleteHit(mx, my) !== null ||
+        getRowDuplicateHit(mx, my) !== null ||
+        getRowMoveUpHit(mx, my) !== null ||
+        getRowMoveDownHit(mx, my) !== null
+      );
+      const isOverCard = (getRowCardHit(mx, my) !== null);
+
+      dom.gridCanvas.style.cursor = isOverBtn ? 'pointer' : (isOverCard ? 'grab' : 'default');
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (rowDragState) {
+        if (rowDragState.isDragging) {
+          const fromR = rowDragState.fromRow;
+          const toR = rowDragState.targetRow;
+          rowDragState = null;
+          if (dom.gridCanvas) dom.gridCanvas.style.cursor = 'default';
+          if (fromR !== toR) {
+            moveRow(fromR, toR);
+          } else {
+            renderGridOverview();
+          }
+        } else {
+          rowDragState = null;
+          if (dom.gridCanvas) dom.gridCanvas.style.cursor = 'default';
+        }
+      }
     });
 
     dom.gridCanvas.addEventListener('contextmenu', (e) => {
@@ -5449,6 +5778,16 @@ namespace NOIRADIX.Editor
           case 'clear':
             clearGridCell(targetCellId);
             break;
+          case 'move-row-up': {
+            const { r: selR } = getCellRowCol(targetCellId);
+            if (selR > 0) moveRow(selR, selR - 1);
+            break;
+          }
+          case 'move-row-down': {
+            const { r: selR } = getCellRowCol(targetCellId);
+            if (state.doc && selR < state.doc.meta.grid.rows - 1) moveRow(selR, selR + 1);
+            break;
+          }
           case 'duplicate-row': {
             const { r: selR } = getCellRowCol(targetCellId);
             promptAndDuplicateRow(selR);

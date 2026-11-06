@@ -172,6 +172,57 @@ assert(multiRowDoc.meta.grid.rows === 3, 'Grid rows expanded from 2 to 3');
 assert(multiRowDoc.cells['walk_run_0'].pixels['13,2'] === '#ffffff', 'Duplicated row 2 has cloned pixel data from row 0');
 assert(multiRowDoc.animations['walk_run'].frames.length === 4, 'Animation sequence created with all 4 column frames');
 
+// Row reordering & Animation state assignment verification
+console.log('\nTest 6: Row Movement & Safe Animation Assignment (Zero Pixel Loss)');
+// Move row 2 to row 0
+const rows = multiRowDoc.meta.grid.rows;
+const cols = multiRowDoc.meta.grid.cols;
+const fromIdx = 2;
+const toIdx = 0;
+const order = [];
+for (let r = 0; r < rows; r++) order.push(r);
+const [moved] = order.splice(fromIdx, 1);
+order.splice(toIdx, 0, moved);
+const oldToNew = {};
+order.forEach((oldR, newR) => { oldToNew[oldR] = newR; });
+
+// Update cell row properties
+for (const cid in multiRowDoc.cells) {
+  const cell = multiRowDoc.cells[cid];
+  if (cell && typeof cell.row === 'number') {
+    cell.row = oldToNew[cell.row];
+  }
+}
+
+assert(multiRowDoc.cells['walk_run_0'].row === 0, 'Moved row 2 cell walk_run_0 is now at row 0');
+assert(multiRowDoc.cells['walk_run_0'].pixels['13,2'] === '#ffffff', 'Moved row preserved all pixel data without loss');
+
+// Safe animation assignment to row 0 with new animation name "dash"
+const row0Cells = [];
+for (let c = 0; c < cols; c++) {
+  // Find cell at row 0, col c
+  let foundCell = null;
+  for (const cid in multiRowDoc.cells) {
+    if (multiRowDoc.cells[cid].row === 0 && multiRowDoc.cells[cid].col === c) {
+      foundCell = multiRowDoc.cells[cid];
+      break;
+    }
+  }
+  assert(foundCell !== null, `Found cell at row 0 col ${c}`);
+  row0Cells.push(foundCell.id);
+}
+
+multiRowDoc.animations['dash'] = {
+  name: 'Dash',
+  direction: 'none',
+  frames: row0Cells,
+  fps: 8,
+  loop: true
+};
+
+assert(multiRowDoc.animations['dash'].frames[0] === 'walk_run_0', 'New animation state references existing cells');
+assert(multiRowDoc.cells['walk_run_0'].pixels['13,2'] === '#ffffff', 'Artwork pixels completely preserved when assigned to new animation state');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);

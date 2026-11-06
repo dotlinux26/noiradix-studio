@@ -936,6 +936,9 @@ body {
   max-width: 90px;
   overflow: hidden;
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .has-marquee {
@@ -944,19 +947,40 @@ body {
   position: relative;
 }
 
-.badge-marquee-inner {
-  display: inline-block;
+.badge-marquee-container {
+  overflow: hidden;
+  max-width: 100%;
+  display: inline-flex;
+}
+
+.badge-marquee-track {
+  display: inline-flex;
   white-space: nowrap;
-  animation: badge-marquee-scroll 5s ease-in-out infinite alternate;
+  animation: badge-continuous-marquee 5s linear infinite;
   will-change: transform;
 }
 
-@keyframes badge-marquee-scroll {
-  0%, 20% {
+.badge-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.badge-marquee-track .marquee-text {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.badge-marquee-track .marquee-spacer {
+  display: inline-block;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+@keyframes badge-continuous-marquee {
+  0% {
     transform: translateX(0);
   }
-  80%, 100% {
-    transform: translateX(var(--marquee-dist, -24px));
+  100% {
+    transform: translateX(-50%);
   }
 }
 
