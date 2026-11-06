@@ -5934,12 +5934,66 @@ namespace NOIRADIX.Editor
         }
     }
 }`;
+      const readmeUnityText = `================================================================================
+NOIRADIX STUDIO — Unity 2D Sprite Package Quickstart Guide
+================================================================================
+
+Package Contents:
+  1. ${pngName}
+     - High-resolution sprite sheet atlas with anti-bleed padding & extrusion.
+  2. ${baseName}.pix2.json
+     - Precise slice boundaries, custom pivots, and animation sequence metadata.
+  3. Pix2UnityImporter.cs
+     - Automatic 1-click Unity editor importer script.
+  4. README_UNITY_IMPORT.txt
+     - This instruction guide.
+
+--------------------------------------------------------------------------------
+HOW TO IMPORT INTO YOUR UNITY PROJECT (3 Easy Steps):
+--------------------------------------------------------------------------------
+
+STEP 1: PLACE THE C# SCRIPT IN AN "Editor" FOLDER
+  - Copy "Pix2UnityImporter.cs" into your Unity project's Editor directory:
+      Assets/Editor/Pix2UnityImporter.cs
+      (or Assets/_Game/Editor/Pix2UnityImporter.cs)
+  * Note: Unity requires editor tools to be placed inside a folder named "Editor".
+
+STEP 2: PLACE THE SPRITESHEET AND METADATA TOGETHER
+  - Copy "${pngName}" and "${baseName}.pix2.json" into any folder inside Assets:
+      e.g. Assets/_Game/Art/Sprites/
+  * Note: Keep both the .png and .json files in the SAME directory.
+
+STEP 3: 1-CLICK AUTOMATIC IMPORT
+  - Method A (Right-Click Context Menu):
+      In Unity Project Window, RIGHT-CLICK the "${baseName}.pix2.json" file
+      -> Select "NOIRADIX > Import Spritesheet & Animations".
+  
+  - Method B (Top Menu Bar):
+      In Unity's top menu bar, click "Tools > NOIRADIX > Import Pix2 Spritesheet JSON..."
+      and select the .json file.
+
+--------------------------------------------------------------------------------
+WHAT THE IMPORTER DOES AUTOMATICALLY:
+--------------------------------------------------------------------------------
+  [x] Sets Texture Type to "Sprite (2D and UI)" with Sprite Mode = "Multiple".
+  [x] Sets Filter Mode to "Point (no filter)" for crisp pixel-perfect art.
+  [x] Sets Texture Compression to "None / Uncompressed".
+  [x] Automatically slices all frames with exact pixel bounds and custom pivots.
+  [x] Automatically creates native Unity Animation Clips (.anim) in an "Animations/"
+      subfolder with preconfigured frame rates and looping!
+
+Ready to drag directly into your Scene or Animator Controller!
+NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
+`;
+
       const scriptBytes = new TextEncoder().encode(importerScript);
+      const readmeBytes = new TextEncoder().encode(readmeUnityText);
 
       const zipBlob = createZip([
         { name: pngName, data: pngBytes },
         { name: `${baseName}.pix2.json`, data: jsonBytes },
-        { name: 'Pix2UnityImporter.cs', data: scriptBytes }
+        { name: 'Pix2UnityImporter.cs', data: scriptBytes },
+        { name: 'README_UNITY_IMPORT.txt', data: readmeBytes }
       ]);
 
       downloadBlob(zipBlob, `${baseName}_unity_package.zip`);
@@ -5988,11 +6042,47 @@ namespace NOIRADIX.Editor
         }
       };
 
+      const readmeTpText = `================================================================================
+NOIRADIX STUDIO — TexturePacker Standard JSON Package Guide
+================================================================================
+
+Package Contents:
+  1. ${pngName}
+     - High-resolution transparent sprite atlas with bleed protection.
+  2. ${baseName}.json
+     - Industry standard TexturePacker Hash format with frame rects and animations.
+  3. README_TEXTUREPACKER.txt
+     - This guide.
+
+--------------------------------------------------------------------------------
+HOW TO USE IN POPULAR GAME ENGINES:
+--------------------------------------------------------------------------------
+
+1. GODOT 4:
+   - Copy "${pngName}" and "${baseName}.json" into your Godot project.
+   - Use SpriteFrames importer or load as an AtlasTexture resource.
+
+2. PHASER 3:
+   - In your Scene preload method:
+       this.load.atlas('${baseName}', 'assets/${pngName}', 'assets/${baseName}.json');
+
+3. PIXI.JS:
+   - Load using the modern Assets loader:
+       const sheet = await PIXI.Assets.load('assets/${baseName}.json');
+
+4. DEFOLD / RAYLIB / GAMEMAKER:
+   - Direct support for TexturePacker JSON Hash coordinates.
+
+NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
+`;
+
       const jsonBytes = new TextEncoder().encode(JSON.stringify(tpData, null, 2));
+      const readmeBytes = new TextEncoder().encode(readmeTpText);
 
       const zipBlob = createZip([
         { name: pngName, data: pngBytes },
-        { name: `${baseName}.json`, data: jsonBytes }
+        { name: `${baseName}.json`, data: jsonBytes },
+        { name: 'README_TEXTUREPACKER.txt', data: readmeBytes }
       ]);
 
       downloadBlob(zipBlob, `${baseName}_texturepacker.zip`);
