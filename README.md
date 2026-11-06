@@ -19,6 +19,95 @@
 
 ---
 
+## 📸 Studio Visual Tour
+
+Experience desktop-grade pixel art creation directly in your browser with zero installation:
+
+| 🗺️ **1. Sprite Sheet Matrix & Multi-Frame Layout** | 🎬 **2. Directional Animation Studio (Real-Time)** |
+|:---:|:---:|
+| [![Sprite Sheet Matrix Overview](docs/noiradix-grid-overview.png)](docs/noiradix-grid-overview.png) | [![Directional Animation Studio](docs/noiradix-grid-animation.png)](docs/noiradix-grid-animation.png) |
+| *Multi-cell matrix with row-level animation states, column frame sequences, cell resolution presets (16×16 to 64×64), and interactive Inspector.* | *Floating real-time playback player supporting 4-direction and 8-direction compass previews, variable FPS slider, and loop controls.* |
+
+| 🖌️ **3. Precision Pixel Editor with Rulers & Symmetry** | 🤖 **4. AI-Native PIX2 Code & Prompt Generator** |
+|:---:|:---:|
+| [![Precision Cell Editor](docs/noiradix-editor.png)](docs/noiradix-editor.png) | [![AI Code & Prompt Generator](docs/noiradix-COPYFORAI.png)](docs/noiradix-COPYFORAI.png) |
+| *Bilateral symmetry mirror axis (`sym_dot`), 4× to 64× anchor-centered zoom, dynamic pixel rulers, discrete drawing tools, and palette swatches.* | *1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, and real-time disk hot-reload.* |
+
+---
+
+## 🚀 Quick Start Guide (5 Minutes)
+
+Get up and running immediately with zero configuration and zero build tools:
+
+### Step 1: Launch NOIRADIX Studio
+* **Windows (1-Click):** Double-click [`start-noiradix-studio.bat`](start-noiradix-studio.bat). It instantly launches your default Chromium browser.
+* **Direct File:** Simply open [`index.html`](index.html) in any modern browser (Chrome, Edge, Brave, Opera, Arc).
+* **Local HTTP Server (Optional):**
+  ```bash
+  # Python 3
+  python -m http.server 8080
+
+  # Node.js
+  npx serve .
+  ```
+
+---
+
+### Step 2: Create or Open a Sprite Project
+* **Create a New Project:** Press <kbd>Ctrl</kbd> + <kbd>N</kbd> or click the **New** button in the top navigation bar. Enter your file name (e.g. `hero_knight.pix2`) and select a layout preset:
+  * **4-Direction Walk:** 4 rows × 4 columns (16 frames) — *Down, Up, Right, Left*.
+  * **8-Direction Combat:** 8 rows × 4 columns (32 frames) — *Full compass locomotion*.
+  * **Action Strip:** 1 row × 6 columns — *Single animation sequence (dash, slash, jump)*.
+  * **Single Frame:** 1 row × 1 column — *Static item, icon, tile, or portrait*.
+* **Open an Existing Project:** Drag and drop any `.pix2` file onto the window, or click **Open** (<kbd>Ctrl</kbd> + <kbd>O</kbd>).
+
+---
+
+### Step 3: Draw in the Precision Cell Editor
+1. In the **Sprite Sheet Layout**, double-click any frame (or click **Edit Frame Pixels**).
+2. The Studio opens the **Cell Editor** with high-precision tools:
+   * **Pencil (<kbd>B</kbd>):** Discrete pixel placement.
+   * **Bilateral Symmetry Axis:** Click **Symmetry** in the top bar to draw bilateral symmetrical characters automatically (`sym_dot` formula).
+   * **Dynamic Pixel Rulers:** Live X/Y rulers update as you zoom (<kbd>Ctrl</kbd> + Mouse Wheel, `4×` to `64×`) and pan (<kbd>Space</kbd> + Drag).
+   * **Eyedropper (<kbd>I</kbd>) & Palette Swatches:** Pick colors from the canvas or click any swatch in the bottom palette.
+   * **Line (<kbd>L</kbd>), Rectangle (<kbd>U</kbd>), Paint Bucket (<kbd>G</kbd>), Eraser (<kbd>E</kbd>).**
+
+---
+
+### Step 4: Preview Real-Time Animations
+1. Click the **Preview** button in the top bar or press <kbd>Space</kbd> while on the grid to toggle the **Animation Studio** floating panel.
+2. Select your compass direction (`Down`, `Up`, `Right`, `Left`, etc.).
+3. Drag the **FPS Slider** to adjust playback speed (1 to 30 FPS).
+4. Watch character walk cycles update live as you paint!
+
+---
+
+### Step 5: Supercharge with AI Coding Assistants
+NOIRADIX Studio is designed from day one to pair-program with AI (ChatGPT, Claude, Gemini, Antigravity, Cursor):
+1. Click the **AI** / **Spec** button in the top navigation bar.
+2. Click **"Copy Prompt for AI"** — this generates a structured system prompt containing the exact mathematical coordinate rules, color palette, and current character state.
+3. Paste the prompt into your AI coding assistant and ask it to design characters, synthesize walk cycles, or generate equipment overlays.
+4. Save the generated `.pix2` code to disk — NOIRADIX Studio's **Real-Time Live Watcher** automatically reloads the canvas and animation timeline instantly!
+
+---
+
+### Step 6: Save to Disk & Memory Draft Protection
+* **Direct Disk Save (<kbd>Ctrl</kbd> + <kbd>S</kbd>):** In Chromium browsers (Chrome, Edge, Brave), NOIRADIX Studio writes directly to your local `.pix2` file using the File System Access API without disruptive download prompts.
+* **In-Memory Draft Safety:** When working on an unsaved new file, the statusbar displays an amber badge (`⚠️ In-Memory Draft`). Your work is cached safely in memory so refreshing the page (<kbd>F5</kbd>) will never lose your unsaved edits.
+* **Project Base Directory:** Click the **Folder icon** in the statusbar to set your game project root (e.g. `D:/MyGame/Assets`). The **Copy Path** button will then copy full, absolute filesystem paths directly to your clipboard.
+
+---
+
+### Step 7: Export to Your Game Engine
+1. Click **Export** in the top navigation bar.
+2. Choose your game engine target:
+   * **Unity 2D Spritesheet Package (.ZIP):** Atlas PNG + JSON Metadata + C# `Pix2UnityImporter.cs` for 1-click automatic sprite slicing and `.anim` AnimationClip generation.
+   * **TexturePacker JSON (.ZIP):** Universal Hash format ready for Godot 4, Phaser, Pixi.js, Defold, Raylib, and GameMaker.
+   * **PNG Spritesheet Only:** High-res transparent atlas with configurable Cell Spacing (`0px`–`4px`) and Extrude Edge Pixels to eliminate GPU bleeding seams.
+   * **Individual Sliced Frames (.ZIP):** Numbered transparent PNGs.
+
+---
+
 ## 🌟 Key Highlights
 
 * **100% Pure Vanilla Web Stack:** Zero build tools, zero npm packages, zero runtime frameworks. Runs directly in any modern browser by double-clicking `index.html` or executing `start-noiradix-studio.bat`.
@@ -46,6 +135,31 @@
 
 ---
 
+## ⌨️ Essential Keyboard Shortcuts
+
+| Shortcut | Context | Action |
+|:---|:---:|:---|
+| <kbd>Ctrl</kbd> + <kbd>N</kbd> | Global | Create a new sprite project (Modal with presets) |
+| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Global | Open `.pix2` file from disk |
+| <kbd>Ctrl</kbd> + <kbd>S</kbd> | Global | Direct disk save (Chromium) / Download |
+| <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Global | Undo last canvas stroke or grid edit |
+| <kbd>Ctrl</kbd> + <kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Global | Redo |
+| <kbd>Space</kbd> | Grid Overview | Toggle Animation Studio floating player |
+| <kbd>Space</kbd> + Drag | Cell Editor | Pan canvas smoothly |
+| <kbd>Ctrl</kbd> + Mouse Wheel | Cell Editor | Anchor-centered zoom (`4×` to `64×`) |
+| <kbd>B</kbd> | Cell Editor | Pencil Tool |
+| <kbd>E</kbd> | Cell Editor | Eraser Tool |
+| <kbd>I</kbd> | Cell Editor | Eyedropper Tool (Sample color under cursor) |
+| <kbd>G</kbd> | Cell Editor | Paint Bucket Tool (4-way flood fill) |
+| <kbd>L</kbd> | Cell Editor | Discrete Line Tool (Bresenham) |
+| <kbd>U</kbd> | Cell Editor | Rectangle Tool |
+| <kbd>M</kbd> | Cell Editor | Marquee Selection Tool |
+| <kbd>Esc</kbd> | Cell Editor | Close cell editor tab / Return to Overview |
+
+*For complete keyboard shortcut documentation across all views and operating systems, see [KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md).*
+
+---
+
 ## 🌐 Browser Compatibility & Recommended Setup
 
 NOIRADIX Studio operates in two tiers based on modern browser file capabilities:
@@ -58,95 +172,6 @@ NOIRADIX Studio operates in two tiers based on modern browser file capabilities:
 
 > [!TIP]
 > **Why Chromium is Recommended:** Google Chrome, Microsoft Edge, Brave, and Opera implement the **File System Access API** (`window.showOpenFilePicker`, `showSaveFilePicker`, and `DataTransferItem.getAsFileSystemHandle()`). This unlocks instant `Ctrl+S` disk commits, drag-and-drop linking, and real-time external change detection when working alongside external AI coding assistants or VS Code. In Firefox and Safari, the studio gracefully falls back to lossless HTML5 file downloads with zero data loss.
-
----
-
-## 📁 File System Architecture, Encoding & Security Boundaries
-
-NOIRADIX Studio enforces a clean, deterministic architecture for local files and project metadata:
-
-### 1. Document Title vs. Physical File Name
-* **Physical File Name (`*.pix2`):** Displayed in the Top Header File Widget and Bottom Statusbar Pill (e.g. `player_wispling.pix2` or `Dũng Sĩ Bóng Đêm.pix2`). This directly represents the file handle on your local filesystem.
-* **Internal Document Metadata (`@meta.title`):** Embedded inside the plain-text `.pix2` file. Synchronized automatically with the filename base (without the `.pix2` extension).
-* **Inline Renaming Workflow:**
-  * Clicking the file title input in the top header allows editing the filename directly.
-  * Renaming in the header does **not** silently overwrite the physical disk file under a new name without user consent (prohibited by W3C browser security). Instead, it marks the project as **Dirty (`●`)**.
-  * Pressing **`Ctrl + S`** after a rename automatically opens the system **Save As** dialog with the new filename prefilled, ensuring you have explicit control over where the new file is placed on disk.
-
-### 2. Character Encoding & Multilingual Support Matrix
-NOIRADIX Studio is 100% UTF-8 native across both the parser, serializer, and UI:
-
-| Name / Path Feature | Support Level | Behavior & Rules |
-|:---|:---:|:---|
-| **Whitespaces (` `)** | ✅ 100% Full | Allowed in file names, titles, and cell names without stripping (e.g. `Player Wispling Final.pix2`). |
-| **Vietnamese Diacritics** | ✅ 100% Full | Fully preserved with tone marks (e.g. `Dũng Sĩ Bóng Đêm.pix2`, `Đòn Đánh Sấm Sét 01`). |
-| **CJK / Multilingual** | ✅ 100% Full | Japanese, Korean, Chinese, Cyrillic, and extended Unicode characters are fully supported (e.g. `勇者スプライト_v2.pix2`). |
-| **Illegal OS Chars** | 🛡️ Auto-Sanitized | Windows/POSIX reserved characters (`\ / : * ? " < > \|`) are automatically converted to clean underscores (`_`). |
-
-### 3. Drag & Drop Architecture
-* **Chromium (Chrome / Edge / Brave):** Dropping a `.pix2` file extracts a live `FileSystemFileHandle` via `DataTransferItem.getAsFileSystemHandle()`. Once loaded, pressing `Ctrl + S` writes directly back to that physical disk file without prompt interruptions.
-* **Non-Chromium Fallback (Firefox / Safari):** Dropping a `.pix2` file reads the file stream into memory. Pressing `Ctrl + S` triggers a standard lossless download save.
-
-### 4. Path Copying & Project Root Directory
-* **Browser Security Sandbox Rule:** For privacy and security, modern web browsers intentionally conceal the full host filesystem path (e.g. `D:\ghoster\assets\...`) from client-side JavaScript.
-* **Project Root Directory Feature:**
-  * Click the **Folder icon** (`#btn-reveal-explorer`) in the bottom statusbar to set or change your project base directory (e.g. `D:/ghoster` or `Assets/_Game/Art`).
-  * Once set, clicking the **Copy Path** button in the top header or statusbar copies the **full combined path** (`D:/ghoster/player_wispling.pix2`) directly to your clipboard for instant pasting into Unity, VS Code, or terminal commands.
-
----
-
-## 💻 Hardware & System Requirements
-
-NOIRADIX Studio is engineered with an ultra-lightweight, zero-overhead architecture:
-
-| Component | Minimum Specification | Recommended Specification |
-|:---|:---|:---|
-| **Operating System** | Windows 10/11, macOS 10.15+, Linux (Ubuntu, Debian, Fedora, Arch), ChromeOS | Windows 11, macOS 14+, Linux |
-| **Processor (CPU)** | 1.5 GHz Dual-Core (x86_64 or ARM64) | 2.0 GHz Quad-Core or Apple Silicon (M1/M2/M3/M4) |
-| **Memory (RAM)** | 512 MB free RAM (Studio footprint is only ~25 MB – 100 MB) | 1 GB free RAM |
-| **Graphics (GPU)** | Integrated Graphics with WebGL / HTML5 Canvas 2D support | Any modern integrated or dedicated GPU |
-| **Display Resolution** | 1280×720 (HD) minimum | 1920×1080 (Full HD) or higher (supports 2K, 4K, Ultrawide) |
-| **Input Devices** | Standard Mouse & Keyboard | Mouse, Keyboard, and Drawing Tablet (Wacom, Apple Pencil) |
-| **Network / Internet** | **None** (100% Offline-Capable) | Offline (Zero telemetry, zero external network requests) |
-
----
-
-## 📦 Zero-Dependency Architecture & Third-Party Transparency
-
-NOIRADIX Studio follows a strict **Zero-Runtime-Dependency & Zero-Build** philosophy:
-
-* **0 npm runtime packages:** Zero `node_modules` required for execution.
-* **0 build steps:** No Webpack, Vite, Babel, Rollup, or esbuild. Source code in `js/` runs directly and natively in the browser.
-* **Pure Web Standards:**
-  * HTML5 Canvas 2D Context (`CanvasRenderingContext2D`) for pixel-perfect rendering.
-  * Modern ECMAScript 2022+ (Vanilla JavaScript).
-  * CSS Custom Properties (Variables) with clean light and dark theme switching.
-  * Chromium File System Access API & IndexedDB for disk persistence.
-* **Third-Party Assets Used:**
-  * **FontAwesome 6 (Free Vector Icons):** Delivered with Subresource Integrity (SRI) SHA-512 hashes and fallback styling.
-  * **Web Fonts:** Fira Code (Monospace) & Inter (UI typography) with clean native system font fallbacks (`monospace`, `system-ui`, `-apple-system`, `sans-serif`) when operating completely offline.
-  * See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSE](LICENSE) for complete license attributions.
-
----
-
-## 🚀 Quickstart
-
-### Method 1: Instant 1-Click Launch (Windows)
-Double-click `start-noiradix-studio.bat` in the repository root. It opens the studio directly in your default browser.
-
-### Method 2: Any Web Server
-Serve the repository root directory with any HTTP server:
-```bash
-# Python 3
-python -m http.server 8080
-
-# Node.js npx
-npx serve .
-```
-Then navigate to `http://localhost:8080` in Chrome, Edge, or Brave.
-
-### Method 3: Direct File Opening
-Simply open `index.html` in any Chromium-based browser (Chrome, Edge, Brave, Opera, Arc).
 
 ---
 
@@ -182,10 +207,11 @@ this.load.atlas('player', 'assets/player_atlas.png', 'assets/player.json');
 noiradix-studio/
 ├── index.html                   # Single-page studio interface & modals
 ├── start-noiradix-studio.bat    # 1-click launcher for Windows
+├── noiradix-studio-logo.svg     # Official vector mascot logo
 ├── PIX2_SPECIFICATION.md        # Official specification for the .pix2 format
 ├── THIRD_PARTY_NOTICES.md       # Third-party licenses & acknowledgments
 ├── LICENSE                      # Apache-2.0 open-source license
-├── README.md                    # Studio documentation
+├── README.md                    # Main studio documentation & visual guide
 │
 ├── css/
 │   └── style.css                # Polished design system (Light & Dark themes)
@@ -195,11 +221,20 @@ noiradix-studio/
 │   ├── editor-state.js          # Undo/redo stack, document store, & tabs
 │   ├── tools.js                 # Pencil, Line, Rect, Bucket Fill, Eraser
 │   ├── animation-player.js      # Timeline playback engine
-│   ├── default-sample.js        # Built-in character sprite template
+│   ├── default-sample.js        # Built-in NOIRADIX Ghost character mascot template
 │   └── app.js                   # UI controllers, modal managers, & export pipeline
 │
 ├── samples/
-│   └── Player.pix2              # Example 4-direction Wispling character sprite sheet
+│   └── Noiradix_Ghost.pix2      # Official 4-direction NOIRADIX Ghost mascot template
+│
+├── docs/                        # Complete technical documentation suite
+│   ├── README.md                # Documentation master index & contributor map
+│   ├── PRODUCT_SPEC.md          # Master product requirements & design principles
+│   ├── UX_AND_INTERACTION_SPEC.md # Interaction rules, tabs, & floating panels
+│   ├── KEYBOARD_SHORTCUTS.md    # Master keyboard shortcut reference
+│   ├── PIX2/                    # Formal .pix2 grammar, data models, & AI guides
+│   ├── FEATURES/                # Deep dives into grid, animation, palette, and zoom
+│   └── ENGINEERING/             # System architecture, test plan, & roadmaps
 │
 └── tests/
     ├── test-roundtrip.js        # Deterministic parse-serialize roundtrip test suite
@@ -212,24 +247,34 @@ noiradix-studio/
 
 Run the deterministic roundtrip and security test suites using Node.js:
 ```bash
-# Semantic roundtrip tests (23/23)
+# Semantic roundtrip tests (96/96)
 node tests/test-roundtrip.js
 
-# Malicious payload & anti-DoS tests (11/11)
+# Malicious payload & anti-DoS tests (14/14)
 node tests/test-security.js
-```
-Expected output:
-```
-====================================================
-TEST RESULTS: 23 / 23 PASSED
-====================================================
 ```
 
 Verify JavaScript syntax:
 ```bash
 node --check js/app.js
 node --check js/pix2-format.js
+node --check js/editor-state.js
+node --check js/animation-player.js
 ```
+
+---
+
+## 📚 Master Documentation Index
+
+Looking for detailed technical deep-dives, EBNF grammars, or engineering roadmaps? Visit the full documentation suite:
+
+👉 **[Explore the NOIRADIX Studio Documentation Hub (`docs/README.md`)](docs/README.md)**
+
+* **[PIX2 Language Specification](docs/PIX2/PIX2_SPEC.md)**
+* **[AI Authoring & Prompting Guide](docs/PIX2/PIX2_AI_AUTHORING_GUIDE.md)**
+* **[Grid & Cell Model Architecture](docs/FEATURES/GRID_AND_CELL_MODEL.md)**
+* **[Animation Engine & Directional Locomotion](docs/FEATURES/ANIMATION_MODEL.md)**
+* **[System Architecture & Boundaries](docs/ENGINEERING/ARCHITECTURE.md)**
 
 ---
 
@@ -259,4 +304,3 @@ Copyright (c) 2026 dotlinux26 (Nguyen Duc Canh)
 ```
 
 See [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions and third-party notices.
-

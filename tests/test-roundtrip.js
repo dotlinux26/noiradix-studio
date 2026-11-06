@@ -85,15 +85,16 @@ assert(parsed2.cells['custom_hero_01'].pixels['4,5'] === parsed1.cells['custom_h
 assert(parsed2.cells['custom_hero_01'].pixels['8,9'] === '#ff6b8bcc', 'Roundtrip: RGBA alpha pixel preserved');
 assert(parsed2.animations['hero_idle'] !== undefined, 'Roundtrip: animation preserved');
 
-// TEST 3: Sample Player.pix2 validation
-console.log('\nTest 3: Validating samples/Player.pix2');
-const samplePath = path.join(__dirname, '..', 'samples', 'Player.pix2');
+// TEST 3: Sample Noiradix_Ghost.pix2 validation
+console.log('\nTest 3: Validating samples/Noiradix_Ghost.pix2');
+const samplePath = path.join(__dirname, '..', 'samples', 'Noiradix_Ghost.pix2');
 if (fs.existsSync(samplePath)) {
   const sampleContent = fs.readFileSync(samplePath, 'utf8');
   const sampleDoc = PIX2.parse(sampleContent);
   const cellCount = Object.keys(sampleDoc.cells).length;
-  assert(cellCount > 0, `Player.pix2 loaded with ${cellCount} cells`);
-  assert(sampleDoc.palette && Object.keys(sampleDoc.palette).length > 0, 'Player.pix2 palette loaded');
+  assert(cellCount > 0, `Noiradix_Ghost.pix2 loaded with ${cellCount} cells`);
+  assert(sampleDoc.palette && Object.keys(sampleDoc.palette).length > 0, 'Noiradix_Ghost.pix2 palette loaded');
+  assert(sampleDoc.animations && Object.keys(sampleDoc.animations).length >= 4, 'Noiradix_Ghost.pix2 has 4-dir animations');
 }
 
 // TEST 4: Custom Cell Identifiers with grid_pos & Single-Line vs Multi-Line Pixels
