@@ -5,15 +5,17 @@
 const Tools = (function () {
   'use strict';
 
-  // Bresenham's line algorithm
+  // Bresenham's line algorithm with guard counter
   function line(x0, y0, x1, y1, callback) {
+    if (isNaN(x0) || isNaN(y0) || isNaN(x1) || isNaN(y1)) return;
     let dx = Math.abs(x1 - x0);
     let dy = Math.abs(y1 - y0);
     let sx = (x0 < x1) ? 1 : -1;
     let sy = (y0 < y1) ? 1 : -1;
     let err = dx - dy;
+    let maxSteps = 4096;
 
-    while (true) {
+    while (maxSteps-- > 0) {
       callback(x0, y0);
       if (x0 === x1 && y0 === y1) break;
       let e2 = 2 * err;
@@ -110,8 +112,10 @@ const Tools = (function () {
 
     const queue = [[startX, startY]];
     const visited = new Set();
+    const maxSteps = Math.min(65536, w * h * 4);
+    let steps = 0;
 
-    while (queue.length > 0) {
+    while (queue.length > 0 && steps++ < maxSteps) {
       const [cx, cy] = queue.pop();
       if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
 

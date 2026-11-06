@@ -1671,7 +1671,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  gap: 24px;
+  padding: 0 14px;
   font-size: 11px;
   color: var(--statusbar-text);
   flex-shrink: 0;
@@ -1693,12 +1694,23 @@ body {
   cursor: grabbing;
 }
 
-.status-left, .status-right {
+.status-left {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-subtle);
 }
 
 .status-item {
