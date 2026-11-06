@@ -29,4 +29,5 @@ NOIRADIX Studio incorporates third-party open-source assets and libraries under 
 
 ---
 
-All other code, design, format specifications (`.pix2`), and assets are property of the NOIRADIX project under the project's root license.
+All other code, design, format specifications (`.pix2`), and assets are copyright (c) 2026 dotlinux26 (Nguyen Duc Canh) and licensed under the Apache License 2.0.
+

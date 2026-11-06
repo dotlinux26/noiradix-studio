@@ -2,6 +2,10 @@
  * NOIRADIX Studio - Main Application Controller
  * Fully Static & Zero External Dependencies
  * Professional Pixel Art Editor & Structured Sprite Authoring Environment
+ * 
+ * Author: Nguyen Duc Canh (dotlinux26)
+ * Copyright: (c) 2026 dotlinux26 (Nguyen Duc Canh). All rights reserved.
+ * License: Apache-2.0
  */
 
 (function () {

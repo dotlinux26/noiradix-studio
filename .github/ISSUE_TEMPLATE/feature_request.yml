@@ -1,0 +1,35 @@
+name: 💡 Feature Request
+description: Propose a new feature, tool, export target, or enhancement for NOIRADIX Studio
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an idea! Please explain what problem you want solved and how you envision this feature working.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: Is your feature request related to a problem or workflow limitation?
+      placeholder: A clear description of the challenge or friction you are facing...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution / Feature
+      description: Describe the feature, tool, or engine integration you would like to see added.
+      placeholder: I would like NOIRADIX Studio to...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions Considered
+      description: Describe any alternative workflows or workarounds you have considered.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any mockups, screenshots, engine specifications, or references.

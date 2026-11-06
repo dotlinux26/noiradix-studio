@@ -1,11 +1,18 @@
-# NOIRADIX Studio v1.0
+<div align="center">
+  <img src="noiradix-studio-logo.svg" alt="NOIRADIX Studio Logo" width="128" height="128">
+  <h1>NOIRADIX Studio</h1>
+  <p><strong>High-Performance, AI-Native Pixel Art & Spritesheet Studio for the <code>.pix2</code> Standard</strong></p>
 
-> **High-Performance, AI-Native Pixel Art & Spritesheet Studio for the `.pix2` Standard**
-
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Format](https://img.shields.io/badge/Format-PIX2_v1.0-6366f1.svg)](PIX2_SPECIFICATION.md)
-[![Pure Vanilla](https://img.shields.io/badge/Stack-Pure_Vanilla_Web-10b981.svg)](#architecture)
-[![Game Engine Ready](https://img.shields.io/badge/Engine-Unity_%7C_Godot_%7C_Phaser-ff6b6b.svg)](#game-engine-integration)
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+    <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Format-PIX2_v1.0-6366f1.svg" alt="PIX2 Standard"></a>
+    <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
+    <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
+    <a href="CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg" alt="Code of Conduct"></a>
+    <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
+    <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security-Private%20Reporting-success.svg" alt="Security Policy"></a>
+  </p>
+</div>
 
 **NOIRADIX Studio** is a pure vanilla, offline-first pixel art editor and animation suite built from the ground up for the `.pix2` semantic text standard. It bridges the gap between AI generation, pixel artists, and modern game engines by providing deterministic sparse-pixel serialization, multi-directional character templates, and game-ready atlas export with anti-bleeding protection.
 
@@ -138,7 +145,31 @@ node --check js/pix2-format.js
 
 ---
 
-## 📄 License
+## 💖 Donate & Sponsor
 
-NOIRADIX Studio is open-source software licensed under the [Apache License, Version 2.0](LICENSE).
-Third-party font and icon licenses are detailed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+If you find NOIRADIX Studio useful in your game development pipeline, please consider supporting its continuous development:
+
+* 👉 **[GitHub Sponsors (@dotlinux26)](https://github.com/sponsors/dotlinux26)**
+* ☕ **[Buy Me a Coffee](https://buymeacoffee.com/dotlinux26)**
+* 🍵 **[Ko-fi](https://ko-fi.com/dotlinux26)**
+* See [DONATE.md](DONATE.md) for full domestic and international options.
+
+---
+
+## 👤 Author & Maintainer
+
+* **Created & Maintained by:** Nguyen Duc Canh ([@dotlinux26](https://github.com/dotlinux26))
+* **Email:** [0206canh@gmail.com](mailto:0206canh@gmail.com)
+
+---
+
+## 📄 License & Copyright
+
+NOIRADIX Studio is open-source software created by **dotlinux26 (Nguyen Duc Canh)** and licensed under the [Apache License, Version 2.0](LICENSE).
+
+```text
+Copyright (c) 2026 dotlinux26 (Nguyen Duc Canh)
+```
+
+See [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions and third-party notices.
+

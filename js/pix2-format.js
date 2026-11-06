@@ -3,6 +3,10 @@
  * Specification v1.0
  * AI-Native Structured Pixel Art Language
  * 
+ * Author: Nguyen Duc Canh (dotlinux26)
+ * Copyright: (c) 2026 dotlinux26 (Nguyen Duc Canh). All rights reserved.
+ * License: Apache-2.0
+ * 
  * Core Invariant: Pure Transparency (Zero background, only explicitly drawn pixels are saved).
  * Supports: #RGB, #RGBA, #RRGGBB, #RRGGBBAA, decoupled Cell IDs, user-defined animations.
  */

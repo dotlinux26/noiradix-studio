@@ -1,0 +1,63 @@
+name: 🐛 Bug Report
+description: Report a bug, crash, or unexpected behavior in NOIRADIX Studio
+title: "[BUG]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please provide as much detail as possible so we can reproduce and fix the bug quickly.
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When I click on...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the issue.
+      placeholder: |
+        1. Open NOIRADIX Studio
+        2. Click on 'Auto 4-Dir'
+        3. Enter 'run' and click Apply
+        4. See error in browser console...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen instead?
+      placeholder: The grid should expand to 4 rows without errors.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Browser, Operating System, Screen Resolution.
+      value: |
+        - OS: [e.g. Windows 11, macOS Sequoia, Ubuntu 24.04]
+        - Browser: [e.g. Chrome 124, Edge 124, Brave, Firefox]
+        - Screen Resolution / Scale: [e.g. 1920x1080, 125%]
+    validations:
+      required: true
+  - type: textarea
+    id: console-logs
+    attributes:
+      label: Browser Console Logs
+      description: Open Developer Tools (`F12` or `Ctrl+Shift+I`) and paste any red error logs here.
+      render: shell
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have verified this bug on the latest version of NOIRADIX Studio.
+          required: true
+        - label: I have checked existing issues to ensure this is not a duplicate.
+          required: true

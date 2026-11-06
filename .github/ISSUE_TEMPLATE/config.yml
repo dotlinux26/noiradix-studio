@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask Questions & General Discussions
+    url: https://github.com/dotlinux26/noiradix-studio/discussions
+    about: Ask questions, share your pixel artwork, or discuss ideas with the community.
+  - name: 💖 Donate & Sponsor the Author
+    url: https://github.com/dotlinux26/noiradix-studio/blob/main/DONATE.md
+    about: Support dotlinux26 (Nguyen Duc Canh) and independent open-source game tool development.
+  - name: 🔒 Security Vulnerability Reporting
+    url: https://github.com/dotlinux26/noiradix-studio/blob/main/SECURITY.md
+    about: Report sensitive security vulnerabilities directly and confidentially.
