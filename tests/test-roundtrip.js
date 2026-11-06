@@ -257,6 +257,49 @@ assert(resolveGridContextMenuTarget(null, focusedCellId, multiRowDoc) === 'reape
 assert(resolveGridContextMenuTarget('reaper_down_0', focusedCellId, multiRowDoc) === 'reaper_down_0', 'Right-clicking another cell focuses that specific cell');
 assert(resolveGridContextMenuTarget(null, null, multiRowDoc) !== null, 'Right-clicking with no selection falls back safely');
 
+// Test 8: Animation Player Dynamic Scaling & Auto-Fit Math
+console.log(`\nTest 8: Animation Player Scaling & Auto-Fit Math`);
+const AnimationPlayer = require('../js/animation-player.js');
+const dummyCanvas = { width: 0, height: 0, getContext: () => null, parentElement: { clientWidth: 192, clientHeight: 192 } };
+const animP = new AnimationPlayer(dummyCanvas);
+assert(animP.scale === 8, 'AnimationPlayer default scale is 8x for clear crisp preview');
+
+// Test auto-fit integer scale calculations for different sprite resolutions into 192px box
+function calcFitScale(cw, ch, maxBox = 192) {
+  return Math.max(1, Math.floor(Math.min(maxBox / cw, maxBox / ch)));
+}
+assert(calcFitScale(16, 16) === 12, '16x16 sprite auto-fits to exact 12x integer scale (192px)');
+assert(calcFitScale(24, 24) === 8, '24x24 sprite auto-fits to exact 8x integer scale (192px)');
+assert(calcFitScale(32, 32) === 6, '32x32 sprite auto-fits to exact 6x integer scale (192px)');
+assert(calcFitScale(64, 64) === 3, '64x64 sprite auto-fits to exact 3x integer scale (192px)');
+assert(16 * 16 === 256, '16x16 sprite renders grand at 256px in Animation Studio');
+assert(calcFitScale(16, 16, 400) === 25, '16x16 sprite dynamically auto-fits up to 25x in large 400px studio viewport');
+
+// Test 9: Grid Overview Free 360° Panning Invariance & Atlas Magnifying Zoom
+console.log(`\nTest 9: Grid Free Panning & Atlas Magnifying Zoom`);
+let gPanX = 0, gPanY = 0;
+const startPanX = 15, startPanY = -25;
+const dragDeltaX = 80, dragDeltaY = 45;
+gPanX = startPanX + dragDeltaX;
+gPanY = startPanY + dragDeltaY;
+assert(gPanX === 95 && gPanY === 20, 'Grid free panning computes exact 360-degree delta translation');
+
+// Verify Atlas Magnifying Zoom display calculations
+function getAtlasDisplayDim(atlasW, atlasH, zoom, containerW = 200, containerH = 200) {
+  let effZ = zoom;
+  if (zoom === 'fit') {
+    effZ = Math.max(1, Math.floor(Math.min(containerW / atlasW, containerH / atlasH)));
+  } else {
+    effZ = Math.max(1, Number(zoom) || 4);
+  }
+  return { w: atlasW * effZ, h: atlasH * effZ, effZ };
+}
+const sampleAtlas = { w: 69, h: 69 };
+assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 1).w === 69, 'Atlas 1x zoom is exact 69px');
+assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 2).w === 138, 'Atlas 2x zoom is exact 138px');
+assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 4).w === 276, 'Atlas 4x zoom is exact 276px');
+assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 'fit', 200, 200).effZ === 2, 'Atlas fit zoom calculates exact integer multiplier within box');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);

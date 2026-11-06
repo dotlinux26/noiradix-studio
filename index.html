@@ -533,6 +533,15 @@
           </div>
 
           <div class="toolbar-section">
+            <!-- Studio Viewport Zoom Level Pills -->
+            <div class="preview-zoom-pills" id="studio-zoom-group" title="Animation Studio Preview Zoom Level">
+              <button class="pill-btn-xs" data-scale="8" title="8× Scale">8×</button>
+              <button class="pill-btn-xs" data-scale="12" title="12× Scale">12×</button>
+              <button class="pill-btn-xs active" data-scale="16" title="16× Scale (Default Large)">16×</button>
+              <button class="pill-btn-xs" data-scale="20" title="20× Scale (Giant)">20×</button>
+              <button class="pill-btn-xs" data-scale="fit" title="Fit to Viewport">Fit</button>
+            </div>
+            <div class="bar-separator"></div>
             <button id="btn-studio-onion-skin" class="btn btn-sm btn-secondary" title="Toggle Onion Skinning (Ghost adjacent frames)">
               <i class="fa-solid fa-ghost"></i> <span id="onion-skin-label">Onion Skin: OFF</span>
             </button>
@@ -549,9 +558,9 @@
           </div>
         </div>
 
-        <!-- Big Center Canvas Viewport -->
-        <div class="anim-studio-viewport">
-          <div class="anim-studio-canvas-container">
+        <!-- Big Center Canvas Viewport (Enlarged & Zoomable) -->
+        <div class="anim-studio-viewport" id="anim-studio-viewport" title="Scroll mouse wheel or drag to pan preview">
+          <div class="anim-studio-canvas-container" id="anim-studio-canvas-container">
             <canvas id="studio-anim-canvas" class="pixel-art-canvas"></canvas>
           </div>
         </div>
@@ -627,7 +636,14 @@
         <i class="fa-solid fa-film"></i>
         <span>Animation Studio</span>
       </div>
-      <div class="anim-header-controls">
+      <button id="anim-panel-min-btn" class="icon-round-btn btn-xs" title="Minimize / Expand Panel">
+        <i class="fa-solid fa-minus"></i>
+      </button>
+    </div>
+
+    <div class="anim-panel-body">
+      <!-- Dropdown Select Controls (Moved down to allow compact panel width) -->
+      <div class="anim-dropdowns-row">
         <select id="floating-anim-select" class="modern-select select-xs" title="Select Any Animation to Preview">
           <!-- Dynamically populated: walk_down, walk_up, idle, attack, custom... -->
         </select>
@@ -635,16 +651,20 @@
           <option value="4dir" selected>4-Dir</option>
           <option value="8dir">8-Dir</option>
         </select>
-        <button id="anim-panel-min-btn" class="icon-round-btn btn-xs" title="Minimize / Expand Panel">
-          <i class="fa-solid fa-minus"></i>
-        </button>
       </div>
-    </div>
 
-    <div class="anim-panel-body">
-      <!-- Animated Preview Canvas -->
-      <div class="anim-canvas-wrapper">
+      <!-- Animated Preview Canvas (Enlarged & Zoomable) -->
+      <div class="anim-canvas-wrapper" id="anim-canvas-wrapper" title="Double click or use mouse wheel to zoom preview">
         <canvas id="anim-canvas" class="pixel-art-canvas"></canvas>
+      </div>
+
+      <!-- Preview Zoom Level Pills -->
+      <div class="preview-zoom-pills" id="anim-zoom-group" title="Preview Zoom Level">
+        <button class="pill-btn-xs" data-scale="4" title="4× Scale">4×</button>
+        <button class="pill-btn-xs" data-scale="6" title="6× Scale">6×</button>
+        <button class="pill-btn-xs active" data-scale="8" title="8× Scale (Default)">8×</button>
+        <button class="pill-btn-xs" data-scale="10" title="10× Scale">10×</button>
+        <button class="pill-btn-xs" data-scale="fit" title="Fit to Container">Fit</button>
       </div>
 
       <!-- Direction Compass (Symmetrical D-Pad & 8-Way Dial) -->
@@ -667,16 +687,11 @@
         </div>
       </div>
 
-      <!-- Playback Controls -->
+      <!-- Playback Controls (Clean, Symmetrical 3-Button Row) -->
       <div class="anim-controls-row">
         <button id="anim-step-prev" class="icon-round-btn" title="Previous frame"><i class="fa-solid fa-backward-step"></i></button>
         <button id="anim-play-pause" class="icon-round-btn play-btn" title="Play / Pause"><i class="fa-solid fa-pause"></i></button>
         <button id="anim-step-next" class="icon-round-btn" title="Next frame"><i class="fa-solid fa-forward-step"></i></button>
-
-        <div class="fps-control">
-          <input type="range" id="anim-fps-slider" min="1" max="24" value="6" class="modern-slider">
-          <span id="anim-fps-label">6 fps</span>
-        </div>
       </div>
     </div>
   </aside>
@@ -1103,10 +1118,16 @@
           <!-- Right Live Preview Column -->
           <div class="export-preview-col">
             <div class="preview-header-bar">
-              <label class="form-label" style="margin:0;">Atlas Live Preview</label>
+              <label class="form-label" style="margin:0;"><i class="fa-solid fa-magnifying-glass"></i> Atlas Preview</label>
+              <div class="preview-zoom-pills" id="export-zoom-group" title="Atlas Preview Zoom Level">
+                <button class="pill-btn-xs" data-scale="1" title="1× (Actual Pixels)">1×</button>
+                <button class="pill-btn-xs" data-scale="2" title="2× Zoom">2×</button>
+                <button class="pill-btn-xs active" data-scale="4" title="4× Zoom (Default)">4×</button>
+                <button class="pill-btn-xs" data-scale="fit" title="Fit to Box">Fit</button>
+              </div>
               <span id="export-dimension-badge" class="info-badge badge-accent">0 × 0 px</span>
             </div>
-            <div class="export-preview-viewport">
+            <div class="export-preview-viewport" id="export-preview-viewport" title="Scroll mouse wheel or double-click to zoom preview">
               <canvas id="export-preview-canvas"></canvas>
             </div>
             <div class="export-metadata-summary">

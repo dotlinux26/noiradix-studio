@@ -4,7 +4,7 @@
 **Platform Version:** NOIRADIX Studio v1.0  
 **Specification:** PIX2 Format Specification v1.0  
 **Repository Remote:** `git@github.com:dotlinux26/noiradix-studio.git` (Branch: `main`)  
-**Test Suite Status:** 64 / 64 Automated Tests Passing (100%)
+**Test Suite Status:** 74 / 74 Automated Tests Passing (100%)
 
 ---
 
@@ -52,6 +52,21 @@ A rigorous, exhaustive system verification was conducted across all subsystems o
 * **Row Cards:** Removed hard outline strokes (`#94a3b8` / `#4b5563`), transitioning to clean, borderless cards with intact rounded geometry, crisp labels, and action buttons (`[▲] [▼] [clone] [×]`).
 * **Column Headers:** Removed outline strokes, leaving high-contrast, borderless pill badges with column delete buttons.
 * **Cell Artworks:** Sprite cell borders and pixel grid lines remain 100% intact as required.
+
+### 2.5 Floating Animation Studio Ergonomics & Narrow Profile
+* **Narrow Panel Architecture:** Relocated the animation clip selector and direction mode dropdowns down into `.anim-panel-body`, allowing the entire floating panel width to contract from `380px` to a compact `236px`.
+* **Lightweight Playback Row:** Eliminated the cramped FPS slider from the floating preview, creating a clean, symmetrical 3-button playback control row (`[Previous] [Play/Pause] [Next]`).
+* **Enlarged Preview & Integer Scaling:** Expanded `.anim-canvas-wrapper` from `112px` to `192px` (290% area increase). Sized preview to default `8×` (128px for 16×16 sprites) with dedicated zoom pills (`4×`, `6×`, `8×`, `10×`, `Fit`), wheel zoom, and double-click toggle.
+
+### 2.6 Grid Overview 360° Free Panning (Hand-like Dragging Without Key H)
+* **Zero-Key Requirement:** Clicking and dragging anywhere on the empty canvas margins or on `.grid-canvas-viewport` initiates free 360° canvas panning without needing to switch tools or press shortcut `H`.
+* **Hit-Testing Separation:** Mutually exclusive routing cleanly differentiates button clicks, row card drag reordering, cell selection clicks, and background panning.
+* **Tactile Feedback:** Empty spaces display cursor `grab`, actively dragging displays `grabbing`, and cell targets display `pointer`.
+* **Instant Re-center:** Double-clicking the viewport background or pressing `Ctrl + 0` instantly resets `gridPanX = 0, gridPanY = 0`.
+
+### 2.7 Export Atlas Live Preview Magnifying Zoom Controls
+* **Magnifying Glass Controls:** Added zoom pills (`1×`, `2×`, `4×`, `Fit`) to the Atlas Live Preview header.
+* **Crisp Nearest-Neighbor Scaling:** Preview defaults to `4×` zoom ($276\text{px}$ for a $69\text{px}$ atlas) with mouse-wheel zoom support and double-click toggle, allowing artists to closely inspect pixel bleeding and spacing margins.
 
 ---
 

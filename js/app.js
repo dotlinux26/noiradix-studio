@@ -551,7 +551,7 @@
   function initAnimationPlayers() {
     if (dom.animCanvas) {
       animPlayer = new AnimationPlayer(dom.animCanvas);
-      animPlayer.scale = 4;
+      animPlayer.scale = 8;
       window.animPlayer = animPlayer;
       animPlayer.start();
       updateFloatingPlayButtonUI();
@@ -559,7 +559,7 @@
 
     if (dom.studioAnimCanvas) {
       studioAnimPlayer = new AnimationPlayer(dom.studioAnimCanvas);
-      studioAnimPlayer.scale = 8;
+      studioAnimPlayer.scale = 16; // 16x scale: grand, crisp, high-visibility viewport
       studioAnimPlayer.onFrameChange = (frameIdx, cellId) => {
         updateStudioActiveFrameUI(frameIdx, cellId);
       };
@@ -789,6 +789,7 @@
     currentFilePath = null;
     selectedGridCellId = 'cell_0_0';
     centerCellCanvas();
+    centerGridCanvas();
     setDirty(false);
     refreshAll();
   }
@@ -800,6 +801,7 @@
     currentFileName = null;
     currentFilePath = null;
     centerCellCanvas();
+    centerGridCanvas();
     setDirty(false);
   }
 
@@ -992,6 +994,27 @@
   let gridRowCards = [];
   let gridColDeleteButtons = [];
   let rowDragState = null;
+
+  // Grid Overview Free 360° Panning State (Pan anywhere without needing Hand shortcut H)
+  let isGridPanning = false;
+  let gridPanX = 0, gridPanY = 0;
+  let gridDragStartX = 0, gridDragStartY = 0;
+  let gridDragStartPanX = 0, gridDragStartPanY = 0;
+
+  function applyGridPan() {
+    if (!dom.gridCanvas) return;
+    if (gridPanX === 0 && gridPanY === 0) {
+      dom.gridCanvas.style.transform = '';
+    } else {
+      dom.gridCanvas.style.transform = `translate(${gridPanX}px, ${gridPanY}px)`;
+    }
+  }
+
+  function centerGridCanvas() {
+    gridPanX = 0;
+    gridPanY = 0;
+    applyGridPan();
+  }
 
   function getRowMoveUpHit(mx, my) {
     for (const btn of gridRowMoveUpButtons) {
@@ -4982,10 +5005,14 @@ ${serialized}
   // ===========================================================================
 
   let currentExportFormat = 'unity'; // 'unity' | 'texturepacker' | 'png-only' | 'zip-frames'
+  let exportPreviewZoom = 4; // 1, 2, 4, 'fit' - magnifying glass preview zoom
 
   function openGameExportModal() {
     if (!dom.modalGameExport || !state.doc) return;
     syncExportFormatCards();
+    document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
+      b.classList.toggle('active', b.dataset.scale === String(exportPreviewZoom));
+    });
     updateExportPreview();
     dom.modalGameExport.classList.remove('hidden');
   }
@@ -5134,6 +5161,20 @@ ${serialized}
     const pctx = dom.exportPreviewCanvas.getContext('2d');
     pctx.clearRect(0, 0, atlasData.width, atlasData.height);
     pctx.drawImage(atlasData.canvas, 0, 0);
+
+    // Apply Magnifying Zoom scaling to Atlas Preview
+    let effZoom = exportPreviewZoom;
+    if (exportPreviewZoom === 'fit') {
+      const vp = document.getElementById('export-preview-viewport');
+      const vpw = vp ? (vp.clientWidth - 32) : 200;
+      const vph = vp ? (vp.clientHeight - 32) : 200;
+      effZoom = Math.max(1, Math.floor(Math.min(vpw / atlasData.width, vph / atlasData.height)));
+    } else {
+      effZoom = Math.max(1, Number(exportPreviewZoom) || 4);
+    }
+
+    dom.exportPreviewCanvas.style.width = `${Math.round(atlasData.width * effZoom)}px`;
+    dom.exportPreviewCanvas.style.height = `${Math.round(atlasData.height * effZoom)}px`;
 
     const doc = state.doc;
     const cols = doc.meta.grid.cols;
@@ -5851,10 +5892,64 @@ namespace NOIRADIX.Editor
         return;
       }
 
+      // Check if clicked on a Cell
+      const cellId = getGridCellFromPos(mx, my);
+      if (cellId) {
+        handleGridCellSelect(e);
+        return;
+      }
+
+      // Otherwise: clicked on empty canvas area -> Start free 360° pan!
+      isGridPanning = true;
+      gridDragStartX = e.clientX;
+      gridDragStartY = e.clientY;
+      gridDragStartPanX = gridPanX;
+      gridDragStartPanY = gridPanY;
+      dom.gridCanvas.style.cursor = 'grabbing';
+      document.body.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+
+    // Viewport background pointerdown for free 360° canvas pan
+    const gridViewport = document.querySelector('.grid-canvas-viewport');
+    if (gridViewport) {
+      gridViewport.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target !== gridViewport) return;
+        isGridPanning = true;
+        gridDragStartX = e.clientX;
+        gridDragStartY = e.clientY;
+        gridDragStartPanX = gridPanX;
+        gridDragStartPanY = gridPanY;
+        gridViewport.classList.add('is-panning');
+        document.body.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+
+      // Double-click empty background to re-center Grid
+      gridViewport.addEventListener('dblclick', (e) => {
+        if (e.target === gridViewport) {
+          centerGridCanvas();
+          showToast('Grid centered');
+        }
+      });
+    }
+
+    dom.gridCanvas.addEventListener('click', (e) => {
+      // Don't trigger cell select if user was panning or dragging
+      if (isGridPanning) return;
       handleGridCellSelect(e);
     });
 
-    dom.gridCanvas.addEventListener('click', handleGridCellSelect);
+    window.addEventListener('pointermove', (e) => {
+      if (isGridPanning) {
+        const dx = e.clientX - gridDragStartX;
+        const dy = e.clientY - gridDragStartY;
+        gridPanX = Math.round(gridDragStartPanX + dx);
+        gridPanY = Math.round(gridDragStartPanY + dy);
+        applyGridPan();
+      }
+    });
 
     dom.gridCanvas.addEventListener('mousemove', (e) => {
       const rect = dom.gridCanvas.getBoundingClientRect();
@@ -5879,6 +5974,11 @@ namespace NOIRADIX.Editor
         }
       }
 
+      if (isGridPanning) {
+        dom.gridCanvas.style.cursor = 'grabbing';
+        return;
+      }
+
       const isOverBtn = (
         getRowDeleteHit(mx, my) !== null ||
         getColDeleteHit(mx, my) !== null ||
@@ -5887,11 +5987,19 @@ namespace NOIRADIX.Editor
         getRowMoveDownHit(mx, my) !== null
       );
       const isOverCard = (getRowCardHit(mx, my) !== null);
+      const isOverCell = (getGridCellFromPos(mx, my) !== null);
 
-      dom.gridCanvas.style.cursor = isOverBtn ? 'pointer' : (isOverCard ? 'grab' : 'default');
+      dom.gridCanvas.style.cursor = isOverBtn ? 'pointer' : (isOverCard ? 'grab' : (isOverCell ? 'pointer' : 'grab'));
     });
 
     window.addEventListener('pointerup', () => {
+      if (isGridPanning) {
+        isGridPanning = false;
+        document.body.style.cursor = '';
+        if (gridViewport) gridViewport.classList.remove('is-panning');
+        if (dom.gridCanvas) dom.gridCanvas.style.cursor = 'grab';
+      }
+
       if (rowDragState) {
         if (rowDragState.isDragging) {
           const fromR = rowDragState.fromRow;
@@ -5946,7 +6054,6 @@ namespace NOIRADIX.Editor
     };
 
     dom.gridCanvas.addEventListener('contextmenu', handleGridContextMenu);
-    const gridViewport = document.querySelector('.grid-canvas-viewport');
     if (gridViewport) {
       gridViewport.addEventListener('contextmenu', handleGridContextMenu);
     }
@@ -6259,6 +6366,49 @@ namespace NOIRADIX.Editor
         closeGameExportModal();
       }
     });
+
+    // Export Atlas Preview Zoom level buttons (Magnifying Glass Controls)
+    document.querySelectorAll('#export-zoom-group [data-scale]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const scaleVal = btn.dataset.scale;
+        exportPreviewZoom = (scaleVal === 'fit') ? 'fit' : parseInt(scaleVal, 10);
+        updateExportPreview();
+      });
+    });
+
+    // Mouse wheel zoom on Export preview viewport
+    const exportViewport = document.getElementById('export-preview-viewport');
+    if (exportViewport) {
+      exportViewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const scales = [1, 2, 4, 'fit'];
+        let curIdx = scales.indexOf(exportPreviewZoom);
+        if (curIdx === -1) curIdx = 2; // default 4
+        if (e.deltaY < 0 && curIdx < scales.length - 1) {
+          curIdx++;
+        } else if (e.deltaY > 0 && curIdx > 0) {
+          curIdx--;
+        }
+        const nextScale = scales[curIdx];
+        exportPreviewZoom = nextScale;
+        document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
+          b.classList.toggle('active', b.dataset.scale === String(nextScale));
+        });
+        updateExportPreview();
+      }, { passive: false });
+
+      exportViewport.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        const nextScale = (exportPreviewZoom === 'fit') ? 4 : 'fit';
+        exportPreviewZoom = nextScale;
+        document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
+          b.classList.toggle('active', b.dataset.scale === String(nextScale));
+        });
+        updateExportPreview();
+      });
+    }
 
     if (dom.btnAddAnimClip) {
       dom.btnAddAnimClip.addEventListener('click', () => {
@@ -6924,6 +7074,207 @@ namespace NOIRADIX.Editor
         renderMiniPreview();
       });
     });
+
+    // Floating Animation Preview Zoom level buttons
+    document.querySelectorAll('#anim-zoom-group [data-scale]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#anim-zoom-group [data-scale]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const scaleVal = btn.dataset.scale;
+        if (animPlayer) {
+          animPlayer.scale = (scaleVal === 'fit') ? 'fit' : parseInt(scaleVal, 10);
+          animPlayer.render();
+        }
+      });
+    });
+
+    // Mouse wheel zoom on floating preview canvas wrapper
+    const animCanvasWrapper = document.getElementById('anim-canvas-wrapper');
+    if (animCanvasWrapper) {
+      animCanvasWrapper.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (!animPlayer) return;
+        const scales = [4, 6, 8, 10, 'fit'];
+        let curIdx = scales.indexOf(animPlayer.scale);
+        if (curIdx === -1) curIdx = 2; // default 8
+        if (e.deltaY < 0 && curIdx < scales.length - 1) {
+          curIdx++;
+        } else if (e.deltaY > 0 && curIdx > 0) {
+          curIdx--;
+        }
+        const nextScale = scales[curIdx];
+        animPlayer.scale = nextScale;
+        document.querySelectorAll('#anim-zoom-group [data-scale]').forEach(b => {
+          b.classList.toggle('active', b.dataset.scale === String(nextScale));
+        });
+        animPlayer.render();
+      }, { passive: false });
+
+      animCanvasWrapper.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        if (!animPlayer) return;
+        const nextScale = (animPlayer.scale === 'fit') ? 8 : 'fit';
+        animPlayer.scale = nextScale;
+        document.querySelectorAll('#anim-zoom-group [data-scale]').forEach(b => {
+          b.classList.toggle('active', b.dataset.scale === String(nextScale));
+        });
+        animPlayer.render();
+      });
+    }
+
+    // Animation Studio Viewport Zoom Level buttons
+    document.querySelectorAll('#studio-zoom-group [data-scale]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#studio-zoom-group [data-scale]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const scaleVal = btn.dataset.scale;
+        if (studioAnimPlayer) {
+          studioAnimPlayer.scale = (scaleVal === 'fit') ? 'fit' : parseInt(scaleVal, 10);
+          studioAnimPlayer.render();
+        }
+      });
+    });
+
+    // Animation Studio Viewport mouse wheel zoom & free panning
+    const animStudioViewport = document.getElementById('anim-studio-viewport');
+    const animStudioContainer = document.getElementById('anim-studio-canvas-container');
+    let studioPanX = 0, studioPanY = 0;
+    let isStudioPanning = false;
+    let studioDragStartX = 0, studioDragStartY = 0;
+    let studioDragStartPanX = 0, studioDragStartPanY = 0;
+
+    function applyStudioPan() {
+      if (!animStudioContainer) return;
+      if (studioPanX === 0 && studioPanY === 0) {
+        animStudioContainer.style.transform = '';
+      } else {
+        animStudioContainer.style.transform = `translate(${studioPanX}px, ${studioPanY}px)`;
+      }
+    }
+
+    window.centerStudioCanvas = function() {
+      studioPanX = 0;
+      studioPanY = 0;
+      applyStudioPan();
+    };
+
+    if (animStudioViewport) {
+      animStudioViewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (!studioAnimPlayer) return;
+        const scales = [8, 12, 16, 20, 'fit'];
+        let curIdx = scales.indexOf(studioAnimPlayer.scale);
+        if (curIdx === -1) curIdx = 2; // default 16
+        if (e.deltaY < 0 && curIdx < scales.length - 1) {
+          curIdx++;
+        } else if (e.deltaY > 0 && curIdx > 0) {
+          curIdx--;
+        }
+        const nextScale = scales[curIdx];
+        studioAnimPlayer.scale = nextScale;
+        document.querySelectorAll('#studio-zoom-group [data-scale]').forEach(b => {
+          b.classList.toggle('active', b.dataset.scale === String(nextScale));
+        });
+        studioAnimPlayer.render();
+      }, { passive: false });
+
+      animStudioViewport.addEventListener('dblclick', (e) => {
+        if (e.target === animStudioViewport || e.target === animStudioContainer || e.target.id === 'studio-anim-canvas') {
+          e.preventDefault();
+          if (!studioAnimPlayer) return;
+          const nextScale = (studioAnimPlayer.scale === 'fit') ? 16 : 'fit';
+          studioAnimPlayer.scale = nextScale;
+          studioPanX = 0;
+          studioPanY = 0;
+          applyStudioPan();
+          document.querySelectorAll('#studio-zoom-group [data-scale]').forEach(b => {
+            b.classList.toggle('active', b.dataset.scale === String(nextScale));
+          });
+          studioAnimPlayer.render();
+        }
+      });
+
+      // Free 360° Panning in Animation Studio Viewport
+      animStudioViewport.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('#studio-zoom-group') || e.target.closest('button')) return;
+        isStudioPanning = true;
+        studioDragStartX = e.clientX;
+        studioDragStartY = e.clientY;
+        studioDragStartPanX = studioPanX;
+        studioDragStartPanY = studioPanY;
+        animStudioViewport.classList.add('is-panning');
+        document.body.style.cursor = 'grabbing';
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (isStudioPanning) {
+          const dx = e.clientX - studioDragStartX;
+          const dy = e.clientY - studioDragStartY;
+          studioPanX = Math.round(studioDragStartPanX + dx);
+          studioPanY = Math.round(studioDragStartPanY + dy);
+          applyStudioPan();
+        }
+      });
+
+      window.addEventListener('pointerup', () => {
+        if (isStudioPanning) {
+          isStudioPanning = false;
+          animStudioViewport.classList.remove('is-panning');
+          document.body.style.cursor = '';
+        }
+      });
+    }
+
+    // Generic Horizontal Drag-to-Scroll & Wheel-Scroll Helper
+    function enableHorizontalDragScroll(container) {
+      if (!container) return;
+      let isDown = false;
+      let startX = 0;
+      let startScrollLeft = 0;
+
+      container.addEventListener('pointerdown', (e) => {
+        if (['BUTTON', 'SELECT', 'INPUT'].includes(e.target.tagName)) return;
+        if (e.target.closest('button, select, input')) return;
+        isDown = true;
+        startX = e.clientX;
+        startScrollLeft = container.scrollLeft;
+        container.classList.add('is-dragging');
+        try { container.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+
+      container.addEventListener('pointermove', (e) => {
+        if (!isDown) return;
+        const dx = e.clientX - startX;
+        container.scrollLeft = startScrollLeft - dx;
+      });
+
+      const stopDrag = (e) => {
+        if (isDown) {
+          isDown = false;
+          container.classList.remove('is-dragging');
+          try { if (e && e.pointerId) container.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      };
+
+      container.addEventListener('pointerup', stopDrag);
+      container.addEventListener('pointercancel', stopDrag);
+
+      container.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault();
+          container.scrollLeft += e.deltaY;
+        } else if (Math.abs(e.deltaX) > 0) {
+          container.scrollLeft += e.deltaX;
+        }
+      }, { passive: false });
+    }
+
+    enableHorizontalDragScroll(document.querySelector('.cell-top-bar'));
+    enableHorizontalDragScroll(document.querySelector('.timeline-header'));
+    enableHorizontalDragScroll(document.getElementById('timeline-frames-strip'));
+    document.querySelectorAll('.view-sub-toolbar').forEach(tb => enableHorizontalDragScroll(tb));
+
     bindAction('btn-export-atlas', exportAtlasPng);
     bindAction('btn-load-demo', loadDefaultProject);
     bindAction('btn-open-spec', () => {
@@ -7092,6 +7443,16 @@ namespace NOIRADIX.Editor
       // Reset Zoom & Frame (Ctrl + 0)
       if ((e.ctrlKey || e.metaKey) && key === '0') {
         e.preventDefault();
+        if (state.activeTabId === 'tab-grid-overview') {
+          centerGridCanvas();
+          showToast('Grid centered (Ctrl+0)');
+          return;
+        }
+        if (state.activeTabId === 'tab-anim-studio') {
+          if (typeof centerStudioCanvas === 'function') centerStudioCanvas();
+          showToast('Animation Studio centered (Ctrl+0)');
+          return;
+        }
         state.cellZoom = 24;
         centerCellCanvas();
         renderCellEditor();

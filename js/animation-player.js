@@ -36,7 +36,7 @@ class AnimationPlayer {
     this.currentMode = '4dir'; // '4dir' | '8dir'
     this.fps = 6;
     this.isPlaying = true;
-    this.scale = 4; // 4x preview
+    this.scale = 8; // 8x preview (crisp & large default)
     this.onionSkin = false;
     this.onFrameChange = null;
   }
@@ -225,8 +225,24 @@ class AnimationPlayer {
     const cw = doc.meta.cellSize.w;
     const ch = doc.meta.cellSize.h;
 
-    this.canvas.width = cw * this.scale;
-    this.canvas.height = ch * this.scale;
+    let effScale = 8;
+    if (this.scale === 'fit' || typeof this.scale === 'string') {
+      const studioVp = this.canvas.closest ? this.canvas.closest('.anim-studio-viewport') : null;
+      if (studioVp) {
+        // Measure viewport bounds with safe margins so fit scale is 100% stable (Zero infinite loop)
+        const maxW = Math.max(160, studioVp.clientWidth - 120);
+        const maxH = Math.max(160, studioVp.clientHeight - 120);
+        effScale = Math.max(1, Math.min(24, Math.floor(Math.min(maxW / cw, maxH / ch))));
+      } else {
+        // Floating preview panel wrapper has fixed size of 192px
+        effScale = Math.max(1, Math.min(12, Math.floor(192 / Math.max(cw, ch))));
+      }
+    } else {
+      effScale = Math.max(1, Math.min(32, Number(this.scale) || 8));
+    }
+
+    this.canvas.width = cw * effScale;
+    this.canvas.height = ch * effScale;
     this.ctx.imageSmoothingEnabled = false;
 
     // Draw checkerboard
@@ -245,7 +261,7 @@ class AnimationPlayer {
         for (const coord in prevCell.pixels) {
           const [x, y] = coord.split(',').map(Number);
           this.ctx.fillStyle = '#6366f1'; // Tinted ghost color
-          this.ctx.fillRect(x * this.scale, y * this.scale, this.scale, this.scale);
+          this.ctx.fillRect(x * effScale, y * effScale, effScale, effScale);
         }
         this.ctx.restore();
       }
@@ -259,7 +275,7 @@ class AnimationPlayer {
     for (const coord in cell.pixels) {
       const [x, y] = coord.split(',').map(Number);
       this.ctx.fillStyle = cell.pixels[coord];
-      this.ctx.fillRect(x * this.scale, y * this.scale, this.scale, this.scale);
+      this.ctx.fillRect(x * effScale, y * effScale, effScale, effScale);
     }
   }
 
@@ -277,4 +293,9 @@ class AnimationPlayer {
   }
 }
 
-window.AnimationPlayer = AnimationPlayer;
+if (typeof window !== 'undefined') {
+  window.AnimationPlayer = AnimationPlayer;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = AnimationPlayer;
+}
