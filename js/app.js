@@ -76,7 +76,7 @@
 
     await initAppSession();
     initFileWatcher();
-    updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'full-character');
+    updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
   });
 
   // ===========================================================================
@@ -3847,12 +3847,57 @@
   // AI SPECIFICATION & CONTEXTUAL PROMPT STUDIO
   // ===========================================================================
 
-  function updateAiGuidePane(mode = 'full-character') {
+  function updateAiGuidePane(mode = 'all-in-one') {
     const titleEl = document.getElementById('ai-guide-title');
     const contentEl = document.getElementById('ai-guide-content');
     if (!contentEl) return;
 
-    if (mode === 'full-character') {
+    if (mode === 'all-in-one') {
+      if (titleEl) titleEl.textContent = '🌟 All-in-One Master Cognitive Guide';
+      contentEl.innerHTML = `
+        <h4>1. Studio Ecosystem &amp; Live Hot-Reload</h4>
+        <p class="guide-desc">Desktop-grade coordinate pixel studio with real-time file watcher. Any external file write triggers instant live hot-reload without losing unsaved changes.</p>
+
+        <h4>2. Mathematical Primitives &amp; Discrete Coords</h4>
+        <div class="guide-formula-box">
+          <p><strong>Discrete Coords:</strong> (0,0) is top-left. Strictly 0 &le; X &lt; W and 0 &le; Y &lt; H.</p>
+          <p><strong>Shorthand Plot:</strong> <code>p x,y &lt;pal_id|hex&gt;</code></p>
+          <p><strong>Bilateral Center Symmetry:</strong> <code>sym_dot x,y axisX &lt;col&gt;</code> (axis = 7.5 for 16×16)</p>
+          <p><strong>Bresenham Line:</strong> <code>line x0,y0 x1,y1 &lt;col&gt;</code> (weapons, diagonal silhouettes)</p>
+          <p><strong>Bounding Rect:</strong> <code>rect x,y w,h &lt;col&gt; [fill|outline]</code></p>
+          <p><strong>Flood Fill:</strong> <code>fill x,y &lt;col&gt;</code> (bounded 4-way fill)</p>
+        </div>
+
+        <h4>3. Anatomy &amp; Center Symmetry Formula (16×16)</h4>
+        <div class="guide-formula-box">
+          <p><strong>Head / Hair:</strong> Y = 1 to 6, X = 4 to 11 (8px wide)</p>
+          <p><strong>Eyes:</strong> Y = 7 to 8 (2–3px apart, outline + eye color)</p>
+          <p><strong>Torso / Outfit:</strong> Y = 9 to 12 (8–10px wide)</p>
+          <p><strong>Feet / Ground:</strong> Y = 13 to 15 (leave transparent base margin)</p>
+        </div>
+
+        <h4>4. Mathematical 4-Frame Walk Locomotion</h4>
+        <ul class="guide-cmd-list">
+          <li><strong>Frame 0 (Contact):</strong> Neutral standing pose, feet grounded.</li>
+          <li><strong>Frame 1 (Step Left):</strong> Bob torso -1px on Y (Y - 1), left foot forward.</li>
+          <li><strong>Frame 2 (Passing):</strong> Neutral height, feet crossing center.</li>
+          <li><strong>Frame 3 (Step Right):</strong> Bob torso -1px on Y (Y - 1), right foot forward.</li>
+          <li><strong>Secondary Motion:</strong> Capes, tails, weapons lag 1 frame behind primary movement.</li>
+        </ul>
+
+        <h4>5. Equipment &amp; Accessory Overlay</h4>
+        <p class="guide-desc">Non-destructive layering: Headgear on crown Y = 0 to 5; Weapons at hand level X = 2 to 4 or 12 to 14; Shields and wings flanking sides.</p>
+
+        <h4>6. Surgical Patch Directives</h4>
+        <p class="guide-desc">Target individual <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives to recolor or fix frames with zero token waste.</p>
+
+        <h4>7. Anti-Hallucination Guardrails</h4>
+        <div class="tip-box">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span><strong>Zero Background:</strong> Never output background fill! Unspecified coordinates are 100% transparent. Valid coordinates are strictly 0 &le; x &lt; width, 0 &le; y &lt; height.</span>
+        </div>
+      `;
+    } else if (mode === 'full-character') {
       if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)';
       contentEl.innerHTML = `
         <h4>1. NOIRADIX Studio Character Architecture</h4>
@@ -3975,7 +4020,7 @@ const outText = PIX2.serialize(doc);</code></pre>
 
   function copyAiPrompt() {
     if (!state.doc) return;
-    const mode = (dom.selectAiPromptMode && dom.selectAiPromptMode.value) || 'full-character';
+    const mode = (dom.selectAiPromptMode && dom.selectAiPromptMode.value) || 'all-in-one';
     const serialized = PIX2.serialize(state.doc);
     const meta = state.doc.meta;
     const cw = meta.cellSize.w;
@@ -3994,7 +4039,57 @@ const outText = PIX2.serialize(doc);</code></pre>
 
     let specializedInstructions = '';
 
-    if (mode === 'full-character') {
+    if (mode === 'all-in-one') {
+      specializedInstructions = `### MASTER SPECIALIZATION: ALL-IN-ONE COGNITIVE GUIDE & ALL PRODUCTION RECIPES
+You are equipped with the full suite of NOIRADIX Studio production capabilities. You can create complete characters, synthesize animations, craft equipment overlays, or execute surgical patches as requested:
+
+#### PRODUCTION RECIPE 1: COMPLETE 4-DIRECTIONAL & 8-DIRECTIONAL CHARACTER CREATION
+1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):
+   - Head & Hair: Top Y in [1..6], centered around X ~ ${((cw - 1) / 2).toFixed(1)}. Width = 8px.
+   - Eyes: Y in [7..8], spaced 2-3 pixels apart. Use dark outline and contrasting eye color.
+   - Torso & Clothing: Y in [9..12], width = 8-10 pixels.
+   - Legs & Shadow: Y in [13..15]. Leave transparent margins below feet.
+2. DIRECTIONAL PERSPECTIVES:
+   - 'down_0': Frontal view with bilateral center symmetry. Both eyes clearly visible.
+   - 'up_0': Back view showing back of head, hair, and cloak. NO eyes, nose, or mouth visible.
+   - 'right_0': 3/4 side profile facing right. Eyes and nose shifted toward right edge (X ~ ${cw - 5}).
+   - 'left_0': Facing left. Exact horizontal mirror of 'right_0'.
+3. ACCELERATION MACROS:
+   - Use 'sym_dot x,y ${((cw - 1) / 2).toFixed(1)} <color>' for bilateral frontal symmetry.
+   - Use 'p x,y <pal_id>' for compact sparse pixel placement.
+4. ANIMATION BINDINGS:
+   - Hook up all walk animation cycles at 6fps loop:
+     @animation walk_down: [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
+     @animation walk_up: [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
+     @animation walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
+     @animation walk_left: [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop
+
+#### PRODUCTION RECIPE 2: DISCRETE 4-FRAME WALK CYCLE & LOCOMOTION FORMULA
+1. 4-FRAME MATHEMATICAL WALK FORMULA:
+   - Frame 0 (Contact): Neutral standing contact pose, both feet grounded.
+   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up by 1px: Y - 1). Left foot forward, right foot trailing back.
+   - Frame 2 (Passing): Neutral torso height. Legs passing each other in center.
+   - Frame 3 (Step Right): Bob torso by 1px (Y - 1). Right foot forward, left foot trailing back.
+2. SECONDARY MOTION PHYSICS:
+   - Trailing capes, hair tails, antennae, and held weapons MUST lag 1 frame behind primary body bobbing.
+
+#### PRODUCTION RECIPE 3: NON-DESTRUCTIVE ACCESSORY & EQUIPMENT OVERLAY
+1. NON-DESTRUCTIVE OVERLAY INVARIANT:
+   - Preserve existing character silhouette and facial pixels underneath unless intentionally obscured.
+   - Hats / Helmets / Crowns: Draw on top crown Y in [0..5].
+   - Weapons (Swords, Staves, Bows): Position at hand level (X in [2..4] or [12..14]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
+   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..3] and [13..15]) and behind back frames.
+2. PALETTE EXPANSION:
+   - Introduce new equipment material color IDs in '@palette' (e.g. gold '#ffd700', steel '#94a3b8', ruby '#ef4444').
+
+#### PRODUCTION RECIPE 4: SURGICAL FRAME & COLOR PATCH DIRECTIVES
+1. SURGICAL SPECIFICATION:
+   - When requested to modify existing art, do NOT regenerate or output unchanged cells or animations.
+   - Output ONLY the modified '@cell <id>' or '@palette' lines to conserve tokens and prevent regressions.
+   - To ERASE a pixel, simply omit its coordinate from the cell record.
+2. RECOLORING:
+   - Modify the '@palette' hex value or remap palette IDs inside targeted cells.`;
+    } else if (mode === 'full-character') {
       specializedInstructions = `### SPECIALIZED OBJECTIVE: COMPLETE 4-DIRECTIONAL CHARACTER CREATION
 You are tasked with generating a complete game character from scratch in all 4 cardinal directions:
 1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):

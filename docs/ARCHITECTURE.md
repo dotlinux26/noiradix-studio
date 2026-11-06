@@ -122,7 +122,7 @@ Player.cell_id.pixel(x, y) = Color
 
 ## 7. Hardware & System Execution Profile
 
-- **RAM Footprint:** ~25 MB to 45 MB typical consumption during active 4K / 64x zoom operation.
+- **RAM Footprint:** ~25 MB to 100 MB typical consumption depending on grid size, zoom depth, and undo history buffer.
 - **CPU Overhead:** 0% idle; minimal bursts during flood fill or atlas generation (< 16ms per frame, ensuring steady 60 FPS).
 - **GPU Acceleration:** Standard HTML5 Canvas 2D hardware rasterizer.
 - **Storage Requirement:** Zero local installation required; static bundle footprint is under 2 MB.

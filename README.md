@@ -68,7 +68,7 @@ NOIRADIX Studio is engineered with an ultra-lightweight, zero-overhead architect
 |:---|:---|:---|
 | **Operating System** | Windows 10/11, macOS 10.15+, Linux (Ubuntu, Debian, Fedora, Arch), ChromeOS | Windows 11, macOS 14+, Linux |
 | **Processor (CPU)** | 1.5 GHz Dual-Core (x86_64 or ARM64) | 2.0 GHz Quad-Core or Apple Silicon (M1/M2/M3/M4) |
-| **Memory (RAM)** | 512 MB free RAM (Studio footprint is only ~25 MB – 45 MB) | 1 GB free RAM |
+| **Memory (RAM)** | 512 MB free RAM (Studio footprint is only ~25 MB – 100 MB) | 1 GB free RAM |
 | **Graphics (GPU)** | Integrated Graphics with WebGL / HTML5 Canvas 2D support | Any modern integrated or dedicated GPU |
 | **Display Resolution** | 1280×720 (HD) minimum | 1920×1080 (Full HD) or higher (supports 2K, 4K, Ultrawide) |
 | **Input Devices** | Standard Mouse & Keyboard | Mouse, Keyboard, and Drawing Tablet (Wacom, Apple Pencil) |
