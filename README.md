@@ -5,7 +5,8 @@
 
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-    <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Format-PIX2_v1.0-6366f1.svg" alt="PIX2 Standard"></a>
+    <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
+    <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.0-6366f1.svg" alt="PIX2 Standard"></a>
     <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
     <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
     <a href="CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg" alt="Code of Conduct"></a>

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "PIX2",
+  "scopeName": "source.pix2",
+  "fileTypes": ["pix2"],
+  "patterns": [
+    {
+      "name": "comment.line.number-sign.pix2",
+      "match": "(#|;).*$"
+    },
+    {
+      "name": "keyword.control.directive.pix2",
+      "match": "@(pix2|meta|palette|cell|animation|end)\\b"
+    },
+    {
+      "name": "support.type.property-name.pix2",
+      "match": "\\b(title|grid|cell_size|name|direction|frame|frames|fps|loop):"
+    },
+    {
+      "name": "keyword.operator.macro.pix2",
+      "match": "\\b(p|pixel|sym_dot|line|rect|fill)\\b"
+    },
+    {
+      "name": "constant.other.color.hex.pix2",
+      "match": "#[0-9a-fA-F]{3,8}\\b"
+    },
+    {
+      "name": "constant.language.direction.pix2",
+      "match": "\\b(down|up|right|left|down_left|down_right|up_left|up_right)\\b"
+    },
+    {
+      "name": "constant.language.boolean.pix2",
+      "match": "\\b(true|false)\\b"
+    },
+    {
+      "name": "string.quoted.double.pix2",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.pix2",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "constant.numeric.integer.pix2",
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+    }
+  ]
+}

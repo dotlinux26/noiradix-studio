@@ -1,0 +1,25 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# -----------------------------------------------------------------------------
+# GitHub Linguist Language & Syntax Highlighting Overrides
+# -----------------------------------------------------------------------------
+
+# Syntax highlight .pix2 files on GitHub using YAML grammar parser
+# (Highlights @meta, @cell, @palette directives, keys, coordinates, and #/; comments)
+*.pix2 linguist-language=YAML
+*.pix2 linguist-detectable=true
+
+# Mark vendored third-party libraries & webfonts to prevent inflating repository stats
+css/fontawesome/** linguist-vendored=true
+css/webfonts/** linguist-vendored=true
+*.min.css linguist-vendored=true
+*.min.js linguist-vendored=true
+
+# Mark documentation and specifications
+docs/** linguist-documentation=true
+specification/** linguist-documentation=true
+*.md linguist-documentation=true
+
+# Mark test suites
+tests/** linguist-detectable=false
