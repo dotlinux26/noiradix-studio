@@ -33,3 +33,4 @@ Before submitting, please ensure your PR satisfies the core principles of NOIRAD
 
 ## 📸 Screenshots or Recordings (Optional)
 <!-- Attach screenshots or animated GIFs demonstrating the change if applicable -->
+

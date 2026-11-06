@@ -81,3 +81,4 @@ node --check js/editor-state.js
 This project is led by **dotlinux26 (Nguyen Duc Canh)**. Please note that all participants are expected to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 If you have questions or want to discuss ideas, please open a discussion on GitHub or reach out to `0206canh@gmail.com`.
+

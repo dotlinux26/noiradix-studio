@@ -15,6 +15,35 @@ const PIX2 = (function () {
   'use strict';
 
   // ===========================================================================
+  // SECURITY & RESOURCE BOUNDS (Anti-DoS & Anti-Prototype Pollution)
+  // ===========================================================================
+  const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+  const MAX_GRID_COLS = 128;
+  const MAX_GRID_ROWS = 256;
+  const MAX_CELL_DIM = 512;
+  const MIN_CELL_DIM = 1;
+  const MAX_ANIM_FPS = 120;
+  const MAX_FRAMES_PER_ANIM = 512;
+  const MAX_TOTAL_CELLS = 4096;
+  const MAX_COORD_ABS = 2048;
+
+  function isSafeIdentifier(key) {
+    if (!key || typeof key !== 'string') return false;
+    const lower = key.trim().toLowerCase();
+    return !FORBIDDEN_KEYS.has(lower);
+  }
+
+  function sanitizeKey(raw, fallback = 'item') {
+    if (!raw || typeof raw !== 'string') return fallback;
+    const trimmed = raw.trim();
+    if (!isSafeIdentifier(trimmed)) return fallback;
+    // Allow safe alphanumeric, underscore, dot, dash
+    const clean = trimmed.replace(/[^a-zA-Z0-9_\-\.]/g, '_').slice(0, 128);
+    return clean || fallback;
+  }
+
+  // ===========================================================================
   // COMMENT & LEXER DISAMBIGUATION
   // ===========================================================================
 
@@ -229,7 +258,13 @@ const PIX2 = (function () {
    * Parse .pix2 text into internal document model
    */
   function parse(text) {
-    if (!text) return createDocument();
+    if (!text || typeof text !== 'string') return createDocument();
+
+    // Defense-in-depth: limit payload size to prevent memory exhaustion
+    if (text.length > MAX_FILE_SIZE) {
+      console.warn(`[PIX2 Security] Document payload exceeds 20MB limit (${text.length} bytes). Safely truncating.`);
+      text = text.slice(0, MAX_FILE_SIZE);
+    }
 
     const lines = text.split(/\r?\n/);
     const doc = {
@@ -263,7 +298,7 @@ const PIX2 = (function () {
         const secName = parts[0].toLowerCase();
 
         if (secName === 'pix2') {
-          doc.meta.version = parts[1] || '1.0';
+          doc.meta.version = sanitizeKey(parts[1] || '1.0', '1.0');
           continue;
         } else if (secName === 'meta') {
           currentSection = 'meta';
@@ -288,7 +323,8 @@ const PIX2 = (function () {
         } else if (secName === 'animation') {
           currentSection = 'animation';
           currentCell = null;
-          const animId = parts[1] || `anim_${Object.keys(doc.animations).length}`;
+          const rawAnimId = parts[1] || `anim_${Object.keys(doc.animations).length}`;
+          const animId = sanitizeKey(rawAnimId, `anim_${Object.keys(doc.animations).length}`);
           currentAnim = {
             id: animId,
             name: animId,
@@ -303,14 +339,21 @@ const PIX2 = (function () {
         } else if (secName === 'cell' || secName === 'frame') {
           currentSection = 'cell';
           currentAnim = null;
-          const cellId = parts[1] || `cell_${Object.keys(doc.cells).length}`;
+          const rawCellId = parts[1] || `cell_${Object.keys(doc.cells).length}`;
+          const cellId = sanitizeKey(rawCellId, `cell_${Object.keys(doc.cells).length}`);
+
+          // Memory DoS protection: cap maximum cells per document
+          if (Object.keys(doc.cells).length >= MAX_TOTAL_CELLS && !doc.cells[cellId]) {
+            currentCell = null;
+            continue;
+          }
 
           // Detect row & col if cellId has standard pattern
           let parsedRow = null, parsedCol = null;
           const match = cellId.match(/cell_(\d+)_(\d+)/);
           if (match) {
-            parsedRow = parseInt(match[1], 10);
-            parsedCol = parseInt(match[2], 10);
+            parsedRow = Math.min(parseInt(match[1], 10), MAX_GRID_ROWS);
+            parsedCol = Math.min(parseInt(match[2], 10), MAX_GRID_COLS);
           }
 
           currentCell = {
@@ -336,23 +379,29 @@ const PIX2 = (function () {
           const key = line.slice(0, colonIdx).trim().toLowerCase();
           const val = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
 
-          if (key === 'title' || key === 'name') doc.meta.title = val;
-          else if (key === 'author') doc.meta.author = val;
-          else if (key === 'version') doc.meta.version = val;
-          else if (key === 'color_mode') doc.meta.color_mode = val;
-          else if (key === 'coordinate_origin') doc.meta.coordinate_origin = val;
-          else if (key === 'columns' || key === 'cols') doc.meta.grid.cols = parseInt(val, 10) || 4;
-          else if (key === 'rows') doc.meta.grid.rows = parseInt(val, 10) || 4;
+          if (key === 'title' || key === 'name') doc.meta.title = val.slice(0, 256);
+          else if (key === 'author') doc.meta.author = val.slice(0, 128);
+          else if (key === 'version') doc.meta.version = val.slice(0, 32);
+          else if (key === 'color_mode') doc.meta.color_mode = val.slice(0, 32);
+          else if (key === 'coordinate_origin') doc.meta.coordinate_origin = val.slice(0, 32);
+          else if (key === 'columns' || key === 'cols') doc.meta.grid.cols = Math.min(Math.max(1, parseInt(val, 10) || 4), MAX_GRID_COLS);
+          else if (key === 'rows') doc.meta.grid.rows = Math.min(Math.max(1, parseInt(val, 10) || 4), MAX_GRID_ROWS);
           else if (key === 'grid') {
             const dims = val.split('x').map(n => parseInt(n.trim(), 10));
-            doc.meta.grid = { cols: dims[0] || 4, rows: dims[1] || 4 };
+            doc.meta.grid = {
+              cols: Math.min(Math.max(1, dims[0] || 4), MAX_GRID_COLS),
+              rows: Math.min(Math.max(1, dims[1] || 4), MAX_GRID_ROWS)
+            };
           } else if (key === 'default_cell' || key === 'cell_size') {
             const dims = val.split('x').map(n => parseInt(n.trim(), 10));
-            doc.meta.cellSize = { w: dims[0] || 16, h: dims[1] || 16 };
+            doc.meta.cellSize = {
+              w: Math.min(Math.max(MIN_CELL_DIM, dims[0] || 16), MAX_CELL_DIM),
+              h: Math.min(Math.max(MIN_CELL_DIM, dims[1] || 16), MAX_CELL_DIM)
+            };
           } else if (key === 'gap') {
-            doc.meta.gap = parseInt(val, 10) || 0;
+            doc.meta.gap = Math.min(Math.max(0, parseInt(val, 10) || 0), 128);
           } else if (key === 'margin') {
-            doc.meta.margin = parseInt(val, 10) || 0;
+            doc.meta.margin = Math.min(Math.max(0, parseInt(val, 10) || 0), 128);
           }
         }
       }
@@ -361,9 +410,11 @@ const PIX2 = (function () {
       else if (currentSection === 'palette') {
         const colonIdx = line.indexOf(':');
         if (colonIdx > 0) {
-          const id = line.slice(0, colonIdx).trim();
-          const colorToken = line.slice(colonIdx + 1).trim().split(/\s+/)[0];
-          doc.palette[id] = normalizeHex(colorToken);
+          const rawId = line.slice(0, colonIdx).trim();
+          if (isSafeIdentifier(rawId)) {
+            const colorToken = line.slice(colonIdx + 1).trim().split(/\s+/)[0];
+            doc.palette[rawId] = normalizeHex(colorToken);
+          }
         }
       }
 
@@ -371,16 +422,22 @@ const PIX2 = (function () {
       else if (currentSection === 'animations_block') {
         const colonIdx = line.indexOf(':');
         if (colonIdx > 0) {
-          const animName = line.slice(0, colonIdx).trim();
+          const rawAnimName = line.slice(0, colonIdx).trim();
+          const animName = sanitizeKey(rawAnimName, 'anim');
           const rest = line.slice(colonIdx + 1).trim();
           const framesMatch = rest.match(/\[(.*?)\]/);
           let frames = [];
           if (framesMatch) {
-            frames = framesMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+            frames = framesMatch[1]
+              .split(',')
+              .map(s => s.trim())
+              .filter(Boolean)
+              .filter(isSafeIdentifier)
+              .slice(0, MAX_FRAMES_PER_ANIM);
           }
           let fps = 6;
           const fpsMatch = rest.match(/@\s*(\d+)\s*fps/i);
-          if (fpsMatch) fps = parseInt(fpsMatch[1], 10);
+          if (fpsMatch) fps = Math.min(Math.max(1, parseInt(fpsMatch[1], 10) || 6), MAX_ANIM_FPS);
           const loop = !/once/i.test(rest);
           doc.animations[animName] = {
             id: animName,
@@ -401,15 +458,20 @@ const PIX2 = (function () {
           const key = line.slice(0, colonIdx).trim().toLowerCase();
           const val = line.slice(colonIdx + 1).trim();
 
-          if (key === 'name') currentAnim.name = val.replace(/^["']|["']$/g, '');
-          else if (key === 'direction') currentAnim.direction = val.toLowerCase();
-          else if (key === 'fps') currentAnim.fps = parseInt(val, 10) || 6;
+          if (key === 'name') currentAnim.name = val.replace(/^["']|["']$/g, '').slice(0, 256);
+          else if (key === 'direction') currentAnim.direction = val.toLowerCase().slice(0, 32);
+          else if (key === 'fps') currentAnim.fps = Math.min(Math.max(1, parseInt(val, 10) || 6), MAX_ANIM_FPS);
           else if (key === 'loop') currentAnim.loop = (val.toLowerCase() === 'true');
-          else if (key === 'mode') currentAnim.mode = val.toLowerCase();
+          else if (key === 'mode') currentAnim.mode = val.toLowerCase().slice(0, 32);
           else if (key === 'frames') {
             const framesMatch = val.match(/\[(.*?)\]/);
             if (framesMatch) {
-              currentAnim.frames = framesMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+              currentAnim.frames = framesMatch[1]
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean)
+                .filter(isSafeIdentifier)
+                .slice(0, MAX_FRAMES_PER_ANIM);
             }
           }
         }
@@ -419,22 +481,25 @@ const PIX2 = (function () {
       else if (currentSection === 'cell' && currentCell) {
         // Properties
         if (line.startsWith('name:')) {
-          currentCell.name = line.slice(5).trim().replace(/^["']|["']$/g, '');
+          currentCell.name = line.slice(5).trim().replace(/^["']|["']$/g, '').slice(0, 256);
           continue;
         } else if (line.startsWith('direction:') || line.startsWith('dir:')) {
-          currentCell.direction = line.split(':')[1].trim().toLowerCase();
+          currentCell.direction = line.split(':')[1].trim().toLowerCase().slice(0, 32);
           continue;
         } else if (line.startsWith('frame:')) {
-          currentCell.frame = parseInt(line.split(':')[1].trim(), 10) || 0;
+          currentCell.frame = Math.min(Math.max(0, parseInt(line.split(':')[1].trim(), 10) || 0), 2048);
           continue;
         } else if (line.startsWith('grid_pos:') || line.startsWith('pos:')) {
           const [r, c] = line.split(':')[1].split(',').map(n => parseInt(n.trim(), 10));
-          currentCell.row = r;
-          currentCell.col = c;
+          currentCell.row = isNaN(r) ? null : Math.min(Math.max(0, r), MAX_GRID_ROWS);
+          currentCell.col = isNaN(c) ? null : Math.min(Math.max(0, c), MAX_GRID_COLS);
           continue;
         } else if (line.startsWith('size:')) {
           const dims = line.split(':')[1].split('x').map(n => parseInt(n.trim(), 10));
-          currentCell.size = { w: dims[0] || doc.meta.cellSize.w, h: dims[1] || doc.meta.cellSize.h };
+          currentCell.size = {
+            w: Math.min(Math.max(MIN_CELL_DIM, dims[0] || doc.meta.cellSize.w), MAX_CELL_DIM),
+            h: Math.min(Math.max(MIN_CELL_DIM, dims[1] || doc.meta.cellSize.h), MAX_CELL_DIM)
+          };
           continue;
         }
 
@@ -448,7 +513,7 @@ const PIX2 = (function () {
               const colRef = tokens[t + 2];
               const [x, y] = coord.split(',').map(n => parseInt(n, 10));
               const color = resolveColor(colRef, doc.palette);
-              if (!isNaN(x) && !isNaN(y) && color) {
+              if (!isNaN(x) && !isNaN(y) && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
                 currentCell.pixels[`${x},${y}`] = color;
               }
               t += 2;
@@ -464,28 +529,40 @@ const PIX2 = (function () {
         if (cmd === 'dot' || cmd === 'd') {
           const [x, y] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
           const color = resolveColor(parts[2], doc.palette);
-          if (!isNaN(x) && !isNaN(y) && color) {
+          if (!isNaN(x) && !isNaN(y) && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
             currentCell.pixels[`${x},${y}`] = color;
           }
         } else if (cmd === 'line') {
           const [x1, y1] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
           const [x2, y2] = (parts[2] || '').split(',').map(n => parseInt(n, 10));
           const color = resolveColor(parts[3], doc.palette);
-          if (color) {
-            drawLineBresenham(x1, y1, x2, y2, (x, y) => {
-              currentCell.pixels[`${x},${y}`] = color;
-            });
+          if (color && !isNaN(x1) && !isNaN(y1) && !isNaN(x2) && !isNaN(y2)) {
+            if (Math.abs(x1) <= MAX_COORD_ABS && Math.abs(y1) <= MAX_COORD_ABS &&
+                Math.abs(x2) <= MAX_COORD_ABS && Math.abs(y2) <= MAX_COORD_ABS) {
+              drawLineBresenham(x1, y1, x2, y2, (x, y) => {
+                if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
+                  currentCell.pixels[`${x},${y}`] = color;
+                }
+              });
+            }
           }
         } else if (cmd === 'rect') {
           const [x, y] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
           const [w, h] = (parts[2] || '').split(',').map(n => parseInt(n, 10));
           const color = resolveColor(parts[3], doc.palette);
           const mode = (parts[4] || 'outline').toLowerCase();
-          if (color && !isNaN(x) && !isNaN(y) && !isNaN(w) && !isNaN(h)) {
-            for (let dy = 0; dy < h; dy++) {
-              for (let dx = 0; dx < w; dx++) {
-                if (mode === 'fill' || dx === 0 || dy === 0 || dx === w - 1 || dy === h - 1) {
-                  currentCell.pixels[`${x + dx},${y + dy}`] = color;
+          const maxBoundW = (currentCell.size ? currentCell.size.w : doc.meta.cellSize.w) * 2;
+          const maxBoundH = (currentCell.size ? currentCell.size.h : doc.meta.cellSize.h) * 2;
+          const clampedW = Math.min(Math.max(0, w), maxBoundW);
+          const clampedH = Math.min(Math.max(0, h), maxBoundH);
+          if (color && !isNaN(x) && !isNaN(y) && !isNaN(clampedW) && !isNaN(clampedH) && (clampedW * clampedH <= 262144)) {
+            for (let dy = 0; dy < clampedH; dy++) {
+              for (let dx = 0; dx < clampedW; dx++) {
+                if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
+                  const px = x + dx, py = y + dy;
+                  if (Math.abs(px) <= MAX_COORD_ABS && Math.abs(py) <= MAX_COORD_ABS) {
+                    currentCell.pixels[`${px},${py}`] = color;
+                  }
                 }
               }
             }
@@ -500,10 +577,12 @@ const PIX2 = (function () {
           const [x, y] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
           const axisX = parseFloat(parts[2]) || ((doc.meta.cellSize.w - 1) / 2);
           const color = resolveColor(parts[3], doc.palette);
-          if (color && !isNaN(x) && !isNaN(y)) {
+          if (color && !isNaN(x) && !isNaN(y) && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
             currentCell.pixels[`${x},${y}`] = color;
             const mx = Math.round(2 * axisX - x);
-            currentCell.pixels[`${mx},${y}`] = color;
+            if (Math.abs(mx) <= MAX_COORD_ABS) {
+              currentCell.pixels[`${mx},${y}`] = color;
+            }
           }
         }
       }
@@ -545,13 +624,15 @@ const PIX2 = (function () {
   // ===========================================================================
 
   function drawLineBresenham(x0, y0, x1, y1, plot) {
+    if (isNaN(x0) || isNaN(y0) || isNaN(x1) || isNaN(y1)) return;
     let dx = Math.abs(x1 - x0);
     let dy = Math.abs(y1 - y0);
     let sx = (x0 < x1) ? 1 : -1;
     let sy = (y0 < y1) ? 1 : -1;
     let err = dx - dy;
+    let maxSteps = 4096;
 
-    while (true) {
+    while (maxSteps-- > 0) {
       plot(x0, y0);
       if (x0 === x1 && y0 === y1) break;
       let e2 = 2 * err;
@@ -561,14 +642,19 @@ const PIX2 = (function () {
   }
 
   function floodFillCell(cell, startX, startY, newColor, cellSize) {
+    if (!cellSize || !cellSize.w || !cellSize.h) return;
+    if (isNaN(startX) || isNaN(startY)) return;
     const targetColor = cell.pixels[`${startX},${startY}`] || null;
     if (targetColor === newColor) return;
 
     const queue = [[startX, startY]];
     const visited = new Set();
-    const w = cellSize.w, h = cellSize.h;
+    const w = Math.min(cellSize.w, MAX_CELL_DIM);
+    const h = Math.min(cellSize.h, MAX_CELL_DIM);
+    const maxSteps = Math.min(65536, w * h * 4);
+    let steps = 0;
 
-    while (queue.length > 0) {
+    while (queue.length > 0 && steps++ < maxSteps) {
       const [x, y] = queue.pop();
       if (x < 0 || x >= w || y < 0 || y >= h) continue;
       const key = `${x},${y}`;
@@ -825,17 +911,68 @@ const PIX2 = (function () {
     return doc;
   }
 
+  /**
+   * Validates a document structure and flags any prototype pollution or anomalous bounds.
+   */
+  function validate(doc) {
+    const errors = [];
+    const warnings = [];
+
+    if (!doc || typeof doc !== 'object') {
+      return { valid: false, errors: ['Document is not an object'], warnings };
+    }
+
+    if (!doc.meta || typeof doc.meta !== 'object') {
+      errors.push('Missing or invalid @meta object');
+    } else {
+      if (!doc.meta.grid || typeof doc.meta.grid.cols !== 'number' || typeof doc.meta.grid.rows !== 'number') {
+        errors.push('Invalid grid definition');
+      } else {
+        if (doc.meta.grid.cols < 1 || doc.meta.grid.cols > MAX_GRID_COLS) {
+          warnings.push(`Grid columns clamped to max ${MAX_GRID_COLS}`);
+        }
+        if (doc.meta.grid.rows < 1 || doc.meta.grid.rows > MAX_GRID_ROWS) {
+          warnings.push(`Grid rows clamped to max ${MAX_GRID_ROWS}`);
+        }
+      }
+      if (!doc.meta.cellSize || typeof doc.meta.cellSize.w !== 'number' || typeof doc.meta.cellSize.h !== 'number') {
+        errors.push('Invalid cellSize definition');
+      }
+    }
+
+    for (const key of ['cells', 'palette', 'animations']) {
+      if (doc[key] && typeof doc[key] === 'object') {
+        const propNames = Object.getOwnPropertyNames(doc[key]);
+        for (const id of propNames) {
+          if (FORBIDDEN_KEYS.has(id.toLowerCase())) {
+            errors.push(`Illegal prototype pollution identifier in ${key}: "${id}"`);
+          }
+        }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
   return {
     createDocument,
     parse,
     serialize,
+    validate,
     resizeCells,
     sliceImageIntoDoc,
     normalizeHex,
     hexToRgba,
     rgbaToHex,
     stripComment,
-    drawLineBresenham
+    drawLineBresenham,
+    floodFillCell,
+    isSafeIdentifier,
+    sanitizeKey
   };
 })();
 

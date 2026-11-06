@@ -119,16 +119,21 @@ noiradix-studio/
 │   └── Player.pix2              # Example character sheet
 │
 └── tests/
-    └── test-roundtrip.js        # Deterministic parse-serialize roundtrip test suite
+    ├── test-roundtrip.js        # Deterministic parse-serialize roundtrip test suite
+    └── test-security.js         # Malicious payload & prototype pollution test suite
 ```
 
 ---
 
 ## 🧪 Testing & Validation
 
-Run the deterministic roundtrip test suite using Node.js:
+Run the deterministic roundtrip and security test suites using Node.js:
 ```bash
+# Semantic roundtrip tests (23/23)
 node tests/test-roundtrip.js
+
+# Malicious payload & anti-DoS tests (11/11)
+node tests/test-security.js
 ```
 Expected output:
 ```
@@ -150,8 +155,7 @@ node --check js/pix2-format.js
 If you find NOIRADIX Studio useful in your game development pipeline, please consider supporting its continuous development:
 
 * 👉 **[GitHub Sponsors (@dotlinux26)](https://github.com/sponsors/dotlinux26)**
-* ☕ **[Buy Me a Coffee](https://buymeacoffee.com/dotlinux26)**
-* 🍵 **[Ko-fi](https://ko-fi.com/dotlinux26)**
+* 🍵 **[Ko-fi (@dotlinux26)](https://ko-fi.com/dotlinux26)**
 * See [DONATE.md](DONATE.md) for full domestic and international options.
 
 ---

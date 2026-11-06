@@ -17,8 +17,7 @@ Your sponsorship helps:
 Sponsor directly through GitHub to receive a sponsor badge on your profile:
 * 👉 **[GitHub Sponsors: @dotlinux26](https://github.com/sponsors/dotlinux26)**
 
-### 2. Buy Me a Coffee / Ko-fi
-* ☕ **Buy Me a Coffee:** [buymeacoffee.com/dotlinux26](https://buymeacoffee.com/dotlinux26)
+### 2. Ko-fi
 * 🍵 **Ko-fi:** [ko-fi.com/dotlinux26](https://ko-fi.com/dotlinux26)
 
 ### 3. Direct / Domestic Support (Vietnam)
@@ -38,3 +37,4 @@ If financial contribution isn't an option, you can still support NOIRADIX Studio
 4. **Contributing code or documentation:** Help polish importers and format documentation.
 
 Thank you for your generous support! 🙏
+

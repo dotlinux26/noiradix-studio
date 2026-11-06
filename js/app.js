@@ -32,6 +32,30 @@
   // DOM Elements cache
   const dom = {};
 
+  // Security & Sanitization Utilities
+  function escapeHTML(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function sanitizeSafeFilename(raw, fallback = 'file') {
+    if (!raw) return fallback;
+    let clean = String(raw)
+      .replace(/\\/g, '/')
+      .replace(/\0/g, '')
+      .split('/')
+      .filter(seg => seg && seg !== '.' && seg !== '..')
+      .join('_')
+      .replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    clean = clean.replace(/^\.+/, '');
+    return clean || fallback;
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     initDomCache();
     initTheme();
@@ -1745,10 +1769,19 @@
         const item = document.createElement('div');
         item.className = 'anim-clip-item';
         item.style.cursor = 'pointer';
-        item.innerHTML = `
-          <span><strong>${animName}</strong> (${anim.fps || 6} fps)</span>
-          <span class="anim-clip-badge">${(anim.frames || []).length} frames</span>
-        `;
+
+        const titleSpan = document.createElement('span');
+        const strongEl = document.createElement('strong');
+        strongEl.textContent = animName;
+        titleSpan.appendChild(strongEl);
+        titleSpan.appendChild(document.createTextNode(` (${anim.fps || 6} fps)`));
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'anim-clip-badge';
+        badgeSpan.textContent = `${(anim.frames || []).length} frames`;
+
+        item.appendChild(titleSpan);
+        item.appendChild(badgeSpan);
         item.addEventListener('click', () => {
           activeStudioClipId = animName;
           state.activeTabId = 'tab-anim-studio';
@@ -2057,14 +2090,18 @@
         }
       }
 
+      const safeKey = escapeHTML(clipKey);
+      const safeName = escapeHTML(clipName);
+      const safeRange = escapeHTML(rangeText);
+
       html += `
         <div class="template-preview-row">
           <div>
-            <strong class="anim-key">Row ${rowIdx}: ${clipKey}</strong>
-            <span class="anim-tag">("${clipName}")</span>
+            <strong class="anim-key">Row ${rowIdx}: ${safeKey}</strong>
+            <span class="anim-tag">("${safeName}")</span>
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="sub-text" style="font-size: 11px;">${rangeText}</span>
+            <span class="sub-text" style="font-size: 11px;">${safeRange}</span>
             ${statusNotice}
           </div>
         </div>
@@ -2175,10 +2212,18 @@
         const item = document.createElement('div');
         item.className = `anim-clip-item ${name === activeStudioClipId ? 'active' : ''}`;
         item.style.cursor = 'pointer';
-        item.innerHTML = `
-          <span><strong>${clip.name || name}</strong></span>
-          <span class="anim-clip-badge">${(clip.frames || []).length} frames @ ${clip.fps || 6}fps</span>
-        `;
+
+        const titleSpan = document.createElement('span');
+        const strongEl = document.createElement('strong');
+        strongEl.textContent = clip.name || name;
+        titleSpan.appendChild(strongEl);
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'anim-clip-badge';
+        badgeSpan.textContent = `${(clip.frames || []).length} frames @ ${clip.fps || 6}fps`;
+
+        item.appendChild(titleSpan);
+        item.appendChild(badgeSpan);
         item.addEventListener('click', () => {
           activeStudioClipId = name;
           renderDedicatedAnimationStudio();
@@ -3892,7 +3937,8 @@ USER INSTRUCTION:
     let offset = 0;
 
     for (const f of files) {
-      const nameBuf = new TextEncoder().encode(f.name);
+      const safeEntryName = sanitizeSafeFilename(f.name);
+      const nameBuf = new TextEncoder().encode(safeEntryName);
       const data = f.data;
       const crc = crc32(data);
       const size = data.length;
