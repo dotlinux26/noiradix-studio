@@ -4,6 +4,10 @@
   <img src="../noiradix-studio-logo.svg" alt="NOIRADIX Studio Logo" width="96" height="96">
   <h3>Canonical Technical Specifications, Architecture Guides & Engine Integrations</h3>
   <p><strong>A zero-dependency, AI-native structured sprite editor and directional animation suite</strong></p>
+  <p>
+    <a href="https://dotlinux26.github.io/noiradix-studio/"><img src="https://img.shields.io/badge/Live%20Demo-Online%20Studio-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Demo"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
+  </p>
 </div>
 
 ---

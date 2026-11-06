@@ -1,0 +1,70 @@
+name: CI & GitHub Pages Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # 1. CI Test Suite: Syntax integrity & 110 automated unit tests
+  test:
+    name: Run Test Suites (110 Tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify JavaScript Syntax
+        run: |
+          node --check js/app.js
+          node --check js/pix2-format.js
+          node --check js/editor-state.js
+          node --check js/animation-player.js
+          node --check js/tools.js
+
+      - name: Run Semantic Roundtrip & Feature Tests (96 Tests)
+        run: node tests/test-roundtrip.js
+
+      - name: Run Security & Anti-DoS Defense Tests (14 Tests)
+        run: node tests/test-security.js
+
+  # 2. CD Deployment: Deploy static web application to GitHub Pages
+  deploy:
+    name: Deploy to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

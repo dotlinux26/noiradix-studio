@@ -4,6 +4,8 @@
   <p><strong>High-Performance, AI-Native Pixel Art & Spritesheet Studio for the <code>.pix2</code> Standard</strong></p>
 
   <p>
+    <a href="https://dotlinux26.github.io/noiradix-studio/"><img src="https://img.shields.io/badge/Live%20Demo-Online%20Studio-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Demo"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.0-6366f1.svg" alt="PIX2 Standard"></a>
@@ -58,7 +60,8 @@ Experience desktop-grade pixel art creation directly in your browser with zero i
 Get up and running immediately with zero configuration and zero build tools:
 
 ### Step 1: Launch NOIRADIX Studio
-* **Windows (1-Click):** Double-click [`start-noiradix-studio.bat`](start-noiradix-studio.bat). It instantly launches your default Chromium browser.
+* **Instant Online Studio (Zero Install):** Open [**https://dotlinux26.github.io/noiradix-studio/**](https://dotlinux26.github.io/noiradix-studio/) directly in your browser.
+* **Windows (1-Click Local):** Double-click [`start-noiradix-studio.bat`](start-noiradix-studio.bat). It instantly launches your default Chromium browser.
 * **Direct File:** Simply open [`index.html`](index.html) in any modern browser (Chrome, Edge, Brave, Opera, Arc).
 * **Local HTTP Server (Optional):**
   ```bash
