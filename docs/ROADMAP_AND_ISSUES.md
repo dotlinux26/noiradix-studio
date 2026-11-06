@@ -71,6 +71,20 @@ Phase 3: Desktop File Lifecycle & Anchor Zoom (CURRENT)
 
 Phase 4: AI Agent Native Interface & Public Release
   - Formal AI prompt templates & CLI parser
+  - Real-time external hot-reload & smart conflict resolution (Live Human-AI pairing)
+  - Contextual AI prompt generator (4 specialized prompt modes)
+  - Complete client-side security hardening (Zero XSS, Prototype Pollution & DoS defenses)
   - One-click GitHub & itch.io Alpha release
-  - Donation links & community documentation
+  - Donation links (Ko-fi, GitHub Sponsors) & community documentation
 ```
+
+---
+
+## Completed Feature Milestones
+
+| Feature ID | Category | Description | Status |
+|---|---|---|---|
+| **FEAT-08** | **Live Sync** | **Real-Time External Hot-Reload & Smart Conflict Resolution:** Automatic three-tier change detection (`window.onfocus`, `visibilitychange`, 1500ms heartbeat) with non-destructive conflict alerts protecting in-progress drawings. | **SHIPPED** |
+| **FEAT-09** | **AI Engine** | **Contextual AI Prompt Studio & Multi-Mode LLM Generator:** 4 specialized prompt templates (Full Character, Walk Animation, Accessory Overlay, Surgical Patch) with embedded palette and metadata. | **SHIPPED** |
+| **SEC-04** | **Security** | **Client-Side Security Hardening:** Eliminated all hardcoded machine paths, prototype pollution guardrails, coordinate/dimension caps, and path traversal defenses in exporters. | **SHIPPED** |
+| **UI-07** | **Statusbar** | **Separated Statusbar Spacing & Symmetry Divider:** Consistent 14px dividers and dynamic flex spacing ensuring no visual collisions across all viewports. | **SHIPPED** |

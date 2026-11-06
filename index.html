@@ -523,11 +523,18 @@
               <span>.PIX2 Native Code</span>
             </div>
             <div class="code-actions">
+              <select id="select-ai-prompt-mode" class="modern-select select-xs" title="Select AI Prompt Specialization">
+                <option value="full-character" selected>🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)</option>
+                <option value="walk-animation">🎬 Walk Cycle &amp; Animation Generator</option>
+                <option value="accessory-equipment">🗡️ Accessory &amp; Equipment Overlay</option>
+                <option value="surgical-patch">🩹 Surgical Frame / Color Patch</option>
+                <option value="raw-spec">📋 Complete PIX2 Cognitive Reference</option>
+              </select>
+              <button id="btn-copy-ai-prompt" class="btn btn-sm btn-primary" title="Copy structured prompt for AI LLM">
+                <i class="fa-solid fa-robot"></i> Copy for AI Prompt
+              </button>
               <button id="btn-apply-code" class="btn btn-sm btn-accent" title="Apply changes directly to canvas">
                 <i class="fa-solid fa-bolt"></i> Apply to Canvas
-              </button>
-              <button id="btn-copy-ai-prompt" class="btn btn-sm btn-primary" title="Copy full AI prompt with instructions">
-                <i class="fa-solid fa-robot"></i> Copy for AI Prompt
               </button>
             </div>
           </div>
@@ -538,49 +545,55 @@
         <!-- AI Language Guide -->
         <aside class="ai-guide-pane">
           <div class="card-header">
-            <span><i class="fa-solid fa-book"></i> .PIX2 Specification Cheat Sheet</span>
+            <span><i class="fa-solid fa-robot"></i> AI Specification &amp; Cognitive Guide</span>
           </div>
           <div class="ai-guide-content">
-            <h4>Format Structure:</h4>
-            <pre><code>@pix2 1.0
+            <h4>1. Mathematical Primitives &amp; Macros</h4>
+            <ul class="guide-cmd-list">
+              <li><code>p x,y &lt;pal_id|hex&gt;</code> — Plot sparse pixel at discrete integer $(x, y)$</li>
+              <li><code>sym_dot x,y axisX &lt;col&gt;</code> — Mirror plot around vertical axis ($W - 1 - x$)</li>
+              <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Bresenham discrete line (weapons, outlines)</li>
+              <li><code>rect x,y w,h &lt;col&gt; [fill|outline]</code> — Geometric bounding boxes</li>
+              <li><code>fill x,y &lt;col&gt;</code> — 4-way flood fill bounded region</li>
+            </ul>
 
+            <h4>2. Anatomy &amp; Walk Cycle Formula (16×16)</h4>
+            <div class="guide-formula-box">
+              <p><strong>Head:</strong> $Y \in [1, 6]$, $X \in [4, 11]$ (Width: 8px)</p>
+              <p><strong>Eyes:</strong> $Y \in [7, 8]$ (Spacing: 2-3px apart)</p>
+              <p><strong>Torso:</strong> $Y \in [9, 12]$ (Width: 8-10px)</p>
+              <p><strong>Walk Bobbing:</strong> Frame 1 &amp; Frame 3 offset torso by $\Delta Y = -1$</p>
+              <p><strong>Symmetry:</strong> Facing Down/Up front axis is $X_{\text{axis}} = 7.5$</p>
+            </div>
+
+            <h4>3. Canonical Directives</h4>
+            <pre><code>@pix2 1.0
 @meta
-  title: "Player"
+  title: "Hero"
   grid: 4x4
   cell_size: 16x16
 
 @palette
-  1: #ffffff ; White body
-  2: #57546f ; Outline slate
+  1: #ffffff ; Body
+  2: #57546f ; Outline
+  3: #ffb0bc ; Blush
 
 @cell down_0
   name: "Down 0"
   direction: down
   frame: 0
-  pixel 5,1 2
-  pixel 6,1 1
+  p 7,2 2 p 8,2 2
 
 @animation walk_down
-  frames: [down_0, down_1]
+  frames: [down_0, down_1, down_2, down_3]
   fps: 6
   loop: true
-
 @end</code></pre>
 
-            <h4>AI Drawing Commands:</h4>
-            <ul>
-              <li><code>pixel x,y &lt;pal_id|hex&gt;</code> — plot sparse pixel</li>
-              <li><code>p x,y &lt;pal_id|hex&gt;</code> — plot shorthand</li>
-              <li><code>dot x,y &lt;color&gt;</code> — single pixel</li>
-              <li><code>line x1,y1 x2,y2 &lt;color&gt;</code> — straight pixel line</li>
-              <li><code>rect x,y w,h &lt;color&gt; [outline|fill]</code> — box</li>
-              <li><code>fill x,y &lt;color&gt;</code> — flood fill</li>
-              <li><code>sym_dot x,y axisX &lt;color&gt;</code> — symmetric pixel pair</li>
-            </ul>
-
+            <h4>4. Anti-Hallucination Guardrails</h4>
             <div class="tip-box">
-              <i class="fa-solid fa-lightbulb"></i>
-              <span><strong>Zero Background:</strong> Never draw transparent pixels! Only coordinates with visible color are stored.</span>
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span><strong>Zero Background:</strong> Never output background fill! Non-existent coordinates are 100% transparent. Valid coordinates are strictly $0 \le x < \text{width}$, $0 \le y < \text{height}$.</span>
             </div>
           </div>
         </aside>
@@ -664,6 +677,9 @@
         </div>
         <button id="btn-reveal-explorer" class="btn btn-xs btn-secondary" title="Copy file path to clipboard">
           <i class="fa-regular fa-folder-open"></i>
+        </button>
+        <button id="btn-reload-file" class="btn btn-xs btn-secondary" title="Check &amp; Reload from disk (Auto hot-reloads on external changes)">
+          <i class="fa-solid fa-arrows-rotate"></i>
         </button>
         <span id="save-status-badge" class="save-status-badge clean" title="Save status">
           <i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Saved</span>

@@ -1333,6 +1333,39 @@ body {
   margin-top: 14px;
 }
 
+.guide-formula-box {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.guide-formula-box p {
+  margin: 0;
+}
+
+.guide-cmd-list {
+  padding-left: 14px !important;
+  font-size: 11px !important;
+}
+
+.pulse-warning {
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+  animation: pulse-glow-warning 1.5s infinite;
+}
+
+@keyframes pulse-glow-warning {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
 /* ==========================================================================
    FLOATING ANIMATION STUDIO (4-DIR & 8-DIR) - DRAGGABLE & MINIMIZABLE
    ========================================================================== */

@@ -83,19 +83,23 @@
 - [x] Create formal `specification/PIX2-GRAMMAR.md`
 - [x] Create formal `specification/PIX2-AI-GUIDE.md`
 - [x] Create issue tracker `specification/ISSUES_AND_ROADMAP.md`
-- [ ] Upgrade `js/pix2-format.js` Engine:
-  - [ ] Strict comment parser (`;` and non-hex `#`)
-  - [ ] Full RGBA preservation (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`)
-  - [ ] Decouple Cell ID from grid row/col
-  - [ ] User-defined animation model with arbitrary names
-- [ ] Fix Grid Overview Canvas rendering:
-  - [ ] Prevent column header text collision (`Col 0` badges with proper spacing)
-  - [ ] Editable Row and Column names
-  - [ ] Add Row / Add Col buttons
-- [ ] Add Dedicated Animation Studio Tab (`#view-animation-studio`):
-  - [ ] Fullscreen preview canvas
-  - [ ] Horizontal frame sequence timeline
-  - [ ] Custom animation list (create, edit, delete, assign)
-  - [ ] Onion skinning support
-- [ ] Upgrade Keyboard Shortcuts (`Alt+Wheel`, `Space+Drag`, `V`, `B`, `E`, `G`, `I`, `L`, `U`, `S`, `X`, `D`, `Ctrl+0`)
-- [ ] Roundtrip test suite in `tests/test-roundtrip.js`
+- [x] Upgrade `js/pix2-format.js` Engine:
+  - [x] Strict comment parser (`;` and non-hex `#`)
+  - [x] Full RGBA preservation (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`)
+  - [x] Decouple Cell ID from grid row/col
+  - [x] User-defined animation model with arbitrary names
+- [x] Fix Grid Overview Canvas rendering:
+  - [x] Prevent column header text collision (`Col 0` badges with proper spacing)
+  - [x] Editable Row and Column names
+  - [x] Add Row / Add Col buttons
+- [x] Add Dedicated Animation Studio Tab (`#view-animation-studio`):
+  - [x] Fullscreen preview canvas
+  - [x] Horizontal frame sequence timeline
+  - [x] Custom animation list (create, edit, delete, assign)
+  - [x] Onion skinning support
+- [x] Upgrade Keyboard Shortcuts (`Alt+Wheel`, `Space+Drag`, `V`, `B`, `E`, `G`, `I`, `L`, `U`, `S`, `X`, `D`, `Ctrl+0`, `Ctrl+Shift+R`)
+- [x] Roundtrip test suite in `tests/test-roundtrip.js` (23/23 PASSED)
+- [x] Security test suite in `tests/test-security.js` (13/13 PASSED)
+- [x] Real-time external file watcher & live hot-reload engine with smart conflict resolution
+- [x] AI Prompt Studio with 4 specialized prompt templates (Full Character, Walk Animation, Accessory Overlay, Surgical Patch)
+- [x] Eliminated all hardcoded machine paths and hardened export templates

@@ -149,3 +149,63 @@ When creating a $16 \times 16$ RPG character:
 2. **NEVER exceed cell boundaries:** For $16 \times 16$, $x \ge 16$ or $y \ge 16$ is an invalid coordinate and will fail validation.
 3. **NEVER discard alpha:** If a semi-transparent blush or shadow is used (e.g. `#FFB0BC80`), preserve the 8-digit hex.
 4. **DO NOT invent non-existent frame references:** In `@animation walk_down`, ensure all frame names in `frames: [ ... ]` exist as defined `@cell` records.
+
+---
+
+## 6. The 4 Specialized AI Prompt Templates
+
+NOIRADIX Studio equips artists and LLMs with 4 context-tailored prompt modes selectable directly from the Studio interface:
+
+### Mode 1: Full Character (4-Dir / 8-Dir Generation)
+* **Goal:** Generate a complete game character from scratch with directional faces and walk animations.
+* **Instructional Focus:**
+  - Establishes a harmonious 4 to 8 color `@palette` (Outline, Base, Highlight, Shadow, Accents).
+  - Enforces bilateral symmetry on frontal views (`down_0`) using `sym_dot`.
+  - Enforces silhouette consistency across all 4 cardinal directions (`down`, `up`, `right`, `left`).
+  - Automatically hooks up walk cycles (`walk_down`, `walk_up`, `walk_right`, `walk_left`) at 6fps loop.
+
+### Mode 2: Walk Cycle & Locomotion Animation
+* **Goal:** Produce smooth, natural locomotion frames from a static reference pose.
+* **Instructional Focus:**
+  - Discrete bobbing physics: Frame 1 & Frame 3 apply a 1-pixel torso offset ($\Delta Y = -1$) to simulate step impact.
+  - Foot swing dynamics: Leading foot stretches forward, trailing foot pulls back with passing contact.
+  - Secondary motion: Cloaks, tails, antennae, and hair trailing motion lagged by 1 frame.
+
+### Mode 3: Accessory & Equipment Overlay
+* **Goal:** Equip characters with hats, helmets, wings, cloaks, and weapons without breaking base silhouette.
+* **Instructional Focus:**
+  - Non-destructive overlays: Preserves existing character anatomy pixels unless intentionally covered.
+  - Primitives: Utilizes `line x0,y0 x1,y1 <color>` for weapon handles and blades.
+  - Palette integration: Adds distinct material colors (e.g. golden steel, polished silver, ruby gems).
+
+### Mode 4: Surgical Frame / Color Patch
+* **Goal:** Apply targeted fixes to specific cells or color schemes with minimal token consumption.
+* **Instructional Focus:**
+  - Output ONLY modified `@cell <id>` or `@palette` directives rather than regenerating the entire document.
+  - Eliminates regression risks on unrelated frames and reduces LLM latency.
+
+---
+
+## 7. Real-Time Human-AI Live Collaboration Protocol
+
+NOIRADIX Studio supports bidirectional, zero-latency co-authoring between human artists and AI agents:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Artist as Human Artist (Studio UI)
+    participant Disk as Local File (Player.pix2)
+    actor AI as AI Agent (VS Code / Terminal)
+
+    Artist->>Disk: Draws Frame 0 (Down Idle) & Saves (Ctrl+S)
+    AI->>Disk: Reads Player.pix2 to understand character style
+    AI->>Disk: Writes walk cycle frames (Down 1, 2, 3) to Player.pix2
+    Disk-->>Artist: NOIRADIX Watcher detects external change
+    Artist->>Artist: Auto-reloads & plays walk animation in real-time!
+```
+
+### Best Practices for AI Agents Writing to Disk:
+1. **Preserve Document Metadata:** Keep existing `@meta` title, grid dimensions, and cell dimensions untouched unless requested.
+2. **Reuse Existing Palette IDs:** If white is defined as `1`, do not define a duplicate white as `6`.
+3. **Format Determinism:** Keep `@cell` declarations in sequential grid order (`cell_0_0`, `cell_0_1`, etc.).
+4. **Single-File Completeness:** Ensure the written `.pix2` file passes `PIX2.validate()` without dangling frame references.

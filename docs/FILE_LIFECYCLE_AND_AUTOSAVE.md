@@ -122,3 +122,63 @@ Continuous mouse drag drawing MUST be recorded as **one logical undo step**, rat
 - On `mousedown`: Pre-stroke document state is preserved.
 - On `mouseup`: If any pixel changed, push snapshot to undo stack.
 - Pressing `Ctrl+Z` reverses the entire stroke in a single keystroke.
+
+---
+
+## 6. Real-Time External Change Detection & Live Hot-Reload Architecture
+
+### 6.1 The Challenge: Multi-Process Collaboration (AI Agents, VS Code, Git)
+When a user works with AI coding assistants (such as Antigravity, Claude, or Cursor) or modifies `.pix2` files using external editors or command-line scripts, the underlying file on disk changes independently of the running browser tab.
+
+A naive web editor creates severe failure modes:
+1. **Blind Cache:** The editor remains oblivious to external edits, continuing to display stale memory state.
+2. **Silent Overwrite (Catastrophic Data Loss):** If the user later draws a pixel in the editor and presses `Ctrl+S`, the editor's in-memory document overwrites the disk file, destroying all external AI edits.
+
+### 6.2 Triple-Trigger Live Hot-Reload Engine
+NOIRADIX Studio integrates a non-polling, resource-efficient three-tier change detection engine:
+1. **Window Focus Sync (`window.onfocus`):**
+   When the user switches application focus from VS Code, terminal, or AI chat back to NOIRADIX Studio, the app immediately queries `currentFileHandle.getFile()`.
+2. **Page Visibility Sync (`document.visibilitychange`):**
+   Triggers whenever the browser tab transitions from `hidden` to `visible`.
+3. **Heartbeat Observation (1500ms when tab is active):**
+   When the user arranges VS Code and NOIRADIX Studio side-by-side on two monitors without switching active window focus, a lightweight 1500ms interval inspects `file.lastModified` and text content.
+
+```
+[ External AI Agent / Script / Git ]
+             │ writes to disk
+             ▼
+      [ Disk: Player.pix2 ]
+             ▲
+             │ (1) Window Focus
+             │ (2) Visibility Change
+             │ (3) 1500ms Active Heartbeat
+             │
+[ NOIRADIX Studio Watcher Engine ]
+             │
+     ┌───────┴────────────────────────┐
+     ▼                                ▼
+[ If Studio is Clean (!isDirty) ]   [ If Studio has Unsaved Edits (isDirty) ]
+  • Instant parse & re-render         • Surface non-destructive conflict alert
+  • Toast: "⚡ Reloaded from disk"    • Pulse warning on Reload button
+  • Update lastKnownFileModified      • Ask: [Reload from Disk] or [Keep Studio Edits]
+```
+
+---
+
+## 7. Smart Conflict Resolution (Zero Data Loss Invariant)
+
+### 7.1 Clean Auto-Reload
+If the editor state is clean (`isDocumentDirty === false`):
+- The new external content is automatically parsed via `PIX2.parse(text)`.
+- The document state, canvas, rulers, timeline, and animation players update synchronously.
+- `lastKnownFileModified` and `lastSavedContent` are synchronized.
+- An informative toast notifies the artist: `⚡ Reloaded <filename> from disk (external update detected)!`.
+
+### 7.2 Conflict Guardrails
+If the artist has unsaved drawings in Studio (`isDocumentDirty === true`) when an external change is detected:
+- Studio **NEVER** silently overwrites the artist's canvas.
+- A warning toast alerts the user: `⚠️ "<filename>" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`.
+- The status bar reload button (`#btn-reload-file`) activates a visual pulse warning (`.pulse-warning`).
+- The user can either:
+  1. **Click "Reload from Disk" (or `Ctrl+Shift+R`):** Prompts for confirmation, then discards Studio edits and pulls the latest disk version.
+  2. **Press "Save" (`Ctrl+S`):** Explicitly commits the Studio version, intentionally overriding the external change.

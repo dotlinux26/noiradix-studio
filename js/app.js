@@ -25,6 +25,13 @@
   let debouncedAutosaveTimer = null;
   let miniPreviewScale = 6;
 
+  // Real-Time File Watcher & External Hot-Reload
+  let lastKnownFileModified = 0;
+  let lastSavedContent = '';
+  let isExternalReloading = false;
+  let pendingExternalConflict = null;
+  let fileWatcherHeartbeatTimer = null;
+
   // Floating preview & marquee animation state
   let userClosedFloatingPreview = false;
   let marqueeAnimFrameId = null;
@@ -68,6 +75,7 @@
     initAutosave();
 
     await initAppSession();
+    initFileWatcher();
   });
 
   // ===========================================================================
@@ -146,6 +154,8 @@
               const doc = PIX2.parse(content);
               state.setDocument(doc);
               localStorage.setItem('pix2_last_saved_content', content);
+              lastSavedContent = content;
+              lastKnownFileModified = file.lastModified;
               docLoaded = true;
             }
           }
@@ -220,6 +230,7 @@
     dom.codeTextarea = document.getElementById('pix2-code-text');
     dom.btnApplyCode = document.getElementById('btn-apply-code');
     dom.btnCopyAiPrompt = document.getElementById('btn-copy-ai-prompt');
+    dom.selectAiPromptMode = document.getElementById('select-ai-prompt-mode');
 
     // Info labels
     dom.labelCoords = document.getElementById('label-mouse-coords');
@@ -241,6 +252,7 @@
     dom.statusZoomLabel = document.getElementById('status-zoom-label');
     dom.statusToolLabel = document.getElementById('status-tool-label');
     dom.btnOpenSpec = document.getElementById('btn-open-spec');
+    dom.btnReloadFile = document.getElementById('btn-reload-file');
 
     // Grid Overview Inspector elements
     dom.gridInspectorRowLabel = document.getElementById('grid-inspector-row-label');
@@ -3559,6 +3571,11 @@
         currentFileHandle = handle;
         currentFileName = file.name;
         currentFilePath = file.name;
+        lastSavedContent = text;
+        lastKnownFileModified = file.lastModified;
+        pendingExternalConflict = null;
+        const btnReload = document.getElementById('btn-reload-file');
+        if (btnReload) btnReload.classList.remove('pulse-warning');
         await persistFileHandle(handle);
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
@@ -3607,6 +3624,14 @@
         await writable.write(text);
         await writable.close();
         setDirty(false);
+        lastSavedContent = text;
+        try {
+          const fresh = await currentFileHandle.getFile();
+          lastKnownFileModified = fresh.lastModified;
+        } catch (_) {}
+        pendingExternalConflict = null;
+        const btnReload = document.getElementById('btn-reload-file');
+        if (btnReload) btnReload.classList.remove('pulse-warning');
         localStorage.setItem('pix2_last_saved_content', text);
         localStorage.removeItem('pix2_recovery_snapshot');
         showToast(`Saved to ${currentFileHandle.name}!`, 'success');
@@ -3636,6 +3661,14 @@
         currentFileHandle = handle;
         currentFileName = handle.name;
         currentFilePath = handle.name;
+        lastSavedContent = text;
+        try {
+          const fresh = await handle.getFile();
+          lastKnownFileModified = fresh.lastModified;
+        } catch (_) {}
+        pendingExternalConflict = null;
+        const btnReload = document.getElementById('btn-reload-file');
+        if (btnReload) btnReload.classList.remove('pulse-warning');
         await persistFileHandle(handle);
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
@@ -3667,6 +3700,122 @@
   }
 
   // ===========================================================================
+  // REAL-TIME FILE WATCHER & LIVE HOT-RELOAD (External AI & Tool Collaboration)
+  // ===========================================================================
+
+  async function checkAndReloadExternalFileChanges(force = false) {
+    if (!currentFileHandle || isExternalReloading) return;
+    if (typeof currentFileHandle.getFile !== 'function') return;
+
+    try {
+      isExternalReloading = true;
+      const file = await currentFileHandle.getFile();
+      const currentModified = file.lastModified;
+
+      // Check if file modified time is newer than our recorded timestamp
+      if (!force && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified) {
+        isExternalReloading = false;
+        return;
+      }
+
+      const text = await file.text();
+      if (!text || !text.trim()) {
+        isExternalReloading = false;
+        return;
+      }
+
+      // If content is identical to our last saved version, just sync timestamp
+      if (text === lastSavedContent) {
+        lastKnownFileModified = currentModified;
+        isExternalReloading = false;
+        return;
+      }
+
+      // External change detected!
+      if (isDocumentDirty && !force) {
+        // Studio has unsaved edits: do NOT overwrite silently!
+        showExternalConflictNotification(file, text, currentModified);
+        isExternalReloading = false;
+        return;
+      }
+
+      // Safe reload
+      const newDoc = PIX2.parse(text);
+      state.setDocument(newDoc);
+      lastKnownFileModified = currentModified;
+      lastSavedContent = text;
+      localStorage.setItem('pix2_last_saved_content', text);
+      localStorage.removeItem('pix2_recovery_snapshot');
+      pendingExternalConflict = null;
+      setDirty(false);
+      refreshAll();
+      const btnReload = document.getElementById('btn-reload-file');
+      if (btnReload) btnReload.classList.remove('pulse-warning');
+      showToast(`⚡ Reloaded ${file.name} from disk (external update detected)!`, 'info');
+    } catch (err) {
+      console.debug('External file check deferred:', err);
+    } finally {
+      isExternalReloading = false;
+    }
+  }
+
+  function showExternalConflictNotification(file, newText, newModified) {
+    if (pendingExternalConflict && pendingExternalConflict.modified === newModified) return;
+    pendingExternalConflict = { file, text: newText, modified: newModified };
+
+    showToast(
+      `⚠️ "${file.name}" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`,
+      'warning',
+      6000
+    );
+
+    const btnReload = document.getElementById('btn-reload-file');
+    if (btnReload) {
+      btnReload.classList.add('pulse-warning');
+      btnReload.title = `External changes detected on ${file.name}! Click to reload from disk.`;
+    }
+  }
+
+  async function handleManualFileReload() {
+    if (!currentFileHandle) {
+      showToast('No local disk file is currently linked.', 'info');
+      return;
+    }
+    if (isDocumentDirty) {
+      const confirmDiscard = confirm(
+        `"${currentFileHandle.name}" has unsaved changes in NOIRADIX Studio.\n\nReloading from disk will discard your current Studio edits and load the external disk version.\n\nDo you want to discard Studio edits and reload from disk?`
+      );
+      if (!confirmDiscard) return;
+    }
+    await checkAndReloadExternalFileChanges(true);
+    const btnReload = document.getElementById('btn-reload-file');
+    if (btnReload) btnReload.classList.remove('pulse-warning');
+    pendingExternalConflict = null;
+  }
+
+  function initFileWatcher() {
+    // 1. Focus listener: window gets active focus when switching from external editor/AI
+    window.addEventListener('focus', () => {
+      checkAndReloadExternalFileChanges(false);
+    });
+
+    // 2. Visibility change listener (tab becomes visible)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        checkAndReloadExternalFileChanges(false);
+      }
+    });
+
+    // 3. Heartbeat polling (every 1500ms when document is active and no unsaved edits)
+    if (fileWatcherHeartbeatTimer) clearInterval(fileWatcherHeartbeatTimer);
+    fileWatcherHeartbeatTimer = setInterval(() => {
+      if (!document.hidden && currentFileHandle && !isDocumentDirty) {
+        checkAndReloadExternalFileChanges(false);
+      }
+    }, 1500);
+  }
+
+  // ===========================================================================
   // PIX2 CODE & AI INTEGRATION
   // ===========================================================================
 
@@ -3692,25 +3841,110 @@
 
   function copyAiPrompt() {
     if (!state.doc) return;
+    const mode = (dom.selectAiPromptMode && dom.selectAiPromptMode.value) || 'full-character';
     const serialized = PIX2.serialize(state.doc);
-    const prompt = `You are editing a pixel art sprite sheet in .pix2 format.
+    const meta = state.doc.meta;
+    const cw = meta.cellSize.w;
+    const ch = meta.cellSize.h;
+    const cols = meta.grid.cols;
+    const rows = meta.grid.rows;
 
-FORMAT PRINCIPLES:
-1. Pure Transparency: Only explicitly drawn pixels are saved. No background layer.
-2. Coordinates are top-left origin (0,0). Valid coordinates: 0 to width-1, 0 to height-1.
-3. Every cell has unique ID and sparse pixels.
-4. Format supports: pixel x,y <palette_id|hex>.
+    let paletteSummary = '';
+    if (state.doc.palette) {
+      paletteSummary = Object.entries(state.doc.palette)
+        .map(([id, col]) => `  ${id}: ${col.hex}  # ${col.name || 'Color'}`)
+        .join('\n');
+    }
 
-CURRENT SPRITE DATA:
+    let cellInventory = Object.keys(state.doc.cells || {}).join(', ') || 'none';
+
+    let specializedInstructions = '';
+
+    if (mode === 'full-character') {
+      specializedInstructions = `TASK: FULL 4-DIRECTION / 8-DIRECTION CHARACTER GENERATION
+1. ANATOMICAL SILHOUETTE (for ${cw}x${ch} cell):
+   - Head & Hair: Top Y in [1..6], centered around X ~ ${((cw - 1) / 2).toFixed(1)}.
+   - Eyes: Y in [7..8], spaced 2-3 pixels apart. Use dark outline and contrasting eye color.
+   - Torso & Clothing: Y in [9..12], width 8-10 pixels.
+   - Legs & Shadow: Y in [13..15]. Leave transparent margins if grounded.
+2. DIRECTIONAL CONSISTENCY:
+   - down_0: Frontal facing with bilateral symmetry.
+   - up_0: Back of head & cloak/outfit; no facial features.
+   - right_0: Profile/3-quarters view facing right; offset nose/eyes to the right edge.
+   - left_0: Mirror of right_0 or facing left.
+3. DRAWING MACROS:
+   - Use 'sym_dot x,y ${((cw - 1) / 2).toFixed(1)} <color>' for symmetric frontal faces.
+   - Use 'p x,y <pal_id>' for compact sparse pixel placement.
+4. ANIMATION:
+   - Define walk cycles for each direction at 6fps loop:
+     walk_down:  [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
+     walk_up:    [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
+     walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
+     walk_left:  [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop`;
+    } else if (mode === 'walk-animation') {
+      specializedInstructions = `TASK: WALK CYCLE & LOCOMOTION ANIMATION
+1. 4-FRAME WALK FORMULA (Discrete Mathematical Physics):
+   - Frame 0 (Contact): Neutral grounded pose.
+   - Frame 1 (Down / Passing): Squash torso down 1 pixel (Y + 1) or bob torso (Y - 1). Left foot forward.
+   - Frame 2 (Passing): Neutral torso height, legs crossing.
+   - Frame 3 (Up / Passing): Bob torso, Right foot forward.
+2. SUB-PIXEL HAIR & CLOAK SECONDARY MOTION:
+   - Delay cloak and hair tail trailing motion by 1 frame behind body movement.
+3. OUTPUT REQUIREMENT:
+   - Provide the complete '@animation' block and '@cell' records for all new walk frames.`;
+    } else if (mode === 'accessory-equipment') {
+      specializedInstructions = `TASK: ACCESSORY & EQUIPMENT OVERLAY
+1. OVERLAY RULES:
+   - Do NOT destroy the underlying character silhouette unless intended.
+   - Hat / Helmet: Overlay on Y in [0..5] on existing head pixels.
+   - Wings / Cloak: Attach behind torso or sides.
+   - Weapon (Staff/Sword): Use 'line x0,y0 x1,y1 <color>' to draw blades and shafts.
+2. PALETTE EXPANSION:
+   - Add new equipment colors to '@palette' if needed (e.g. gold, steel, ruby gems).`;
+    } else if (mode === 'surgical-patch') {
+      specializedInstructions = `TASK: SURGICAL FRAME / COLOR PATCH
+1. SURGICAL PRECISION:
+   - Do NOT rewrite unrelated cells or animations.
+   - Only output the modified '@cell <id>' or '@palette' entries that need changes.
+   - Clearly state which pixels are added, replaced, or erased.`;
+    } else {
+      specializedInstructions = `TASK: PIX2 COGNITIVE & GRAMMAR SPECIFICATION
+1. ZERO-BACKGROUND: Never write transparent pixels. Omitted coords are 100% transparent.
+2. INTEGER COORDINATES: Strict discrete domain 0 <= x < ${cw}, 0 <= y < ${ch}.
+3. DIRECTIVES: @pix2, @meta, @palette, @cell, @animation, @end.`;
+    }
+
+    const prompt = `# SYSTEM PROMPT: NOIRADIX PIX2 EXPERT COGNITIVE AGENT
+You are an expert game artist and systems engineer specializing in deterministic, coordinate-addressed pixel art using the .PIX2 specification.
+
+## CORE PRINCIPLES & GUARDRAILS
+1. ZERO BACKGROUND: Never output background layers, black fills, or transparent placeholder pixels. In PIX2, non-existent coordinates are 100% transparent.
+2. DISCRETE COORDINATES: Origin is top-left (0,0). Valid coordinates: 0 <= x < ${cw}, 0 <= y < ${ch}. Coordinates outside this boundary are illegal.
+3. DETERMINISTIC REPRODUCIBILITY: Pixels are placed with 'p x,y <pal_id|hex>' or primitives ('sym_dot', 'line', 'rect', 'fill').
+4. PALETTE FIRST: Always prefer referencing palette keys (e.g. '1', '2', 'outline') defined in @palette.
+
+## ACTIVE PROJECT METADATA
+- Title: "${meta.title || 'Sprite'}"
+- Grid: ${cols} columns x ${rows} rows (Total ${cols * rows} cells)
+- Cell Dimensions: ${cw}x${ch} pixels
+- Existing Cells: [${cellInventory}]
+- Current Palette:
+${paletteSummary}
+
+## SPECIALIZED INSTRUCTIONS
+${specializedInstructions}
+
+## CURRENT PIX2 SOURCE CODE
 \`\`\`pix2
 ${serialized}
 \`\`\`
 
-USER INSTRUCTION:
-[Describe your modifications or character design request here. You can specify exact pixel coordinates, colors, animations, or shapes.]
+## USER REQUEST
+[Please specify your design, animation, or character modification request here.]
 `;
+
     navigator.clipboard.writeText(prompt).then(() => {
-      showToast('AI Prompt copied to clipboard!', 'success');
+      showToast(`Copied AI Prompt [${mode.toUpperCase()}] to clipboard!`, 'success');
     }).catch(() => {
       alert('Could not copy automatically. You can copy the code manually.');
     });
@@ -5236,6 +5470,8 @@ namespace NOIRADIX.Editor
       });
     }
 
+    bindAction('btn-reload-file', handleManualFileReload);
+
     // Mini Preview Zoom level buttons
     document.querySelectorAll('#preview-zoom-group [data-scale]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -5413,6 +5649,13 @@ namespace NOIRADIX.Editor
         renderCellRulers();
         updateStatusBarCoords(null, null);
         showToast('Zoom reset to 24× (Ctrl+0)');
+        return;
+      }
+
+      // Reload from disk (Ctrl + Shift + R)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'r') {
+        e.preventDefault();
+        handleManualFileReload();
         return;
       }
 
