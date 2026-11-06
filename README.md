@@ -23,15 +23,33 @@
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
-| 🗺️ **1. Sprite Sheet Matrix & Multi-Frame Layout** | 🎬 **2. Directional Animation Studio (Real-Time)** |
-|:---:|:---:|
-| [![Sprite Sheet Matrix Overview](docs/noiradix-grid-overview.png)](docs/noiradix-grid-overview.png) | [![Directional Animation Studio](docs/noiradix-grid-animation.png)](docs/noiradix-grid-animation.png) |
-| *Multi-cell matrix with row-level animation states, column frame sequences, cell resolution presets (16×16 to 64×64), and interactive Inspector.* | *Floating real-time playback player supporting 4-direction and 8-direction compass previews, variable FPS slider, and loop controls.* |
+### 🌟 End-to-End Live Workflow: Browser to Unity 2D in 1 Click
+![Full-Stack Web to Unity Workflow](docs/noiradix-export-unity-9-gif-fullstack-preview-web.gif)
+*Real-time demonstration of authoring sprite animations in NOIRADIX Studio, exporting the game package, and 1-click importing directly into Unity 6.*
 
-| 🖌️ **3. Precision Pixel Editor with Rulers & Symmetry** | 🤖 **4. AI-Native PIX2 Code & Prompt Generator** |
-|:---:|:---:|
-| [![Precision Cell Editor](docs/noiradix-editor.png)](docs/noiradix-editor.png) | [![AI Code & Prompt Generator](docs/noiradix-COPYFORAI.png)](docs/noiradix-COPYFORAI.png) |
-| *Bilateral symmetry mirror axis (`sym_dot`), 4× to 64× anchor-centered zoom, dynamic pixel rulers, discrete drawing tools, and palette swatches.* | *1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, and real-time disk hot-reload.* |
+---
+
+### 1. Sprite Sheet Matrix & Multi-Frame Layout
+![Sprite Sheet Matrix Overview](docs/noiradix-grid-overview.png)
+*Multi-cell matrix with row-level animation states, column frame sequences, cell resolution presets (16×16 to 64×64), and interactive Inspector panel.*
+
+---
+
+### 2. Directional Animation Studio (Real-Time Playback)
+![Directional Animation Studio](docs/noiradix-grid-animation.png)
+*Floating real-time playback player supporting 4-direction and 8-direction compass previews, variable FPS slider, and loop controls.*
+
+---
+
+### 3. Precision Pixel Editor with Rulers & Symmetry
+![Precision Pixel Editor](docs/noiradix-editor.png)
+*Bilateral symmetry mirror axis (`sym_dot`), 4× to 64× anchor-centered zoom, dynamic pixel rulers, discrete drawing tools, and palette swatches.*
+
+---
+
+### 4. AI-Native PIX2 Code & 1-Click Prompt Studio
+![AI Code & Prompt Generator](docs/noiradix-COPYFORAI.png)
+*1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, and real-time disk hot-reload.*
 
 ---
 
@@ -67,8 +85,8 @@ Get up and running immediately with zero configuration and zero build tools:
 1. In the **Sprite Sheet Layout**, double-click any frame (or click **Edit Frame Pixels**).
 2. The Studio opens the **Cell Editor** with high-precision tools:
    * **Pencil (<kbd>B</kbd>):** Discrete pixel placement.
-   * **Bilateral Symmetry Axis:** Click **Symmetry** in the top bar to draw bilateral symmetrical characters automatically (`sym_dot` formula).
-   * **Dynamic Pixel Rulers:** Live X/Y rulers update as you zoom (<kbd>Ctrl</kbd> + Mouse Wheel, `4×` to `64×`) and pan (<kbd>Space</kbd> + Drag).
+   * **Bilateral Symmetry Axis (<kbd>S</kbd>):** Draw bilateral symmetrical characters automatically (`sym_dot` formula).
+   * **Dynamic Pixel Rulers:** Live X/Y rulers update as you zoom (<kbd>Ctrl</kbd> + Mouse Wheel, `4×` to `64×`) and pan (<kbd>Space</kbd> + Drag or <kbd>H</kbd>).
    * **Eyedropper (<kbd>I</kbd>) & Palette Swatches:** Pick colors from the canvas or click any swatch in the bottom palette.
    * **Line (<kbd>L</kbd>), Rectangle (<kbd>U</kbd>), Paint Bucket (<kbd>G</kbd>), Eraser (<kbd>E</kbd>).**
 
@@ -101,10 +119,70 @@ NOIRADIX Studio is designed from day one to pair-program with AI (ChatGPT, Claud
 ### Step 7: Export to Your Game Engine
 1. Click **Export** in the top navigation bar.
 2. Choose your game engine target:
-   * **Unity 2D Spritesheet Package (.ZIP):** Atlas PNG + JSON Metadata + C# `Pix2UnityImporter.cs` for 1-click automatic sprite slicing and `.anim` AnimationClip generation.
+   * **Unity 2D Spritesheet Package (.ZIP):** Atlas PNG + JSON Metadata + C# `Pix2UnityImporter.cs` + `README_UNITY_IMPORT.txt` for 1-click automatic sprite slicing and `.anim` AnimationClip generation.
    * **TexturePacker JSON (.ZIP):** Universal Hash format ready for Godot 4, Phaser, Pixi.js, Defold, Raylib, and GameMaker.
    * **PNG Spritesheet Only:** High-res transparent atlas with configurable Cell Spacing (`0px`–`4px`) and Extrude Edge Pixels to eliminate GPU bleeding seams.
    * **Individual Sliced Frames (.ZIP):** Numbered transparent PNGs.
+
+---
+
+## 🎮 Unity 2D Engine Integration Walkthrough
+
+NOIRADIX Studio delivers a seamless, zero-friction bridge into Unity 2D:
+
+### Step 1: Export Game Package from NOIRADIX Studio
+In NOIRADIX Studio, click **Export** in the top header. Select **Unity 2D Sprite Package** and configure your spacing (recommended: `1px Bleed Guard` with `Extrude Edge Pixels` checked). Click **Export Unity 2D Package (.ZIP)**.
+
+![Step 1 - Export Modal in Studio](docs/noiradix-export-unity-1.png)
+
+---
+
+### Step 2: Unzip the Package
+Extract `{project}_unity_package.zip`. It contains `{name}.png`, `{name}.pix2.json`, `Pix2UnityImporter.cs`, and `README_UNITY_IMPORT.txt`.
+
+![Step 2 - Extracted Files](docs/noiradix-export-unity-2.png)
+
+---
+
+### Step 3: Place Files into Your Unity Project
+* Copy `Pix2UnityImporter.cs` into your Unity project's `Assets/_Game/Editor/` (or any `Editor/` folder).
+* Copy `{name}.png` and `{name}.pix2.json` into any asset folder together (e.g. `Assets/_Game/Art/Sprites/Noiradix/`).
+
+![Step 3 - Place into Unity Assets](docs/noiradix-export-unity-3.png)
+
+---
+
+### Step 4: 1-Click Automatic Import
+In your Unity Project window, **RIGHT-CLICK** the `{name}.pix2.json` file and select:  
+👉 **NOIRADIX > Import Spritesheet & Animations**  
+*(Or use the top menu: `Tools > NOIRADIX > Import Pix2 Spritesheet JSON...`)*.
+
+![Step 4 - Right Click Import Menu](docs/noiradix-export-unity-4.png)
+
+An import summary dialog confirms that all frames and animation clips were generated instantly:
+
+![Step 5 - Import Complete Popup](docs/noiradix-export-unity-5.png)
+
+---
+
+### Step 5: Pixel-Perfect Sprite Slicing
+The importer automatically sets Texture Type to **Sprite (2D and UI)**, Filter Mode to **Point (no filter)**, Compression to **None**, and slices all 16 frames with custom pivots:
+
+![Step 6 - Sliced Sprites & Inspector](docs/noiradix-export-unity-6.png)
+
+---
+
+### Step 6: Native Unity Animation Clips (.anim)
+All 4 direction clips (`walk_down`, `walk_left`, `walk_right`, `walk_up`) are created in the `Animations/` folder with proper 6 FPS timing, sprite curve bindings, and loop settings:
+
+![Step 7 - Animation Window Timeline](docs/noiradix-export-unity-7.png)
+
+---
+
+### Step 7: Live in Scene & Game Playback
+Drag the sprite or animation clip into your scene, press **Play Game**, and watch your character animate with zero texture bleeding!
+
+![Step 8 - Live In Scene Walk Animation](docs/noiradix-export-unity-8-gif.gif)
 
 ---
 
@@ -195,18 +273,7 @@ NOIRADIX Studio operates in two tiers based on modern browser file capabilities:
 
 ---
 
-## 🎮 Game Engine Integration
-
-### Unity (2D Top-Down / Platformer)
-1. In NOIRADIX Studio, click the **Export** button in the top header.
-2. Select **Unity 2D Sprite Package** and your desired spacing (recommended: `1px`).
-3. Click **Export Game Package** to download `{project}_unity_package.zip`.
-4. Extract the folder into your Unity project (e.g. `Assets/_Game/Art/Sprites/`).
-5. In Unity, right-click the `.pix2.json` file and select **Assets > NOIRADIX > Import Spritesheet & Animations** (or use top menu `Tools > NOIRADIX > Import Pix2 Spritesheet JSON...`).
-6. The importer automatically:
-   * Sets `TextureType` to **Sprite (2D and UI)**, `FilterMode` to **Point (no filter)**, and `Compression` to **None**.
-   * Slices all frames with exact pixel bounds and pivots.
-   * Generates `.anim` AnimationClips inside an `Animations/` subfolder at your specified FPS.
+## 🎮 Other Game Engine Targets
 
 ### Godot 4
 1. Select **TexturePacker Standard (JSON Hash)** in the Export dialog.

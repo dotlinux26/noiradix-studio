@@ -8,19 +8,84 @@
 
 ---
 
-## 📸 Studio Visual Overview
+## 📸 Studio Visual Tour
 
-NOIRADIX Studio provides a complete, desktop-grade environment for authoring 2D sprites, directional animations, and game-ready atlas packages directly in the browser:
+Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
-| 🗺️ **Sprite Sheet Matrix Overview** | 🎬 **Directional Animation Studio** |
-|:---:|:---:|
-| [![Sprite Sheet Matrix Overview](noiradix-grid-overview.png)](noiradix-grid-overview.png) | [![Directional Animation Studio](noiradix-grid-animation.png)](noiradix-grid-animation.png) |
-| *Multi-cell grid matrix with row-level animation states, column frame sequences, resolution presets (16×16 to 64×64), and interactive Inspector panel.* | *Floating real-time playback player supporting 4-direction and 8-direction compass previews, variable FPS slider, and loop controls.* |
+### 🌟 End-to-End Live Workflow: Browser to Unity 2D in 1 Click
+![Full-Stack Web to Unity Workflow](noiradix-export-unity-9-gif-fullstack-preview-web.gif)
+*Real-time demonstration of authoring sprite animations in NOIRADIX Studio, exporting the game package, and 1-click importing directly into Unity 6.*
 
-| 🖌️ **Precision Pixel Editor** | 🤖 **AI-Native PIX2 Code & Prompt Studio** |
-|:---:|:---:|
-| [![Precision Cell Editor](noiradix-editor.png)](noiradix-editor.png) | [![AI Code & Prompt Generator](noiradix-COPYFORAI.png)](noiradix-COPYFORAI.png) |
-| *Bilateral symmetry mirror axis (`sym_dot`), 4× to 64× anchor-centered zoom, dynamic pixel rulers, discrete drawing tools, and palette swatches.* | *1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, and real-time disk hot-reload.* |
+---
+
+### 1. Sprite Sheet Matrix & Multi-Frame Layout
+![Sprite Sheet Matrix Overview](noiradix-grid-overview.png)
+*Multi-cell grid matrix with row-level animation states, column frame sequences, resolution presets (16×16 to 64×64), and interactive Inspector panel.*
+
+---
+
+### 2. Directional Animation Studio (Real-Time Playback)
+![Directional Animation Studio](noiradix-grid-animation.png)
+*Floating real-time playback player supporting 4-direction and 8-direction compass previews, variable FPS slider, and loop controls.*
+
+---
+
+### 3. Precision Pixel Editor with Rulers & Symmetry
+![Precision Pixel Editor](noiradix-editor.png)
+*Bilateral symmetry mirror axis (`sym_dot`), 4× to 64× anchor-centered zoom, dynamic pixel rulers, discrete drawing tools, and palette swatches.*
+
+---
+
+### 4. AI-Native PIX2 Code & 1-Click Prompt Studio
+![AI Code & Prompt Generator](noiradix-COPYFORAI.png)
+*1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, and real-time disk hot-reload.*
+
+---
+
+## 🎮 Unity 2D Integration Step-by-Step
+
+### Step 1: Export Game Package from NOIRADIX Studio
+![Step 1 - Export Modal in Studio](noiradix-export-unity-1.png)
+*Select Unity 2D Sprite Package, 1px bleed guard padding, and extrude edge pixels.*
+
+---
+
+### Step 2: Unzip the Package
+![Step 2 - Extracted Files](noiradix-export-unity-2.png)
+*Extract package containing the atlas PNG, `.pix2.json` metadata, `Pix2UnityImporter.cs`, and `README_UNITY_IMPORT.txt`.*
+
+---
+
+### Step 3: Place Files into Your Unity Project
+![Step 3 - Place into Unity Assets](noiradix-export-unity-3.png)
+*Place `Pix2UnityImporter.cs` into `Assets/_Game/Editor/` and sprites into `Assets/_Game/Art/Sprites/Noiradix/`.*
+
+---
+
+### Step 4: 1-Click Automatic Import
+![Step 4 - Right Click Import Menu](noiradix-export-unity-4.png)
+*Right-click the `.pix2.json` file and select "NOIRADIX > Import Spritesheet & Animations".*
+
+![Step 5 - Import Complete Popup](noiradix-export-unity-5.png)
+*Dialog confirms all 16 frames were sliced and 4 Animation Clips were automatically generated.*
+
+---
+
+### Step 5: Pixel-Perfect Sprite Slicing
+![Step 6 - Sliced Sprites & Inspector](noiradix-export-unity-6.png)
+*Automatic configuration of Sprite Multiple, Point filter mode, uncompressed textures, and custom pivots.*
+
+---
+
+### Step 6: Native Unity Animation Clips (.anim)
+![Step 7 - Animation Window Timeline](noiradix-export-unity-7.png)
+*Pre-configured 6 FPS walk cycle curves with loop settings in Unity's native Animation timeline.*
+
+---
+
+### Step 7: Live in Scene & Game Playback
+![Step 8 - Live In Scene Walk Animation](noiradix-export-unity-8-gif.gif)
+*Watch the character animate with zero texture bleeding inside the live Unity scene.*
 
 ---
 
