@@ -61,6 +61,14 @@ When running in a Chromium-based browser (Edge, Chrome, Opera, Brave), PIX2 uses
 2. Clears existing file handle (`state.fileHandle = null`), initializes blank document.
 3. Sets clean state.
 
+### 2.5 Drag-and-Drop File Ingestion (Direct FileSystemHandle Binding)
+When dropping a `.pix2` file from desktop into the Studio window:
+1. **Direct FileSystemHandle Acquisition:** Uses `DataTransferItem.getAsFileSystemHandle()` (File System Access API) to bind directly to the actual disk file.
+2. **Seamless Save (`Ctrl+S`):** Pressing `Ctrl+S` immediately commits edits back to the dropped disk file without prompting a Save As popup.
+3. **Status Bar Synchronization:** Dynamically sets badge to `Local File` and updates the file path pill to the dropped file name.
+4. **Instant Watcher Activation:** The real-time watcher automatically begins monitoring the dropped file for external modifications.
+5. *Fallback (Legacy Drag-and-Drop):* If `getAsFileSystemHandle()` is not supported by the browser, reads the file in-memory, displays `In-Memory Draft`, and safely routes `Ctrl+S` to `showSaveFilePicker()` pre-populated with the file name.
+
 ---
 
 ## 3. Document Dirty State & Visual Identity

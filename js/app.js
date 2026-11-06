@@ -593,25 +593,28 @@
     const saveStatusText = document.getElementById('save-status-text');
     const btnSave = document.getElementById('btn-save-pix2');
 
-    const isLocal = Boolean(currentFileHandle || currentFilePath);
+    const isDirectDiskLinked = Boolean(currentFileHandle);
+    const hasFileName = Boolean(currentFileName || currentFilePath);
 
     if (fileSourceBadge && fileSourceText) {
-      if (isLocal) {
+      if (isDirectDiskLinked) {
         fileSourceBadge.className = 'file-source-badge local';
         fileSourceBadge.innerHTML = '<i class="fa-solid fa-hard-drive"></i> <span id="file-source-text">Local File</span>';
-        fileSourceBadge.title = 'File located on local drive';
+        fileSourceBadge.title = 'File linked to disk via File System Access API (Ctrl+S saves directly)';
       } else {
         fileSourceBadge.className = 'file-source-badge draft';
         fileSourceBadge.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> <span id="file-source-text">In-Memory Draft</span>';
-        fileSourceBadge.title = 'File exists only in temporary browser memory';
+        fileSourceBadge.title = hasFileName ? 'File held in memory. Click Save to save to disk.' : 'New unsaved project in memory.';
       }
     }
 
     if (filePathText && filePathPill) {
-      if (isLocal) {
-        const full = currentFilePath || (currentFileHandle ? currentFileHandle.name : currentFileName || 'player_wispling.pix2');
+      if (hasFileName) {
+        const full = (currentFileHandle ? currentFileHandle.name : null) || currentFileName || currentFilePath;
         filePathText.textContent = formatTruncatedPath(full);
-        filePathPill.title = `File: ${full}\nClick to copy file name`;
+        filePathPill.title = isDirectDiskLinked
+          ? `File: ${full}\nLinked to disk (Ctrl+S saves directly without prompt)`
+          : `File: ${full}\nIn-memory draft (Click Save to save to disk)`;
         filePathPill.style.display = 'inline-flex';
       } else {
         filePathText.textContent = 'Unsaved Project (Memory)';
@@ -4540,6 +4543,58 @@ namespace NOIRADIX.Editor
     });
   }
 
+  async function handleFileOpenFromHandle(handle) {
+    if (!handle) return;
+    if (isDocumentDirty) {
+      if (!confirm('You have unsaved changes in current project. Discard changes and open new file?')) {
+        return;
+      }
+    }
+    try {
+      const file = await handle.getFile();
+      if (file.size > 25 * 1024 * 1024) {
+        showToast('File exceeds 25MB safety limit.', 'error');
+        return;
+      }
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.pix2') || name.endsWith('.txt')) {
+        const text = await file.text();
+        const doc = PIX2.parse(text);
+        currentFileHandle = handle;
+        currentFileName = file.name;
+        currentFilePath = file.name;
+        lastSavedContent = text;
+        lastKnownFileModified = file.lastModified;
+        pendingExternalConflict = null;
+        await persistFileHandle(handle);
+        localStorage.setItem('noiradix_active_file_name', currentFileName);
+        localStorage.setItem('noiradix_active_file_path', currentFilePath);
+        localStorage.setItem('pix2_last_saved_content', text);
+        state.setDocument(doc);
+        setDirty(false);
+        refreshAll();
+        showToast(`Linked & opened ${file.name} from disk (Ctrl+S will save directly)!`, 'success');
+        return;
+      } else if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            slicePngToProject(img, file.name);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      console.warn('Failed reading from dropped FileSystemHandle, falling back:', err);
+      try {
+        const file = await handle.getFile();
+        handleFileOpen(file);
+      } catch (_) {}
+    }
+  }
+
   function handleFileOpen(file) {
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) {
@@ -4556,9 +4611,18 @@ namespace NOIRADIX.Editor
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const doc = PIX2.parse(e.target.result);
+          const content = e.target.result;
+          const doc = PIX2.parse(content);
           state.setDocument(doc);
           currentFileHandle = null;
+          currentFileName = file.name;
+          currentFilePath = file.name;
+          lastSavedContent = content;
+          lastKnownFileModified = file.lastModified || Date.now();
+          pendingExternalConflict = null;
+          localStorage.setItem('noiradix_active_file_name', currentFileName);
+          localStorage.setItem('noiradix_active_file_path', currentFilePath);
+          localStorage.setItem('pix2_last_saved_content', content);
           setDirty(false);
           refreshAll();
           showToast(`Opened ${file.name}!`, 'success');
@@ -4614,7 +4678,10 @@ namespace NOIRADIX.Editor
 
     state.setDocument(doc);
     currentFileHandle = null;
-    setDirty(false);
+    currentFileName = `${filename.replace(/\.[^/.]+$/, '')}.pix2`;
+    currentFilePath = null;
+    lastSavedContent = '';
+    setDirty(true);
     refreshAll();
     showToast(`Imported ${filename} (${defaultCols}x${defaultRows} cells)!`, 'success');
   }
@@ -4833,10 +4900,29 @@ namespace NOIRADIX.Editor
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     });
 
-    window.addEventListener('drop', (e) => {
+    window.addEventListener('drop', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      if (!e.dataTransfer) return;
+
+      // 1. Modern File System Access API: extract actual FileSystemFileHandle from drop
+      if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        const item = e.dataTransfer.items[0];
+        if (typeof item.getAsFileSystemHandle === 'function') {
+          try {
+            const handle = await item.getAsFileSystemHandle();
+            if (handle && handle.kind === 'file') {
+              await handleFileOpenFromHandle(handle);
+              return;
+            }
+          } catch (handleErr) {
+            console.debug('Direct getAsFileSystemHandle not available, using standard file fallback:', handleErr);
+          }
+        }
+      }
+
+      // 2. Standard HTML5 Drag & Drop fallback
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         handleFileOpen(e.dataTransfer.files[0]);
       }
     });
