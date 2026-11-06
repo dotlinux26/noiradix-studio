@@ -5696,6 +5696,11 @@ using UnityEditor;
 
 namespace NOIRADIX.Editor
 {
+    /// <summary>
+    /// Automatic Unity 2D Sprite Importer for NOIRADIX Studio (.pix2.json) exports.
+    /// Slices multi-frame sprite sheets with exact padding/spacing bleed protection,
+    /// sets sprite pivots, and automatically generates Unity .anim AnimationClips.
+    /// </summary>
     public static class Pix2UnityImporter
     {
         [MenuItem("Tools/NOIRADIX/Import Pix2 Spritesheet JSON...")]
@@ -5703,62 +5708,230 @@ namespace NOIRADIX.Editor
         {
             string selectedPath = EditorUtility.OpenFilePanel("Select NOIRADIX Spritesheet JSON", "Assets", "json");
             if (string.IsNullOrEmpty(selectedPath)) return;
+
             ImportPix2Json(selectedPath);
+        }
+
+        [MenuItem("Assets/NOIRADIX/Import Spritesheet & Animations", false, 30)]
+        public static void ImportSelectedAsset()
+        {
+            var selected = Selection.activeObject;
+            if (selected == null) return;
+            string path = AssetDatabase.GetAssetPath(selected);
+            if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                EditorUtility.DisplayDialog("NOIRADIX Importer", "Please select a NOIRADIX .json spritesheet file.", "OK");
+                return;
+            }
+            ImportPix2Json(Path.GetFullPath(path));
+        }
+
+        [MenuItem("Assets/NOIRADIX/Import Spritesheet & Animations", true)]
+        public static bool ValidateImportSelectedAsset()
+        {
+            var selected = Selection.activeObject;
+            if (selected == null) return false;
+            string path = AssetDatabase.GetAssetPath(selected);
+            return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
         }
 
         public static void ImportPix2Json(string fullJsonPath)
         {
             try
             {
-                if (!File.Exists(fullJsonPath)) return;
+                if (!File.Exists(fullJsonPath))
+                {
+                    Debug.LogError($"[NOIRADIX] File not found: {fullJsonPath}");
+                    return;
+                }
+
                 string jsonText = File.ReadAllText(fullJsonPath);
                 Pix2Data data = JsonUtility.FromJson<Pix2Data>(jsonText);
+                if (data == null || data.frames == null || data.frames.Length == 0)
+                {
+                    Debug.LogError("[NOIRADIX] Invalid or empty NOIRADIX JSON format.");
+                    return;
+                }
+
                 string dir = Path.GetDirectoryName(fullJsonPath);
                 string safeImageName = Path.GetFileName(data.meta.image);
                 string pngPath = Path.Combine(dir, safeImageName);
-                string assetPngPath = ToAssetPath(pngPath);
+                if (!File.Exists(pngPath))
+                {
+                    string altPng = Path.ChangeExtension(fullJsonPath, ".png");
+                    if (File.Exists(altPng)) pngPath = altPng;
+                    else
+                    {
+                        Debug.LogError($"[NOIRADIX] PNG image not found at: {pngPath}");
+                        return;
+                    }
+                }
 
+                string assetPngPath = ToAssetPath(pngPath);
                 TextureImporter importer = AssetImporter.GetAtPath(assetPngPath) as TextureImporter;
-                if (importer == null) { AssetDatabase.ImportAsset(assetPngPath); importer = AssetImporter.GetAtPath(assetPngPath) as TextureImporter; }
-                if (importer == null) return;
+                if (importer == null)
+                {
+                    AssetDatabase.ImportAsset(assetPngPath, ImportAssetOptions.ForceUpdate);
+                    importer = AssetImporter.GetAtPath(assetPngPath) as TextureImporter;
+                }
+
+                if (importer == null)
+                {
+                    Debug.LogError($"[NOIRADIX] Failed to obtain TextureImporter for {assetPngPath}");
+                    return;
+                }
 
                 importer.textureType = TextureImporterType.Sprite;
                 importer.spriteImportMode = SpriteImportMode.Multiple;
                 importer.filterMode = FilterMode.Point;
                 importer.textureCompression = TextureImporterCompression.Uncompressed;
-                importer.spritePixelsPerUnit = data.meta.cellWidth;
+                importer.mipmapEnabled = false;
+                importer.spritePixelsPerUnit = data.meta.cellWidth > 0 ? data.meta.cellWidth : 16;
 
                 List<SpriteMetaData> metas = new List<SpriteMetaData>();
                 int texH = data.meta.size.h;
+
                 foreach (var frame in data.frames)
                 {
                     SpriteMetaData sm = new SpriteMetaData();
                     sm.name = frame.name;
-                    sm.rect = new Rect(frame.x, texH - frame.y - frame.h, frame.w, frame.h);
+                    int unityY = texH - frame.y - frame.h;
+                    sm.rect = new Rect(frame.x, unityY, frame.w, frame.h);
                     sm.alignment = (int)SpriteAlignment.Custom;
                     sm.pivot = new Vector2(frame.pivotX, frame.pivotY);
                     metas.Add(sm);
                 }
+
                 importer.spritesheet = metas.ToArray();
                 EditorUtility.SetDirty(importer);
                 importer.SaveAndReimport();
+
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+
+                UnityEngine.Object[] loadedSprites = AssetDatabase.LoadAllAssetsAtPath(assetPngPath);
+                Dictionary<string, Sprite> spriteMap = new Dictionary<string, Sprite>();
+                foreach (var obj in loadedSprites)
+                {
+                    if (obj is Sprite s) spriteMap[s.name] = s;
+                }
+
+                int createdClips = 0;
+                string animDir = Path.Combine(Path.GetDirectoryName(assetPngPath), "Animations");
+                if (!Directory.Exists(animDir)) Directory.CreateDirectory(animDir);
+
+                if (data.animations != null)
+                {
+                    foreach (var anim in data.animations)
+                    {
+                        if (anim.frameNames == null || anim.frameNames.Length == 0) continue;
+
+                        AnimationClip clip = new AnimationClip();
+                        clip.frameRate = anim.fps > 0 ? anim.fps : 6;
+
+                        if (anim.loop)
+                        {
+                            AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(clip);
+                            settings.loopTime = true;
+                            AnimationUtility.SetAnimationClipSettings(clip, settings);
+                        }
+
+                        EditorCurveBinding binding = new EditorCurveBinding();
+                        binding.type = typeof(SpriteRenderer);
+                        binding.path = "";
+                        binding.propertyName = "m_Sprite";
+
+                        List<ObjectReferenceKeyframe> keyframes = new List<ObjectReferenceKeyframe>();
+                        float frameDuration = 1f / clip.frameRate;
+
+                        for (int i = 0; i < anim.frameNames.Length; i++)
+                        {
+                            string fName = anim.frameNames[i];
+                            if (spriteMap.TryGetValue(fName, out Sprite sp))
+                            {
+                                ObjectReferenceKeyframe key = new ObjectReferenceKeyframe();
+                                key.time = i * frameDuration;
+                                key.value = sp;
+                                keyframes.Add(key);
+                            }
+                        }
+
+                        if (keyframes.Count > 0)
+                        {
+                            AnimationUtility.SetObjectReferenceCurve(clip, binding, keyframes.ToArray());
+                            string clipPath = $"{animDir}/{anim.clipName}.anim";
+                            AssetDatabase.CreateAsset(clip, clipPath);
+                            createdClips++;
+                        }
+                    }
+                }
+
+                AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
-                Debug.Log($"[NOIRADIX] Imported {pngPath} with {metas.Count} sliced frames!");
+
+                Debug.Log($"[NOIRADIX] Successfully imported '{Path.GetFileName(pngPath)}': Sliced {metas.Count} frames and created {createdClips} Animation Clips!");
+                EditorUtility.DisplayDialog("NOIRADIX Importer", $"Import Complete!\n\nSliced: {metas.Count} frames\nClips Created: {createdClips}\nTarget: {assetPngPath}", "OK");
             }
-            catch (Exception ex) { Debug.LogError(ex); }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[NOIRADIX] Import failed: {ex.Message}\\n{ex.StackTrace}");
+            }
         }
 
         private static string ToAssetPath(string fullPath)
         {
             string projectPath = Path.GetFullPath(Application.dataPath + "/..").Replace('\\\\', '/');
             string norm = fullPath.Replace('\\\\', '/');
-            return norm.StartsWith(projectPath) ? norm.Substring(projectPath.Length).TrimStart('/') : fullPath;
+            if (norm.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return norm.Substring(projectPath.Length).TrimStart('/');
+            }
+            return fullPath;
         }
 
-        [Serializable] public class Pix2Data { public Pix2Meta meta; public Pix2Frame[] frames; }
-        [Serializable] public class Pix2Meta { public string image; public int cellWidth; public Pix2Size size; }
-        [Serializable] public class Pix2Size { public int w; public int h; }
-        [Serializable] public class Pix2Frame { public string name; public int x; public int y; public int w; public int h; public float pivotX = 0.5f; public float pivotY = 0f; }
+        [Serializable]
+        public class Pix2Data
+        {
+            public Pix2Meta meta;
+            public Pix2Frame[] frames;
+            public Pix2Anim[] animations;
+        }
+
+        [Serializable]
+        public class Pix2Meta
+        {
+            public string image;
+            public int cellWidth;
+            public int cellHeight;
+            public Pix2Size size;
+        }
+
+        [Serializable]
+        public class Pix2Size
+        {
+            public int w;
+            public int h;
+        }
+
+        [Serializable]
+        public class Pix2Frame
+        {
+            public string name;
+            public int x;
+            public int y;
+            public int w;
+            public int h;
+            public float pivotX = 0.5f;
+            public float pivotY = 0f;
+        }
+
+        [Serializable]
+        public class Pix2Anim
+        {
+            public string clipName;
+            public float fps = 6;
+            public bool loop = true;
+            public string[] frameNames;
+        }
     }
 }`;
       const scriptBytes = new TextEncoder().encode(importerScript);
