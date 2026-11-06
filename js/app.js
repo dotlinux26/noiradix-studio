@@ -788,6 +788,7 @@
     currentFileName = 'player_wispling.pix2';
     currentFilePath = null;
     selectedGridCellId = 'cell_0_0';
+    centerCellCanvas();
     setDirty(false);
     refreshAll();
   }
@@ -798,6 +799,7 @@
     currentFileHandle = null;
     currentFileName = null;
     currentFilePath = null;
+    centerCellCanvas();
     setDirty(false);
   }
 

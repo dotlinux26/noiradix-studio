@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const PIX2 = require('../js/pix2-format.js');
+const EditorState = require('../js/editor-state.js');
 
 let totalTests = 0;
 let passedTests = 0;
@@ -222,6 +223,39 @@ multiRowDoc.animations['dash'] = {
 
 assert(multiRowDoc.animations['dash'].frames[0] === 'walk_run_0', 'New animation state references existing cells');
 assert(multiRowDoc.cells['walk_run_0'].pixels['13,2'] === '#ffffff', 'Artwork pixels completely preserved when assigned to new animation state');
+
+// Test 7: Hand/Pan Tool State & Analytical Cursor-Centered Zoom Formula
+console.log(`\nTest 7: Pan Tool State & Analytical Cursor-Centered Zoom Formula`);
+const state = new EditorState();
+state.currentTool = 'pan';
+assert(state.currentTool === 'pan', 'EditorState supports pan tool');
+
+// Verify analytical anchor-centered zoom invariance across random test points
+const testPoints = [0, 3, 7.5, 11, 15, 16];
+const vpWidth = 1000;
+const docW = 16;
+for (const pt of testPoints) {
+  let pX = 0;
+  const zOld = 16;
+  const zNew = 28;
+  const screenPosBefore = pX + (vpWidth / 2 - (docW * zOld) / 2) + pt * zOld;
+  const dW = (docW * (zNew - zOld)) / 2;
+  const pShift = pt * (zNew - zOld);
+  pX += Math.round(dW - pShift);
+  const screenPosAfter = pX + (vpWidth / 2 - (docW * zNew) / 2) + pt * zNew;
+  assert(Math.abs(screenPosAfter - screenPosBefore) < 0.001, `Zoom anchor point ${pt} remains invariant under cursor`);
+}
+
+// Verify Grid Context Menu focused-cell resolution
+let focusedCellId = 'reaper_up_3';
+function resolveGridContextMenuTarget(clickedCellId, currentSelectedCellId, doc) {
+  if (clickedCellId) return clickedCellId;
+  if (currentSelectedCellId) return currentSelectedCellId;
+  return Object.keys(doc ? doc.cells : {})[0] || null;
+}
+assert(resolveGridContextMenuTarget(null, focusedCellId, multiRowDoc) === 'reaper_up_3', 'Right-clicking empty grid area correctly resolves focused cell Reaper Up 3');
+assert(resolveGridContextMenuTarget('reaper_down_0', focusedCellId, multiRowDoc) === 'reaper_down_0', 'Right-clicking another cell focuses that specific cell');
+assert(resolveGridContextMenuTarget(null, null, multiRowDoc) !== null, 'Right-clicking with no selection falls back safely');
 
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);

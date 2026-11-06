@@ -216,5 +216,10 @@ class EditorState {
   }
 }
 
-// Global state singleton
-window.state = new EditorState();
+// Global state singleton & Node.js CommonJS export
+if (typeof window !== 'undefined') {
+  window.state = new EditorState();
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = EditorState;
+}
