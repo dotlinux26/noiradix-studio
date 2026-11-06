@@ -936,14 +936,18 @@
         state.setDocument(doc);
       } catch (err) {
         console.error('Failed parsing DEFAULT_SAMPLE_PIX2:', err);
-        createBlankProject('Wispling Sprite', 4, 4, 16, 16);
+        createBlankProject('noiradix_ghost.pix2', 'Noiradix Ghost', 4, 4, 16, 16);
       }
     } else {
-      createBlankProject('Wispling Sprite', 4, 4, 16, 16);
+      createBlankProject('noiradix_ghost.pix2', 'Noiradix Ghost', 4, 4, 16, 16);
     }
     currentFileHandle = null;
-    currentFileName = 'player_wispling.pix2';
-    currentFilePath = null;
+    clearPersistedFileHandle();
+    currentFileName = 'noiradix_ghost.pix2';
+    currentFilePath = 'noiradix_ghost.pix2';
+    localStorage.setItem('noiradix_session_type', 'draft');
+    localStorage.setItem('noiradix_active_file_name', currentFileName);
+    localStorage.setItem('noiradix_active_file_path', currentFilePath);
     selectedGridCellId = 'cell_0_0';
     centerCellCanvas();
     centerGridCanvas();
