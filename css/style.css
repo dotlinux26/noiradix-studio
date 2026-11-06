@@ -433,8 +433,11 @@ body {
 }
 
 .save-status-badge.dirty {
-  color: #f59e0b;
-  animation: pulse-dirty 2s infinite ease-in-out;
+  color: #6366f1;
+}
+
+.save-status-badge.autosaved {
+  color: #10b981;
 }
 
 @keyframes pulse-dirty {

@@ -640,12 +640,14 @@
     if (saveStatusBadge && saveStatusText) {
       if (isDocumentDirty) {
         saveStatusBadge.className = 'save-status-badge dirty';
-        saveStatusBadge.innerHTML = '<i class="fa-solid fa-circle"></i> <span id="save-status-text">Unsaved</span>';
-        saveStatusBadge.title = 'You have unsaved changes';
+        saveStatusBadge.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> <span id="save-status-text">Saving...</span>';
+        saveStatusBadge.title = 'Saving changes to autosave recovery snapshot';
       } else {
         saveStatusBadge.className = 'save-status-badge clean';
-        saveStatusBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Saved</span>';
-        saveStatusBadge.title = 'All changes saved to disk';
+        saveStatusBadge.innerHTML = isDirectDiskLinked
+          ? '<i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Saved</span>'
+          : '<i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Autosaved</span>';
+        saveStatusBadge.title = isDirectDiskLinked ? 'All changes saved directly to disk file' : 'Changes safely backed up in recovery storage';
       }
     }
 
@@ -694,7 +696,7 @@
     }, 1200); // 1200ms debounce
   }
 
-  function saveRecoverySnapshot() {
+  async function saveRecoverySnapshot() {
     if (!state.doc) return;
     try {
       const text = PIX2.serialize(state.doc);
@@ -705,6 +707,34 @@
         data: text
       };
       localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
+
+      // Direct write to disk file if linked
+      if (currentFileHandle && 'createWritable' in currentFileHandle) {
+        try {
+          let hasPerm = true;
+          if (currentFileHandle.queryPermission) {
+            const p = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+            hasPerm = (p === 'granted');
+          }
+          if (hasPerm) {
+            const writable = await currentFileHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            lastSavedContent = text;
+            try {
+              const fresh = await currentFileHandle.getFile();
+              lastKnownFileModified = fresh.lastModified;
+            } catch (_) {}
+            pendingExternalConflict = null;
+            setDirty(false);
+          }
+        } catch (diskErr) {
+          console.debug('Direct disk autosave skipped:', diskErr);
+        }
+      } else {
+        setDirty(false);
+      }
+
       updateAutosaveIndicator('saved', now);
     } catch (err) {
       console.warn('Autosave snapshot failed:', err);
