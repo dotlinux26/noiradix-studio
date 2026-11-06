@@ -76,6 +76,7 @@
 
     await initAppSession();
     initFileWatcher();
+    updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'full-character');
   });
 
   // ===========================================================================
@@ -3842,6 +3843,136 @@
     }
   }
 
+  // ===========================================================================
+  // AI SPECIFICATION & CONTEXTUAL PROMPT STUDIO
+  // ===========================================================================
+
+  function updateAiGuidePane(mode = 'full-character') {
+    const titleEl = document.getElementById('ai-guide-title');
+    const contentEl = document.getElementById('ai-guide-content');
+    if (!contentEl) return;
+
+    if (mode === 'full-character') {
+      if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)';
+      contentEl.innerHTML = `
+        <h4>1. NOIRADIX Studio Character Architecture</h4>
+        <p class="guide-desc">The character is structured into directional rows on a grid matrix. Studio's Animation Player automatically loops each direction.</p>
+        
+        <h4>2. Anatomy &amp; Center Symmetry (16×16)</h4>
+        <div class="guide-formula-box">
+          <p><strong>Head / Hair:</strong> Y = 1 to 6, X = 4 to 11 (8px wide)</p>
+          <p><strong>Eyes:</strong> Y = 7 to 8 (2–3px apart, outline + eye color)</p>
+          <p><strong>Torso / Outfit:</strong> Y = 9 to 12 (8–10px wide)</p>
+          <p><strong>Bilateral Symmetry:</strong> Axis is center X = 7.5 (Front &amp; Back)</p>
+          <p><strong>Shorthand Macro:</strong> <code>sym_dot x,y 7.5 &lt;color&gt;</code></p>
+        </div>
+
+        <h4>3. Directional Frame Mapping</h4>
+        <ul class="guide-cmd-list">
+          <li><code>down_0..3</code>: Front facing (bilateral symmetry, 2 eyes)</li>
+          <li><code>up_0..3</code>: Back view (hair/cloak only, no facial features)</li>
+          <li><code>right_0..3</code>: Profile facing right (offset eyes/nose)</li>
+          <li><code>left_0..3</code>: Profile facing left (mirror of right)</li>
+        </ul>
+
+        <h4>4. Anti-Hallucination Guardrail</h4>
+        <div class="tip-box">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span><strong>Zero Background:</strong> Never output background fill! Non-existent coordinates are 100% transparent. Valid coordinates are strictly 0 &le; x &lt; width, 0 &le; y &lt; height.</span>
+        </div>
+      `;
+    } else if (mode === 'walk-animation') {
+      if (titleEl) titleEl.textContent = '🎬 Walk Cycle & Animation Math';
+      contentEl.innerHTML = `
+        <h4>1. Mathematical 4-Frame Walk Formula</h4>
+        <div class="guide-formula-box">
+          <p><strong>Frame 0 (Contact):</strong> Neutral standing pose, feet planted.</p>
+          <p><strong>Frame 1 (Step Left):</strong> Bob torso -1px on Y (Y - 1), left foot steps forward.</p>
+          <p><strong>Frame 2 (Passing):</strong> Neutral height, feet crossing center.</p>
+          <p><strong>Frame 3 (Step Right):</strong> Bob torso -1px on Y (Y - 1), right foot steps forward.</p>
+        </div>
+
+        <h4>2. Animation Directives in PIX2</h4>
+        <pre><code>@animation walk_down
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+  fps: 6
+  loop: true</code></pre>
+
+        <h4>3. Secondary Motion</h4>
+        <p class="guide-desc">Cloaks, hair tails, antennae, and weapons should lag 1 frame behind primary torso movement for organic fluid motion.</p>
+
+        <div class="tip-box">
+          <i class="fa-solid fa-film"></i>
+          <span><strong>Instant Live Preview:</strong> As soon as external AI saves the file, Studio hot-reloads and the Animation Player immediately loops your clip!</span>
+        </div>
+      `;
+    } else if (mode === 'accessory-equipment') {
+      if (titleEl) titleEl.textContent = '🗡️ Equipment & Accessory Overlay';
+      contentEl.innerHTML = `
+        <h4>1. Non-Destructive Equipment Layering</h4>
+        <p class="guide-desc">Equipment overlays onto existing character cells without erasing base silhouette pixels.</p>
+
+        <h4>2. Equipment Placement Zones (16×16)</h4>
+        <div class="guide-formula-box">
+          <p><strong>Hats / Helmets / Crowns:</strong> Top crown Y = 0 to 5</p>
+          <p><strong>Weapons (Sword / Staff):</strong> Hand level X = 2 to 4 or 12 to 14</p>
+          <p><strong>Cloaks / Wings / Shields:</strong> Flanking sides X = 1..3, X = 13..15</p>
+        </div>
+
+        <h4>3. Bresenham Line Macro for Weapons</h4>
+        <ul class="guide-cmd-list">
+          <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Diagonal sword blades, staff shafts</li>
+          <li><code>rect x,y w,h &lt;col&gt; outline</code> — Shield rims and armor plates</li>
+        </ul>
+
+        <div class="tip-box">
+          <i class="fa-solid fa-palette"></i>
+          <span><strong>Palette Expansion:</strong> Add dedicated accessory color IDs (e.g. gold, steel, ruby) directly into <code>@palette</code>.</span>
+        </div>
+      `;
+    } else if (mode === 'surgical-patch') {
+      if (titleEl) titleEl.textContent = '🩹 Surgical Frame / Color Patch';
+      contentEl.innerHTML = `
+        <h4>1. Surgical Frame-Level Addressing</h4>
+        <p class="guide-desc">Instruct the AI to output ONLY the specific <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives that need changes, keeping all other frames untouched.</p>
+
+        <h4>2. Selective Replacement Examples</h4>
+        <pre><code>; Recolor eyes to Glowing Cyan
+@cell cell_0_0
+  p 7,7 #00ffff p 8,7 #00ffff
+
+; Update palette theme
+@palette
+  1: #ffeaa7 ; Warm Body
+  2: #2d3436 ; Dark Outline</code></pre>
+
+        <div class="tip-box">
+          <i class="fa-solid fa-bolt"></i>
+          <span><strong>Zero Token Waste:</strong> Surgical patches reduce token consumption by 90% and prevent accidental regression on existing animation frames.</span>
+        </div>
+      `;
+    } else {
+      if (titleEl) titleEl.textContent = '📋 Studio Architecture & Programmatic API';
+      contentEl.innerHTML = `
+        <h4>1. NOIRADIX Studio Overview</h4>
+        <p class="guide-desc">An AI-native, coordinate-addressed pixel art studio with live hot-reloading, bilateral symmetry, 4-dir/8-dir animation player, and Unity/TexturePacker exporters.</p>
+
+        <h4>2. JavaScript / Node.js Engine API</h4>
+        <pre><code>const doc = PIX2.parse(fileContent);
+const cell = doc.cells['cell_0_0'];
+cell.pixels['7,2'] = 2; // plot pixel
+const outText = PIX2.serialize(doc);</code></pre>
+
+        <h4>3. Game Engine Integrations</h4>
+        <ul class="guide-cmd-list">
+          <li><strong>Unity 2D Package:</strong> Slices frames &amp; generates <code>.anim</code> clips via included <code>Pix2UnityImporter.cs</code>.</li>
+          <li><strong>TexturePacker:</strong> Standard JSON Hash format with animation dictionaries.</li>
+          <li><strong>Live Hot-Reload:</strong> Watches disk file via File System Access API.</li>
+        </ul>
+      `;
+    }
+  }
+
   function copyAiPrompt() {
     if (!state.doc) return;
     const mode = (dom.selectAiPromptMode && dom.selectAiPromptMode.value) || 'full-character';
@@ -3864,86 +3995,149 @@
     let specializedInstructions = '';
 
     if (mode === 'full-character') {
-      specializedInstructions = `TASK: FULL 4-DIRECTION / 8-DIRECTION CHARACTER GENERATION
-1. ANATOMICAL SILHOUETTE (for ${cw}x${ch} cell):
-   - Head & Hair: Top Y in [1..6], centered around X ~ ${((cw - 1) / 2).toFixed(1)}.
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: COMPLETE 4-DIRECTIONAL CHARACTER CREATION
+You are tasked with generating a complete game character from scratch in all 4 cardinal directions:
+1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):
+   - Head & Hair: Top Y in [1..6], centered around X ~ ${((cw - 1) / 2).toFixed(1)}. Width = 8px.
    - Eyes: Y in [7..8], spaced 2-3 pixels apart. Use dark outline and contrasting eye color.
-   - Torso & Clothing: Y in [9..12], width 8-10 pixels.
-   - Legs & Shadow: Y in [13..15]. Leave transparent margins if grounded.
-2. DIRECTIONAL CONSISTENCY:
-   - down_0: Frontal facing with bilateral symmetry.
-   - up_0: Back of head & cloak/outfit; no facial features.
-   - right_0: Profile/3-quarters view facing right; offset nose/eyes to the right edge.
-   - left_0: Mirror of right_0 or facing left.
-3. DRAWING MACROS:
-   - Use 'sym_dot x,y ${((cw - 1) / 2).toFixed(1)} <color>' for symmetric frontal faces.
+   - Torso & Clothing: Y in [9..12], width = 8-10 pixels.
+   - Legs & Shadow: Y in [13..15]. Leave transparent margins below feet.
+2. DIRECTIONAL PERSPECTIVES:
+   - 'down_0': Frontal view with bilateral center symmetry. Both eyes clearly visible.
+   - 'up_0': Back view showing back of head, hair, and cloak. NO eyes, nose, or mouth visible.
+   - 'right_0': 3/4 side profile facing right. Eyes and nose shifted toward right edge (X ~ ${cw - 5}).
+   - 'left_0': Facing left. Exact horizontal mirror of 'right_0'.
+3. ACCELERATION MACROS:
+   - Use 'sym_dot x,y ${((cw - 1) / 2).toFixed(1)} <color>' for bilateral frontal symmetry.
    - Use 'p x,y <pal_id>' for compact sparse pixel placement.
-4. ANIMATION:
-   - Define walk cycles for each direction at 6fps loop:
-     walk_down:  [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
-     walk_up:    [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
-     walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
-     walk_left:  [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop`;
+4. ANIMATION BINDINGS:
+   - Hook up all walk animation cycles at 6fps loop:
+     @animation walk_down: [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
+     @animation walk_up: [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
+     @animation walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
+     @animation walk_left: [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop`;
     } else if (mode === 'walk-animation') {
-      specializedInstructions = `TASK: WALK CYCLE & LOCOMOTION ANIMATION
-1. 4-FRAME WALK FORMULA (Discrete Mathematical Physics):
-   - Frame 0 (Contact): Neutral grounded pose.
-   - Frame 1 (Down / Passing): Squash torso down 1 pixel (Y + 1) or bob torso (Y - 1). Left foot forward.
-   - Frame 2 (Passing): Neutral torso height, legs crossing.
-   - Frame 3 (Up / Passing): Bob torso, Right foot forward.
-2. SUB-PIXEL HAIR & CLOAK SECONDARY MOTION:
-   - Delay cloak and hair tail trailing motion by 1 frame behind body movement.
-3. OUTPUT REQUIREMENT:
-   - Provide the complete '@animation' block and '@cell' records for all new walk frames.`;
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: DISCRETE WALK CYCLE & LOCOMOTION ANIMATION
+You are tasked with transforming static character poses into fluid, natural walking animations:
+1. 4-FRAME MATHEMATICAL WALK FORMULA:
+   - Frame 0 (Contact): Neutral standing contact pose, both feet grounded.
+   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up by 1px: Y - 1). Left foot forward, right foot trailing back.
+   - Frame 2 (Passing): Neutral torso height. Legs passing each other in center.
+   - Frame 3 (Step Right): Bob torso by 1px (Y - 1). Right foot forward, left foot trailing back.
+2. SECONDARY MOTION PHYSICS:
+   - Trailing capes, hair tails, antennae, and held weapons MUST lag 1 frame behind primary body bobbing.
+3. OUTPUT FORMAT:
+   - Provide the complete '@animation' definitions and corresponding '@cell' frame records.`;
     } else if (mode === 'accessory-equipment') {
-      specializedInstructions = `TASK: ACCESSORY & EQUIPMENT OVERLAY
-1. OVERLAY RULES:
-   - Do NOT destroy the underlying character silhouette unless intended.
-   - Hat / Helmet: Overlay on Y in [0..5] on existing head pixels.
-   - Wings / Cloak: Attach behind torso or sides.
-   - Weapon (Staff/Sword): Use 'line x0,y0 x1,y1 <color>' to draw blades and shafts.
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: NON-DESTRUCTIVE ACCESSORY & EQUIPMENT OVERLAY
+You are tasked with adding equipment, costumes, weapons, or cosmetics onto existing character sprites:
+1. NON-DESTRUCTIVE OVERLAY INVARIANT:
+   - Preserve existing character silhouette and facial pixels underneath unless intentionally obscured.
+   - Hats / Helmets / Crowns: Draw on top crown Y in [0..5].
+   - Weapons (Swords, Staves, Bows): Position at hand level (X in [2..4] or [12..14]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
+   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..3] and [13..15]) and behind back frames.
 2. PALETTE EXPANSION:
-   - Add new equipment colors to '@palette' if needed (e.g. gold, steel, ruby gems).`;
+   - Introduce new equipment material color IDs in '@palette' (e.g. gold '#ffd700', steel '#94a3b8', ruby '#ef4444').`;
     } else if (mode === 'surgical-patch') {
-      specializedInstructions = `TASK: SURGICAL FRAME / COLOR PATCH
-1. SURGICAL PRECISION:
-   - Do NOT rewrite unrelated cells or animations.
-   - Only output the modified '@cell <id>' or '@palette' entries that need changes.
-   - Clearly state which pixels are added, replaced, or erased.`;
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: SURGICAL FRAME / COLOR PATCH
+You are tasked with making surgical, highly-targeted corrections with zero token waste:
+1. SURGICAL SPECIFICATION:
+   - Do NOT regenerate or output unchanged cells or animations.
+   - Output ONLY the modified '@cell <id>' or '@palette' lines.
+   - To ERASE a pixel, simply omit its coordinate from the cell record.
+2. RECOLORING:
+   - Modify the '@palette' hex value or remap palette IDs inside targeted cells.`;
     } else {
-      specializedInstructions = `TASK: PIX2 COGNITIVE & GRAMMAR SPECIFICATION
-1. ZERO-BACKGROUND: Never write transparent pixels. Omitted coords are 100% transparent.
-2. INTEGER COORDINATES: Strict discrete domain 0 <= x < ${cw}, 0 <= y < ${ch}.
-3. DIRECTIVES: @pix2, @meta, @palette, @cell, @animation, @end.`;
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: STUDIO ARCHITECTURE & PROGRAMMATIC API
+You are tasked with programmatic interaction, compilation, or automated processing of PIX2 files:
+1. JavaScript API: Parse via 'PIX2.parse(text)', mutate 'doc.cells[id].pixels', serialize via 'PIX2.serialize(doc)'.
+2. Exporter Integration: Output spritesheet atlases formatted for Unity 2D (with 'Pix2UnityImporter.cs') or TexturePacker.`;
     }
 
-    const prompt = `# SYSTEM PROMPT: NOIRADIX PIX2 EXPERT COGNITIVE AGENT
-You are an expert game artist and systems engineer specializing in deterministic, coordinate-addressed pixel art using the .PIX2 specification.
+    const prompt = `# SYSTEM PROMPT: NOIRADIX STUDIO & PIX2 SPRITE ENGINE SPECIALIST
 
-## CORE PRINCIPLES & GUARDRAILS
-1. ZERO BACKGROUND: Never output background layers, black fills, or transparent placeholder pixels. In PIX2, non-existent coordinates are 100% transparent.
-2. DISCRETE COORDINATES: Origin is top-left (0,0). Valid coordinates: 0 <= x < ${cw}, 0 <= y < ${ch}. Coordinates outside this boundary are illegal.
-3. DETERMINISTIC REPRODUCIBILITY: Pixels are placed with 'p x,y <pal_id|hex>' or primitives ('sym_dot', 'line', 'rect', 'fill').
-4. PALETTE FIRST: Always prefer referencing palette keys (e.g. '1', '2', 'outline') defined in @palette.
+## 1. WHAT IS NOIRADIX STUDIO?
+NOIRADIX Studio is a desktop-grade, zero-dependency, AI-native structured pixel art editor and animation suite.
+It bridges human game artists and AI coding assistants through deterministic sprite code:
+- **Grid Matrix Overview:** Multi-cell grid matrix (e.g. ${cols} columns x ${rows} rows = ${cols * rows} cells) where each cell has a unique identifier (\`cell_0_0\`, \`down_0\`).
+- **Animation Studio:** Real-time preview player supporting 4-direction (Down, Up, Right, Left) and 8-direction compass modes with configurable frame sequence strips, FPS control, and loop toggle.
+- **Cell Editor:** High-precision canvas with anchor-centered zoom (4x to 64x), pixel rulers, bilateral symmetry mirror axis, and discrete drawing tools (Pencil, Eraser, Eyedropper, Paint Bucket, Line, Rectangle, Marquee Selection).
+- **Real-Time Live Hot-Reload Engine:** Watches the active \`.pix2\` file on disk. When you (the AI) or an external script writes to the file on disk, Studio automatically reloads the canvas and animation timeline in real-time without user intervention.
+- **Engine Exporters:** Automatically compiles sprite sheets into Unity 2D Spritesheet Packages (Atlas PNG + Metadata JSON + C# \`Pix2UnityImporter.cs\` script for 1-click automatic sprite slicing and \`.anim\` AnimationClip generation), TexturePacker JSON, and PNG Atlas with bleed protection.
 
-## ACTIVE PROJECT METADATA
-- Title: "${meta.title || 'Sprite'}"
+## 2. THE PIX2 LANGUAGE PHILOSOPHY & SYNTAX SPECIFICATION
+PIX2 is a deterministic, coordinate-addressed plain-text sprite format. Unlike raster PNGs or fuzzy diffusion images, PIX2 code is discrete, mathematically exact, and human/AI readable.
+
+### Core Invariants:
+1. PURE TRANSPARENCY: Transparent pixels do NOT exist in the file. Only explicitly drawn pixels are saved. NEVER output a background layer, black canvas fill, or transparent placeholder dots.
+2. DISCRETE INTEGER COORDINATES: Origin (0,0) is at the top-left corner. Valid coordinates strictly satisfy 0 <= x < ${cw} and 0 <= y < ${ch}.
+3. PALETTE-MAPPED COLORS: Pixels reference palette IDs defined in \`@palette\` (e.g. \`1\`, \`2\`, \`outline\`) or direct hex (\`#RRGGBB\` or \`#RRGGBBAA\` for semi-transparency).
+4. MATHEMATICAL MACROS & DRAWING COMMANDS:
+   - \`p x,y <pal_id|hex>\` or \`pixel x,y <pal_id|hex>\`: Plots a single pixel at (x,y).
+   - \`sym_dot x,y axisX <col>\`: Plots (x,y) and automatically plots its mirror at (2*axisX - x, y). For cell width ${cw}, center axis is ${((cw - 1) / 2).toFixed(1)}.
+   - \`line x0,y0 x1,y1 <col>\`: Draws a Bresenham discrete line (weapons, outlines, diagonal borders).
+   - \`rect x,y w,h <col> [fill|outline]\`: Draws a rectangular bounding box.
+   - \`fill x,y <col>\`: 4-way flood fill.
+
+### File Structure Example:
+\`\`\`pix2
+@pix2 1.0
+
+@meta
+  title: "Player Hero"
+  grid: ${cols}x${rows}
+  cell_size: ${cw}x${ch}
+
+@palette
+  1: #ffffff  # Body Primary
+  2: #57546f  # Outline Dark Slate
+  3: #ffb0bc  # Blush Accent
+  4: #46435c  # Eye Dark Purple
+
+@cell cell_0_0
+  name: "Down 0"
+  direction: down
+  frame: 0
+  p 7,2 2 p 8,2 2
+  sym_dot 6,3 ${((cw - 1) / 2).toFixed(1)} 1
+
+@animation walk_down
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+  fps: 6
+  loop: true
+
+@end
+\`\`\`
+
+## 3. PROGRAMMATIC API & SCRIPTING USAGE:
+- **JavaScript / Node.js Engine:**
+  \`\`\`javascript
+  const doc = PIX2.parse(fileContent);
+  doc.cells['cell_0_0'].pixels['7,2'] = 2; // set pixel at (7,2) to palette 2
+  const text = PIX2.serialize(doc);
+  \`\`\`
+- **Python Asset Pipelines:**
+  Parse directives using regex (\`@meta\`, \`@palette\`, \`@cell\`, \`p x,y col\`).
+- **Unity 2D Engine (C#):**
+  \`NOIRADIX.Editor.Pix2UnityImporter.ImportPix2Json(jsonPath)\` slices sprites and creates Unity AnimationClips.
+
+## 4. CURRENT PROJECT CONTEXT
+- Project Title: "${meta.title || 'Sprite'}"
 - Grid: ${cols} columns x ${rows} rows (Total ${cols * rows} cells)
 - Cell Dimensions: ${cw}x${ch} pixels
 - Existing Cells: [${cellInventory}]
 - Current Palette:
 ${paletteSummary}
 
-## SPECIALIZED INSTRUCTIONS
-${specializedInstructions}
+## 5. ${specializedInstructions}
 
-## CURRENT PIX2 SOURCE CODE
+## 6. CURRENT SOURCE CODE
 \`\`\`pix2
 ${serialized}
 \`\`\`
 
-## USER REQUEST
-[Please specify your design, animation, or character modification request here.]
+## 7. USER INSTRUCTION
+[Please formulate your design, animation, or character modification request here.]
 `;
 
     navigator.clipboard.writeText(prompt).then(() => {
@@ -5577,6 +5771,11 @@ namespace NOIRADIX.Editor
     // Code Editor Buttons
     if (dom.btnApplyCode) dom.btnApplyCode.addEventListener('click', applyCodeToDoc);
     if (dom.btnCopyAiPrompt) dom.btnCopyAiPrompt.addEventListener('click', copyAiPrompt);
+    if (dom.selectAiPromptMode) {
+      dom.selectAiPromptMode.addEventListener('change', (e) => {
+        updateAiGuidePane(e.target.value);
+      });
+    }
 
     if (dom.inputCellName) {
       dom.inputCellName.addEventListener('input', (e) => {
