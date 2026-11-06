@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 50 356 356" role="img" aria-labelledby="title desc">
+  <title id="title">Noiradix Studio</title>
+  <desc id="desc">A geometric pixel ghost mark in ivory, slate, cyan and rose with cute raised arms.</desc>
+  <g shape-rendering="crispEdges">
+    <!-- Floating pixel accents -->
+    <path d="M376 82h24v24h-24zM400 58h16v16h-16zM416 90h12v12h-12z" fill="#48B8E8"/>
+    <path d="M104 174h18v18h-18zM88 198h12v12h-12z" fill="#48B8E8" opacity=".9"/>
+    <path d="M382 354h16v16h-16z" fill="#DDE8EF"/>
+
+    <!-- Ghost silhouette and its deep slate pixel outline -->
+    <path d="M184 72H328V88H352V112H368V280H352V328H336V352H312V376H288V400H224V376H200V352H176V328H160V280H144V112H160V88H184Z"
+          fill="#57546F"/>
+    <path d="M184 88H328V104H344V120H352V272H336V320H320V344H296V368H280V384H232V368H216V344H192V320H176V272H160V120H168V104H184Z"
+          fill="#F8F7FB"/>
+
+    <!-- Cool lower shading keeps the silhouette crisp at small sizes -->
+    <path d="M176 280H192V312H216V336H240V360H272V344H296V320H320V288H336V320H320V344H296V368H280V384H232V368H216V344H192V320H176Z"
+          fill="#DDE8EF"/>
+    <path d="M240 360H272V384H240Z" fill="#BFC9D9"/>
+
+    <!-- Face -->
+    <path d="M202 202h20v38h-20zM290 202h20v38h-20z" fill="#57546F"/>
+    <path d="M166 246h42v16h-42zM304 246h42v16h-42z" fill="#FFB0BC"/>
+    <path d="M166 246h14v8h-14zM332 246h14v8h-14z" fill="#FFD0D8"/>
+
+    <!-- Cute raised, softly curled ghost arms; mirrored to keep the pose balanced -->
+    <g id="ghost-arms">
+      <path d="M160 264H176V272H184V280H192V296H184V304H176V312H160V304H152V296H144V280H152V272H160Z"
+            fill="#57546F"/>
+      <path d="M160 272H176V280H184V288H184V296H176V304H160V296H152V280H160Z"
+            fill="#F8F7FB"/>
+      <path d="M160 296H176V304H168V312H160V304H152V296Z" fill="#DDE8EF"/>
+      <!-- Extra slate pixels close the missing outer lower edge of each hand. -->
+      <path d="M152 296H160V304H152Z M160 304H168V312H160Z" fill="#57546F"/>
+      <path d="M152 280H160V288H152Z" fill="#48B8E8"/>
+    </g>
+    <use href="#ghost-arms" transform="translate(512 0) scale(-1 1)"/>
+
+    <!-- Tiny pixel glints: a nod to the editable .pix2 grid -->
+    <path d="M224 152h16v16h-16zM240 136h16v16h-16zM256 152h16v16h-16z" fill="#DDE8EF"/>
+    <path d="M280 152h8v8h-8z" fill="#48B8E8"/>
+  </g>
+</svg>

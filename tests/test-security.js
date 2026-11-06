@@ -64,6 +64,29 @@ test('Rejects @palette __proto__ from polluting Object.prototype', () => {
   assert.strictEqual(Object.prototype['#ff0000'], undefined);
 });
 
+test('resolveColor is immune to prototype properties (toString, valueOf, constructor)', () => {
+  const p1 = `
+@pix2 1.0
+@cell cell_0_0
+  p 0,0 toString
+  p 1,0 valueOf
+  p 2,0 constructor
+@end
+`;
+  const doc = PIX2.parse(p1);
+  const cell = doc.cells['cell_0_0'];
+  assert.ok(cell);
+  // Must return string hexes, NEVER a function reference
+  assert.strictEqual(typeof cell.pixels['0,0'], 'string');
+  assert.strictEqual(typeof cell.pixels['1,0'], 'string');
+  assert.strictEqual(typeof cell.pixels['2,0'], 'string');
+  assert.notStrictEqual(cell.pixels['0,0'], Object.prototype.toString);
+  assert.notStrictEqual(cell.pixels['1,0'], Object.prototype.valueOf);
+  // Serializing must not throw TypeError
+  const serialized = PIX2.serialize(doc);
+  assert.ok(serialized.includes('@cell cell_0_0'));
+});
+
 // ---------------------------------------------------------------------------
 // TEST GROUP 2: Denial-of-Service (DoS) & Coordinate Clamping
 // ---------------------------------------------------------------------------

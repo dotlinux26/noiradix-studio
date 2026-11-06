@@ -3,6 +3,8 @@
  * Full Document Undo/Redo & Decoupled Cell Identity
  */
 
+const PIX2 = (typeof window !== 'undefined' ? window.PIX2 : (typeof require !== 'undefined' ? require('./pix2-format.js') : null));
+
 class EditorState {
   constructor() {
     this.doc = null;
@@ -78,11 +80,23 @@ class EditorState {
     };
   }
 
-  // Load a new document into state
-  setDocument(doc) {
+  // Load a new document into state (optionally preserving open tabs during external reload or Apply Code)
+  setDocument(doc, preserveTabs = false) {
     this.doc = doc;
-    this.openCellTabs = [];
-    this.activeTabId = 'tab-grid-overview';
+    if (!preserveTabs) {
+      this.openCellTabs = [];
+      this.activeTabId = 'tab-grid-overview';
+    } else {
+      if (this.doc && this.doc.cells) {
+        this.openCellTabs = (this.openCellTabs || []).filter(cid => Boolean(this.doc.cells[cid]));
+        if (this.activeTabId !== 'tab-grid-overview' &&
+            this.activeTabId !== 'tab-anim-studio' &&
+            this.activeTabId !== 'tab-pix2-code' &&
+            !this.doc.cells[this.activeTabId]) {
+          this.activeTabId = this.openCellTabs.length > 0 ? this.openCellTabs[0] : 'tab-grid-overview';
+        }
+      }
+    }
     this.history = [];
     this.historyIndex = -1;
     this.selection = null;
@@ -131,6 +145,11 @@ class EditorState {
       this.historyIndex--;
       const snapshot = this.history[this.historyIndex];
       this.doc = PIX2.parse(snapshot.data);
+      if (snapshot.activeTab) {
+        if (snapshot.activeTab.startsWith('tab-') || (this.doc.cells && this.doc.cells[snapshot.activeTab])) {
+          this.activeTabId = snapshot.activeTab;
+        }
+      }
       return true;
     }
     return false;
@@ -142,6 +161,11 @@ class EditorState {
       this.historyIndex++;
       const snapshot = this.history[this.historyIndex];
       this.doc = PIX2.parse(snapshot.data);
+      if (snapshot.activeTab) {
+        if (snapshot.activeTab.startsWith('tab-') || (this.doc.cells && this.doc.cells[snapshot.activeTab])) {
+          this.activeTabId = snapshot.activeTab;
+        }
+      }
       return true;
     }
     return false;

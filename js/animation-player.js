@@ -221,6 +221,10 @@ class AnimationPlayer {
 
   render() {
     if (!this.canvas || !this.ctx || !window.state || !window.state.doc) return;
+    // Skip rendering if canvas is hidden to conserve GPU/CPU cycles
+    if (this.canvas.offsetWidth === 0 && this.canvas.offsetHeight === 0 && typeof this.canvas.getClientRects === 'function' && !this.canvas.getClientRects().length) {
+      return;
+    }
     const doc = window.state.doc;
     const cw = doc.meta.cellSize.w;
     const ch = doc.meta.cellSize.h;

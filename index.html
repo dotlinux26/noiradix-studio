@@ -1161,6 +1161,76 @@
     </div>
   </div>
 
+  <!-- ================= NEW PIX2 FILE MODAL ================= -->
+  <div id="modal-new-file" class="studio-modal-backdrop hidden">
+    <div class="studio-modal-dialog new-file-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-file-circle-plus text-accent"></i>
+          <span>Create New PIX2 File</span>
+        </div>
+        <button id="btn-close-new-file-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body new-file-modal-body">
+        <!-- 1. File Name (Primary focus) -->
+        <div class="template-section">
+          <label class="form-label" for="new-file-name-input">
+            <i class="fa-solid fa-file-code"></i> File Name (.pix2):
+          </label>
+          <input type="text" id="new-file-name-input" class="modern-input full-width font-mono" value="new_sprite.pix2" placeholder="e.g. hero_walk.pix2">
+          <span class="field-hint">Physical file name on disk. Spaces and OS-forbidden characters are cleanly sanitized.</span>
+        </div>
+
+        <!-- 2. Project Title (Optional metadata) -->
+        <div class="template-section">
+          <label class="form-label" for="new-file-title-input">
+            <i class="fa-solid fa-heading"></i> Internal Title (Optional):
+          </label>
+          <input type="text" id="new-file-title-input" class="modern-input full-width" value="New Sprite" placeholder="Title for @meta.title">
+        </div>
+
+        <!-- 3. Sheet Presets -->
+        <div class="template-section">
+          <label class="form-label">Sheet Layout Presets:</label>
+          <div class="action-chips-container" id="new-file-presets">
+            <button type="button" class="chip-btn active" data-cols="4" data-rows="4" data-cw="16" data-ch="16">4-Direction (4x4, 16px)</button>
+            <button type="button" class="chip-btn" data-cols="8" data-rows="4" data-cw="16" data-ch="16">8-Direction (8x4, 16px)</button>
+            <button type="button" class="chip-btn" data-cols="6" data-rows="1" data-cw="24" data-ch="24">Action Strip (6x1, 24px)</button>
+            <button type="button" class="chip-btn" data-cols="1" data-rows="1" data-cw="32" data-ch="32">Single Frame (1x1, 32px)</button>
+          </div>
+        </div>
+
+        <!-- 4. Dimensions Configuration -->
+        <div class="export-grid-2col">
+          <div class="form-group">
+            <label class="form-label" for="new-file-cols">Grid Columns:</label>
+            <input type="number" id="new-file-cols" class="modern-input full-width" min="1" max="64" value="4">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-file-rows">Grid Rows:</label>
+            <input type="number" id="new-file-rows" class="modern-input full-width" min="1" max="64" value="4">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-file-cell-w">Cell Width (px):</label>
+            <input type="number" id="new-file-cell-w" class="modern-input full-width" min="4" max="256" value="16">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-file-cell-h">Cell Height (px):</label>
+            <input type="number" id="new-file-cell-h" class="modern-input full-width" min="4" max="256" value="16">
+          </div>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-new-file" class="btn btn-secondary">Cancel</button>
+        <button id="btn-confirm-new-file" class="btn btn-accent">
+          <i class="fa-solid fa-plus"></i> Create File
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= SCRIPTS ================= -->
   <script src="js/default-sample.js"></script>
   <script src="js/pix2-format.js"></script>

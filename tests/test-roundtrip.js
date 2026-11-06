@@ -420,6 +420,40 @@ assert(PIX2.parse(linuxLfText).meta.title === 'Linux LF', 'Parser reads Linux LF
 assert(PIX2.parse(macCrText).meta.title === 'Mac CR', 'Parser reads Classic Mac CR files cleanly');
 assert(PIX2.parse(mixedEolText).meta.title === 'Mixed EOL', 'Parser reads mixed EOL line endings cleanly');
 
+// TEST 12: Editor State Stability & Tab Preservation
+console.log('\nTest 12: Editor State Stability & Tab Preservation');
+const testEditor = new EditorState();
+const docA = PIX2.createDocument('Doc A', 4, 4, 16, 16);
+testEditor.setDocument(docA);
+testEditor.openCellTab('cell_1_2');
+assert(testEditor.activeTabId === 'cell_1_2', 'Active tab switched to cell_1_2');
+assert(testEditor.openCellTabs.includes('cell_1_2'), 'openCellTabs contains cell_1_2');
+
+// Reload with preserveTabs = true (e.g. Apply Code or External Disk Reload)
+const docB = PIX2.createDocument('Doc B', 4, 4, 16, 16);
+testEditor.setDocument(docB, true);
+assert(testEditor.activeTabId === 'cell_1_2', 'Reload with preserveTabs=true kept activeTabId cell_1_2');
+assert(testEditor.openCellTabs.includes('cell_1_2'), 'Reload with preserveTabs=true kept open cell tab');
+
+// Full reset with preserveTabs = false (e.g. New File or Open File)
+const docC = PIX2.createDocument('Doc C', 4, 4, 16, 16);
+testEditor.setDocument(docC, false);
+assert(testEditor.activeTabId === 'tab-grid-overview', 'Reset with preserveTabs=false reset active tab to Overview');
+assert(testEditor.openCellTabs.length === 0, 'Reset with preserveTabs=false cleared open tabs');
+
+// Undo / Redo tab restoration
+testEditor.openCellTab('cell_0_1');
+testEditor.saveSnapshot('State on Cell 0,1'); // History index 1: cell_0_1
+testEditor.activeTabId = 'tab-grid-overview';
+testEditor.saveSnapshot('State on Overview'); // History index 2: tab-grid-overview
+assert(testEditor.activeTabId === 'tab-grid-overview', 'Currently on Overview');
+
+testEditor.undo(); // Undoes to History index 1
+assert(testEditor.activeTabId === 'cell_0_1', 'Undo accurately restored historical activeTabId cell_0_1');
+
+testEditor.redo(); // Redoes to History index 2
+assert(testEditor.activeTabId === 'tab-grid-overview', 'Redo accurately restored historical activeTabId tab-grid-overview');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);

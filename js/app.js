@@ -413,6 +413,19 @@
     dom.exportSpacingInfo = document.getElementById('export-spacing-info');
     dom.exportClipsInfo = document.getElementById('export-clips-info');
     dom.exportBleedTag = document.getElementById('export-bleed-tag');
+
+    // New File Modal elements
+    dom.modalNewFile = document.getElementById('modal-new-file');
+    dom.newFileNameInput = document.getElementById('new-file-name-input');
+    dom.newFileTitleInput = document.getElementById('new-file-title-input');
+    dom.newFilePresets = document.getElementById('new-file-presets');
+    dom.newFileCols = document.getElementById('new-file-cols');
+    dom.newFileRows = document.getElementById('new-file-rows');
+    dom.newFileCellW = document.getElementById('new-file-cell-w');
+    dom.newFileCellH = document.getElementById('new-file-cell-h');
+    dom.btnCloseNewFileModal = document.getElementById('btn-close-new-file-modal');
+    dom.btnCancelNewFile = document.getElementById('btn-cancel-new-file');
+    dom.btnConfirmNewFile = document.getElementById('btn-confirm-new-file');
   }
 
   // ===========================================================================
@@ -758,6 +771,9 @@
 
   async function saveRecoverySnapshot() {
     if (!state.doc) return;
+    if (typeof commitFloatingSelection === 'function' && floatingSelectionPixels) {
+      commitFloatingSelection();
+    }
     try {
       const text = PIX2.serialize(state.doc);
       const now = Date.now();
@@ -857,15 +873,110 @@
     refreshAll();
   }
 
-  function createBlankProject(title, cols, rows, cellW, cellH) {
-    const doc = PIX2.createDocument(title, cols, rows, cellW, cellH);
+  function createBlankProject(fileNameOrTitle, maybeTitleOrCols, cols = 4, rows = 4, cellW = 16, cellH = 16) {
+    let fileName = 'new_sprite.pix2';
+    let title = 'New Sprite';
+    let actualCols = 4;
+    let actualRows = 4;
+    let actualW = 16;
+    let actualH = 16;
+
+    if (typeof maybeTitleOrCols === 'string') {
+      fileName = fileNameOrTitle;
+      title = maybeTitleOrCols;
+      actualCols = cols;
+      actualRows = rows;
+      actualW = cellW;
+      actualH = cellH;
+    } else if (typeof maybeTitleOrCols === 'number') {
+      // Called with legacy signature: (title, cols, rows, cellW, cellH)
+      title = fileNameOrTitle;
+      fileName = sanitizeSafeFilename(title, '.pix2', 'new_sprite');
+      actualCols = maybeTitleOrCols;
+      actualRows = cols;
+      actualW = rows;
+      actualH = cellW;
+    } else {
+      fileName = fileNameOrTitle || 'new_sprite.pix2';
+      title = fileName.replace(/\.pix2$/i, '').replace(/[-_]+/g, ' ');
+    }
+
+    const cleanFileName = sanitizeSafeFilename(fileName, '.pix2', 'new_sprite');
+    const doc = PIX2.createDocument(title, actualCols, actualRows, actualW, actualH);
     state.setDocument(doc);
     currentFileHandle = null;
-    currentFileName = sanitizeSafeFilename(title, '.pix2', 'sprite');
-    currentFilePath = currentFileName;
+    currentFileName = cleanFileName;
+    currentFilePath = cleanFileName;
     centerCellCanvas();
     centerGridCanvas();
     setDirty(false);
+    lastSavedContent = PIX2.serialize(doc);
+    localStorage.removeItem('pix2_recovery_snapshot');
+    localStorage.setItem('noiradix_active_file_name', currentFileName);
+    localStorage.setItem('noiradix_active_file_path', currentFilePath);
+  }
+
+  function openNewFileModal() {
+    if (isDocumentDirty) {
+      if (!confirm('You have unsaved changes. Discard and create new file?')) {
+        return;
+      }
+    }
+    if (!dom.modalNewFile) return;
+
+    if (dom.newFileNameInput) {
+      dom.newFileNameInput.value = 'new_sprite.pix2';
+    }
+    if (dom.newFileTitleInput) {
+      dom.newFileTitleInput.value = 'New Sprite';
+    }
+    if (dom.newFileCols) dom.newFileCols.value = '4';
+    if (dom.newFileRows) dom.newFileRows.value = '4';
+    if (dom.newFileCellW) dom.newFileCellW.value = '16';
+    if (dom.newFileCellH) dom.newFileCellH.value = '16';
+
+    if (dom.newFilePresets) {
+      dom.newFilePresets.querySelectorAll('.chip-btn').forEach((btn, idx) => {
+        btn.classList.toggle('active', idx === 0);
+      });
+    }
+
+    dom.modalNewFile.classList.remove('hidden');
+
+    setTimeout(() => {
+      if (dom.newFileNameInput) {
+        dom.newFileNameInput.focus();
+        const dotIdx = dom.newFileNameInput.value.lastIndexOf('.');
+        if (dotIdx > 0) {
+          dom.newFileNameInput.setSelectionRange(0, dotIdx);
+        } else {
+          dom.newFileNameInput.select();
+        }
+      }
+    }, 50);
+  }
+
+  function closeNewFileModal() {
+    if (dom.modalNewFile) {
+      dom.modalNewFile.classList.add('hidden');
+    }
+  }
+
+  function confirmNewFileCreation() {
+    const rawName = dom.newFileNameInput ? dom.newFileNameInput.value.trim() : '';
+    const rawTitle = dom.newFileTitleInput ? dom.newFileTitleInput.value.trim() : '';
+    const cleanFileName = sanitizeSafeFilename(rawName || 'new_sprite', '.pix2', 'new_sprite');
+    const derivedTitle = rawTitle || cleanFileName.replace(/\.pix2$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    const cols = dom.newFileCols ? (parseInt(dom.newFileCols.value, 10) || 4) : 4;
+    const rows = dom.newFileRows ? (parseInt(dom.newFileRows.value, 10) || 4) : 4;
+    const cellW = dom.newFileCellW ? (parseInt(dom.newFileCellW.value, 10) || 16) : 16;
+    const cellH = dom.newFileCellH ? (parseInt(dom.newFileCellH.value, 10) || 16) : 16;
+
+    createBlankProject(cleanFileName, derivedTitle, cols, rows, cellW, cellH);
+    closeNewFileModal();
+    refreshAll();
+    showToast(`Created new file "${cleanFileName}"!`, 'success');
   }
 
   function refreshAll() {
@@ -4435,6 +4546,9 @@
 
   async function saveFileNative(forceSaveAs = false) {
     if (!state.doc) return;
+    if (typeof commitFloatingSelection === 'function') {
+      commitFloatingSelection();
+    }
     const text = PIX2.serialize(state.doc);
 
     // Direct Save to existing handle (Only if filename still matches and not forced to Save As)
@@ -4574,9 +4688,9 @@
         return;
       }
 
-      // Safe reload
+      // Safe reload (preserving active tabs)
       const newDoc = PIX2.parse(text);
-      state.setDocument(newDoc);
+      state.setDocument(newDoc, true);
       lastKnownFileModified = currentModified;
       lastSavedContent = text;
       localStorage.setItem('pix2_last_saved_content', text);
@@ -4664,7 +4778,7 @@
     try {
       const code = dom.codeTextarea.value;
       const newDoc = PIX2.parse(code);
-      state.setDocument(newDoc);
+      state.setDocument(newDoc, true);
       state.saveSnapshot('Apply Code');
       triggerEventAutosave();
       refreshAll();
@@ -5086,6 +5200,9 @@ ${serialized}
 
   function openGameExportModal() {
     if (!dom.modalGameExport || !state.doc) return;
+    if (typeof commitFloatingSelection === 'function') {
+      commitFloatingSelection();
+    }
     syncExportFormatCards();
     document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
       b.classList.toggle('active', b.dataset.scale === String(exportPreviewZoom));
@@ -5653,6 +5770,9 @@ namespace NOIRADIX.Editor
   }
 
   function exportCurrentCellPng() {
+    if (typeof commitFloatingSelection === 'function') {
+      commitFloatingSelection();
+    }
     const cell = state.getActiveCell();
     if (!cell || !state.doc) return;
     const cw = state.doc.meta.cellSize.w;
@@ -6444,6 +6564,52 @@ namespace NOIRADIX.Editor
       }
     });
 
+    // New File Modal Events
+    dom.btnCloseNewFileModal?.addEventListener('click', closeNewFileModal);
+    dom.btnCancelNewFile?.addEventListener('click', closeNewFileModal);
+    dom.btnConfirmNewFile?.addEventListener('click', confirmNewFileCreation);
+
+    dom.modalNewFile?.addEventListener('click', (e) => {
+      if (e.target === dom.modalNewFile) {
+        closeNewFileModal();
+      }
+    });
+
+    dom.newFileNameInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmNewFileCreation();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeNewFileModal();
+      }
+    });
+
+    dom.newFileTitleInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmNewFileCreation();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeNewFileModal();
+      }
+    });
+
+    dom.newFilePresets?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.chip-btn');
+      if (!btn) return;
+      dom.newFilePresets.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const cols = btn.dataset.cols;
+      const rows = btn.dataset.rows;
+      const cw = btn.dataset.cw;
+      const ch = btn.dataset.ch;
+      if (dom.newFileCols && cols) dom.newFileCols.value = cols;
+      if (dom.newFileRows && rows) dom.newFileRows.value = rows;
+      if (dom.newFileCellW && cw) dom.newFileCellW.value = cw;
+      if (dom.newFileCellH && ch) dom.newFileCellH.value = ch;
+    });
+
     // Export Atlas Preview Zoom level buttons (Magnifying Glass Controls)
     document.querySelectorAll('#export-zoom-group [data-scale]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -7095,15 +7261,7 @@ namespace NOIRADIX.Editor
     });
 
     // Top Header File Actions (Desktop-native)
-    bindAction('btn-new-file', () => {
-      if (isDocumentDirty) {
-        if (!confirm('You have unsaved changes. Discard and create new project?')) return;
-      }
-      const title = prompt('Project Title:', 'My Sprite Sheet') || 'Sprite Sheet';
-      createBlankProject(title, 4, 4, 16, 16);
-      refreshAll();
-    });
-
+    bindAction('btn-new-file', openNewFileModal);
     bindAction('btn-open-file', openFileNative);
     bindAction('btn-save-pix2', () => saveFileNative(false));
     bindAction('btn-save-as-pix2', () => saveFileNative(true));
@@ -7552,18 +7710,17 @@ namespace NOIRADIX.Editor
       // New (Ctrl + N)
       if ((e.ctrlKey || e.metaKey) && key === 'n') {
         e.preventDefault();
-        if (isDocumentDirty) {
-          if (!confirm('You have unsaved changes. Discard and create new project?')) return;
-        }
-        const title = prompt('Project Title:', 'My Sprite Sheet') || 'Sprite Sheet';
-        createBlankProject(title, 4, 4, 16, 16);
-        refreshAll();
+        openNewFileModal();
         return;
       }
 
       // Undo / Redo
       if ((e.ctrlKey || e.metaKey) && key === 'z') {
         e.preventDefault();
+        floatingSelectionPixels = null;
+        floatingOriginalSel = null;
+        isMovingSelection = false;
+        state.selection = null;
         if (e.shiftKey) {
           if (state.redo()) {
             triggerEventAutosave();
@@ -7578,6 +7735,10 @@ namespace NOIRADIX.Editor
         return;
       } else if ((e.ctrlKey || e.metaKey) && key === 'y') {
         e.preventDefault();
+        floatingSelectionPixels = null;
+        floatingOriginalSel = null;
+        isMovingSelection = false;
+        state.selection = null;
         if (state.redo()) {
           triggerEventAutosave();
           refreshAll();

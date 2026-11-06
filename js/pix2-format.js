@@ -621,11 +621,12 @@ const PIX2 = (function () {
 
   /**
    * Resolve a color token to valid Hex.
+   * Hardened against Object.prototype properties (e.g. 'toString', 'valueOf').
    */
   function resolveColor(token, palette) {
-    if (!token) return null;
+    if (!token || typeof token !== 'string') return null;
     token = token.trim();
-    if (palette && palette[token]) {
+    if (palette && Object.prototype.hasOwnProperty.call(palette, token) && typeof palette[token] === 'string') {
       return palette[token];
     }
     return normalizeHex(token);
@@ -689,8 +690,8 @@ const PIX2 = (function () {
    * Serialize document object to canonical .pix2 string
    */
   function serialize(doc) {
-    // 1. Gather all unique colors used across cells
-    const colorUsage = {};
+    // 1. Gather all unique colors used across cells (Prototype-pollution free dictionary)
+    const colorUsage = Object.create(null);
     for (const cellId in doc.cells) {
       const cell = doc.cells[cellId];
       for (const k in cell.pixels) {
@@ -701,16 +702,18 @@ const PIX2 = (function () {
 
     // Build palette map (color -> ID)
     const sortedColors = Object.entries(colorUsage).sort((a, b) => b[1] - a[1]);
-    const paletteMap = {};
-    const paletteOut = {};
+    const paletteMap = Object.create(null);
+    const paletteOut = Object.create(null);
     let palId = 1;
 
-    // Preserve existing palette entries
+    // Preserve existing palette entries safely
     for (const id in doc.palette) {
-      const c = normalizeHex(doc.palette[id]);
-      if (colorUsage[c] && !paletteMap[c]) {
-        paletteMap[c] = id;
-        paletteOut[id] = c;
+      if (Object.prototype.hasOwnProperty.call(doc.palette, id)) {
+        const c = normalizeHex(doc.palette[id]);
+        if (colorUsage[c] && !paletteMap[c]) {
+          paletteMap[c] = id;
+          paletteOut[id] = c;
+        }
       }
     }
 

@@ -2582,19 +2582,28 @@ body {
   gap: 8px;
 }
 
-/* ================= ACTION & DIRECTION TEMPLATE MODAL ================= */
-.template-modal-dialog {
+/* ================= ACTION & DIRECTION TEMPLATE & NEW FILE MODALS ================= */
+.template-modal-dialog,
+.new-file-modal-dialog {
   width: 580px;
   max-width: 95vw;
 }
 
-.template-modal-body {
+.template-modal-body,
+.new-file-modal-body {
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   max-height: 70vh;
   overflow-y: auto;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 2px;
 }
 
 .template-section {
