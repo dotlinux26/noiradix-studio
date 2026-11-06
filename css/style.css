@@ -311,21 +311,95 @@ body {
   border: 1px solid var(--border-subtle);
 }
 
-.title-input-wrapper {
+/* Professional File Document Header Widget */
+.header-file-widget {
   display: inline-flex;
   align-items: center;
+  height: 32px;
+  box-sizing: border-box;
+  gap: 7px;
+  padding: 0 8px 0 10px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--pill-radius);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
-.title-input-wrapper input {
-  height: 32px;
-  box-sizing: border-box;
-  width: 155px;
-  padding: 0 10px;
+.header-file-widget:hover,
+.header-file-widget:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  background-color: var(--bg-panel);
+}
+
+.header-file-widget .file-badge-icon {
   font-size: 13px;
-  font-weight: 500;
+  color: var(--accent-primary);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.header-file-input {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0;
+  margin: 0;
+  min-width: 150px;
+  max-width: 320px;
+  outline: none;
+  text-overflow: ellipsis;
+  cursor: text;
+  white-space: nowrap;
+}
+
+.header-file-input:focus {
+  outline: none;
+}
+
+.header-dirty-dot {
+  display: none;
+  font-size: 12px;
+  line-height: 1;
+  color: #f59e0b;
+  margin: 0 1px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.header-dirty-dot.is-dirty {
+  display: inline-block;
+  animation: pulseDirty 2s infinite ease-in-out;
+}
+
+@keyframes pulseDirty {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.header-file-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.header-file-btn:hover {
+  background-color: rgba(99, 102, 241, 0.12);
+  color: var(--accent-primary);
 }
 
 /* File Status & Path Indicator (Positioned in Bottom Statusbar) */

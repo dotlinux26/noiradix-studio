@@ -50,17 +50,60 @@
       .replace(/'/g, '&#39;');
   }
 
-  function sanitizeSafeFilename(raw, fallback = 'file') {
-    if (!raw) return fallback;
-    let clean = String(raw)
-      .replace(/\\/g, '/')
-      .replace(/\0/g, '')
-      .split('/')
-      .filter(seg => seg && seg !== '.' && seg !== '..')
-      .join('_')
-      .replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    clean = clean.replace(/^\.+/, '');
-    return clean || fallback;
+  const WINDOWS_RESERVED_NAMES = new Set([
+    'con', 'prn', 'aux', 'nul',
+    'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+    'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'
+  ]);
+
+  function sanitizeSafeFilename(raw, defaultExt = '', fallback = 'sprite') {
+    if (!raw || typeof raw !== 'string') {
+      return defaultExt ? `${fallback}${defaultExt}` : fallback;
+    }
+
+    let name = raw.trim();
+
+    // 1. Separate existing extension if defaultExt is provided
+    if (defaultExt) {
+      const extRegex = new RegExp(`${defaultExt.replace('.', '\\.')}$`, 'i');
+      if (extRegex.test(name)) {
+        name = name.replace(extRegex, '');
+      }
+    }
+
+    // 2. Replace illegal Windows / POSIX characters (\ / : * ? " < > |) and control chars
+    // Preserves: Unicode, Vietnamese diacritics, Asian CJK, spaces, safe punctuation (-, _, (), [])
+    name = name
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/[\\/:*?"<>|]/g, '_');
+
+    // 3. Prevent path traversal attempts (leading dots or slash sequences)
+    name = name.replace(/^\.+/, '').trim();
+
+    // 4. Windows forbids trailing periods or spaces in file base names
+    name = name.replace(/[. ]+$/, '');
+
+    // 5. Protect against Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+    const lowerBase = name.toLowerCase();
+    if (WINDOWS_RESERVED_NAMES.has(lowerBase)) {
+      name = `_${name}`;
+    }
+
+    // 6. Max length clamp (120 chars for base name ensures total path safety within Windows MAX_PATH)
+    if (name.length > 120) {
+      name = name.slice(0, 120).trim().replace(/[. ]+$/, '');
+    }
+
+    // 7. Fallback if empty or all underscores
+    if (!name || /^_+$/.test(name)) {
+      name = fallback;
+    }
+
+    // 8. Re-attach extension
+    if (defaultExt) {
+      return `${name}${defaultExt}`;
+    }
+    return name;
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
@@ -573,14 +616,30 @@
   // DIRTY STATE & AUTOSAVE / RECOVERY ENGINE
   // ===========================================================================
 
+  function getProjectFullPath() {
+    const base = (localStorage.getItem('noiradix_project_root_dir') || '').trim();
+    const name = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'untitled');
+    if (!base) return name;
+    const cleanBase = base.replace(/\\/g, '/').replace(/\/+$/, '');
+    return `${cleanBase}/${name}`;
+  }
+
   function setDirty(dirty) {
     isDocumentDirty = dirty;
     const title = (state.doc ? state.doc.meta.title : 'NOIRADIX Studio') || 'Untitled';
-    const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : `${title.toLowerCase().replace(/\s+/g, '_')}.pix2`);
+    const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(title, '.pix2', 'untitled');
     document.title = dirty ? `● ${fileName} - NOIRADIX Studio` : `${fileName} - NOIRADIX Studio`;
 
+    const dirtyDot = document.getElementById('header-dirty-dot');
+    if (dirtyDot) {
+      dirtyDot.classList.toggle('is-dirty', dirty);
+    }
+
     if (dom.inputProjectTitle) {
-      dom.inputProjectTitle.title = dirty ? `${fileName} (Unsaved Changes)` : `${fileName} (Saved)`;
+      const fullPath = getProjectFullPath();
+      dom.inputProjectTitle.title = dirty
+        ? `● ${fileName} (Unsaved Changes - Ctrl+S to save)\nFull Path: ${fullPath}`
+        : `${fileName} (Saved)\nFull Path: ${fullPath}`;
     }
 
     if (!dirty) {
@@ -626,11 +685,11 @@
 
     if (filePathText && filePathPill) {
       if (hasFileName) {
-        const full = (currentFileHandle ? currentFileHandle.name : null) || currentFileName || currentFilePath;
+        const full = getProjectFullPath();
         filePathText.textContent = formatTruncatedPath(full);
         filePathPill.title = isDirectDiskLinked
-          ? `File: ${full}\nLinked to disk (Ctrl+S saves directly without prompt)`
-          : `File: ${full}\nIn-memory draft (Click Save to save to disk)`;
+          ? `File: ${full}\nLinked to disk (Ctrl+S saves directly without prompt)\nClick to copy full path`
+          : `File: ${full}\nIn-memory draft (Click Save to save to disk)\nClick to copy full path`;
         filePathPill.style.display = 'inline-flex';
       } else {
         filePathText.textContent = 'Unsaved Project (Memory)';
@@ -709,8 +768,12 @@
       };
       localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
 
-      // Direct write to disk file if linked
-      if (currentFileHandle && 'createWritable' in currentFileHandle) {
+      // Direct write to disk file if linked to matching filename
+      const isDirectDiskValid = currentFileHandle &&
+                                'createWritable' in currentFileHandle &&
+                                (!currentFileName || currentFileHandle.name === currentFileName);
+
+      if (isDirectDiskValid) {
         try {
           let hasPerm = true;
           if (currentFileHandle.queryPermission) {
@@ -798,8 +861,8 @@
     const doc = PIX2.createDocument(title, cols, rows, cellW, cellH);
     state.setDocument(doc);
     currentFileHandle = null;
-    currentFileName = null;
-    currentFilePath = null;
+    currentFileName = sanitizeSafeFilename(title, '.pix2', 'sprite');
+    currentFilePath = currentFileName;
     centerCellCanvas();
     centerGridCanvas();
     setDirty(false);
@@ -876,7 +939,16 @@
 
   function updateProjectTitleUI() {
     if (dom.inputProjectTitle && state.doc) {
-      dom.inputProjectTitle.value = state.doc.meta.title || 'Untitled';
+      const displayFileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(state.doc.meta.title, '.pix2', 'untitled');
+      dom.inputProjectTitle.value = displayFileName;
+      const fullPath = getProjectFullPath();
+      dom.inputProjectTitle.title = isDocumentDirty
+        ? `● ${displayFileName} (Unsaved Changes - Ctrl+S to save)\nFull Path: ${fullPath}`
+        : `${displayFileName} (Saved)\nFull Path: ${fullPath}`;
+    }
+    const dirtyDot = document.getElementById('header-dirty-dot');
+    if (dirtyDot) {
+      dirtyDot.classList.toggle('is-dirty', isDocumentDirty);
     }
   }
 
@@ -4365,8 +4437,12 @@
     if (!state.doc) return;
     const text = PIX2.serialize(state.doc);
 
-    // Direct Save to existing handle (No picker prompt!)
-    if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
+    // Direct Save to existing handle (Only if filename still matches and not forced to Save As)
+    const isDirectHandleValid = currentFileHandle &&
+                                'createWritable' in currentFileHandle &&
+                                (!currentFileName || currentFileHandle.name === currentFileName);
+
+    if (!forceSaveAs && isDirectHandleValid) {
       try {
         if (currentFileHandle.queryPermission) {
           const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
@@ -4405,7 +4481,7 @@
     // Save As via File System Access API (Only when forceSaveAs is true or no handle exists)
     if ('showSaveFilePicker' in window) {
       try {
-        const suggested = currentFileName || `${(state.doc.meta.title || 'sprite').toLowerCase().replace(/\s+/g, '_')}.pix2`;
+        const suggested = currentFileName || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'sprite');
         const handle = await window.showSaveFilePicker({
           suggestedName: suggested,
           types: [{
@@ -4450,11 +4526,12 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(state.doc.meta.title || 'sprite').toLowerCase().replace(/\s+/g, '_')}.pix2`;
+    const fileNameToDownload = currentFileName || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'sprite');
+    a.download = fileNameToDownload;
     a.click();
     URL.revokeObjectURL(url);
     setDirty(false);
-    showToast('Downloaded .pix2 file!', 'success');
+    showToast(`Downloaded ${fileNameToDownload}!`, 'success');
   }
 
   // ===========================================================================
@@ -7031,35 +7108,68 @@ namespace NOIRADIX.Editor
     bindAction('btn-save-pix2', () => saveFileNative(false));
     bindAction('btn-save-as-pix2', () => saveFileNative(true));
 
+    function copyCurrentPathToClipboard() {
+      const full = getProjectFullPath();
+      if (full) {
+        navigator.clipboard.writeText(full).then(() => {
+          const hasRoot = Boolean(localStorage.getItem('noiradix_project_root_dir'));
+          if (hasRoot) {
+            showToast(`Copied full path: "${full}"`, 'success');
+          } else {
+            showToast(`Copied file: "${full}" (Tip: Click folder icon to set project folder for full absolute path)`, 'info');
+          }
+        }).catch(() => {
+          prompt('File path (Press Ctrl+C to copy):', full);
+        });
+      } else {
+        showToast('Project is in memory draft. Click Save to save to disk.', 'info');
+      }
+    }
+
+    function promptConfigureProjectRoot() {
+      const currentRoot = localStorage.getItem('noiradix_project_root_dir') || '';
+      const userPath = prompt(
+        'Set Project Base Directory (Optional):\nWeb browser sandbox hides absolute OS disk paths for security.\nEnter folder path (e.g. C:/Users/OS/Downloads or D:/ghoster) if you want 1-click full absolute path copying:',
+        currentRoot
+      );
+      if (userPath !== null) {
+        const trimmed = userPath.trim();
+        if (trimmed) {
+          localStorage.setItem('noiradix_project_root_dir', trimmed);
+          updateFileStatusUI();
+          updateProjectTitleUI();
+          showToast(`Project root folder set to: "${trimmed}"`, 'success');
+        } else {
+          localStorage.removeItem('noiradix_project_root_dir');
+          updateFileStatusUI();
+          updateProjectTitleUI();
+          showToast('Project root cleared (will copy file name only)', 'info');
+        }
+      }
+    }
+
+    const btnHeaderCopy = document.getElementById('btn-header-copy-path');
+    if (btnHeaderCopy) {
+      btnHeaderCopy.addEventListener('click', copyCurrentPathToClipboard);
+    }
+
     const filePathPill = document.getElementById('file-path-pill');
     if (filePathPill) {
-      filePathPill.addEventListener('click', () => {
-        const full = currentFilePath || (currentFileHandle ? currentFileHandle.name : currentFileName);
-        if (full) {
-          navigator.clipboard.writeText(full).then(() => {
-            showToast(`Copied file: ${full}`, 'success');
-          }).catch(() => {
-            prompt('File name (Press Ctrl+C to copy):', full);
-          });
-        } else {
-          showToast('Project is in memory draft. Click Save to save to disk.');
-        }
-      });
+      filePathPill.addEventListener('click', copyCurrentPathToClipboard);
     }
 
     const btnReveal = document.getElementById('btn-reveal-explorer');
     if (btnReveal) {
-      btnReveal.addEventListener('click', () => {
-        const full = currentFilePath || (currentFileHandle ? currentFileHandle.name : currentFileName);
-        if (full) {
-          navigator.clipboard.writeText(full).then(() => {
-            showToast(`Copied file: "${full}"`, 'success');
-          }).catch(() => {
-            prompt('File name:', full);
-          });
+      btnReveal.addEventListener('click', (e) => {
+        if (e.shiftKey || !localStorage.getItem('noiradix_project_root_dir')) {
+          promptConfigureProjectRoot();
         } else {
-          showToast('File is not yet saved to disk. Click Save first.', 'info');
+          copyCurrentPathToClipboard();
         }
+      });
+      btnReveal.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        promptConfigureProjectRoot();
       });
     }
 
@@ -7303,10 +7413,38 @@ namespace NOIRADIX.Editor
     }
 
     if (dom.inputProjectTitle) {
-      dom.inputProjectTitle.addEventListener('change', (e) => {
-        if (state.doc) {
-          state.doc.meta.title = e.target.value.trim();
-          triggerEventAutosave();
+      const commitRename = () => {
+        if (!state.doc) return;
+        const raw = dom.inputProjectTitle.value;
+        const val = sanitizeSafeFilename(raw, '.pix2', currentFileName || 'untitled');
+
+        if (currentFileHandle && currentFileHandle.name !== val) {
+          // File has been renamed in UI: detach old handle so Save As triggers on next save
+          currentFileHandle = null;
+        }
+
+        currentFileName = val;
+        currentFilePath = val;
+        localStorage.setItem('noiradix_active_file_name', currentFileName);
+        localStorage.setItem('noiradix_active_file_path', currentFilePath);
+
+        // Sync doc.meta.title without .pix2 extension
+        const baseTitle = val.replace(/\.pix2$/i, '').trim();
+        state.doc.meta.title = baseTitle;
+
+        dom.inputProjectTitle.value = val;
+        setDirty(true);
+        triggerEventAutosave();
+        updateFileStatusUI();
+        updateProjectTitleUI();
+        showToast(`Project file set to: "${val}"`, 'success');
+      };
+
+      dom.inputProjectTitle.addEventListener('change', commitRename);
+      dom.inputProjectTitle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          dom.inputProjectTitle.blur();
         }
       });
     }
@@ -7386,16 +7524,21 @@ namespace NOIRADIX.Editor
 
   function bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
-      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-
+      const isInputActive = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
       const key = e.key.toLowerCase();
 
-      // Save (Ctrl + S) & Save As (Ctrl + Shift + S)
+      // Save (Ctrl + S) & Save As (Ctrl + Shift + S) - Universal shortcut, active even inside inputs
       if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault();
+        if (isInputActive && typeof document.activeElement.blur === 'function') {
+          document.activeElement.blur();
+        }
         saveFileNative(e.shiftKey);
         return;
       }
+
+      // If user is actively typing in an input or textarea, skip single-key drawing tool shortcuts
+      if (isInputActive) return;
 
       // Open (Ctrl + O)
       if ((e.ctrlKey || e.metaKey) && key === 'o') {
@@ -7443,6 +7586,16 @@ namespace NOIRADIX.Editor
       // Reset Zoom & Frame (Ctrl + 0)
       if ((e.ctrlKey || e.metaKey) && key === '0') {
         e.preventDefault();
+        if (state.activeTabId === 'tab-grid-overview') {
+          centerGridCanvas();
+          showToast('Grid centered (Ctrl+0)');
+          return;
+        }
+        if (state.activeTabId === 'tab-anim-studio') {
+          if (typeof centerStudioCanvas === 'function') centerStudioCanvas();
+          showToast('Animation Studio centered (Ctrl+0)');
+          return;
+        }
         if (state.activeTabId === 'tab-grid-overview') {
           centerGridCanvas();
           showToast('Grid centered (Ctrl+0)');

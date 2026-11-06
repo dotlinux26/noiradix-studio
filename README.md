@@ -61,6 +61,40 @@ NOIRADIX Studio operates in two tiers based on modern browser file capabilities:
 
 ---
 
+## 📁 File System Architecture, Encoding & Security Boundaries
+
+NOIRADIX Studio enforces a clean, deterministic architecture for local files and project metadata:
+
+### 1. Document Title vs. Physical File Name
+* **Physical File Name (`*.pix2`):** Displayed in the Top Header File Widget and Bottom Statusbar Pill (e.g. `player_wispling.pix2` or `Dũng Sĩ Bóng Đêm.pix2`). This directly represents the file handle on your local filesystem.
+* **Internal Document Metadata (`@meta.title`):** Embedded inside the plain-text `.pix2` file. Synchronized automatically with the filename base (without the `.pix2` extension).
+* **Inline Renaming Workflow:**
+  * Clicking the file title input in the top header allows editing the filename directly.
+  * Renaming in the header does **not** silently overwrite the physical disk file under a new name without user consent (prohibited by W3C browser security). Instead, it marks the project as **Dirty (`●`)**.
+  * Pressing **`Ctrl + S`** after a rename automatically opens the system **Save As** dialog with the new filename prefilled, ensuring you have explicit control over where the new file is placed on disk.
+
+### 2. Character Encoding & Multilingual Support Matrix
+NOIRADIX Studio is 100% UTF-8 native across both the parser, serializer, and UI:
+
+| Name / Path Feature | Support Level | Behavior & Rules |
+|:---|:---:|:---|
+| **Whitespaces (` `)** | ✅ 100% Full | Allowed in file names, titles, and cell names without stripping (e.g. `Player Wispling Final.pix2`). |
+| **Vietnamese Diacritics** | ✅ 100% Full | Fully preserved with tone marks (e.g. `Dũng Sĩ Bóng Đêm.pix2`, `Đòn Đánh Sấm Sét 01`). |
+| **CJK / Multilingual** | ✅ 100% Full | Japanese, Korean, Chinese, Cyrillic, and extended Unicode characters are fully supported (e.g. `勇者スプライト_v2.pix2`). |
+| **Illegal OS Chars** | 🛡️ Auto-Sanitized | Windows/POSIX reserved characters (`\ / : * ? " < > \|`) are automatically converted to clean underscores (`_`). |
+
+### 3. Drag & Drop Architecture
+* **Chromium (Chrome / Edge / Brave):** Dropping a `.pix2` file extracts a live `FileSystemFileHandle` via `DataTransferItem.getAsFileSystemHandle()`. Once loaded, pressing `Ctrl + S` writes directly back to that physical disk file without prompt interruptions.
+* **Non-Chromium Fallback (Firefox / Safari):** Dropping a `.pix2` file reads the file stream into memory. Pressing `Ctrl + S` triggers a standard lossless download save.
+
+### 4. Path Copying & Project Root Directory
+* **Browser Security Sandbox Rule:** For privacy and security, modern web browsers intentionally conceal the full host filesystem path (e.g. `D:\ghoster\assets\...`) from client-side JavaScript.
+* **Project Root Directory Feature:**
+  * Click the **Folder icon** (`#btn-reveal-explorer`) in the bottom statusbar to set or change your project base directory (e.g. `D:/ghoster` or `Assets/_Game/Art`).
+  * Once set, clicking the **Copy Path** button in the top header or statusbar copies the **full combined path** (`D:/ghoster/player_wispling.pix2`) directly to your clipboard for instant pasting into Unity, VS Code, or terminal commands.
+
+---
+
 ## 💻 Hardware & System Requirements
 
 NOIRADIX Studio is engineered with an ultra-lightweight, zero-overhead architecture:

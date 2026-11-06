@@ -26,8 +26,14 @@
         <span class="brand-ver">v1.0</span>
       </div>
 
-      <div class="title-input-wrapper">
-        <input type="text" id="project-title-input" class="modern-input" value="Player Wispling" title="Rename project">
+      <!-- Professional File Document Header Widget -->
+      <div class="header-file-widget" id="header-file-widget" title="Active Project File. Click or press Enter to rename.">
+        <i class="fa-regular fa-file-code file-badge-icon"></i>
+        <input type="text" id="project-title-input" class="header-file-input" value="player_wispling.pix2" spellcheck="false" title="Active File: player_wispling.pix2 (Click to rename)">
+        <span id="header-dirty-dot" class="header-dirty-dot" title="Unsaved changes (Ctrl + S to save)">●</span>
+        <button id="btn-header-copy-path" class="header-file-btn" title="Copy full file path to clipboard">
+          <i class="fa-regular fa-copy"></i>
+        </button>
       </div>
 
       <div id="autosave-status-pill" class="autosave-pill saved" title="Automatic Background Recovery & Cloudless Autosave">

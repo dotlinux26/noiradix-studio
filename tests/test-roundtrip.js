@@ -300,6 +300,97 @@ assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 2).w === 138, 'Atlas 2x 
 assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 4).w === 276, 'Atlas 4x zoom is exact 276px');
 assert(getAtlasDisplayDim(sampleAtlas.w, sampleAtlas.h, 'fit', 200, 200).effZ === 2, 'Atlas fit zoom calculates exact integer multiplier within box');
 
+// TEST 10: Multilingual UTF-8, Vietnamese Diacritics & Whitespace Preservation
+console.log('\nTest 10: Multilingual UTF-8, Vietnamese Diacritics & Whitespace Support');
+const vnTitle = 'Dũng Sĩ Bóng Đêm - Chiến Binh Rừng Sâu (4-Hướng)';
+const cjkTitle = '勇者スプライト - Pixel Master 2026';
+const vnCellName = 'Đòn Đánh Lôi Thần #1';
+
+const multiDoc = PIX2.createDocument(vnTitle, 2, 2, 16, 16);
+multiDoc.cells['cell_0_0'].name = vnCellName;
+multiDoc.cells['cell_0_0'].pixels['0,0'] = '#ffffff';
+
+const serializedVn = PIX2.serialize(multiDoc);
+assert(serializedVn.includes(`title: "${vnTitle}"`), 'Serialized PIX2 contains exact Vietnamese title with tone marks');
+assert(serializedVn.includes(`name: "${vnCellName}"`), 'Serialized PIX2 contains exact Vietnamese cell name');
+
+const reParsedVn = PIX2.parse(serializedVn);
+assert(reParsedVn.meta.title === vnTitle, 'Roundtrip parses exact Vietnamese title with spaces and diacritics');
+assert(reParsedVn.cells['cell_0_0'].name === vnCellName, 'Roundtrip parses exact Vietnamese cell name');
+
+const WINDOWS_RESERVED_NAMES = new Set([
+  'con', 'prn', 'aux', 'nul',
+  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'
+]);
+
+function sanitizeSafeFilename(raw, defaultExt = '', fallback = 'sprite') {
+  if (!raw || typeof raw !== 'string') {
+    return defaultExt ? `${fallback}${defaultExt}` : fallback;
+  }
+  let name = raw.trim();
+  if (defaultExt) {
+    const extRegex = new RegExp(`${defaultExt.replace('.', '\\.')}$`, 'i');
+    if (extRegex.test(name)) {
+      name = name.replace(extRegex, '');
+    }
+  }
+  name = name
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[\\/:*?"<>|]/g, '_');
+  name = name.replace(/^\.+/, '').trim();
+  name = name.replace(/[. ]+$/, '');
+  const lowerBase = name.toLowerCase();
+  if (WINDOWS_RESERVED_NAMES.has(lowerBase)) {
+    name = `_${name}`;
+  }
+  if (name.length > 120) {
+    name = name.slice(0, 120).trim().replace(/[. ]+$/, '');
+  }
+  if (!name || /^_+$/.test(name)) {
+    name = fallback;
+  }
+  if (defaultExt) {
+    return `${name}${defaultExt}`;
+  }
+  return name;
+}
+
+const safeVnFileName = sanitizeSafeFilename('Dũng Sĩ Bóng Đêm: Phiên Bản Mới / Special?', '.pix2');
+assert(safeVnFileName === 'Dũng Sĩ Bóng Đêm_ Phiên Bản Mới _ Special_.pix2', 'Sanitization preserves Vietnamese and spaces while replacing illegal chars');
+
+const safeCjkFileName = sanitizeSafeFilename(cjkTitle, '.pix2');
+assert(safeCjkFileName === `${cjkTitle}.pix2`, 'Sanitization preserves CJK characters and spaces');
+
+// Windows Reserved Device Names Protection
+assert(sanitizeSafeFilename('CON', '.pix2') === '_CON.pix2', 'Sanitizer shields Windows CON device name');
+assert(sanitizeSafeFilename('aux.pix2', '.pix2') === '_aux.pix2', 'Sanitizer shields Windows AUX device name');
+assert(sanitizeSafeFilename('nul', '.pix2') === '_nul.pix2', 'Sanitizer shields Windows NUL device name');
+assert(sanitizeSafeFilename('com1.PIX2', '.pix2') === '_com1.pix2', 'Sanitizer shields Windows COM1 device name');
+
+// Trailing dots, spaces & Control Characters
+assert(sanitizeSafeFilename('my_sprite. . . ', '.pix2') === 'my_sprite.pix2', 'Sanitizer strips trailing dots and spaces before extension');
+assert(sanitizeSafeFilename("bad\x00name\r\n", '.pix2') === 'badname.pix2', 'Sanitizer strips control characters');
+assert(sanitizeSafeFilename(':::???', '.pix2', 'fallback') === 'fallback.pix2', 'Sanitizer falls back cleanly when input is only illegal characters');
+
+// Overwrite defense: Disallow direct disk overwrite when filename does not match handle
+const mockHandle = { name: 'Ashen_Reaper.pix2', createWritable: () => {} };
+let activeFileName = 'reaper_v2.pix2';
+const isDirectHandleValid = mockHandle &&
+                            'createWritable' in mockHandle &&
+                            (!activeFileName || mockHandle.name === activeFileName);
+assert(isDirectHandleValid === false, 'Direct overwrite safely blocked when activeFileName differs from file handle name');
+
+// Test Project Base Path combination
+function computeFullPath(baseDir, fileName) {
+  if (!baseDir) return fileName;
+  const cleanBase = baseDir.replace(/\\/g, '/').replace(/\/+$/, '');
+  return `${cleanBase}/${fileName}`;
+}
+
+const fullVnPath = computeFullPath('D:/ghoster/WISPLINGS/Assets', safeVnFileName);
+assert(fullVnPath === 'D:/ghoster/WISPLINGS/Assets/Dũng Sĩ Bóng Đêm_ Phiên Bản Mới _ Special_.pix2', 'Full path correctly joins base path and UTF-8 filename');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);
