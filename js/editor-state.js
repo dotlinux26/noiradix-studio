@@ -3,7 +3,7 @@
  * Full Document Undo/Redo & Decoupled Cell Identity
  */
 
-const PIX2 = (typeof window !== 'undefined' ? window.PIX2 : (typeof require !== 'undefined' ? require('./pix2-format.js') : null));
+const _PIX2 = (typeof PIX2 !== 'undefined' ? PIX2 : (typeof require !== 'undefined' ? require('./pix2-format.js') : (typeof window !== 'undefined' ? window.PIX2 : null)));
 
 class EditorState {
   constructor() {
@@ -106,14 +106,14 @@ class EditorState {
 
   // Begin a continuous stroke
   beginStroke() {
-    if (!this.doc) return;
-    this.strokePreState = PIX2.serialize(this.doc);
+    if (!this.doc || !_PIX2) return;
+    this.strokePreState = _PIX2.serialize(this.doc);
   }
 
   // End stroke and record single undo step if anything changed
   endStroke(strokeName = 'Draw Stroke') {
-    if (!this.doc || !this.strokePreState) return;
-    const currentState = PIX2.serialize(this.doc);
+    if (!this.doc || !this.strokePreState || !_PIX2) return;
+    const currentState = _PIX2.serialize(this.doc);
     if (currentState !== this.strokePreState) {
       this.saveSnapshot(strokeName);
     }
@@ -122,11 +122,11 @@ class EditorState {
 
   // Record undo snapshot
   saveSnapshot(actionName = 'Edit') {
-    if (!this.doc) return;
+    if (!this.doc || !_PIX2) return;
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1);
     }
-    const serialized = PIX2.serialize(this.doc);
+    const serialized = _PIX2.serialize(this.doc);
     this.history.push({
       action: actionName,
       data: serialized,
@@ -144,7 +144,7 @@ class EditorState {
     if (this.historyIndex > 0) {
       this.historyIndex--;
       const snapshot = this.history[this.historyIndex];
-      this.doc = PIX2.parse(snapshot.data);
+      this.doc = _PIX2.parse(snapshot.data);
       if (snapshot.activeTab) {
         if (snapshot.activeTab.startsWith('tab-') || (this.doc.cells && this.doc.cells[snapshot.activeTab])) {
           this.activeTabId = snapshot.activeTab;
@@ -160,7 +160,7 @@ class EditorState {
     if (this.historyIndex < this.history.length - 1) {
       this.historyIndex++;
       const snapshot = this.history[this.historyIndex];
-      this.doc = PIX2.parse(snapshot.data);
+      this.doc = _PIX2.parse(snapshot.data);
       if (snapshot.activeTab) {
         if (snapshot.activeTab.startsWith('tab-') || (this.doc.cells && this.doc.cells[snapshot.activeTab])) {
           this.activeTabId = snapshot.activeTab;

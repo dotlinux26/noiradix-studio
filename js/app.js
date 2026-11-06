@@ -641,18 +641,33 @@
     isDocumentDirty = dirty;
     const title = (state.doc ? state.doc.meta.title : 'NOIRADIX Studio') || 'Untitled';
     const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(title, '.pix2', 'untitled');
-    document.title = dirty ? `● ${fileName} - NOIRADIX Studio` : `${fileName} - NOIRADIX Studio`;
+    const isDirectDiskLinked = Boolean(currentFileHandle);
+
+    document.title = (dirty || !isDirectDiskLinked)
+      ? `● ${fileName} - NOIRADIX Studio`
+      : `${fileName} - NOIRADIX Studio`;
 
     const dirtyDot = document.getElementById('header-dirty-dot');
     if (dirtyDot) {
-      dirtyDot.classList.toggle('is-dirty', dirty);
+      if (dirty) {
+        dirtyDot.className = 'header-dirty-dot is-dirty';
+        dirtyDot.title = 'Unsaved changes (Ctrl+S to save)';
+      } else if (!isDirectDiskLinked) {
+        dirtyDot.className = 'header-dirty-dot is-draft';
+        dirtyDot.title = 'In-Memory Draft - Not saved to disk file! Press Ctrl+S to save.';
+      } else {
+        dirtyDot.className = 'header-dirty-dot';
+        dirtyDot.title = `All changes saved to disk (${currentFileHandle.name})`;
+      }
     }
 
     if (dom.inputProjectTitle) {
       const fullPath = getProjectFullPath();
       dom.inputProjectTitle.title = dirty
         ? `● ${fileName} (Unsaved Changes - Ctrl+S to save)\nFull Path: ${fullPath}`
-        : `${fileName} (Saved)\nFull Path: ${fullPath}`;
+        : isDirectDiskLinked
+          ? `${fileName} (Saved to disk)\nFull Path: ${fullPath}`
+          : `${fileName} (Memory Draft - Unsaved to Disk! Press Ctrl+S)\nFull Path: ${fullPath}`;
     }
 
     if (!dirty) {
@@ -688,11 +703,11 @@
       if (isDirectDiskLinked) {
         fileSourceBadge.className = 'file-source-badge local';
         fileSourceBadge.innerHTML = '<i class="fa-solid fa-hard-drive"></i> <span id="file-source-text">Local File</span>';
-        fileSourceBadge.title = 'File linked to disk via File System Access API (Ctrl+S saves directly)';
+        fileSourceBadge.title = `File linked directly to disk (${currentFileHandle.name}). Ctrl+S writes directly to disk.`;
       } else {
         fileSourceBadge.className = 'file-source-badge draft';
         fileSourceBadge.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> <span id="file-source-text">In-Memory Draft</span>';
-        fileSourceBadge.title = hasFileName ? 'File held in memory. Click Save to save to disk.' : 'New unsaved project in memory.';
+        fileSourceBadge.title = 'In-memory draft held in browser temporary cache. Not yet saved to physical disk file. Press Ctrl+S to save.';
       }
     }
 
@@ -702,11 +717,11 @@
         filePathText.textContent = formatTruncatedPath(full);
         filePathPill.title = isDirectDiskLinked
           ? `File: ${full}\nLinked to disk (Ctrl+S saves directly without prompt)\nClick to copy full path`
-          : `File: ${full}\nIn-memory draft (Click Save to save to disk)\nClick to copy full path`;
+          : `File: ${full}\nIn-memory draft (Press Ctrl+S to save to physical disk file)\nClick to copy name`;
         filePathPill.style.display = 'inline-flex';
       } else {
         filePathText.textContent = 'Unsaved Project (Memory)';
-        filePathPill.title = 'Project is held in memory draft. Click Save to save to disk.';
+        filePathPill.title = 'Project is held in memory draft. Press Ctrl+S to save to disk.';
       }
     }
 
@@ -714,23 +729,38 @@
       if (isDocumentDirty) {
         saveStatusBadge.className = 'save-status-badge dirty';
         saveStatusBadge.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> <span id="save-status-text">Saving...</span>';
-        saveStatusBadge.title = 'Saving changes to autosave recovery snapshot';
+        saveStatusBadge.title = 'Saving edits to browser memory snapshot...';
       } else {
-        saveStatusBadge.className = 'save-status-badge clean';
-        saveStatusBadge.innerHTML = isDirectDiskLinked
-          ? '<i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Saved</span>'
-          : '<i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Autosaved</span>';
-        saveStatusBadge.title = isDirectDiskLinked ? 'All changes saved directly to disk file' : 'Changes safely backed up in recovery storage';
+        if (isDirectDiskLinked) {
+          saveStatusBadge.className = 'save-status-badge clean';
+          saveStatusBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Saved to Disk</span>';
+          saveStatusBadge.title = `All changes saved directly to disk file (${currentFileHandle.name})`;
+        } else {
+          // In-memory draft: WARN CLEARLY that changes are memory only, not on disk!
+          saveStatusBadge.className = 'save-status-badge memory-draft';
+          saveStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <span id="save-status-text">Unsaved to Disk (Memory Only)</span>';
+          saveStatusBadge.title = 'Draft is temporarily held in browser cache. Press Ctrl+S to save as a physical .pix2 file on disk!';
+        }
       }
     }
 
     if (btnSave) {
-      if (isDocumentDirty) {
-        btnSave.classList.add('dirty');
-        btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Save *</span>';
+      if (isDirectDiskLinked) {
+        btnSave.classList.remove('needs-disk-save');
+        if (isDocumentDirty) {
+          btnSave.classList.add('dirty');
+          btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Save *</span>';
+          btnSave.title = 'Unsaved changes. Click or press Ctrl+S to save directly to disk file.';
+        } else {
+          btnSave.classList.remove('dirty');
+          btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Save</span>';
+          btnSave.title = `Saved to disk (${currentFileHandle.name}). Press Ctrl+S to save again.`;
+        }
       } else {
-        btnSave.classList.remove('dirty');
-        btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Save</span>';
+        // Needs disk save!
+        btnSave.classList.add('needs-disk-save');
+        btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Save to Disk *</span>';
+        btnSave.title = 'Draft is in browser memory only! Click or press Ctrl+S to choose a disk file location.';
       }
     }
   }
@@ -740,14 +770,22 @@
     const textEl = document.getElementById('autosave-status-text');
     if (!pill || !textEl) return;
 
+    const isDirectDiskLinked = Boolean(currentFileHandle);
+
     if (status === 'saving') {
       pill.className = 'autosave-pill saving';
       pill.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> <span id="autosave-status-text">Saving...</span>';
     } else if (status === 'saved') {
-      pill.className = 'autosave-pill saved';
       const timeStr = time ? new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Just now';
-      pill.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <span id="autosave-status-text">Autosaved ${timeStr}</span>`;
-      pill.title = `Project changes safely recorded in autosave recovery at ${timeStr}.`;
+      if (isDirectDiskLinked) {
+        pill.className = 'autosave-pill saved';
+        pill.innerHTML = `<i class="fa-solid fa-hard-drive"></i> <span id="autosave-status-text">Saved to Disk ${timeStr}</span>`;
+        pill.title = `All changes automatically synchronized to disk file (${currentFileHandle.name}) at ${timeStr}.`;
+      } else {
+        pill.className = 'autosave-pill memory-draft';
+        pill.innerHTML = `<i class="fa-solid fa-memory"></i> <span id="autosave-status-text">Memory Cached ${timeStr} (Unsaved to Disk)</span>`;
+        pill.title = `Draft cached in browser temporary storage at ${timeStr}. Not yet saved to physical disk! Press Ctrl+S to save to disk.`;
+      }
     }
   }
 
@@ -780,9 +818,12 @@
       const snapshot = {
         timestamp: now,
         title: state.doc.meta.title || 'Untitled',
+        fileName: currentFileName || 'new_sprite.pix2',
         data: text
       };
       localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
+      localStorage.setItem('pix2_draft_content', text);
+      localStorage.setItem('noiradix_active_file_name', currentFileName || snapshot.fileName);
 
       // Direct write to disk file if linked to matching filename
       const isDirectDiskValid = currentFileHandle &&
@@ -826,19 +867,46 @@
       const raw = localStorage.getItem('pix2_recovery_snapshot');
       if (!raw) return false;
       const snapshot = JSON.parse(raw);
+      if (!snapshot || !snapshot.data) return false;
+
       const timeAgoSec = Math.round((Date.now() - snapshot.timestamp) / 1000);
+      const fileName = snapshot.fileName || localStorage.getItem('noiradix_active_file_name') || 'new_sprite.pix2';
+
+      // If snapshot is recent (within 4 hours, typical refresh/tab reopen), auto-resume seamlessly
+      if (timeAgoSec < 14400) {
+        const doc = PIX2.parse(snapshot.data);
+        currentFileHandle = null;
+        currentFileName = fileName;
+        currentFilePath = fileName;
+        state.setDocument(doc);
+        centerCellCanvas();
+        centerGridCanvas();
+        refreshAll();
+        setDirty(false);
+        showToast(`Resumed in-memory draft "${fileName}". (Unsaved to disk - Press Ctrl+S)`, 'info');
+        return true;
+      }
+
+      // If snapshot is between 4 hours and 7 days old, ask user if they want to restore previous draft
       if (timeAgoSec < 86400 * 7) {
         const timeStr = new Date(snapshot.timestamp).toLocaleTimeString();
-        const restore = confirm(`Unsaved session found for "${snapshot.title}" from ${timeStr}.\n\nClick OK to RESTORE recovery session.\nClick Cancel to discard.`);
+        const dateStr = new Date(snapshot.timestamp).toLocaleDateString();
+        const restore = confirm(`Found unsaved in-memory draft for "${fileName}" from ${dateStr} ${timeStr}.\n\nClick OK to RESTORE this draft session.\nClick Cancel to start fresh.`);
         if (restore) {
           const doc = PIX2.parse(snapshot.data);
+          currentFileHandle = null;
+          currentFileName = fileName;
+          currentFilePath = fileName;
           state.setDocument(doc);
-          setDirty(true);
+          centerCellCanvas();
+          centerGridCanvas();
           refreshAll();
-          showToast('Restored recovery snapshot!', 'success');
+          setDirty(false);
+          showToast(`Restored in-memory draft "${fileName}". Press Ctrl+S to save to disk.`, 'info');
           return true;
         } else {
           localStorage.removeItem('pix2_recovery_snapshot');
+          localStorage.removeItem('pix2_draft_content');
         }
       }
     } catch (err) {

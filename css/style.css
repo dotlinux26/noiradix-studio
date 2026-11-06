@@ -514,6 +514,25 @@ body {
   color: #10b981;
 }
 
+.save-status-badge.memory-draft {
+  color: #d97706;
+  background-color: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.header-dirty-dot.is-draft {
+  background-color: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  opacity: 1;
+}
+
+#btn-save-pix2.needs-disk-save {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(234, 88, 12, 0.12));
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #d97706;
+  font-weight: 600;
+}
+
 @keyframes pulse-dirty {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
@@ -1427,6 +1446,12 @@ body {
   color: #10b981;
   border-color: rgba(16, 185, 129, 0.3);
   background-color: rgba(16, 185, 129, 0.08);
+}
+
+.autosave-pill.memory-draft {
+  color: #d97706;
+  border-color: rgba(245, 158, 11, 0.45);
+  background-color: rgba(245, 158, 11, 0.12);
 }
 
 .autosave-pill i {
