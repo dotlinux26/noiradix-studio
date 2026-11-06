@@ -44,55 +44,95 @@ Experience desktop-grade pixel art creation directly in your browser with zero i
 
 ## 🎮 Unity 2D Integration Step-by-Step
 
-![Unity 2D Spritesheet Package Architecture](noiradix-export-unity.png)
-*Complete architecture of NOIRADIX Studio's game exporter: Sub-pixel bleed guard, automatic C# importer, frame slicing, and .anim clip synthesis.*
+### Step 1: Configure & Export Unity 2D Package (.ZIP)
+In NOIRADIX Studio, click **Export** in the top navigation bar. Select **Unity 2D Sprite Package** and configure your anti-bleed spacing (recommended: `1px Bleed Guard` with `Extrude Edge Pixels` checked). Click **Export Unity 2D Package (.ZIP)**.
+
+![Step 1 - Export Modal in Studio](noiradix-export-unity.png)
+*Configuring sprite sheet padding, extrude edge guards, and Unity metadata in NOIRADIX Studio.*
 
 ---
 
-### Step 1: Export Game Package from NOIRADIX Studio
-![Step 1 - Export Modal in Studio](noiradix-export-unity-1.png)
-*Select Unity 2D Sprite Package, 1px bleed guard padding, and extrude edge pixels.*
+### Step 2: Download & Inspect the Unity Package (.ZIP)
+Open the downloaded `{project}_unity_package.zip` archive. It contains the sprite atlas PNG, `.pix2.json` metadata, `Pix2UnityImporter.cs`, and `README_UNITY_IMPORT.txt`.
+
+![Step 2 - ZIP Package Contents](noiradix-zip-unity.png)
+*Package contents: atlas texture, metadata JSON, 1-click C# importer script, and instruction guide.*
 
 ---
 
-### Step 2: Unzip the Package
-![Step 2 - Extracted Files](noiradix-export-unity-2.png)
-*Extract package containing the atlas PNG, `.pix2.json` metadata, `Pix2UnityImporter.cs`, and `README_UNITY_IMPORT.txt`.*
+### Step 3: Drag Sprites & Metadata into Unity
+Drag the sprite atlas PNG and `.pix2.json` metadata file directly into your Unity project directory (e.g. `Assets/_Game/Art/Sprites/Noiradix/`). Make sure `Pix2UnityImporter.cs` is inside your project's `Editor/` folder (`Assets/_Game/Editor/`).
+
+![Step 3 - Drag Files into Unity](noiradix-export-unity-1.png)
+*Dragging the exported atlas and JSON metadata from File Explorer into Unity's Project tab.*
 
 ---
 
-### Step 3: Place Files into Your Unity Project
-![Step 3 - Place into Unity Assets](noiradix-export-unity-3.png)
-*Place `Pix2UnityImporter.cs` into `Assets/_Game/Editor/` and sprites into `Assets/_Game/Art/Sprites/Noiradix/`.*
+### Step 4: Files Placed in Unity Project Tab
+Both the transparent atlas PNG and `.pix2.json` metadata files appear in your designated sprite directory:
+
+![Step 4 - Assets Placed in Unity](noiradix-export-unity-2.png)
+*Prismatic sprite atlas and JSON metadata ready for 1-click automatic processing.*
 
 ---
 
-### Step 4: 1-Click Automatic Import
-![Step 4 - Right Click Import Menu](noiradix-export-unity-4.png)
-*Right-click the `.pix2.json` file and select "NOIRADIX > Import Spritesheet & Animations".*
+### Step 5: 1-Click Right-Click Context Menu Import
+In your Unity Project window, **RIGHT-CLICK** the `.pix2.json` file and select:  
+👉 **NOIRADIX > Import Spritesheet & Animations**  
+*(Or use the top menu bar: `Tools > NOIRADIX > Import Pix2 Spritesheet JSON...`)*.
 
-![Step 5 - Import Complete Popup](noiradix-export-unity-5.png)
-*Dialog confirms all 16 frames were sliced and 4 Animation Clips were automatically generated.*
-
----
-
-### Step 5: Pixel-Perfect Sprite Slicing
-![Step 6 - Sliced Sprites & Inspector](noiradix-export-unity-6.png)
-*Automatic configuration of Sprite Multiple, Point filter mode, uncompressed textures, and custom pivots.*
+![Step 5 - Right Click Context Menu](noiradix-export-unity-3.png)
+*Executing the 1-click automated asset processing pipeline.*
 
 ---
 
-### Step 6: Native Unity Animation Clips (.anim)
-![Step 7 - Animation Window Timeline](noiradix-export-unity-7.png)
-*Pre-configured 6 FPS walk cycle curves with loop settings in Unity's native Animation timeline.*
+### Step 6: Import Complete Confirmation
+An import summary dialog confirms that all 16 frames were sliced and 4 native `.anim` Animation Clips were generated:
+
+![Step 6 - Import Complete Dialog](noiradix-export-unity-4.png)
+*Confirmation dialog displaying sliced frame count, animation clips generated, and target file path.*
 
 ---
 
-### Step 7: Live in Scene & Game Playback
-![Step 8 - Live In Scene Walk Animation](noiradix-export-unity-8-gif.gif)
-*Real-time animated walk cycle playback inside Unity 6 with 6 FPS timing.*
+### Step 7: Automatic `Animations/` Folder Creation
+The importer automatically creates an `Animations/` subfolder right beside your sprite containing all 4 directional Animation Clips:
 
-![Step 8 - Scene View Detail](noiradix-export-unity-8.png)
+![Step 7 - Generated Animations Folder](noiradix-export-unity-5.png)
+*The `Animations` directory is automatically generated containing `walk_down`, `walk_left`, `walk_right`, and `walk_up`.*
+
+---
+
+### Step 8: Native Animation Timeline & Keyframe Verification
+Open the native Unity Animation window on `walk_down` to see all 4 keyframes pre-wired with 6 FPS timing, loop settings, and sprite curve bindings:
+
+![Step 8 - Animation Window Timeline](noiradix-export-unity-6.png)
+*Native Unity Animation Dopesheet timeline with 4 keyframes bound to SpriteRenderer.m_Sprite.*
+
+---
+
+### Step 9: Sliced Sub-Sprites & Dragging into Scene
+Click the expand arrow next to the sprite atlas to view all 16 sliced sub-sprites (`Noiradix Down 0`, `Noiradix Down 1`, etc.). Drag `Noiradix Down 0` directly into your Scene:
+
+![Step 9 - Sliced Sub-Sprites in Scene](noiradix-export-unity-7.png)
+*All 16 sliced sub-sprites visible in the Project tab and placed directly into the Scene viewport.*
+
+---
+
+### Step 10: Live Animator Controller & Scene Setup
+Attach the animation clip to the sprite to automatically create an Animator Controller component in your scene:
+
+![Step 10 - Scene Setup & Animator Controller](noiradix-export-unity-8.png)
+*Character positioned in the scene alongside the generated Animator Controller.*
+
+---
+
+### Step 11: Live Walking Animation in Scene (Real-Time Playback)
+Press **Play Game** and watch your character animate with crisp point filtering and zero texture bleeding seams!
+
+![Step 11 - Live In Scene Walk Animation](noiradix-export-unity-8-gif.gif)
+*Real-time animated walk cycle running smoothly inside Unity 6.*
+
+![Step 11 - Scene View Detail](noiradix-export-unity-8.png)
 *Crisp point-filtered sprite rendering aligned with scene lights and colliders.*
 
 ---
