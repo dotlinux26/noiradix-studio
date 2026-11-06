@@ -170,52 +170,81 @@ When an LLM is asked to create or modify a `.pix2` character, it must follow thi
 
 ---
 
-## 6. Official Reference File: `Player.pix2`
+## 6. Official Reference File: `Noiradix_Ghost.pix2` (Synthesized by Gemini 3.8 Flash)
+
+The complete official sprite template [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2) was **entirely authored and drawn by AI (Gemini 3.8 Flash)** using the `.pix2` deterministic specification. It implements 16 cells in a 4×4 grid with complete 4-directional locomotion:
 
 ```pix2
 # ==============================================================================
 # PIX2 SPRITE SPECIFICATION v1.0
-# Sprite Sheet: Player (Wispling Ghost)
+# Reference Mascot: NOIRADIX Ghost (Synthesized by Gemini 3.8 Flash)
 # ==============================================================================
 
+@pix2 1.0
+
 @meta
-  title: "Player Wispling"
-  author: "dotlinux26"
+  title: "Noiradix Ghost"
+  author: "Gemini 3.8 Flash & NOIRADIX Studio"
   version: "1.0"
-  grid: 4x4
-  cell_size: 16x16
+  color_mode: "RGBA"
+  coordinate_origin: "top-left"
+
+@grid
+  columns: 4
+  rows: 4
+  default_cell: 16x16
+  background: none
 
 @palette
-  1: #ffffff  # Body White
-  2: #57546f  # Outline Dark Slate
-  3: #dde8ef  # Shade Light Blue
-  4: #ffb0bc  # Blush Pink
-  5: #46435c  # Eye Dark Purple
-
-@animations
-  walk_down:  [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
-  walk_up:    [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
-  walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
-  walk_left:  [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop
+  1: #57546f  ; Outline Slate
+  2: #f8f7fb  ; Body Primary Ghost White
+  3: #dde8ef  ; Shading Soft Blue
+  4: #bfc9d9  ; Deep Shadow Slate
+  5: #ffb0bc  ; Blush Cheeks Pink
+  6: #ffd0d8  ; Soft Blush Highlight
+  7: #48b8e8  ; Magic Sparkle Blue
 
 @cell cell_0_0
-  name: "Down 0"
-  p 4,0 2 p 5,0 2 p 6,0 2 p 7,0 2 p 8,0 2 p 9,0 2 p 10,0 2 p 11,0 2
-  p 3,1 2 p 4,1 1 p 5,1 1 p 6,1 1 p 7,1 1 p 8,1 1 p 9,1 1 p 10,1 1 p 11,1 1 p 12,1 2
-  p 2,2 2 p 3,2 1 p 4,2 1 p 5,2 1 p 6,2 1 p 7,2 1 p 8,2 1 p 9,2 1 p 10,2 1 p 11,2 1 p 12,2 1 p 13,2 2
-  p 2,3 2 p 3,3 1 p 4,3 1 p 5,3 1 p 6,3 1 p 7,3 1 p 8,3 1 p 9,3 1 p 10,3 1 p 11,3 1 p 12,3 1 p 13,3 2
-  p 2,4 2 p 3,4 1 p 4,4 1 p 5,4 1 p 6,4 1 p 7,4 1 p 8,4 1 p 9,4 1 p 10,4 1 p 11,4 1 p 12,4 1 p 13,4 2
-  p 2,5 2 p 3,5 1 p 4,5 1 p 5,5 1 p 6,5 1 p 7,5 1 p 8,5 1 p 9,5 1 p 10,5 1 p 11,5 1 p 12,5 1 p 13,5 2
-  p 2,6 2 p 3,6 1 p 4,6 1 p 5,6 1 p 6,6 1 p 7,6 1 p 8,6 1 p 9,6 1 p 10,6 1 p 11,6 1 p 12,6 1 p 13,6 2
-  p 2,7 2 p 3,7 1 p 4,7 1 p 5,7 5 p 6,7 1 p 7,7 1 p 8,7 1 p 9,7 1 p 10,7 5 p 11,7 1 p 12,7 1 p 13,7 2
-  p 2,8 2 p 3,8 1 p 4,8 1 p 5,8 2 p 6,8 1 p 7,8 1 p 8,8 1 p 9,8 1 p 10,8 2 p 11,8 1 p 12,8 1 p 13,8 2
-  p 2,9 2 p 3,9 4 p 4,9 4 p 5,9 1 p 6,9 1 p 7,9 1 p 8,9 1 p 9,9 1 p 10,9 1 p 11,9 4 p 12,9 4 p 13,9 2
-  p 3,10 2 p 4,10 1 p 5,10 1 p 6,10 1 p 7,10 1 p 8,10 1 p 9,10 1 p 10,10 1 p 11,10 1 p 12,10 2
-  p 4,11 2 p 5,11 2 p 6,11 1 p 7,11 1 p 8,11 1 p 9,11 1 p 10,11 2 p 11,11 2
-  p 5,12 2 p 6,12 1 p 7,12 1 p 8,12 1 p 9,12 1 p 10,12 2
-  p 3,13 2 p 5,13 2 p 6,13 3 p 7,13 3 p 8,13 3 p 9,13 3 p 10,13 2 p 12,13 2
-  p 5,14 2 p 6,14 3 p 7,14 2 p 8,14 2 p 9,14 3 p 10,14 2
-  p 6,15 2 p 9,15 2
+  name: "Noiradix Down 0"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  pixel 6,1 1 pixel 7,1 1 pixel 8,1 1 pixel 9,1 1 pixel 14,1 7
+  pixel 5,2 1 pixel 6,2 2 pixel 7,2 2 pixel 8,2 2 pixel 9,2 2 pixel 10,2 1 pixel 13,2 7
+  pixel 1,3 7 pixel 4,3 1 pixel 5,3 2 pixel 6,3 2 pixel 7,3 3 pixel 8,3 2 pixel 9,3 2 pixel 10,3 2 pixel 11,3 1
+  pixel 2,4 7 pixel 3,4 1 pixel 4,4 2 pixel 5,4 2 pixel 6,4 2 pixel 7,4 2 pixel 8,4 3 pixel 9,4 2 pixel 10,4 2 pixel 11,4 2 pixel 12,4 1
+  pixel 3,5 1 pixel 4,5 2 pixel 5,5 2 pixel 6,5 1 pixel 7,5 2 pixel 8,5 2 pixel 9,5 1 pixel 10,5 2 pixel 11,5 2 pixel 12,5 1
+  pixel 3,6 1 pixel 4,6 5 pixel 5,6 2 pixel 6,6 1 pixel 7,6 2 pixel 8,6 2 pixel 9,6 1 pixel 10,6 2 pixel 11,6 5 pixel 12,6 1
+  pixel 2,7 7 pixel 3,7 1 pixel 4,7 6 pixel 5,7 2 pixel 6,7 1 pixel 7,7 2 pixel 8,7 2 pixel 9,7 1 pixel 10,7 2 pixel 11,7 6 pixel 12,7 1 pixel 13,7 7
+  pixel 1,8 1 pixel 2,8 2 pixel 3,8 1 pixel 4,8 2 pixel 5,8 2 pixel 6,8 2 pixel 7,8 2 pixel 8,8 2 pixel 9,8 2 pixel 10,8 2 pixel 11,8 2 pixel 12,8 1 pixel 13,8 2 pixel 14,8 1
+  pixel 1,9 1 pixel 2,9 1 pixel 3,9 1 pixel 4,9 2 pixel 5,9 2 pixel 6,9 2 pixel 7,9 2 pixel 8,9 2 pixel 9,9 2 pixel 10,9 2 pixel 11,9 2 pixel 12,9 1 pixel 13,9 1 pixel 14,9 1
+  pixel 2,10 1 pixel 3,10 2 pixel 4,10 2 pixel 5,10 2 pixel 6,10 2 pixel 7,10 2 pixel 8,10 2 pixel 9,10 2 pixel 10,10 2 pixel 11,10 2 pixel 12,10 2 pixel 13,10 1
+  pixel 2,11 1 pixel 3,11 2 pixel 4,11 2 pixel 5,11 3 pixel 6,11 3 pixel 7,11 3 pixel 8,11 3 pixel 9,11 3 pixel 10,11 3 pixel 11,11 2 pixel 12,11 2 pixel 13,11 1
+  pixel 2,12 1 pixel 3,12 3 pixel 4,12 3 pixel 5,12 3 pixel 6,12 4 pixel 7,12 4 pixel 8,12 4 pixel 9,12 4 pixel 10,12 3 pixel 11,12 3 pixel 12,12 3 pixel 13,12 1
+  pixel 2,13 1 pixel 3,13 3 pixel 4,13 1 pixel 5,13 4 pixel 6,13 4 pixel 7,13 1 pixel 8,13 1 pixel 9,13 4 pixel 10,13 4 pixel 11,13 1 pixel 12,13 3 pixel 13,13 1
+  pixel 3,14 1 pixel 6,14 1 pixel 9,14 1 pixel 12,14 1
+
+@animation walk_down
+  fps: 6
+  loop: true
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+
+@animation walk_up
+  fps: 6
+  loop: true
+  frames: [cell_1_0, cell_1_1, cell_1_2, cell_1_3]
+
+@animation walk_right
+  fps: 6
+  loop: true
+  frames: [cell_2_0, cell_2_1, cell_2_2, cell_2_3]
+
+@animation walk_left
+  fps: 6
+  loop: true
+  frames: [cell_3_0, cell_3_1, cell_3_2, cell_3_3]
+
+@end
 ```
 
 ---

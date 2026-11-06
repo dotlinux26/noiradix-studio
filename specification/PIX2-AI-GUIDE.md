@@ -194,12 +194,12 @@ NOIRADIX Studio supports bidirectional, zero-latency co-authoring between human 
 sequenceDiagram
     autonumber
     actor Artist as Human Artist (Studio UI)
-    participant Disk as Local File (Player.pix2)
-    actor AI as AI Agent (VS Code / Terminal)
+    participant Disk as Local File (Noiradix_Ghost.pix2)
+    actor AI as AI Agent (Gemini 3.8 Flash / Claude / ChatGPT)
 
     Artist->>Disk: Draws Frame 0 (Down Idle) & Saves (Ctrl+S)
-    AI->>Disk: Reads Player.pix2 to understand character style
-    AI->>Disk: Writes walk cycle frames (Down 1, 2, 3) to Player.pix2
+    AI->>Disk: Reads Noiradix_Ghost.pix2 to understand character style
+    AI->>Disk: Writes walk cycle frames (Down 1, 2, 3) to Noiradix_Ghost.pix2
     Disk-->>Artist: NOIRADIX Watcher detects external change
     Artist->>Artist: Auto-reloads & plays walk animation in real-time!
 ```

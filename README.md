@@ -144,19 +144,39 @@ NOIRADIX Studio is designed from day one to pair-program with AI (ChatGPT, Claud
 | <kbd>Ctrl</kbd> + <kbd>S</kbd> | Global | Direct disk save (Chromium) / Download |
 | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Global | Undo last canvas stroke or grid edit |
 | <kbd>Ctrl</kbd> + <kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Global | Redo |
+| <kbd>Ctrl</kbd> + <kbd>0</kbd> | Global | Reset zoom and re-center canvas (Grid, Studio, or Editor) |
 | <kbd>Space</kbd> | Grid Overview | Toggle Animation Studio floating player |
-| <kbd>Space</kbd> + Drag | Cell Editor | Pan canvas smoothly |
+| <kbd>Space</kbd> + Drag | Cell Editor | Pan canvas smoothly in any direction |
 | <kbd>Ctrl</kbd> + Mouse Wheel | Cell Editor | Anchor-centered zoom (`4×` to `64×`) |
-| <kbd>B</kbd> | Cell Editor | Pencil Tool |
+| <kbd>B</kbd> | Cell Editor | Pencil Tool (Discrete pixels) |
 | <kbd>E</kbd> | Cell Editor | Eraser Tool |
 | <kbd>I</kbd> | Cell Editor | Eyedropper Tool (Sample color under cursor) |
 | <kbd>G</kbd> | Cell Editor | Paint Bucket Tool (4-way flood fill) |
 | <kbd>L</kbd> | Cell Editor | Discrete Line Tool (Bresenham) |
-| <kbd>U</kbd> | Cell Editor | Rectangle Tool |
-| <kbd>M</kbd> | Cell Editor | Marquee Selection Tool |
+| <kbd>U</kbd> / <kbd>R</kbd> | Cell Editor | Rectangle Tool |
+| <kbd>M</kbd> / <kbd>V</kbd> | Cell Editor | Marquee Selection Tool |
+| <kbd>H</kbd> | Cell Editor | Hand (Pan) Tool (Pan viewport without holding Space) |
+| <kbd>S</kbd> | Cell Editor | Toggle Bilateral Symmetry Mirror Axis (`sym_dot`) |
+| <kbd>X</kbd> | Cell Editor | Swap Primary & Secondary Colors |
+| <kbd>D</kbd> | Cell Editor | Reset Default Colors (`#57546f` / `#ffffff`) |
 | <kbd>Esc</kbd> | Cell Editor | Close cell editor tab / Return to Overview |
 
 *For complete keyboard shortcut documentation across all views and operating systems, see [KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md).*
+
+---
+
+## 👻 Official Reference Template: Authored by AI (Gemini 3.8 Flash)
+
+NOIRADIX Studio includes an official reference character template: [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2).
+
+This complete 4-direction, 16-frame walking sprite sheet was **entirely authored and drawn by AI (specifically Gemini 3.8 Flash)** using the deterministic `.pix2` language specification:
+* **Faithful Mascot Silhouette:** Features the official NOIRADIX Ghost mascot with raised friendly arms and expressive eyes based on [`noiradix-studio-logo.svg`](noiradix-studio-logo.svg).
+* **4-Directional Locomotion (16 Cells, 4×4 Grid, 16×16 px):**
+  * `walk_down`: Frontal perspective with bilateral symmetry (`sym_dot`), dark purple eyes (`#46435c`), blush cheeks (`#ffb0bc`), and waving ghost sleeves.
+  * `walk_up`: Back perspective showing cowl fold lines and undulating tail (strictly zero eyes or blush).
+  * `walk_right` & `walk_left`: 3/4 side profiles featuring trailing wisps and forward-reaching arms.
+* **Compact 7-Color Palette:** `#57546f` (outline), `#ffffff` (body primary), `#dde8ef` (shadow), `#ffb0bc` (blush), `#46435c` (eyes), `#ffd700` (gold sparkles), `#fff275` (glow).
+* **Production-Ready Walk Cycles:** All 4 animation strips are pre-wired at `6 fps` loop and instantly playable in the Animation Studio.
 
 ---
 

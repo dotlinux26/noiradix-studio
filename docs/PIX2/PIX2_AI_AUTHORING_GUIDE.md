@@ -194,12 +194,12 @@ NOIRADIX Studio supports bidirectional, zero-latency co-authoring between human 
 sequenceDiagram
     autonumber
     actor Artist as Human Artist (Studio UI)
-    participant Disk as Local File (Player.pix2)
-    actor AI as AI Agent (VS Code / Terminal)
+    participant Disk as Local File (Noiradix_Ghost.pix2)
+    actor AI as AI Agent (Gemini 3.8 Flash / Claude / ChatGPT)
 
     Artist->>Disk: Draws Frame 0 (Down Idle) & Saves (Ctrl+S)
-    AI->>Disk: Reads Player.pix2 to understand character style
-    AI->>Disk: Writes walk cycle frames (Down 1, 2, 3) to Player.pix2
+    AI->>Disk: Reads Noiradix_Ghost.pix2 to understand character style
+    AI->>Disk: Writes walk cycle frames (Down 1, 2, 3) to Noiradix_Ghost.pix2
     Disk-->>Artist: NOIRADIX Watcher detects external change
     Artist->>Artist: Auto-reloads & plays walk animation in real-time!
 ```
@@ -209,3 +209,15 @@ sequenceDiagram
 2. **Reuse Existing Palette IDs:** If white is defined as `1`, do not define a duplicate white as `6`.
 3. **Format Determinism:** Keep `@cell` declarations in sequential grid order (`cell_0_0`, `cell_0_1`, etc.).
 4. **Single-File Completeness:** Ensure the written `.pix2` file passes `PIX2.validate()` without dangling frame references.
+
+---
+
+## 8. Real-World Case Study: Creating `Noiradix_Ghost.pix2` with Gemini 3.8 Flash
+
+The official mascot template [`samples/Noiradix_Ghost.pix2`](../../samples/Noiradix_Ghost.pix2) serves as the primary benchmark in NOIRADIX Studio, **entirely authored and drawn by Gemini 3.8 Flash** using the `.pix2` language:
+1. **Design Target:** A cute, friendly ghost character with raised waving arms and sparkles, matching `noiradix-studio-logo.svg`.
+2. **Mathematical Walk Cycle Synthesis:**
+   - **Down Walk (`cell_0_0` .. `cell_0_3`):** Synthesized using bilateral symmetry (`sym_dot`), dark expressive eyes (`#46435c`), blush cheeks (`#ffb0bc`), and undulating waving arms (bobbing Y: 0 to 1).
+   - **Up Walk (`cell_1_0` .. `cell_1_3`):** Back view showing cowl folds and trailing ghost wisps, strictly omitting all eyes and blush.
+   - **Right & Left Walk (`cell_2_x` & `cell_3_x`):** 3/4 side profiles featuring trailing tails and reaching arms.
+3. **Token Efficiency:** Only explicitly drawn pixels are serialized (~370 lines of structured text), achieving 100% roundtrip determinism and zero LLM hallucination.

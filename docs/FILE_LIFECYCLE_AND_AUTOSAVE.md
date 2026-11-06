@@ -21,7 +21,7 @@ When running in a Chromium-based browser (Edge, Chrome, Opera, Brave), PIX2 uses
         v [Manual Save: Ctrl+S]                           v [Autosave Buffer: 30s / 1.5s]
 +--------------------------------+               +--------------------------------+
 |     ORIGINAL PROJECT FILE      |               |     LOCAL RECOVERY BUFFER      |
-|        (e.g. Player.pix2)      |               |    (IndexedDB / LocalStorage)  |
+|     (e.g. Noiradix_Ghost.pix2) |               |    (IndexedDB / LocalStorage)  |
 | - Single source of truth       |               | - Crash protection only        |
 | - Written via createWritable() |               | - Distinct from original file  |
 | - Human & AI readable plaintext|               | - Timestamped session state    |
@@ -46,9 +46,9 @@ When running in a Chromium-based browser (Edge, Chrome, Opera, Brave), PIX2 uses
    - Serializes document: `const text = PIX2.serialize(state.doc)`.
    - Creates stream: `const writable = await state.fileHandle.createWritable()`.
    - Writes content: `await writable.write(text); await writable.close();`.
-   - Clears dirty state (`isDirty = false`), shows toast: `"Saved Player.pix2"`.
-2. If no file handle exists (e.g. freshly created new document):
-   - Automatically diverts to **Save As**.
+   - Clears dirty state (`isDirty = false`), shows toast: `"Saved to disk"`.
+2. If no file handle exists (e.g. freshly created new document / in-memory draft):
+   - Automatically diverts to **Save As** or prompts system save picker.
 
 ### 2.3 Save As (`Ctrl+Shift+S`)
 1. Invokes `window.showSaveFilePicker({ suggestedName: `${title}.pix2`, types: [{ description: 'PIX2 Sprite File', accept: { 'application/x-pix2': ['.pix2'] } }] })`.
@@ -56,10 +56,18 @@ When running in a Chromium-based browser (Edge, Chrome, Opera, Brave), PIX2 uses
 3. Updates `state.fileHandle` and project title to point to the new destination.
 4. *Fallback:* Generates Blob `URL.createObjectURL(new Blob([text]))` and triggers direct browser download.
 
-### 2.4 New Project (`Ctrl+N`)
-1. Prompts for Title, Columns, Rows, Cell Width, Cell Height.
-2. Clears existing file handle (`state.fileHandle = null`), initializes blank document.
-3. Sets clean state.
+### 2.4 New Project (`Ctrl+N` Desktop Modal)
+1. Pressing <kbd>Ctrl</kbd> + <kbd>N</kbd> or clicking **New** displays the `#modal-new-file` desktop dialog (replacing browser modal popups).
+2. **File Name Focus:** Primary input is the physical `.pix2` file name (e.g. `hero_knight.pix2`) with automatic basename selection.
+3. **One-Click Layout Presets:**
+   - **4-Direction Walk:** 4 rows × 4 columns, 16×16px (16 cells total).
+   - **8-Direction Combat:** 8 rows × 4 columns, 16×16px (32 cells total).
+   - **Action Strip:** 1 row × 6 columns, 16×16px.
+   - **Single Frame:** 1 row × 1 column, 16×16px (items, icons, tiles).
+4. **Draft Protection & Handle Isolation:**
+   - Clears previous file handle from memory and IndexedDB (`clearPersistedFileHandle()`).
+   - Flags session as `draft` (`noiradix_session_type = 'draft'`), ensuring that page refreshes (<kbd>F5</kbd>) will faithfully resume the user's active draft rather than resurrecting an old disk file.
+   - Sets statusbar badge to amber `⚠️ In-Memory Draft (Unsaved to Disk)`.
 
 ### 2.5 Drag-and-Drop File Ingestion (Direct FileSystemHandle Binding)
 When dropping a `.pix2` file from desktop into the Studio window:
@@ -74,8 +82,9 @@ When dropping a `.pix2` file from desktop into the Studio window:
 ## 3. Document Dirty State & Visual Identity
 
 The document identity clearly indicates modification status:
-- Clean: `Player.pix2`
-- Unsaved changes: `Player.pix2 ●` (or `* Player.pix2`)
+- Clean & Committed to Disk: `Noiradix_Ghost.pix2` (`Saved to Disk` badge)
+- In-Memory Draft: `hero_knight.pix2` (`⚠️ Unsaved to Disk (Memory Only)` badge)
+- Unsaved changes: `Noiradix_Ghost.pix2 ●` (or `* Noiradix_Ghost.pix2`)
 
 ### Dirty Trigger Criteria:
 - Modifying pixel records (pencil, eraser, bucket, line, rect, symmetry).
@@ -155,7 +164,7 @@ NOIRADIX Studio integrates a non-polling, resource-efficient three-tier change d
 [ External AI Agent / Script / Git ]
              │ writes to disk
              ▼
-      [ Disk: Player.pix2 ]
+      [ Disk: Noiradix_Ghost.pix2 ]
              ▲
              │ (1) Window Focus
              │ (2) Visibility Change

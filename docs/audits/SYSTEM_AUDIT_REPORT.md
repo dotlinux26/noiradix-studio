@@ -111,24 +111,29 @@ RUNNING PIX2 ENGINE SEMANTIC & ROUNDTRIP TEST SUITE
 ====================================================
 Test 1: Comment Lexer & Hex Disambiguation          [14/14 PASS]
 Test 2: Semantic Roundtrip Determinism              [ 7/ 7 PASS]
-Test 3: Validating samples/Player.pix2              [ 2/ 2 PASS]
+Test 3: Validating samples/Noiradix_Ghost.pix2      [ 3/ 3 PASS]
 Test 4: Custom Cell Identifiers & grid_pos Mapping  [ 4/ 4 PASS]
 Test 5: Row-Only Flip & Row Duplication             [ 6/ 6 PASS]
 Test 6: Row Movement & Safe Animation Assignment    [ 8/ 8 PASS]
-Test 7: Pan Tool State & Cursor-Anchored Zoom       [10/10 PASS]
-Subtotal: 51 / 51 PASSED
+Test 7: Pan Tool State & Cursor-Anchored Zoom       [ 9/ 9 PASS]
+Test 8: Animation Player Scaling & Auto-Fit Math    [ 7/ 7 PASS]
+Test 9: Grid Free Panning & Atlas Magnifying Zoom   [ 5/ 5 PASS]
+Test 10: Multilingual UTF-8 & Name Sanitization     [15/15 PASS]
+Test 11: Cross-Platform Interoperability (mac/win)  [ 8/ 8 PASS]
+Test 12: Editor State Stability & Tab Preservation  [10/10 PASS]
+Subtotal: 96 / 96 PASSED
 
 ====================================================
 RUNNING PIX2 SECURITY & MALICIOUS PAYLOAD SUITE
 ====================================================
-Test Group 1: Prototype Pollution Defenses          [ 3/ 3 PASS]
+Test Group 1: Prototype Pollution Defenses          [ 4/ 4 PASS]
 Test Group 2: Denial-of-Service & Resource Clamping [ 6/ 6 PASS]
 Test Group 3: Document Validation API               [ 2/ 2 PASS]
 Test Group 4: Client-Side XSS & Sanitization        [ 2/ 2 PASS]
-Subtotal: 13 / 13 PASSED
+Subtotal: 14 / 14 PASSED
 
 ====================================================
-TOTAL TESTS: 64 / 64 PASSED (100%)
+TOTAL TESTS: 110 / 110 PASSED (100%)
 ====================================================
 ```
 

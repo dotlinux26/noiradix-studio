@@ -87,7 +87,7 @@ The engine MUST NOT assume hardcoded rows (e.g., row 0 is down, row 1 is up). An
 A `.pix2` file is an UTF-8 plaintext document organized into directive sections starting with `@`.
 
 ```
-Player.pix2
+Noiradix_Ghost.pix2 (Reference Mascot, Synthesized by Gemini 3.8 Flash)
 │
 ├── @pix2 1.0          (Format declaration)
 ├── @meta              (Document & project metadata)
