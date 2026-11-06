@@ -130,6 +130,11 @@ NOIRADIX Studio is designed from day one to pair-program with AI (ChatGPT, Claud
 
 NOIRADIX Studio delivers a seamless, zero-friction bridge into Unity 2D:
 
+![Unity 2D Spritesheet Package Architecture](docs/noiradix-export-unity.png)
+*Complete architecture of NOIRADIX Studio's game exporter: Sub-pixel bleed guard, automatic C# importer, frame slicing, and .anim clip synthesis.*
+
+---
+
 ### Step 1: Export Game Package from NOIRADIX Studio
 In NOIRADIX Studio, click **Export** in the top header. Select **Unity 2D Sprite Package** and configure your spacing (recommended: `1px Bleed Guard` with `Extrude Edge Pixels` checked). Click **Export Unity 2D Package (.ZIP)**.
 
@@ -183,6 +188,10 @@ All 4 direction clips (`walk_down`, `walk_left`, `walk_right`, `walk_up`) are cr
 Drag the sprite or animation clip into your scene, press **Play Game**, and watch your character animate with zero texture bleeding!
 
 ![Step 8 - Live In Scene Walk Animation](docs/noiradix-export-unity-8-gif.gif)
+*Real-time animated walk cycle playback inside Unity 6 with 6 FPS timing.*
+
+![Step 8 - Scene View Detail](docs/noiradix-export-unity-8.png)
+*Crisp point-filtered sprite rendering aligned with scene lights and colliders.*
 
 ---
 

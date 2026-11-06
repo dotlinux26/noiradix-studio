@@ -44,6 +44,11 @@ Experience desktop-grade pixel art creation directly in your browser with zero i
 
 ## 🎮 Unity 2D Integration Step-by-Step
 
+![Unity 2D Spritesheet Package Architecture](noiradix-export-unity.png)
+*Complete architecture of NOIRADIX Studio's game exporter: Sub-pixel bleed guard, automatic C# importer, frame slicing, and .anim clip synthesis.*
+
+---
+
 ### Step 1: Export Game Package from NOIRADIX Studio
 ![Step 1 - Export Modal in Studio](noiradix-export-unity-1.png)
 *Select Unity 2D Sprite Package, 1px bleed guard padding, and extrude edge pixels.*
@@ -85,7 +90,10 @@ Experience desktop-grade pixel art creation directly in your browser with zero i
 
 ### Step 7: Live in Scene & Game Playback
 ![Step 8 - Live In Scene Walk Animation](noiradix-export-unity-8-gif.gif)
-*Watch the character animate with zero texture bleeding inside the live Unity scene.*
+*Real-time animated walk cycle playback inside Unity 6 with 6 FPS timing.*
+
+![Step 8 - Scene View Detail](noiradix-export-unity-8.png)
+*Crisp point-filtered sprite rendering aligned with scene lights and colliders.*
 
 ---
 
