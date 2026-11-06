@@ -10,7 +10,7 @@ class EditorState {
     this.openCellTabs = []; // Array of cellIds currently open as tabs
 
     // Active tool state
-    this.currentTool = 'pen'; // 'pen' | 'eraser' | 'picker' | 'bucket' | 'line' | 'rect' | 'select'
+    this.currentTool = 'pen'; // 'pen' | 'eraser' | 'picker' | 'bucket' | 'line' | 'rect' | 'select' | 'pan'
     this.primaryColor = '#57546f';
     this.secondaryColor = '#ffffff';
 
@@ -25,6 +25,7 @@ class EditorState {
     this.cellZoom = 24; // 1 pixel = 24 screen pixels
     this.cellPanX = 0;
     this.cellPanY = 0;
+    this.hasCenteredCellPan = false;
 
     // Viewport for Grid Overview
     this.gridZoom = 4; // 4x scale

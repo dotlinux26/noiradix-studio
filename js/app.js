@@ -1229,9 +1229,6 @@
       if (ctx.roundRect) ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
       else ctx.rect(badgeX, badgeY, badgeW, badgeH);
       ctx.fill();
-      ctx.strokeStyle = isDark ? '#4b5563' : '#94a3b8';
-      ctx.lineWidth = 1;
-      ctx.stroke();
 
       ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
       ctx.font = 'bold 12px "Segoe UI", system-ui, -apple-system, sans-serif';
@@ -1282,9 +1279,6 @@
       if (ctx.roundRect) ctx.roundRect(cardX, cardY, cardW, cardH, 8);
       else ctx.rect(cardX, cardY, cardW, cardH);
       ctx.fill();
-      ctx.strokeStyle = isDark ? '#4b5563' : '#94a3b8';
-      ctx.lineWidth = 1;
-      ctx.stroke();
 
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
@@ -4176,13 +4170,31 @@
   // ANCHOR-CENTERED ZOOM & SMOOTH PANNING
   // ===========================================================================
 
+  let panX = 0;
+  let panY = 0;
+
+  function applyCanvasTransform() {
+    if (!dom.canvasContainerWithRulers) return;
+    if (panX === 0 && panY === 0) {
+      dom.canvasContainerWithRulers.style.transform = '';
+    } else {
+      dom.canvasContainerWithRulers.style.transform = `translate(${panX}px, ${panY}px)`;
+    }
+  }
+
+  function centerCellCanvas() {
+    panX = 0;
+    panY = 0;
+    applyCanvasTransform();
+  }
+
   function initCanvasPanningAndZoom() {
     if (!dom.canvasViewport) return;
 
     let isSpacePressed = false;
     let isPanning = false;
     let startX = 0, startY = 0;
-    let scrollLeft = 0, scrollTop = 0;
+    let dragStartPanX = 0, dragStartPanY = 0;
 
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
@@ -4209,8 +4221,8 @@
         isPanning = true;
         startX = e.clientX;
         startY = e.clientY;
-        scrollLeft = dom.canvasViewport.scrollLeft;
-        scrollTop = dom.canvasViewport.scrollTop;
+        dragStartPanX = panX;
+        dragStartPanY = panY;
         dom.canvasViewport.classList.add('is-panning');
         e.preventDefault();
       }
@@ -4220,8 +4232,9 @@
       if (!isPanning) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      dom.canvasViewport.scrollLeft = scrollLeft - dx;
-      dom.canvasViewport.scrollTop = scrollTop - dy;
+      panX = Math.round(dragStartPanX + dx);
+      panY = Math.round(dragStartPanY + dy);
+      applyCanvasTransform();
     });
 
     window.addEventListener('mouseup', () => {
@@ -4240,39 +4253,29 @@
       const newZoom = Math.max(4, Math.min(64, oldZoom + delta));
       if (newZoom === oldZoom) return;
 
-      // Determine pixel anchor: hovered pixel OR selection center OR cell center
-      let anchorPx, anchorPy;
-      let mouseCanvasX, mouseCanvasY;
+      const cw = state.doc ? state.doc.meta.cellSize.w : 16;
+      const ch = state.doc ? state.doc.meta.cellSize.h : 16;
 
-      if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        mouseCanvasX = e.clientX - rect.left;
-        mouseCanvasY = e.clientY - rect.top;
-        anchorPx = mouseCanvasX / oldZoom;
-        anchorPy = mouseCanvasY / oldZoom;
-      } else if (state.selection) {
-        anchorPx = state.selection.x + state.selection.w / 2;
-        anchorPy = state.selection.y + state.selection.h / 2;
-        mouseCanvasX = anchorPx * oldZoom;
-        mouseCanvasY = anchorPy * oldZoom;
-      } else {
-        const cw = state.doc ? state.doc.meta.cellSize.w : 16;
-        const ch = state.doc ? state.doc.meta.cellSize.h : 16;
-        anchorPx = cw / 2;
-        anchorPy = ch / 2;
-        mouseCanvasX = anchorPx * oldZoom;
-        mouseCanvasY = anchorPy * oldZoom;
-      }
+      // Unscaled point under mouse cursor
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const unscaledX = mx / oldZoom;
+      const unscaledY = my / oldZoom;
 
       state.cellZoom = newZoom;
       renderCellEditor();
       renderCellRulers();
       updateStatusBarCoords(null, null);
 
-      // Adjust viewport scroll so anchor pixel remains stationary under cursor
-      const newMouseCanvasX = anchorPx * newZoom;
-      const newMouseCanvasY = anchorPy * newZoom;
-      dom.canvasViewport.scrollLeft += (newMouseCanvasX - mouseCanvasX);
-      dom.canvasViewport.scrollTop += (newMouseCanvasY - mouseCanvasY);
+      // Keep pixel under mouse cursor stationary:
+      const deltaW = (cw * (newZoom - oldZoom)) / 2;
+      const deltaH = (ch * (newZoom - oldZoom)) / 2;
+      const pixelShiftX = unscaledX * (newZoom - oldZoom);
+      const pixelShiftY = unscaledY * (newZoom - oldZoom);
+
+      panX += Math.round(deltaW - pixelShiftX);
+      panY += Math.round(deltaH - pixelShiftY);
+      applyCanvasTransform();
     }, { passive: false });
   }
 
@@ -5746,10 +5749,7 @@ namespace NOIRADIX.Editor
 
       if (btn.dataset.tool === 'pan') {
         btn.addEventListener('dblclick', () => {
-          if (dom.canvasViewport) {
-            dom.canvasViewport.scrollLeft = Math.max(0, (dom.canvasViewport.scrollWidth - dom.canvasViewport.clientWidth) / 2);
-            dom.canvasViewport.scrollTop = Math.max(0, (dom.canvasViewport.scrollHeight - dom.canvasViewport.clientHeight) / 2);
-          }
+          centerCellCanvas();
           showToast('Canvas centered');
         });
       }
@@ -5908,18 +5908,46 @@ namespace NOIRADIX.Editor
       }
     });
 
-    dom.gridCanvas.addEventListener('contextmenu', (e) => {
+    const handleGridContextMenu = (e) => {
       e.preventDefault();
       closeContextMenu();
-      const rect = dom.gridCanvas.getBoundingClientRect();
-      const cellId = getGridCellFromPos(e.clientX - rect.left, e.clientY - rect.top);
-      if (cellId) {
-        selectedGridCellId = cellId;
+
+      let clickedCellId = null;
+      if (dom.gridCanvas) {
+        const rect = dom.gridCanvas.getBoundingClientRect();
+        clickedCellId = getGridCellFromPos(e.clientX - rect.left, e.clientY - rect.top);
+      }
+
+      // 1. If clicked on a specific cell -> select and open context menu
+      if (clickedCellId) {
+        selectedGridCellId = clickedCellId;
         renderGridOverview();
         updateGridInspectorUI();
-        openGridContextMenu(e.clientX, e.clientY, cellId);
+        openGridContextMenu(e.clientX, e.clientY, clickedCellId);
+        return;
       }
-    });
+
+      // 2. If clicked on empty area or viewport, but a cell was already focused -> open menu for focused cell
+      if (selectedGridCellId) {
+        openGridContextMenu(e.clientX, e.clientY, selectedGridCellId);
+        return;
+      }
+
+      // 3. Fallback: select first cell if none selected
+      const firstCellId = Object.keys(state.doc ? state.doc.cells : {})[0];
+      if (firstCellId) {
+        selectedGridCellId = firstCellId;
+        renderGridOverview();
+        updateGridInspectorUI();
+        openGridContextMenu(e.clientX, e.clientY, firstCellId);
+      }
+    };
+
+    dom.gridCanvas.addEventListener('contextmenu', handleGridContextMenu);
+    const gridViewport = document.querySelector('.grid-canvas-viewport');
+    if (gridViewport) {
+      gridViewport.addEventListener('contextmenu', handleGridContextMenu);
+    }
 
     dom.gridCanvas.addEventListener('dblclick', (e) => {
       const rect = dom.gridCanvas.getBoundingClientRect();
@@ -7063,14 +7091,11 @@ namespace NOIRADIX.Editor
       if ((e.ctrlKey || e.metaKey) && key === '0') {
         e.preventDefault();
         state.cellZoom = 24;
+        centerCellCanvas();
         renderCellEditor();
         renderCellRulers();
         updateStatusBarCoords(null, null);
-        if (dom.canvasViewport) {
-          dom.canvasViewport.scrollLeft = Math.max(0, (dom.canvasViewport.scrollWidth - dom.canvasViewport.clientWidth) / 2);
-          dom.canvasViewport.scrollTop = Math.max(0, (dom.canvasViewport.scrollHeight - dom.canvasViewport.clientHeight) / 2);
-        }
-        showToast('Zoom reset to 24× (Ctrl+0)');
+        showToast('Zoom reset to 24× and centered (Ctrl+0)');
         return;
       }
 
