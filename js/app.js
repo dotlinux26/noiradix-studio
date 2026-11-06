@@ -19,7 +19,7 @@
   // Desktop File & Autosave State
   let currentFileHandle = null;
   let currentFileName = 'player_wispling.pix2';
-  let currentFilePath = 'D:\\ghoster\\noiradix-studio\\samples\\player_wispling.pix2';
+  let currentFilePath = null;
   let isDocumentDirty = false;
   let periodicAutosaveTimer = null;
   let debouncedAutosaveTimer = null;
@@ -133,7 +133,7 @@
       if (savedHandle) {
         currentFileHandle = savedHandle;
         currentFileName = savedHandle.name;
-        currentFilePath = localStorage.getItem('noiradix_active_file_path') || `D:\\ghoster\\noiradix-studio\\${savedHandle.name}`;
+        currentFilePath = localStorage.getItem('noiradix_active_file_path') || savedHandle.name;
 
         let docLoaded = false;
 
@@ -597,9 +597,9 @@
 
     if (filePathText && filePathPill) {
       if (isLocal) {
-        const full = currentFilePath || (currentFileHandle ? `D:\\ghoster\\noiradix-studio\\${currentFileHandle.name}` : 'Unknown Path');
+        const full = currentFilePath || (currentFileHandle ? currentFileHandle.name : currentFileName || 'player_wispling.pix2');
         filePathText.textContent = formatTruncatedPath(full);
-        filePathPill.title = `Full Path: ${full}\nClick to copy full path`;
+        filePathPill.title = `File: ${full}\nClick to copy file name`;
         filePathPill.style.display = 'inline-flex';
       } else {
         filePathText.textContent = 'Unsaved Project (Memory)';
@@ -706,7 +706,7 @@
     }
     currentFileHandle = null;
     currentFileName = 'player_wispling.pix2';
-    currentFilePath = 'D:\\ghoster\\noiradix-studio\\samples\\player_wispling.pix2';
+    currentFilePath = null;
     selectedGridCellId = 'cell_0_0';
     setDirty(false);
     refreshAll();
@@ -3558,7 +3558,7 @@
         const doc = PIX2.parse(text);
         currentFileHandle = handle;
         currentFileName = file.name;
-        currentFilePath = `D:\\ghoster\\noiradix-studio\\${file.name}`;
+        currentFilePath = file.name;
         await persistFileHandle(handle);
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
@@ -3635,7 +3635,7 @@
         await writable.close();
         currentFileHandle = handle;
         currentFileName = handle.name;
-        currentFilePath = `D:\\ghoster\\noiradix-studio\\${handle.name}`;
+        currentFilePath = handle.name;
         await persistFileHandle(handle);
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
@@ -3759,10 +3759,10 @@ USER INSTRUCTION:
   }
 
   function getExportOptions() {
-    const spacing = parseInt(dom.exportSpacingSelect?.value || '1', 10);
-    const margin = parseInt(dom.exportMarginSelect?.value || '1', 10);
+    const spacing = Math.max(0, Math.min(16, parseInt(dom.exportSpacingSelect?.value || '1', 10) || 0));
+    const margin = Math.max(0, Math.min(32, parseInt(dom.exportMarginSelect?.value || '1', 10) || 0));
     const extrude = dom.exportExtrudeCheckbox ? dom.exportExtrudeCheckbox.checked : false;
-    const scale = parseInt(dom.exportScaleSelect?.value || '1', 10);
+    const scale = Math.max(1, Math.min(8, parseInt(dom.exportScaleSelect?.value || '1', 10) || 1));
     const pivotChoice = dom.exportPivotSelect?.value || 'bottom-center';
 
     let pivot = { x: 0.5, y: 0.0 };
@@ -3786,6 +3786,11 @@ USER INSTRUCTION:
 
     const atlasW = margin * 2 + cols * scw + Math.max(0, cols - 1) * spacing;
     const atlasH = margin * 2 + rows * sch + Math.max(0, rows - 1) * spacing;
+
+    if (atlasW <= 0 || atlasH <= 0 || atlasW > 16384 || atlasH > 16384) {
+      showToast('Calculated atlas size exceeds browser canvas limits (16384px).', 'error');
+      return null;
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = atlasW;
@@ -4031,7 +4036,8 @@ USER INSTRUCTION:
     const atlasData = generateAtlasCanvas(opts);
     if (!atlasData) return;
 
-    const baseName = (state.doc.meta.title || 'sprite_atlas').toLowerCase().replace(/\s+/g, '_');
+    const rawBaseName = (state.doc.meta.title || 'sprite_atlas').toLowerCase().replace(/\s+/g, '_');
+    const baseName = sanitizeSafeFilename(rawBaseName, 'sprite_atlas');
     const pngName = `${baseName}.png`;
 
     if (currentExportFormat === 'png-only') {
@@ -4119,7 +4125,8 @@ namespace NOIRADIX.Editor
                 string jsonText = File.ReadAllText(fullJsonPath);
                 Pix2Data data = JsonUtility.FromJson<Pix2Data>(jsonText);
                 string dir = Path.GetDirectoryName(fullJsonPath);
-                string pngPath = Path.Combine(dir, data.meta.image);
+                string safeImageName = Path.GetFileName(data.meta.image);
+                string pngPath = Path.Combine(dir, safeImageName);
                 string assetPngPath = ToAssetPath(pngPath);
 
                 TextureImporter importer = AssetImporter.GetAtPath(assetPngPath) as TextureImporter;
@@ -4185,7 +4192,8 @@ namespace NOIRADIX.Editor
       // TexturePacker Hash Format
       const tpFrames = {};
       atlasData.frameRects.forEach(fr => {
-        tpFrames[fr.name] = {
+        const safeFrameName = PIX2.sanitizeKey(fr.name || fr.id);
+        tpFrames[safeFrameName] = {
           frame: { x: fr.x, y: fr.y, w: fr.w, h: fr.h },
           rotated: false,
           trimmed: false,
@@ -4198,6 +4206,7 @@ namespace NOIRADIX.Editor
       const tpAnimations = {};
       const anims = state.doc.animations || {};
       for (const k in anims) {
+        if (!PIX2.isSafeIdentifier(k)) continue;
         tpAnimations[k] = (anims[k].frames || []).map(cid => {
           const c = state.doc.cells[cid];
           return (c && c.name) ? c.name : cid;
@@ -5198,12 +5207,12 @@ namespace NOIRADIX.Editor
     const filePathPill = document.getElementById('file-path-pill');
     if (filePathPill) {
       filePathPill.addEventListener('click', () => {
-        const full = currentFilePath || (currentFileHandle ? `D:\\ghoster\\noiradix-studio\\${currentFileHandle.name}` : null);
+        const full = currentFilePath || (currentFileHandle ? currentFileHandle.name : currentFileName);
         if (full) {
           navigator.clipboard.writeText(full).then(() => {
-            showToast(`Copied path: ${full}`, 'success');
+            showToast(`Copied file: ${full}`, 'success');
           }).catch(() => {
-            prompt('File path (Press Ctrl+C to copy):', full);
+            prompt('File name (Press Ctrl+C to copy):', full);
           });
         } else {
           showToast('Project is in memory draft. Click Save to save to disk.');
@@ -5214,12 +5223,12 @@ namespace NOIRADIX.Editor
     const btnReveal = document.getElementById('btn-reveal-explorer');
     if (btnReveal) {
       btnReveal.addEventListener('click', () => {
-        const full = currentFilePath || (currentFileHandle ? `D:\\ghoster\\noiradix-studio\\${currentFileHandle.name}` : null);
+        const full = currentFilePath || (currentFileHandle ? currentFileHandle.name : currentFileName);
         if (full) {
           navigator.clipboard.writeText(full).then(() => {
-            showToast(`Copied path: "${full}" (Paste in Explorer or Run to open)`, 'success');
+            showToast(`Copied file: "${full}"`, 'success');
           }).catch(() => {
-            prompt('File path in Explorer:', full);
+            prompt('File name:', full);
           });
         } else {
           showToast('File is not yet saved to disk. Click Save first.', 'info');

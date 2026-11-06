@@ -1700,6 +1700,7 @@ body {
   gap: 12px;
   flex-shrink: 0;
   white-space: nowrap;
+  min-width: max-content;
 }
 
 .status-right {
@@ -1709,8 +1710,7 @@ body {
   flex-shrink: 0;
   white-space: nowrap;
   margin-left: auto;
-  padding-left: 16px;
-  border-left: 1px solid var(--border-subtle);
+  min-width: max-content;
 }
 
 .status-item {
