@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOIRADIX Studio - AI-Native Sprite Editor</title>
+
+  <!-- Local Font Awesome 6 (Offline First) with CDN Fallback -->
+  <link rel="stylesheet" href="css/fontawesome/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onerror="this.onerror=null;">
+
+  <!-- Studio Custom CSS -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="light-theme">
+
+  <!-- ================= TOP NAVIGATION / APP HEADER ================= -->
+  <header class="studio-header">
+    <div class="header-left">
+      <div class="brand-badge" title="NOIRADIX Studio v1.0">
+        <i class="fa-solid fa-layer-group brand-icon"></i>
+        <span class="brand-title">NOIRADIX</span>
+        <span class="brand-ver">v1.0</span>
+      </div>
+
+      <div class="title-input-wrapper">
+        <input type="text" id="project-title-input" class="modern-input" value="Player Wispling" title="Rename project">
+      </div>
+    </div>
+
+    <div class="header-center">
+      <!-- Resolution Presets -->
+      <div class="pill-group" title="Change Cell Pixel Resolution">
+        <span class="pill-label">Cell Res:</span>
+        <button class="pill-btn" data-res="16x16">16×16</button>
+        <button class="pill-btn" data-res="24x24">24×24</button>
+        <button class="pill-btn" data-res="32x32">32×32</button>
+        <button class="pill-btn" data-res="64x64">64×64</button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button id="btn-toggle-float-anim" class="btn btn-secondary btn-compact" title="Toggle Floating Animation Preview">
+        <i class="fa-solid fa-film"></i>
+        <span class="btn-text">Preview</span>
+      </button>
+
+      <button id="btn-theme-toggle" class="btn btn-secondary btn-compact" title="Switch Theme (Light / Dark)">
+        <i class="fa-solid fa-moon"></i>
+        <span class="btn-text" id="theme-btn-label">Dark</span>
+      </button>
+
+      <button id="btn-open-spec" class="btn btn-secondary btn-compact" title="View PIX2 Specification & AI Prompts">
+        <i class="fa-solid fa-book-bookmark"></i>
+        <span class="btn-text">Spec</span>
+      </button>
+
+      <button id="btn-load-demo" class="btn btn-secondary btn-compact" title="Load Wispling Demo Sprite">
+        <i class="fa-solid fa-ghost"></i>
+        <span class="btn-text">Demo</span>
+      </button>
+
+      <button id="btn-new-file" class="btn btn-secondary btn-compact" title="New Blank Sprite Sheet (Ctrl+N)">
+        <i class="fa-solid fa-file-circle-plus"></i>
+        <span class="btn-text">New</span>
+      </button>
+
+      <button id="btn-open-file" class="btn btn-secondary btn-compact" title="Open .pix2 or Import PNG (Ctrl+O)">
+        <i class="fa-solid fa-folder-open"></i>
+        <span class="btn-text">Open</span>
+      </button>
+
+      <div class="save-actions-group">
+        <button id="btn-save-pix2" class="btn btn-primary" title="Save directly to disk (Ctrl+S)">
+          <i class="fa-solid fa-floppy-disk"></i>
+          <span>Save</span>
+        </button>
+        <button id="btn-save-as-pix2" class="btn btn-secondary" title="Save as new file (Ctrl+Shift+S)">
+          <i class="fa-solid fa-file-arrow-down"></i>
+          <span class="btn-text">Save As...</span>
+        </button>
+      </div>
+
+      <div class="export-group">
+        <button id="btn-export-atlas" class="btn btn-accent btn-compact" title="Open Game Export Studio (Atlas PNG, Unity, Godot, TexturePacker)">
+          <i class="fa-solid fa-file-export"></i>
+          <span class="btn-text">Export</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= SECONDARY TAB BAR ================= -->
+  <nav class="studio-tab-bar" id="tabs-container">
+    <!-- Rendered dynamically by app.js:
+         [Grid Overview] [🎬 Animation Studio] [Down 0 (0,0) x] [</> PIX2 Code & AI] -->
+  </nav>
+
+  <!-- ================= MAIN WORKSPACE AREA ================= -->
+  <main class="studio-main">
+
+    <!-- 1. VIEW: GRID OVERVIEW -->
+    <section id="view-grid-overview" class="view-panel active">
+      <div class="grid-view-main">
+        <div class="view-sub-toolbar">
+          <div class="toolbar-section">
+            <span class="toolbar-title"><i class="fa-solid fa-table-cells"></i> Sprite Sheet Layout</span>
+            <span class="sub-text">Click to inspect & assign; Double-click to edit pixels</span>
+          </div>
+
+          <div class="toolbar-section">
+            <!-- Row & Column Management (Intelligent Selection-Aware & Direct Selection Dropdown) -->
+            <div class="btn-group">
+              <button id="btn-grid-add-row" class="btn btn-sm btn-secondary" title="Add Row to Sheet"><i class="fa-solid fa-plus"></i> Row</button>
+              <button id="btn-grid-remove-row" class="btn btn-sm btn-secondary" title="Delete Selected Row"><i class="fa-solid fa-minus"></i> Row</button>
+              <button id="btn-grid-add-col" class="btn btn-sm btn-secondary" title="Add Column to Sheet"><i class="fa-solid fa-plus"></i> Col</button>
+              <button id="btn-grid-remove-col" class="btn btn-sm btn-secondary" title="Delete Selected Column"><i class="fa-solid fa-minus"></i> Col</button>
+            </div>
+
+            <div class="bar-separator"></div>
+
+            <button id="btn-quick-4dir" class="btn btn-sm btn-accent" title="Generate 4-Direction Character Template (Down, Up, Right, Left)">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Auto 4-Dir
+            </button>
+            <button id="btn-quick-8dir" class="btn btn-sm btn-secondary" title="Generate 8-Direction Character Template (Full 8-Way RPG)">
+              <i class="fa-solid fa-compass"></i> Auto 8-Dir
+            </button>
+            <div class="bar-separator"></div>
+            <button id="btn-sheet-flip-h" class="btn btn-sm btn-secondary" title="Flip whole sheet horizontally">
+              <i class="fa-solid fa-arrows-left-right"></i> Flip H
+            </button>
+            <button id="btn-sheet-flip-v" class="btn btn-sm btn-secondary" title="Flip whole sheet vertically">
+              <i class="fa-solid fa-arrows-up-down"></i> Flip V
+            </button>
+            <button id="btn-sheet-align-center" class="btn btn-sm btn-secondary" title="Align all cells to center">
+              <i class="fa-solid fa-align-center"></i> Center All
+            </button>
+          </div>
+        </div>
+
+        <div class="grid-canvas-viewport">
+          <canvas id="grid-canvas" class="pixel-art-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Grid Overview Right Inspector Sidebar -->
+      <aside class="right-sidebar grid-inspector-sidebar">
+        <!-- Unified Row & Cell Inspector Sidebar -->
+        <div class="sidebar-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-crosshairs"></i> Inspector</span>
+            <div class="flex-row gap-4 align-center">
+              <span id="grid-inspector-row-label" class="info-badge badge-accent" style="font-weight: 600;">Row 0</span>
+              <span id="grid-selected-badge" class="info-badge">cell_0_0</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <label class="form-label">Row Animation State:</label>
+            <div class="flex-row gap-4">
+              <select id="grid-cell-anim" class="modern-select full-width" title="Animation state assigned to this entire row"></select>
+              <button id="btn-add-anim-clip" class="btn btn-sm btn-secondary" title="Create new animation state for this row"><i class="fa-solid fa-plus"></i></button>
+            </div>
+
+            <label class="form-label" style="margin-top: 10px;">Cell Identifier (ID):</label>
+            <input type="text" id="grid-cell-id" class="modern-input full-width" value="cell_0_0" placeholder="e.g. hero_idle_01" readonly style="opacity: 0.8; font-family: monospace;">
+
+            <label class="form-label" style="margin-top: 8px;">Frame Display Name:</label>
+            <input type="text" id="grid-cell-name" class="modern-input full-width" value="Down 0" placeholder="Frame name...">
+
+            <label class="form-label" style="margin-top: 8px;">Direction Tag:</label>
+            <select id="grid-cell-dir" class="modern-select full-width">
+              <option value="none">None / Neutral</option>
+              <option value="down">Down (S)</option>
+              <option value="up">Up (W)</option>
+              <option value="right">Right (D)</option>
+              <option value="left">Left (A)</option>
+              <option value="down_right">Down-Right (SE)</option>
+              <option value="down_left">Down-Left (SW)</option>
+              <option value="up_right">Up-Right (NE)</option>
+              <option value="up_left">Up-Left (NW)</option>
+            </select>
+
+            <div class="flex-row gap-8" style="margin-top: 12px;">
+              <button id="btn-grid-open-editor" class="btn btn-primary full-width" title="Open this cell in Cell Editor tab">
+                <i class="fa-solid fa-pen-to-square"></i> Edit Frame Pixels
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Animation Clips List -->
+        <div class="sidebar-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-film"></i> Animation Sequences</span>
+            <button id="btn-quick-new-anim" class="btn btn-sm btn-secondary" title="New Animation Clip"><i class="fa-solid fa-plus"></i></button>
+          </div>
+          <div class="card-body">
+            <div id="anim-clips-list" class="anim-clips-container"></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 2. VIEW: CELL EDITOR -->
+    <section id="view-cell-editor" class="view-panel">
+      <!-- Left Drawing Tools Column -->
+      <aside class="tools-sidebar">
+        <div class="tool-btn-group">
+          <button class="tool-btn active" data-tool="pen" title="Pencil (B) - 1px pixel draw">
+            <i class="fa-solid fa-pencil"></i>
+          </button>
+          <button class="tool-btn" data-tool="eraser" title="Eraser (E) - Transparent pixel">
+            <i class="fa-solid fa-eraser"></i>
+          </button>
+          <button class="tool-btn" data-tool="picker" title="Eyedropper (I) - Pick color">
+            <i class="fa-solid fa-eye-dropper"></i>
+          </button>
+          <button class="tool-btn" data-tool="bucket" title="Paint Bucket (G) - Flood fill">
+            <i class="fa-solid fa-fill-drip"></i>
+          </button>
+          <button class="tool-btn" data-tool="line" title="Line Tool (L) - Straight pixel line">
+            <i class="fa-solid fa-slash"></i>
+          </button>
+          <button class="tool-btn" data-tool="rect" title="Rectangle Tool (U) - Outline box">
+            <i class="fa-regular fa-square"></i>
+          </button>
+          <button class="tool-btn" data-tool="select" title="Selection Marquee (V / M)">
+            <i class="fa-solid fa-crop-simple"></i>
+          </button>
+        </div>
+
+        <div class="tool-divider"></div>
+
+        <div class="tool-btn-group">
+          <button id="btn-symmetry-toggle" class="tool-btn" title="Toggle Symmetry Mirror (S) - Vertical Axis">
+            <i class="fa-solid fa-arrows-split-up-and-left"></i>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Center Canvas Work Area -->
+      <div class="cell-editor-center">
+        <!-- Top Cell Action Toolbar -->
+        <div class="cell-top-bar">
+          <div class="cell-action-group">
+            <button id="btn-align-center" class="icon-action-btn" title="Align bounding box to center">
+              <i class="fa-solid fa-align-center"></i>
+            </button>
+            <button id="btn-flip-h" class="icon-action-btn" title="Flip Horizontal">
+              <i class="fa-solid fa-arrows-left-right"></i>
+            </button>
+            <button id="btn-flip-v" class="icon-action-btn" title="Flip Vertical">
+              <i class="fa-solid fa-arrows-up-down"></i>
+            </button>
+            <button id="btn-rotate-90" class="icon-action-btn" title="Rotate 90° Clockwise">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+          </div>
+
+          <div class="bar-separator"></div>
+
+          <div class="cell-action-group">
+            <button id="btn-grid-lines-toggle" class="icon-action-btn active" title="Toggle Pixel Grid Lines">
+              <i class="fa-solid fa-border-all"></i>
+            </button>
+            <button id="btn-zoom-out" class="icon-action-btn" title="Zoom Out (Alt+Wheel / Minus)">
+              <i class="fa-solid fa-magnifying-glass-minus"></i>
+            </button>
+            <button id="btn-zoom-in" class="icon-action-btn" title="Zoom In (Alt+Wheel / Plus)">
+              <i class="fa-solid fa-magnifying-glass-plus"></i>
+            </button>
+            <button id="btn-clear-cell" class="icon-action-btn text-danger" title="Clear all pixels in cell">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+
+          <div class="bar-spacer"></div>
+
+          <div class="cell-info-badges">
+            <span id="label-cell-resolution" class="info-badge">16 × 16 px</span>
+            <span id="label-mouse-coords" class="info-badge">X: 0, Y: 0</span>
+          </div>
+        </div>
+
+        <!-- Centered Canvas Viewport with Perfectly Attached Rulers -->
+        <div class="canvas-viewport" id="canvas-viewport">
+          <div class="canvas-container-with-rulers" id="canvas-container-with-rulers">
+            <div class="ruler-corner"></div>
+            <div id="ruler-top" class="ruler-top-bar"></div>
+            <div id="ruler-left" class="ruler-left-bar"></div>
+            <div class="canvas-stack" id="canvas-stack">
+              <canvas id="cell-canvas" class="pixel-art-canvas"></canvas>
+              <canvas id="cell-overlay" class="pixel-art-canvas"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar: Palettes, Info & Preview -->
+      <aside class="right-sidebar">
+        <!-- Mini Preview -->
+        <div class="sidebar-card">
+          <div class="card-header flex-between">
+            <span><i class="fa-regular fa-eye"></i> Preview</span>
+            <div class="preview-zoom-pills" id="preview-zoom-group" title="Preview Zoom Level">
+              <button class="pill-btn-xs" data-scale="2">2×</button>
+              <button class="pill-btn-xs" data-scale="4">4×</button>
+              <button class="pill-btn-xs active" data-scale="6">6×</button>
+              <button class="pill-btn-xs" data-scale="8">8×</button>
+            </div>
+          </div>
+          <div class="card-body preview-body">
+            <canvas id="mini-preview-canvas" class="pixel-art-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Color Palette Card -->
+        <div class="sidebar-card palette-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-palette"></i> Palette</span>
+            <select id="palette-select" class="modern-select">
+              <option value="wispling">Wispling Ghost</option>
+              <option value="pico8">Pico-8</option>
+              <option value="gameboy">GameBoy</option>
+              <option value="endesga32">Endesga 32</option>
+            </select>
+          </div>
+
+          <div class="card-body">
+            <!-- Active Color Previews -->
+            <div class="color-swatch-row">
+              <div class="color-indicator-pair" title="Click or press (X) to swap primary/secondary; (D) to reset">
+                <div id="color-primary" class="color-box primary" title="Primary (Left Click)"></div>
+                <div id="color-secondary" class="color-box secondary" title="Secondary (Right Click)"></div>
+              </div>
+
+              <input type="color" id="color-picker-input" class="modern-color-input" value="#57546f">
+
+              <button id="btn-add-color" class="btn btn-sm btn-secondary" title="Add color to palette">
+                <i class="fa-solid fa-plus"></i> Add
+              </button>
+            </div>
+
+            <!-- Swatches Grid -->
+            <div id="palette-swatches" class="palette-swatches-grid"></div>
+          </div>
+        </div>
+
+        <!-- Cell Details -->
+        <div class="sidebar-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-tag"></i> Frame & Animation Info</span>
+          </div>
+          <div class="card-body">
+            <label class="form-label">Frame Name:</label>
+            <input type="text" id="cell-name-input" class="modern-input full-width" value="Down 0">
+
+            <label class="form-label" style="margin-top: 8px;">Animation State:</label>
+            <select id="cell-anim-select" class="modern-select full-width"></select>
+
+            <label class="form-label" style="margin-top: 8px;">Direction Tag:</label>
+            <select id="cell-dir-select" class="modern-select full-width">
+              <option value="none">None / Neutral</option>
+              <option value="down">Down (S)</option>
+              <option value="up">Up (W)</option>
+              <option value="right">Right (D)</option>
+              <option value="left">Left (A)</option>
+              <option value="down_right">Down-Right (SE)</option>
+              <option value="down_left">Down-Left (SW)</option>
+              <option value="up_right">Up-Right (NE)</option>
+              <option value="up_left">Up-Left (NW)</option>
+            </select>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 3. VIEW: DEDICATED ANIMATION STUDIO WORKSPACE -->
+    <section id="view-anim-studio" class="view-panel">
+      <!-- Left Animation Clips Manager -->
+      <aside class="left-sidebar anim-clips-sidebar">
+        <div class="sidebar-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-film"></i> Animation Clips</span>
+            <button id="btn-studio-add-anim" class="btn btn-sm btn-accent" title="Create New Animation Clip">
+              <i class="fa-solid fa-plus"></i> New
+            </button>
+          </div>
+          <div class="card-body">
+            <div id="studio-anim-list" class="anim-clips-container"></div>
+          </div>
+        </div>
+
+        <!-- Selected Clip Properties -->
+        <div class="sidebar-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-sliders"></i> Clip Properties</span>
+          </div>
+          <div class="card-body">
+            <label class="form-label">Clip Identifier / Name:</label>
+            <input type="text" id="studio-clip-name" class="modern-input full-width">
+
+            <label class="form-label" style="margin-top: 8px;">Playback FPS:</label>
+            <div class="flex-row gap-8">
+              <input type="range" id="studio-clip-fps" min="1" max="30" value="6" class="modern-slider">
+              <span id="studio-clip-fps-label" class="info-badge">6 fps</span>
+            </div>
+
+            <label class="form-label" style="margin-top: 8px;">Playback Mode:</label>
+            <select id="studio-clip-mode" class="modern-select full-width">
+              <option value="loop">Loop Continuously</option>
+              <option value="once">Play Once & Stop</option>
+              <option value="pingpong">Ping-Pong</option>
+            </select>
+
+            <label class="form-label" style="margin-top: 8px;">Direction Tag:</label>
+            <select id="studio-clip-dir" class="modern-select full-width">
+              <option value="none">None / Neutral</option>
+              <option value="down">Down (S)</option>
+              <option value="up">Up (W)</option>
+              <option value="right">Right (D)</option>
+              <option value="left">Left (A)</option>
+              <option value="down_right">Down-Right (SE)</option>
+              <option value="down_left">Down-Left (SW)</option>
+              <option value="up_right">Up-Right (NE)</option>
+              <option value="up_left">Up-Left (NW)</option>
+            </select>
+
+            <div class="flex-row gap-8" style="margin-top: 12px;">
+              <button id="btn-studio-delete-clip" class="btn btn-sm btn-secondary text-danger full-width" title="Delete this animation clip">
+                <i class="fa-solid fa-trash-can"></i> Delete Clip
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Frame Details in Animation Studio -->
+        <div class="sidebar-card" id="studio-frame-inspector-card">
+          <div class="card-header">
+            <span><i class="fa-solid fa-image"></i> Active Frame Info</span>
+            <span class="info-badge badge-primary" id="studio-frame-idx-badge">#0</span>
+          </div>
+          <div class="card-body">
+            <label class="form-label">Frame Cell ID:</label>
+            <input type="text" id="studio-frame-cell-id" class="modern-input full-width" readonly style="opacity: 0.8; font-family: monospace;">
+
+            <label class="form-label" style="margin-top: 8px;">Frame Display Name / Label:</label>
+            <input type="text" id="studio-frame-name-input" class="modern-input full-width" placeholder="Frame label...">
+
+            <button id="btn-studio-edit-frame-pixels" class="btn btn-sm btn-primary full-width" style="margin-top: 10px;" title="Open this frame in Cell Editor">
+              <i class="fa-solid fa-pen-to-square"></i> Edit Frame Pixels
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Animation Viewport & Interactive Timeline -->
+      <div class="anim-studio-center">
+        <!-- Top Toolbar -->
+        <div class="view-sub-toolbar">
+          <div class="toolbar-section">
+            <span class="toolbar-title"><i class="fa-solid fa-clapperboard"></i> <span id="studio-active-clip-title">Walk Down</span></span>
+            <span class="info-badge" id="studio-timeline-frame-counter">Frame 1 / 4</span>
+            <span class="info-badge badge-primary" id="studio-active-frame-pill" title="Current playing / selected frame">
+              <i class="fa-solid fa-tag"></i> <span id="studio-active-frame-text">Frame 0</span>
+            </span>
+          </div>
+
+          <div class="toolbar-section">
+            <button id="btn-studio-onion-skin" class="btn btn-sm btn-secondary" title="Toggle Onion Skinning (Ghost adjacent frames)">
+              <i class="fa-solid fa-ghost"></i> <span id="onion-skin-label">Onion Skin: OFF</span>
+            </button>
+            <div class="bar-separator"></div>
+            <button id="btn-studio-play" class="btn btn-sm btn-primary is-playing" title="Pause Animation">
+              <i class="fa-solid fa-pause"></i> Pause
+            </button>
+            <button id="btn-studio-prev" class="btn btn-sm btn-secondary" title="Previous frame">
+              <i class="fa-solid fa-backward-step"></i>
+            </button>
+            <button id="btn-studio-next" class="btn btn-sm btn-secondary" title="Next frame">
+              <i class="fa-solid fa-forward-step"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Big Center Canvas Viewport -->
+        <div class="anim-studio-viewport">
+          <div class="anim-studio-canvas-container">
+            <canvas id="studio-anim-canvas" class="pixel-art-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Bottom Timeline Strip (Frame Thumbnails with Reorder & Add) -->
+        <div class="anim-timeline-panel">
+          <div class="timeline-header">
+            <div class="flex-row gap-8 align-center">
+              <span><i class="fa-solid fa-film"></i> Frame Sequence Timeline</span>
+              <span class="info-badge badge-accent" id="timeline-selected-frame-info">Selected: #0</span>
+            </div>
+            <div class="timeline-actions">
+              <button id="btn-timeline-add-frame" class="btn btn-sm btn-accent" title="Append frame from cells">
+                <i class="fa-solid fa-plus"></i> Add Frame
+              </button>
+            </div>
+          </div>
+          <div class="timeline-frames-strip" id="timeline-frames-strip">
+            <!-- Dynamically populated frame cards -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. VIEW: CODE & AI STUDIO -->
+    <section id="view-code-editor" class="view-panel">
+      <div class="code-editor-layout">
+        <div class="code-pane">
+          <div class="code-pane-header">
+            <div class="code-title">
+              <i class="fa-solid fa-code"></i>
+              <span>.PIX2 Native Code</span>
+            </div>
+            <div class="code-actions">
+              <button id="btn-apply-code" class="btn btn-sm btn-accent" title="Apply changes directly to canvas">
+                <i class="fa-solid fa-bolt"></i> Apply to Canvas
+              </button>
+              <button id="btn-copy-ai-prompt" class="btn btn-sm btn-primary" title="Copy full AI prompt with instructions">
+                <i class="fa-solid fa-robot"></i> Copy for AI Prompt
+              </button>
+            </div>
+          </div>
+
+          <textarea id="pix2-code-text" class="code-textarea" spellcheck="false" placeholder="# .pix2 code will appear here..."></textarea>
+        </div>
+
+        <!-- AI Language Guide -->
+        <aside class="ai-guide-pane">
+          <div class="card-header">
+            <span><i class="fa-solid fa-book"></i> .PIX2 Specification Cheat Sheet</span>
+          </div>
+          <div class="ai-guide-content">
+            <h4>Format Structure:</h4>
+            <pre><code>@pix2 1.0
+
+@meta
+  title: "Player"
+  grid: 4x4
+  cell_size: 16x16
+
+@palette
+  1: #ffffff ; White body
+  2: #57546f ; Outline slate
+
+@cell down_0
+  name: "Down 0"
+  direction: down
+  frame: 0
+  pixel 5,1 2
+  pixel 6,1 1
+
+@animation walk_down
+  frames: [down_0, down_1]
+  fps: 6
+  loop: true
+
+@end</code></pre>
+
+            <h4>AI Drawing Commands:</h4>
+            <ul>
+              <li><code>pixel x,y &lt;pal_id|hex&gt;</code> — plot sparse pixel</li>
+              <li><code>p x,y &lt;pal_id|hex&gt;</code> — plot shorthand</li>
+              <li><code>dot x,y &lt;color&gt;</code> — single pixel</li>
+              <li><code>line x1,y1 x2,y2 &lt;color&gt;</code> — straight pixel line</li>
+              <li><code>rect x,y w,h &lt;color&gt; [outline|fill]</code> — box</li>
+              <li><code>fill x,y &lt;color&gt;</code> — flood fill</li>
+              <li><code>sym_dot x,y axisX &lt;color&gt;</code> — symmetric pixel pair</li>
+            </ul>
+
+            <div class="tip-box">
+              <i class="fa-solid fa-lightbulb"></i>
+              <span><strong>Zero Background:</strong> Never draw transparent pixels! Only coordinates with visible color are stored.</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= FLOATING ANIMATION STUDIO (4-DIR, 8-DIR & CUSTOM) ================= -->
+  <aside class="anim-floating-panel mode-4dir" id="anim-floating-panel">
+    <div class="anim-panel-header" id="anim-panel-drag-handle" title="Drag to move panel anywhere">
+      <div class="anim-title">
+        <i class="fa-solid fa-film"></i>
+        <span>Animation Studio</span>
+      </div>
+      <div class="anim-header-controls">
+        <select id="floating-anim-select" class="modern-select select-xs" title="Select Any Animation to Preview">
+          <!-- Dynamically populated: walk_down, walk_up, idle, attack, custom... -->
+        </select>
+        <select id="anim-mode-select" class="modern-select select-xs" title="Compass Mode">
+          <option value="4dir" selected>4-Dir</option>
+          <option value="8dir">8-Dir</option>
+        </select>
+        <button id="anim-panel-min-btn" class="icon-round-btn btn-xs" title="Minimize / Expand Panel">
+          <i class="fa-solid fa-minus"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="anim-panel-body">
+      <!-- Animated Preview Canvas -->
+      <div class="anim-canvas-wrapper">
+        <canvas id="anim-canvas" class="pixel-art-canvas"></canvas>
+      </div>
+
+      <!-- Direction Compass (Symmetrical D-Pad & 8-Way Dial) -->
+      <div class="direction-compass-container">
+        <div class="compass-grid">
+          <!-- Row 1: NW, N, NE -->
+          <button class="compass-btn dir-diagonal" data-dir="up_left" title="Up-Left (NW)"><i class="fa-solid fa-arrow-up" style="transform: rotate(-45deg);"></i></button>
+          <button class="compass-btn" data-dir="up" title="Up (W)"><i class="fa-solid fa-arrow-up"></i></button>
+          <button class="compass-btn dir-diagonal" data-dir="up_right" title="Up-Right (NE)"><i class="fa-solid fa-arrow-up" style="transform: rotate(45deg);"></i></button>
+
+          <!-- Row 2: W, Center, E -->
+          <button class="compass-btn" data-dir="left" title="Left (A)"><i class="fa-solid fa-arrow-left"></i></button>
+          <div class="compass-center"><i class="fa-solid fa-gamepad"></i></div>
+          <button class="compass-btn" data-dir="right" title="Right (D)"><i class="fa-solid fa-arrow-right"></i></button>
+
+          <!-- Row 3: SW, S, SE -->
+          <button class="compass-btn dir-diagonal" data-dir="down_left" title="Down-Left (SW)"><i class="fa-solid fa-arrow-down" style="transform: rotate(45deg);"></i></button>
+          <button class="compass-btn active" data-dir="down" title="Down (S)"><i class="fa-solid fa-arrow-down"></i></button>
+          <button class="compass-btn dir-diagonal" data-dir="down_right" title="Down-Right (SE)"><i class="fa-solid fa-arrow-down" style="transform: rotate(-45deg);"></i></button>
+        </div>
+      </div>
+
+      <!-- Playback Controls -->
+      <div class="anim-controls-row">
+        <button id="anim-step-prev" class="icon-round-btn" title="Previous frame"><i class="fa-solid fa-backward-step"></i></button>
+        <button id="anim-play-pause" class="icon-round-btn play-btn" title="Play / Pause"><i class="fa-solid fa-pause"></i></button>
+        <button id="anim-step-next" class="icon-round-btn" title="Next frame"><i class="fa-solid fa-forward-step"></i></button>
+
+        <div class="fps-control">
+          <input type="range" id="anim-fps-slider" min="1" max="24" value="6" class="modern-slider">
+          <span id="anim-fps-label">6 fps</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= STATUS BAR & COORDINATE HUD ================= -->
+  <footer class="studio-statusbar">
+    <div class="status-left">
+      <!-- File Status & Path Display (Bottom Statusbar) -->
+      <div class="file-status-group" id="file-status-group">
+        <span id="file-source-badge" class="file-source-badge local" title="File Source">
+          <i class="fa-solid fa-hard-drive"></i> <span id="file-source-text">Local</span>
+        </span>
+        <div id="file-path-pill" class="file-path-pill" title="Click to copy full path">
+          <span id="file-path-text">player_wispling.pix2</span>
+          <i class="fa-regular fa-copy copy-icon"></i>
+        </div>
+        <button id="btn-reveal-explorer" class="btn btn-xs btn-secondary" title="Copy file path to clipboard">
+          <i class="fa-regular fa-folder-open"></i>
+        </button>
+        <span id="save-status-badge" class="save-status-badge clean" title="Save status">
+          <i class="fa-solid fa-circle-check"></i> <span id="save-status-text">Saved</span>
+        </span>
+      </div>
+
+      <span class="status-divider"></span>
+
+      <span class="status-item" id="status-cell-info">
+        <i class="fa-regular fa-image"></i>
+        <span id="status-cell-label">Frame: Down 0 (cell_0_0)</span>
+      </span>
+      <span class="status-divider"></span>
+      <span class="status-item" id="status-pixel-info">
+        <i class="fa-solid fa-crosshairs"></i>
+        <strong id="status-coord-label">Pixel: [X: 0, Y: 0]</strong>
+        <span class="status-sub" id="status-grid-total">(16×16 = 256 px)</span>
+      </span>
+      <span class="status-divider"></span>
+      <span class="status-item" id="status-color-info">
+        <span class="color-dot" id="status-color-dot"></span>
+        <span id="status-color-label">Color: Transparent</span>
+      </span>
+    </div>
+
+    <div class="status-right">
+      <span class="status-item" id="status-symmetry-info">
+        <i class="fa-solid fa-arrows-split-up-and-left"></i>
+        <span id="status-symmetry-label">Symmetry: OFF (S)</span>
+      </span>
+      <span class="status-divider"></span>
+      <span class="status-item" id="status-zoom-info">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span id="status-zoom-label">Zoom: 24×</span>
+      </span>
+      <span class="status-divider"></span>
+      <span class="status-item" id="status-tool-info">
+        <span id="status-tool-label">Tool: Pencil (B)</span>
+      </span>
+    </div>
+  </footer>
+
+  <!-- ================= RIGHT-CLICK CONTEXT MENU ================= -->
+  <div id="studio-context-menu" class="studio-context-menu hidden">
+    <div class="context-menu-item" data-action="cut">
+      <i class="fa-solid fa-scissors"></i>
+      <span>Cut</span>
+      <span class="context-shortcut">Ctrl+X</span>
+    </div>
+    <div class="context-menu-item" data-action="copy">
+      <i class="fa-solid fa-copy"></i>
+      <span>Copy</span>
+      <span class="context-shortcut">Ctrl+C</span>
+    </div>
+    <div class="context-menu-item" data-action="paste">
+      <i class="fa-solid fa-paste"></i>
+      <span>Paste</span>
+      <span class="context-shortcut">Ctrl+V</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="fill">
+      <i class="fa-solid fa-fill-drip"></i>
+      <span>Fill Selection</span>
+    </div>
+    <div class="context-menu-item" data-action="flip-h">
+      <i class="fa-solid fa-arrows-left-right"></i>
+      <span>Flip Horizontal</span>
+    </div>
+    <div class="context-menu-item" data-action="flip-v">
+      <i class="fa-solid fa-arrows-up-down"></i>
+      <span>Flip Vertical</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="select-all">
+      <i class="fa-solid fa-border-all"></i>
+      <span>Select All</span>
+      <span class="context-shortcut">Ctrl+A</span>
+    </div>
+    <div class="context-menu-item" data-action="deselect">
+      <i class="fa-solid fa-xmark"></i>
+      <span>Deselect</span>
+      <span class="context-shortcut">Esc</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item text-danger" data-action="delete">
+      <i class="fa-solid fa-trash-can"></i>
+      <span>Delete Selection</span>
+      <span class="context-shortcut">Del</span>
+    </div>
+  </div>
+
+  <!-- ================= GRID OVERVIEW CELL CONTEXT MENU ================= -->
+  <div id="grid-context-menu" class="studio-context-menu hidden">
+    <div class="context-menu-item" data-grid-action="edit">
+      <i class="fa-solid fa-pen-to-square"></i>
+      <span>Edit Frame Pixels</span>
+      <span class="context-shortcut">Double-click</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-grid-action="copy">
+      <i class="fa-solid fa-copy"></i>
+      <span>Copy Frame</span>
+      <span class="context-shortcut">Ctrl+C</span>
+    </div>
+    <div class="context-menu-item" data-grid-action="paste">
+      <i class="fa-solid fa-paste"></i>
+      <span>Paste Frame</span>
+      <span class="context-shortcut">Ctrl+V</span>
+    </div>
+    <div class="context-menu-item" data-grid-action="duplicate">
+      <i class="fa-solid fa-clone"></i>
+      <span>Duplicate to Next Col</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-grid-action="flip-h">
+      <i class="fa-solid fa-arrows-left-right"></i>
+      <span>Flip Frame Horizontally</span>
+    </div>
+    <div class="context-menu-item" data-grid-action="flip-v">
+      <i class="fa-solid fa-arrows-up-down"></i>
+      <span>Flip Frame Vertically</span>
+    </div>
+    <div class="context-menu-item text-danger" data-grid-action="clear">
+      <i class="fa-solid fa-eraser"></i>
+      <span>Clear Frame Pixels</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item text-danger" data-grid-action="delete-row">
+      <i class="fa-solid fa-trash-can"></i>
+      <span id="ctx-del-row-label">Delete Row</span>
+    </div>
+    <div class="context-menu-item text-danger" data-grid-action="delete-col">
+      <i class="fa-solid fa-trash-can"></i>
+      <span id="ctx-del-col-label">Delete Column</span>
+    </div>
+  </div>
+
+  <!-- ================= FRAME PICKER MODAL (ANIMATION STUDIO) ================= -->
+  <div id="modal-frame-picker" class="studio-modal-backdrop hidden">
+    <div class="studio-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-film"></i>
+          <span>Add Frame to Animation Sequence</span>
+        </div>
+        <button id="btn-close-frame-picker" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-subbar">
+        <div class="filter-item">
+          <label class="modal-label">Filter Row:</label>
+          <select id="frame-picker-row-filter" class="modern-select"></select>
+        </div>
+        <div class="filter-item flex-1">
+          <label class="modal-label">Search Frame:</label>
+          <input type="text" id="frame-picker-search" class="modern-input full-width" placeholder="Filter by name or ID...">
+        </div>
+      </div>
+
+      <div class="studio-modal-body">
+        <div id="frame-picker-grid" class="frame-picker-grid"></div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <div class="manual-id-entry">
+          <span class="sub-text">Or enter cell ID directly:</span>
+          <div class="flex-row gap-6">
+            <input type="text" id="frame-picker-manual-id" class="modern-input" placeholder="e.g. cell_0_4">
+            <button id="btn-frame-picker-add-manual" class="btn btn-sm btn-secondary">Add ID</button>
+          </div>
+        </div>
+        <button id="btn-cancel-frame-picker" class="btn btn-sm btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ACTION & DIRECTION TEMPLATE MODAL ================= -->
+  <div id="modal-action-template" class="studio-modal-backdrop hidden">
+    <div class="studio-modal-dialog template-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-wand-magic-sparkles text-accent"></i>
+          <span>Action & Direction Template Generator</span>
+        </div>
+        <button id="btn-close-template-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body template-modal-body">
+        <!-- 1. Action Name & Chips -->
+        <div class="template-section">
+          <label class="form-label" for="template-action-input">Action Name:</label>
+          <input type="text" id="template-action-input" class="modern-input full-width" value="idle" placeholder="e.g. idle, walk, run, attack, dash, hurt, death">
+          <div class="action-chips-container" id="action-chips-container">
+            <span class="chips-label">Presets:</span>
+            <button type="button" class="chip-btn active" data-action="idle">idle</button>
+            <button type="button" class="chip-btn" data-action="walk">walk</button>
+            <button type="button" class="chip-btn" data-action="run">run</button>
+            <button type="button" class="chip-btn" data-action="attack">attack</button>
+            <button type="button" class="chip-btn" data-action="dash">dash</button>
+            <button type="button" class="chip-btn" data-action="hurt">hurt</button>
+            <button type="button" class="chip-btn" data-action="death">death</button>
+          </div>
+        </div>
+
+        <!-- 2. Direction Mode -->
+        <div class="template-section">
+          <label class="form-label">Direction Mode:</label>
+          <div class="template-mode-toggle">
+            <button type="button" class="mode-toggle-btn active" id="btn-mode-4dir" data-dirs="4">
+              <i class="fa-solid fa-arrows-up-down-left-right"></i>
+              <span>4 Directions (Down, Up, Right, Left)</span>
+            </button>
+            <button type="button" class="mode-toggle-btn" id="btn-mode-8dir" data-dirs="8">
+              <i class="fa-solid fa-compass"></i>
+              <span>8 Directions (Full 8-Way RPG)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Dimension & Playback Settings -->
+        <div class="template-section-grid">
+          <div class="form-group">
+            <label class="form-label" for="template-cols-input">Frames per Dir (Cols):</label>
+            <input type="number" id="template-cols-input" class="modern-input full-width" min="1" max="32" value="4">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="template-fps-input">Speed (FPS):</label>
+            <input type="number" id="template-fps-input" class="modern-input full-width" min="1" max="30" value="6">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="template-start-row">Start Row Index:</label>
+            <input type="number" id="template-start-row" class="modern-input full-width" min="0" max="64" value="0" title="Append to existing actions or replace starting at row index">
+          </div>
+        </div>
+
+        <!-- 4. Live Preview Box -->
+        <div class="template-section">
+          <div class="preview-header-bar">
+            <label class="form-label" style="margin: 0;">Live Preview: Generated Animations & Rows</label>
+            <span class="info-badge badge-accent" id="template-summary-badge">4 Rows × 4 Frames</span>
+          </div>
+          <div class="template-preview-box" id="template-live-preview">
+            <!-- Dynamic rows preview -->
+          </div>
+          <div class="template-notice">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Existing cell artwork is 100% preserved. Grid dimensions expand automatically if needed.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-template-modal" class="btn btn-secondary">Cancel</button>
+        <button id="btn-apply-template-modal" class="btn btn-accent">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Generate Template</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= GAME EXPORT STUDIO MODAL ================= -->
+  <div id="modal-game-export" class="studio-modal-backdrop hidden">
+    <div class="studio-modal-dialog export-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-gamepad text-accent"></i>
+          <span>Game Export Studio (Atlas & Spritesheet)</span>
+        </div>
+        <button id="btn-close-export-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body export-modal-body">
+        <div class="export-columns-layout">
+          <!-- Left Options Column -->
+          <div class="export-options-col">
+            <!-- 1. Atlas Layout & Spacing -->
+            <div class="export-section">
+              <div class="export-section-title">
+                <i class="fa-solid fa-border-all"></i>
+                <span>Atlas Layout & Spacing</span>
+              </div>
+              <div class="form-row-grid">
+                <div class="form-group">
+                  <label class="form-label" for="export-spacing-select">Cell Spacing:</label>
+                  <select id="export-spacing-select" class="modern-select full-width">
+                    <option value="0">0 px (Packed - Tight)</option>
+                    <option value="1" selected>1 px (Recommended - Bleed Guard)</option>
+                    <option value="2">2 px (Wide Bleed Guard)</option>
+                    <option value="4">4 px (Extra Padding)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="export-margin-select">Outer Margin:</label>
+                  <select id="export-margin-select" class="modern-select full-width">
+                    <option value="0">0 px (Flush)</option>
+                    <option value="1" selected>1 px (Border Margin)</option>
+                    <option value="2">2 px (Wide Margin)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="checkbox-row" style="margin-top: 8px;">
+                <label class="checkbox-label" for="export-extrude-checkbox">
+                  <input type="checkbox" id="export-extrude-checkbox">
+                  <span><strong>Extrude Edge Pixels</strong> (Clones border pixels into spacing to prevent texture filtering seams)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 2. Scale & Pivot -->
+            <div class="export-section">
+              <div class="export-section-title">
+                <i class="fa-solid fa-expand"></i>
+                <span>Scale & Pivot</span>
+              </div>
+              <div class="form-row-grid">
+                <div class="form-group">
+                  <label class="form-label" for="export-scale-select">Export Scale:</label>
+                  <select id="export-scale-select" class="modern-select full-width">
+                    <option value="1" selected>1× (Native Pixel Art)</option>
+                    <option value="2">2× (HD 2x)</option>
+                    <option value="3">3× (Scale 3x)</option>
+                    <option value="4">4× (Ultra 4x)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="export-pivot-select">Sprite Pivot:</label>
+                  <select id="export-pivot-select" class="modern-select full-width">
+                    <option value="bottom-center" selected>Bottom-Center (0.5, 0.0) [RPG]</option>
+                    <option value="center">Center (0.5, 0.5) [Standard]</option>
+                    <option value="top-left">Top-Left (0.0, 1.0) [UI / Tile]</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Target Engine & Format -->
+            <div class="export-section">
+              <div class="export-section-title">
+                <i class="fa-solid fa-file-export"></i>
+                <span>Target Engine & Format</span>
+              </div>
+              <div class="export-format-options" id="export-format-options">
+                <label class="format-option-card active" data-format="unity">
+                  <input type="radio" name="export-format-radio" value="unity" checked>
+                  <div class="format-card-info">
+                    <div class="format-title"><i class="fa-brands fa-unity text-accent"></i> Unity 2D Sprite Package</div>
+                    <div class="format-desc">PNG Atlas + Unity Metadata JSON + Pix2UnityImporter.cs C# script. 1-click automatic sprite slicing &amp; .anim clips!</div>
+                  </div>
+                </label>
+
+                <label class="format-option-card" data-format="texturepacker">
+                  <input type="radio" name="export-format-radio" value="texturepacker">
+                  <div class="format-card-info">
+                    <div class="format-title"><i class="fa-solid fa-code text-accent"></i> TexturePacker Standard (JSON Hash)</div>
+                    <div class="format-desc">Universal industry format. Directly imported by Godot, Phaser, Pixi.js, Defold, Raylib, and GameMaker.</div>
+                  </div>
+                </label>
+
+                <label class="format-option-card" data-format="png-only">
+                  <input type="radio" name="export-format-radio" value="png-only">
+                  <div class="format-card-info">
+                    <div class="format-title"><i class="fa-regular fa-image text-accent"></i> PNG Spritesheet Only</div>
+                    <div class="format-desc">Pure transparent PNG atlas with your selected spacing &amp; extrude settings.</div>
+                  </div>
+                </label>
+
+                <label class="format-option-card" data-format="zip-frames">
+                  <input type="radio" name="export-format-radio" value="zip-frames">
+                  <div class="format-card-info">
+                    <div class="format-title"><i class="fa-solid fa-file-zipper text-accent"></i> Individual PNG Frames (.ZIP)</div>
+                    <div class="format-desc">Export each animation frame as a separate numbered PNG file packed in a zip.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Live Preview Column -->
+          <div class="export-preview-col">
+            <div class="preview-header-bar">
+              <label class="form-label" style="margin:0;">Atlas Live Preview</label>
+              <span id="export-dimension-badge" class="info-badge badge-accent">0 × 0 px</span>
+            </div>
+            <div class="export-preview-viewport">
+              <canvas id="export-preview-canvas"></canvas>
+            </div>
+            <div class="export-metadata-summary">
+              <div class="meta-row"><span>Grid Layout:</span> <strong id="export-grid-info">4 Cols × 4 Rows</strong></div>
+              <div class="meta-row"><span>Cell Size:</span> <strong id="export-cell-size-info">16×16 px</strong></div>
+              <div class="meta-row"><span>Spacing / Margin:</span> <strong id="export-spacing-info">1px / 1px</strong></div>
+              <div class="meta-row"><span>Animation Clips:</span> <strong id="export-clips-info">4 clips</strong></div>
+              <div class="meta-row"><span>Bleed Protection:</span> <span class="badge-tag" id="export-bleed-tag">Active (1px gap)</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-export-modal" class="btn btn-secondary">Cancel</button>
+        <button id="btn-quick-export-png" class="btn btn-secondary" title="Quick export PNG without metadata">
+          <i class="fa-regular fa-image"></i>
+          <span>Export PNG Only</span>
+        </button>
+        <button id="btn-execute-game-export" class="btn btn-accent">
+          <i class="fa-solid fa-download"></i>
+          <span id="btn-execute-export-label">Export Game Package</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SCRIPTS ================= -->
+  <script src="js/default-sample.js"></script>
+  <script src="js/pix2-format.js"></script>
+  <script src="js/editor-state.js"></script>
+  <script src="js/tools.js"></script>
+  <script src="js/animation-player.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
