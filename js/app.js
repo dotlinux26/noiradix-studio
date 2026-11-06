@@ -1289,13 +1289,18 @@
         else ctx.rect(downBtnX, downBtnY, downBtnW, downBtnH);
         ctx.fill();
 
-        ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
+        // Standard chevron-down icon (matches FontAwesome fa-chevron-down)
+        const midX = downBtnX + downBtnW / 2;
+        const midY = downBtnY + downBtnH / 2;
+        ctx.strokeStyle = isDark ? '#cbd5e1' : '#475569';
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(downBtnX + 5, downBtnY + 6);
-        ctx.lineTo(downBtnX + downBtnW - 5, downBtnY + 6);
-        ctx.lineTo(downBtnX + downBtnW / 2, downBtnY + downBtnH - 5);
-        ctx.closePath();
-        ctx.fill();
+        ctx.moveTo(midX - 3.5, midY - 1.5);
+        ctx.lineTo(midX, midY + 2.5);
+        ctx.lineTo(midX + 3.5, midY - 1.5);
+        ctx.stroke();
       }
 
       // Move Up button [▲] (if not first row)
@@ -1313,13 +1318,18 @@
         else ctx.rect(upBtnX, upBtnY, upBtnW, upBtnH);
         ctx.fill();
 
-        ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
+        // Standard chevron-up icon (matches FontAwesome fa-chevron-up)
+        const midX = upBtnX + upBtnW / 2;
+        const midY = upBtnY + upBtnH / 2;
+        ctx.strokeStyle = isDark ? '#cbd5e1' : '#475569';
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(upBtnX + upBtnW / 2, upBtnY + 5);
-        ctx.lineTo(upBtnX + upBtnW - 5, upBtnY + upBtnH - 6);
-        ctx.lineTo(upBtnX + 5, upBtnY + upBtnH - 6);
-        ctx.closePath();
-        ctx.fill();
+        ctx.moveTo(midX - 3.5, midY + 1.5);
+        ctx.lineTo(midX, midY - 2.5);
+        ctx.lineTo(midX + 3.5, midY + 1.5);
+        ctx.stroke();
       }
 
       // Frame / Display name shifted comfortably lower (generous breathing room below buttons)
