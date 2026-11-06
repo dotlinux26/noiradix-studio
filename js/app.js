@@ -189,10 +189,20 @@
   }
 
   async function initAppSession() {
-    // 1. Try restoring persisted FileSystemFileHandle from IndexedDB
+    const sessionType = localStorage.getItem('noiradix_session_type') || 'disk';
+    const activeFileName = localStorage.getItem('noiradix_active_file_name');
+
+    // 1. If active session is an in-memory draft, resume the draft first!
+    if (sessionType === 'draft') {
+      if (checkCrashRecovery()) {
+        return true;
+      }
+    }
+
+    // 2. Try restoring persisted FileSystemFileHandle from IndexedDB (Only if matching active file)
     try {
       const savedHandle = await retrievePersistedFileHandle();
-      if (savedHandle) {
+      if (savedHandle && (!activeFileName || savedHandle.name === activeFileName)) {
         currentFileHandle = savedHandle;
         currentFileName = savedHandle.name;
         currentFilePath = localStorage.getItem('noiradix_active_file_path') || savedHandle.name;
@@ -219,7 +229,7 @@
 
         // If direct read failed (e.g. permission reset on F5), load from last saved content
         if (!docLoaded) {
-          const cached = localStorage.getItem('pix2_last_saved_content') || localStorage.getItem('pix2_recovery_snapshot');
+          const cached = localStorage.getItem('pix2_last_saved_content') || localStorage.getItem('pix2_draft_content');
           if (cached) {
             try {
               const doc = PIX2.parse(cached);
@@ -242,12 +252,12 @@
       console.warn('Could not restore file handle from IndexedDB:', err);
     }
 
-    // 2. Check crash recovery next
+    // 3. Check crash recovery next
     if (checkCrashRecovery()) {
       return true;
     }
 
-    // 3. Fallback: load default demo
+    // 4. Fallback: load default demo
     loadDefaultProject();
     return false;
   }
@@ -973,13 +983,23 @@
     const doc = PIX2.createDocument(title, actualCols, actualRows, actualW, actualH);
     state.setDocument(doc);
     currentFileHandle = null;
+    clearPersistedFileHandle();
     currentFileName = cleanFileName;
     currentFilePath = cleanFileName;
     centerCellCanvas();
     centerGridCanvas();
     setDirty(false);
     lastSavedContent = PIX2.serialize(doc);
-    localStorage.removeItem('pix2_recovery_snapshot');
+    const snapshot = {
+      timestamp: Date.now(),
+      title: doc.meta.title || 'Untitled',
+      fileName: currentFileName,
+      data: lastSavedContent
+    };
+    localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
+    localStorage.setItem('pix2_draft_content', lastSavedContent);
+    localStorage.removeItem('pix2_last_saved_content');
+    localStorage.setItem('noiradix_session_type', 'draft');
     localStorage.setItem('noiradix_active_file_name', currentFileName);
     localStorage.setItem('noiradix_active_file_path', currentFilePath);
   }
@@ -4586,6 +4606,7 @@
         const btnReload = document.getElementById('btn-reload-file');
         if (btnReload) btnReload.classList.remove('pulse-warning');
         await persistFileHandle(handle);
+        localStorage.setItem('noiradix_session_type', 'disk');
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
         state.setDocument(doc);
@@ -4648,6 +4669,9 @@
         pendingExternalConflict = null;
         const btnReload = document.getElementById('btn-reload-file');
         if (btnReload) btnReload.classList.remove('pulse-warning');
+        localStorage.setItem('noiradix_session_type', 'disk');
+        localStorage.setItem('noiradix_active_file_name', currentFileName);
+        localStorage.setItem('noiradix_active_file_path', currentFilePath);
         localStorage.setItem('pix2_last_saved_content', text);
         localStorage.removeItem('pix2_recovery_snapshot');
         showToast(`Saved to ${currentFileHandle.name}!`, 'success');
@@ -4686,6 +4710,7 @@
         const btnReload = document.getElementById('btn-reload-file');
         if (btnReload) btnReload.classList.remove('pulse-warning');
         await persistFileHandle(handle);
+        localStorage.setItem('noiradix_session_type', 'disk');
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
         localStorage.setItem('pix2_last_saved_content', text);
@@ -7649,10 +7674,13 @@ namespace NOIRADIX.Editor
         if (currentFileHandle && currentFileHandle.name !== val) {
           // File has been renamed in UI: detach old handle so Save As triggers on next save
           currentFileHandle = null;
+          clearPersistedFileHandle();
+          localStorage.setItem('noiradix_session_type', 'draft');
         }
 
         currentFileName = val;
         currentFilePath = val;
+        localStorage.setItem('noiradix_session_type', currentFileHandle ? 'disk' : 'draft');
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
 
