@@ -24,3 +24,4 @@ Unlike opaque binary PNGs or complex layered PSDs, `.pix2` treats sprites as str
 - **Animation Studio:** Dedicated playback studio with timeline, multi-direction playback preview, FPS controls, frame reordering, and onion skinning.
 - **Palette Generator from Artwork:** Instant 1-click scanning of active cell or entire document to extract unique colors (exact or reduced) with add/replace actions.
 - **PIX2 Code & AI Prompt Studio:** Live two-way text editor with syntax highlighting, one-shot prompt generator, schema validator, and copy buttons.
+

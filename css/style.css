@@ -909,6 +909,11 @@ body {
   border-radius: 4px;
   border: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .info-badge.badge-primary {
@@ -923,6 +928,36 @@ body {
   color: #10b981;
   border-color: rgba(16, 185, 129, 0.3);
   font-weight: 600;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+#grid-selected-badge {
+  max-width: 90px;
+  overflow: hidden;
+  position: relative;
+}
+
+.has-marquee {
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  position: relative;
+}
+
+.badge-marquee-inner {
+  display: inline-block;
+  white-space: nowrap;
+  animation: badge-marquee-scroll 5s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes badge-marquee-scroll {
+  0%, 20% {
+    transform: translateX(0);
+  }
+  80%, 100% {
+    transform: translateX(var(--marquee-dist, -24px));
+  }
 }
 
 /* Canvas Viewport & Integrated Centered Rulers */

@@ -22,3 +22,4 @@
 | `Delete` / `Backspace` | Cell Editor | Clear pixels in active selection |
 | `Space + Drag` | Canvas | Pan viewport |
 | `Mouse Wheel` | Canvas | Zoom in / Zoom out |
+

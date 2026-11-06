@@ -15,3 +15,4 @@ Author: dotlinux26 (Nguyen Duc Canh)
 | Duplicate Row with Custom Name | IMPLEMENTED & VERIFIED | Verified: clones cells, creates animation, hit test |
 | Palette Auto-Generation from Artwork | IMPLEMENTED & VERIFIED | Exact & Reduce extraction verified |
 | Offline & Zero-Dependency Runtime | IMPLEMENTED & VERIFIED | Pure vanilla ES2022+ web stack |
+

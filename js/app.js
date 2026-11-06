@@ -2017,6 +2017,31 @@
     }
   }
 
+  function setupBadgeMarquee(badgeEl, text, maxW = 90) {
+    if (!badgeEl) return;
+    badgeEl.title = text;
+
+    let textWidth = 0;
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.font = '11px monospace';
+      textWidth = ctx.measureText(text).width;
+    } catch {
+      textWidth = text.length * 7;
+    }
+
+    const availableW = maxW - 14;
+    if (textWidth > availableW) {
+      const overflowDist = Math.ceil(textWidth - availableW + 8);
+      badgeEl.innerHTML = `<span class="badge-marquee-inner" style="--marquee-dist: -${overflowDist}px;">${text}</span>`;
+      badgeEl.classList.add('has-marquee');
+    } else {
+      badgeEl.textContent = text;
+      badgeEl.classList.remove('has-marquee');
+    }
+  }
+
   function updateGridInspectorUI() {
     if (!state.doc || !dom.gridCellName) return;
     let cell = state.doc.cells[selectedGridCellId];
@@ -2029,7 +2054,7 @@
     }
     if (!cell) return;
 
-    if (dom.gridSelectedBadge) dom.gridSelectedBadge.textContent = selectedGridCellId;
+    if (dom.gridSelectedBadge) setupBadgeMarquee(dom.gridSelectedBadge, selectedGridCellId, 90);
     if (dom.gridCellIdInput) dom.gridCellIdInput.value = cell.id || selectedGridCellId;
     dom.gridCellName.value = cell.name || selectedGridCellId;
 

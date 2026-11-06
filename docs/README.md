@@ -37,3 +37,4 @@
 - [ENGINEERING/KNOWN_LIMITATIONS.md](ENGINEERING/KNOWN_LIMITATIONS.md) — Documented constraints, browser boundary requirements, and architectural trade-offs.
 - [audits/BASELINE_AUDIT.md](audits/BASELINE_AUDIT.md) — Baseline audit of the codebase, feature verification matrix, and test coverage report.
 - [audits/IMPLEMENTATION_REPORT.md](audits/IMPLEMENTATION_REPORT.md) — Detailed implementation report of the master upgrade.
+
