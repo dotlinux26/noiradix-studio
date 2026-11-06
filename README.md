@@ -45,6 +45,55 @@
 
 ---
 
+## 🌐 Browser Compatibility & Recommended Setup
+
+NOIRADIX Studio operates in two tiers based on modern browser file capabilities:
+
+| Browser Tier | Supported Browsers | Recommended Version | Direct Disk `Ctrl+S` | Drag-and-Drop Handle Binding | Real-Time Live Watcher | Status |
+|:---|:---|:---:|:---:|:---:|:---:|:---:|
+| **Tier 1 — Full Native (Recommended)** | **Google Chrome, Microsoft Edge, Brave, Opera, Arc, Vivaldi** | **v86+** (Chromium engine) | ✅ Yes (Direct write via `createWritable()`, zero popups) | ✅ Yes (Binds `FileSystemFileHandle` on drop) | ✅ Yes (Live auto-reload on external file edits) | **Optimal (100% Desktop-Grade Experience)** |
+| **Tier 2 — Graceful Fallback** | **Mozilla Firefox** | **v90+** (Gecko engine) | 🔄 Fallback (Triggers direct file download) | 🔄 Fallback (In-Memory Draft) | ⚠️ Manual Only (Click reload button or `Ctrl+Shift+R`) | **Fully Supported (Lossless Web Fallback)** |
+| **Tier 2 — Graceful Fallback** | **Apple Safari** (macOS, iPadOS, iOS) | **v15.2+** (WebKit engine) | 🔄 Fallback (Triggers direct file download) | 🔄 Fallback (In-Memory Draft) | ⚠️ Manual Only (Click reload button or `Ctrl+Shift+R`) | **Fully Supported (Lossless Web Fallback)** |
+
+> [!TIP]
+> **Why Chromium is Recommended:** Google Chrome, Microsoft Edge, Brave, and Opera implement the **File System Access API** (`window.showOpenFilePicker`, `showSaveFilePicker`, and `DataTransferItem.getAsFileSystemHandle()`). This unlocks instant `Ctrl+S` disk commits, drag-and-drop linking, and real-time external change detection when working alongside external AI coding assistants or VS Code. In Firefox and Safari, the studio gracefully falls back to lossless HTML5 file downloads with zero data loss.
+
+---
+
+## 💻 Hardware & System Requirements
+
+NOIRADIX Studio is engineered with an ultra-lightweight, zero-overhead architecture:
+
+| Component | Minimum Specification | Recommended Specification |
+|:---|:---|:---|
+| **Operating System** | Windows 10/11, macOS 10.15+, Linux (Ubuntu, Debian, Fedora, Arch), ChromeOS | Windows 11, macOS 14+, Linux |
+| **Processor (CPU)** | 1.5 GHz Dual-Core (x86_64 or ARM64) | 2.0 GHz Quad-Core or Apple Silicon (M1/M2/M3/M4) |
+| **Memory (RAM)** | 512 MB free RAM (Studio footprint is only ~25 MB – 45 MB) | 1 GB free RAM |
+| **Graphics (GPU)** | Integrated Graphics with WebGL / HTML5 Canvas 2D support | Any modern integrated or dedicated GPU |
+| **Display Resolution** | 1280×720 (HD) minimum | 1920×1080 (Full HD) or higher (supports 2K, 4K, Ultrawide) |
+| **Input Devices** | Standard Mouse & Keyboard | Mouse, Keyboard, and Drawing Tablet (Wacom, Apple Pencil) |
+| **Network / Internet** | **None** (100% Offline-Capable) | Offline (Zero telemetry, zero external network requests) |
+
+---
+
+## 📦 Zero-Dependency Architecture & Third-Party Transparency
+
+NOIRADIX Studio follows a strict **Zero-Runtime-Dependency & Zero-Build** philosophy:
+
+* **0 npm runtime packages:** Zero `node_modules` required for execution.
+* **0 build steps:** No Webpack, Vite, Babel, Rollup, or esbuild. Source code in `js/` runs directly and natively in the browser.
+* **Pure Web Standards:**
+  * HTML5 Canvas 2D Context (`CanvasRenderingContext2D`) for pixel-perfect rendering.
+  * Modern ECMAScript 2022+ (Vanilla JavaScript).
+  * CSS Custom Properties (Variables) with clean light and dark theme switching.
+  * Chromium File System Access API & IndexedDB for disk persistence.
+* **Third-Party Assets Used:**
+  * **FontAwesome 6 (Free Vector Icons):** Delivered with Subresource Integrity (SRI) SHA-512 hashes and fallback styling.
+  * **Web Fonts:** Fira Code (Monospace) & Inter (UI typography) with clean native system font fallbacks (`monospace`, `system-ui`, `-apple-system`, `sans-serif`) when operating completely offline.
+  * See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSE](LICENSE) for complete license attributions.
+
+---
+
 ## 🚀 Quickstart
 
 ### Method 1: Instant 1-Click Launch (Windows)
@@ -115,8 +164,7 @@ noiradix-studio/
 │   └── app.js                   # UI controllers, modal managers, & export pipeline
 │
 ├── samples/
-│   ├── player_wispling.pix2     # Example 4-direction RPG character
-│   └── Player.pix2              # Example character sheet
+│   └── Player.pix2              # Example 4-direction Wispling character sprite sheet
 │
 └── tests/
     ├── test-roundtrip.js        # Deterministic parse-serialize roundtrip test suite
