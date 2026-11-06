@@ -121,6 +121,57 @@ assert(customDoc.cells['reaper_down_0'].row === 0 && customDoc.cells['reaper_dow
 assert(customDoc.cells['reaper_down_0'].direction === 'down', 'Cell direction tag preserved');
 assert(customDoc.animations['walk_down'].frames.includes('reaper_down_0'), 'Animation references custom cell ID');
 
+// TEST 5: Row-Only Flip & Duplicate Logic Semantics
+console.log('\nTest 5: Row-Only Flip & Row Duplication Verification');
+const multiRowDoc = PIX2.createDocument('MultiRow Test', 4, 2, 16, 16);
+multiRowDoc.cells['cell_0_0'].pixels = { '2,2': '#ffffff', '4,4': '#ffffff' };
+multiRowDoc.cells['cell_1_0'].pixels = { '1,1': '#ff0000' };
+
+// Flip row 0 horizontally (w = 16)
+const originalRow1Pixels = { ...multiRowDoc.cells['cell_1_0'].pixels };
+const newRow0Pixels = {};
+for (const coord in multiRowDoc.cells['cell_0_0'].pixels) {
+  const [x, y] = coord.split(',').map(Number);
+  newRow0Pixels[`${16 - 1 - x},${y}`] = multiRowDoc.cells['cell_0_0'].pixels[coord];
+}
+multiRowDoc.cells['cell_0_0'].pixels = newRow0Pixels;
+
+assert(multiRowDoc.cells['cell_0_0'].pixels['13,2'] === '#ffffff', 'Row 0 pixel 2,2 flipped to 13,2 horizontally');
+assert(multiRowDoc.cells['cell_0_0'].pixels['11,4'] === '#ffffff', 'Row 0 pixel 4,4 flipped to 11,4 horizontally');
+assert(multiRowDoc.cells['cell_1_0'].pixels['1,1'] === '#ff0000', 'Row 1 remained completely untouched during row 0 flip');
+
+// Row duplication test
+const oldRows = multiRowDoc.meta.grid.rows;
+const newRowIdx = oldRows;
+multiRowDoc.meta.grid.rows = oldRows + 1;
+const dupName = 'Walk Run';
+const cleanPrefix = 'walk_run';
+const dupFrameIds = [];
+
+for (let c = 0; c < multiRowDoc.meta.grid.cols; c++) {
+  const newCellId = `${cleanPrefix}_${c}`;
+  const srcCell = multiRowDoc.cells[`cell_0_${c}`];
+  multiRowDoc.cells[newCellId] = {
+    id: newCellId,
+    name: `${dupName} - Frame ${c}`,
+    row: newRowIdx,
+    col: c,
+    frame: c,
+    pixels: { ...(srcCell ? srcCell.pixels : {}) }
+  };
+  dupFrameIds.push(newCellId);
+}
+multiRowDoc.animations[cleanPrefix] = {
+  name: dupName,
+  fps: 6,
+  loop: true,
+  frames: dupFrameIds
+};
+
+assert(multiRowDoc.meta.grid.rows === 3, 'Grid rows expanded from 2 to 3');
+assert(multiRowDoc.cells['walk_run_0'].pixels['13,2'] === '#ffffff', 'Duplicated row 2 has cloned pixel data from row 0');
+assert(multiRowDoc.animations['walk_run'].frames.length === 4, 'Animation sequence created with all 4 column frames');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);

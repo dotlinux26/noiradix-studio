@@ -920,7 +920,17 @@
   };
 
   let gridRowDeleteButtons = [];
+  let gridRowDuplicateButtons = [];
   let gridColDeleteButtons = [];
+
+  function getRowDuplicateHit(mx, my) {
+    for (const btn of gridRowDuplicateButtons) {
+      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
+        return btn.row;
+      }
+    }
+    return null;
+  }
 
   function getRowDeleteHit(mx, my) {
     for (const btn of gridRowDeleteButtons) {
@@ -1086,6 +1096,7 @@
 
     gridColDeleteButtons = [];
     gridRowDeleteButtons = [];
+    gridRowDuplicateButtons = [];
 
     const sheetW = leftHeaderW + cols * (cw * zoom + cellGapX) + 36;
     const sheetH = topHeaderH + rows * (ch * zoom + cellGapY) + 40;
@@ -1199,6 +1210,31 @@
       ctx.moveTo(rowBtnX + rowBtnW - 5, rowBtnY + 5);
       ctx.lineTo(rowBtnX + 5, rowBtnY + rowBtnH - 5);
       ctx.stroke();
+
+      // Duplicate Row button directly to the left of the delete button (20x20 matching size)
+      const dupBtnW = 20;
+      const dupBtnH = 20;
+      const dupBtnX = rowBtnX - dupBtnW - 4;
+      const dupBtnY = rowBtnY;
+
+      gridRowDuplicateButtons.push({ row: r, x: dupBtnX, y: dupBtnY, w: dupBtnW, h: dupBtnH });
+
+      ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(dupBtnX, dupBtnY, dupBtnW, dupBtnH, 4);
+      else ctx.rect(dupBtnX, dupBtnY, dupBtnW, dupBtnH);
+      ctx.fill();
+
+      // Duplicate icon: two crisp overlapping squares
+      ctx.strokeStyle = isDark ? '#a5b4fc' : '#4f46e5';
+      ctx.lineWidth = 1.4;
+      // Back square (offset top-right: 7, 3.5, w: 7.5, h: 7.5)
+      ctx.strokeRect(dupBtnX + 7, dupBtnY + 3.5, 7.5, 7.5);
+      // Front square fill (to obscure back square overlap)
+      ctx.fillStyle = isDark ? '#1e2230' : '#ffffff';
+      ctx.fillRect(dupBtnX + 4.5, dupBtnY + 6.5, 7.5, 7.5);
+      // Front square stroke
+      ctx.strokeRect(dupBtnX + 4.5, dupBtnY + 6.5, 7.5, 7.5);
 
       ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
       ctx.font = '600 12px "Segoe UI", system-ui, -apple-system, sans-serif';
@@ -1501,6 +1537,111 @@
     triggerEventAutosave();
     refreshAll();
     showToast(`Added Column ${newC} (all row animations extended to ${doc.meta.grid.cols} frames)`, 'success');
+  }
+
+  function promptAndDuplicateRow(rowIdx) {
+    if (!state.doc) return;
+    const doc = state.doc;
+    const rows = doc.meta.grid.rows;
+    if (rowIdx < 0 || rowIdx >= rows) return;
+
+    const sourceTitle = inferRowTitle(rowIdx) || `Row ${rowIdx}`;
+    const defaultName = `${sourceTitle} Copy`;
+    const inputName = prompt(`Enter name for the duplicated row:`, defaultName);
+    if (inputName === null) return; // User pressed Cancel
+    const finalName = inputName.trim() || defaultName;
+
+    duplicateSpecificRow(rowIdx, finalName);
+  }
+
+  function duplicateSpecificRow(sourceRowIdx, newRowName) {
+    if (!state.doc) return;
+    const doc = state.doc;
+    const oldRows = doc.meta.grid.rows;
+    const cols = doc.meta.grid.cols;
+    const newRowIdx = oldRows;
+
+    const sourceTitle = inferRowTitle(sourceRowIdx) || `Row ${sourceRowIdx}`;
+    const finalName = (newRowName || `${sourceTitle} Copy`).trim();
+
+    state.beginStroke();
+
+    // 1. Expand row count
+    doc.meta.grid.rows = oldRows + 1;
+
+    // 2. Derive clean identifier prefix
+    const cleanPrefix = finalName
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `row_${newRowIdx}`;
+
+    const newFrameIds = [];
+
+    // 3. Clone all cells in the row
+    for (let c = 0; c < cols; c++) {
+      const srcCell = getCellAtGrid(doc, sourceRowIdx, c);
+      const newCellId = `${cleanPrefix}_${c}`;
+
+      const newCell = {
+        id: newCellId,
+        name: `${finalName} - Frame ${c}`,
+        row: newRowIdx,
+        col: c,
+        frame: c,
+        direction: (srcCell && srcCell.direction) ? srcCell.direction : 'none',
+        pixels: {}
+      };
+
+      if (srcCell && srcCell.pixels) {
+        for (const coord in srcCell.pixels) {
+          newCell.pixels[coord] = srcCell.pixels[coord];
+        }
+      }
+
+      doc.cells[newCellId] = newCell;
+      newFrameIds.push(newCellId);
+    }
+
+    // 4. Create animation sequence
+    if (!doc.animations) doc.animations = {};
+    let srcFps = 6;
+    let srcLoop = true;
+    let srcDir = 'none';
+
+    for (const aKey in doc.animations) {
+      const a = doc.animations[aKey];
+      if (a && a.frames && a.frames.some(fid => {
+        const cell = doc.cells[fid];
+        return cell && cell.row === sourceRowIdx;
+      })) {
+        srcFps = a.fps || 6;
+        srcLoop = (a.loop !== undefined) ? a.loop : true;
+        srcDir = a.direction || 'none';
+        break;
+      }
+    }
+
+    let animKey = cleanPrefix;
+    let suffix = 1;
+    while (doc.animations[animKey]) {
+      animKey = `${cleanPrefix}_${suffix++}`;
+    }
+
+    doc.animations[animKey] = {
+      name: finalName,
+      fps: srcFps,
+      loop: srcLoop,
+      direction: srcDir,
+      frames: newFrameIds
+    };
+
+    // 5. Select first cell of new row
+    selectedGridCellId = newFrameIds[0];
+
+    state.endStroke(`Duplicate Row ${sourceRowIdx} as "${finalName}"`);
+    triggerEventAutosave();
+    refreshAll();
+    showToast(`Row ${sourceRowIdx} duplicated as "${finalName}" with ${cols} frames!`, 'success');
   }
 
   function deleteSpecificRow(rowIdx, skipConfirm = false) {
@@ -3427,6 +3568,40 @@
     showToast(`Flipped ${cell.name || cellId} ${horizontal ? 'Horizontally' : 'Vertically'}`);
   }
 
+  function flipRow(rowIdx, horizontal = true) {
+    if (!state.doc) return;
+    const doc = state.doc;
+    const rows = doc.meta.grid.rows;
+    const cols = doc.meta.grid.cols;
+    if (rowIdx < 0 || rowIdx >= rows) return;
+
+    const rowTitle = inferRowTitle(rowIdx) || `Row ${rowIdx}`;
+    const cw = doc.meta.cellSize.w;
+    const ch = doc.meta.cellSize.h;
+    let flippedCount = 0;
+
+    state.beginStroke();
+    for (let c = 0; c < cols; c++) {
+      const cell = getCellAtGrid(doc, rowIdx, c) || doc.cells[`cell_${rowIdx}_${c}`];
+      if (cell && cell.pixels && Object.keys(cell.pixels).length > 0) {
+        const newPixels = {};
+        for (const coord in cell.pixels) {
+          const [x, y] = coord.split(',').map(Number);
+          const nx = horizontal ? (cw - 1 - x) : x;
+          const ny = horizontal ? y : (ch - 1 - y);
+          newPixels[`${nx},${ny}`] = cell.pixels[coord];
+        }
+        cell.pixels = newPixels;
+        flippedCount++;
+      }
+    }
+    const dirName = horizontal ? 'Horizontal' : 'Vertical';
+    state.endStroke(`Flip Row ${rowIdx} ${dirName}`);
+    triggerEventAutosave();
+    refreshAll();
+    showToast(`Flipped Row ${rowIdx} ("${rowTitle}") ${dirName.toLowerCase()} (${flippedCount} frame(s) modified).`, 'success');
+  }
+
   function clearGridCell(cellId) {
     if (!state.doc || !state.doc.cells[cellId]) return;
     const cell = state.doc.cells[cellId];
@@ -3471,6 +3646,9 @@
 
     const { r, c } = getCellRowCol(cellId);
 
+    const dupRowLabel = document.getElementById('ctx-dup-row-label');
+    if (dupRowLabel) dupRowLabel.textContent = `Duplicate Row ${r}...`;
+
     const delRowLabel = document.getElementById('ctx-del-row-label');
     if (delRowLabel) delRowLabel.textContent = `Delete Row ${r}`;
 
@@ -3478,8 +3656,8 @@
     if (delColLabel) delColLabel.textContent = `Delete Column ${c}`;
 
     gridContextMenu.classList.remove('hidden');
-    const menuW = 220;
-    const menuH = 340;
+    const menuW = 230;
+    const menuH = 440;
     const posX = Math.min(x, window.innerWidth - menuW - 10);
     const posY = Math.min(y, window.innerHeight - menuH - 10);
 
@@ -5116,6 +5294,13 @@ namespace NOIRADIX.Editor
         return;
       }
 
+      // Check if clicked on a Row Duplicate button
+      const hitDupRow = getRowDuplicateHit(mx, my);
+      if (hitDupRow !== null) {
+        promptAndDuplicateRow(hitDupRow);
+        return;
+      }
+
       // 2. Check if clicked on a Column Delete 'x' button
       const hitCol = getColDeleteHit(mx, my);
       if (hitCol !== null) {
@@ -5136,7 +5321,7 @@ namespace NOIRADIX.Editor
       const rect = dom.gridCanvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      if (getRowDeleteHit(mx, my) !== null || getColDeleteHit(mx, my) !== null) {
+      if (getRowDeleteHit(mx, my) !== null || getColDeleteHit(mx, my) !== null || getRowDuplicateHit(mx, my) !== null) {
         return;
       }
       handleGridCellSelect(e);
@@ -5147,8 +5332,8 @@ namespace NOIRADIX.Editor
       const rect = dom.gridCanvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      const isOverDelete = (getRowDeleteHit(mx, my) !== null || getColDeleteHit(mx, my) !== null);
-      dom.gridCanvas.style.cursor = isOverDelete ? 'pointer' : 'default';
+      const isOverBtn = (getRowDeleteHit(mx, my) !== null || getColDeleteHit(mx, my) !== null || getRowDuplicateHit(mx, my) !== null);
+      dom.gridCanvas.style.cursor = isOverBtn ? 'pointer' : 'default';
     });
 
     dom.gridCanvas.addEventListener('contextmenu', (e) => {
@@ -5239,6 +5424,21 @@ namespace NOIRADIX.Editor
           case 'clear':
             clearGridCell(targetCellId);
             break;
+          case 'duplicate-row': {
+            const { r: selR } = getCellRowCol(targetCellId);
+            promptAndDuplicateRow(selR);
+            break;
+          }
+          case 'flip-row-h': {
+            const { r: selR } = getCellRowCol(targetCellId);
+            flipRow(selR, true);
+            break;
+          }
+          case 'flip-row-v': {
+            const { r: selR } = getCellRowCol(targetCellId);
+            flipRow(selR, false);
+            break;
+          }
           case 'delete-row': {
             const { r: selR } = getCellRowCol(targetCellId);
             deleteSpecificRow(selR);
@@ -5755,6 +5955,153 @@ namespace NOIRADIX.Editor
       });
     }
 
+    // Palette Generator from Artwork Controls
+    const btnTogglePalGen = document.getElementById('btn-toggle-palette-gen');
+    const palGenBody = document.getElementById('palette-gen-body');
+    const palGenChevron = document.getElementById('palette-gen-chevron');
+    const selPalGenMode = document.getElementById('select-palette-gen-mode');
+    const grpPalGenMax = document.getElementById('group-palette-gen-max');
+    const btnAnalyzeArtwork = document.getElementById('btn-analyze-artwork');
+    const btnApplyAddPalette = document.getElementById('btn-apply-add-palette');
+    const btnApplyReplacePalette = document.getElementById('btn-apply-replace-palette');
+
+    if (btnTogglePalGen && palGenBody) {
+      btnTogglePalGen.addEventListener('click', () => {
+        const isCollapsed = palGenBody.classList.toggle('hidden');
+        if (palGenChevron) {
+          palGenChevron.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+      });
+    }
+
+    if (selPalGenMode && grpPalGenMax) {
+      selPalGenMode.addEventListener('change', () => {
+        grpPalGenMax.classList.toggle('hidden', selPalGenMode.value !== 'reduce');
+      });
+    }
+
+    let detectedArtworkColors = [];
+
+    if (btnAnalyzeArtwork) {
+      btnAnalyzeArtwork.addEventListener('click', () => {
+        if (!state.doc) return;
+        const sourceSelect = document.getElementById('select-palette-gen-source');
+        const sourceMode = sourceSelect ? sourceSelect.value : 'active-cell';
+        const isReduce = selPalGenMode ? selPalGenMode.value === 'reduce' : false;
+        const inputMax = document.getElementById('input-palette-gen-max');
+        const maxLimit = inputMax ? parseInt(inputMax.value, 10) || 16 : 16;
+
+        const colorFreq = {};
+        const targetCells = [];
+
+        if (sourceMode === 'active-cell') {
+          const targetId = selectedGridCellId || state.activeCellId;
+          const { r, c } = getCellRowCol(targetId);
+          const cell = state.doc.cells[targetId] || getCellAtGrid(state.doc, r, c);
+          if (cell) {
+            targetCells.push(cell);
+          } else {
+            showToast('No active cell selected to analyze.', 'info');
+            return;
+          }
+        } else {
+          for (const cid in state.doc.cells) {
+            targetCells.push(state.doc.cells[cid]);
+          }
+        }
+
+        for (const cell of targetCells) {
+          if (!cell || !cell.pixels) continue;
+          for (const coord in cell.pixels) {
+            const raw = cell.pixels[coord];
+            if (!raw || raw === 'transparent' || raw === '#00000000') continue;
+            const norm = raw.toLowerCase();
+            colorFreq[norm] = (colorFreq[norm] || 0) + 1;
+          }
+        }
+
+        const sorted = Object.keys(colorFreq).sort((a, b) => colorFreq[b] - colorFreq[a]);
+        if (sorted.length === 0) {
+          showToast('No painted pixels found in selected source.', 'info');
+          return;
+        }
+
+        detectedArtworkColors = isReduce ? sorted.slice(0, maxLimit) : sorted;
+
+        const resultsEl = document.getElementById('palette-gen-results');
+        const countEl = document.getElementById('palette-gen-count');
+        const previewEl = document.getElementById('palette-gen-preview-swatches');
+
+        if (resultsEl) resultsEl.classList.remove('hidden');
+        if (countEl) countEl.textContent = `Detected: ${detectedArtworkColors.length} unique color(s)`;
+        if (previewEl) {
+          previewEl.innerHTML = '';
+          detectedArtworkColors.forEach(hex => {
+            const sw = document.createElement('div');
+            sw.className = 'palette-swatch';
+            sw.style.backgroundColor = hex;
+            sw.title = `${hex} (${colorFreq[hex] || 0} px)`;
+            sw.addEventListener('click', () => {
+              state.primaryColor = hex;
+              updateColorUI();
+            });
+            previewEl.appendChild(sw);
+          });
+        }
+        showToast(`Analyzed: detected ${detectedArtworkColors.length} color(s)!`, 'success');
+      });
+    }
+
+    if (btnApplyAddPalette) {
+      btnApplyAddPalette.addEventListener('click', () => {
+        if (!state.doc || detectedArtworkColors.length === 0) {
+          showToast('Please analyze artwork first.', 'info');
+          return;
+        }
+        if (!state.doc.palette) state.doc.palette = {};
+        const existingColors = new Set(Object.values(state.doc.palette).map(c => (c || '').toLowerCase()));
+        let addedCount = 0;
+
+        state.beginStroke();
+        detectedArtworkColors.forEach(hex => {
+          if (!existingColors.has(hex.toLowerCase())) {
+            let nextKey = 1;
+            while (state.doc.palette[nextKey]) nextKey++;
+            state.doc.palette[nextKey] = hex;
+            existingColors.add(hex.toLowerCase());
+            addedCount++;
+          }
+        });
+
+        state.endStroke(`Add ${addedCount} Colors to Palette`);
+        triggerEventAutosave();
+        renderPalette();
+        showToast(addedCount > 0 ? `Added ${addedCount} new color(s) to palette!` : 'All detected colors already in palette.', addedCount > 0 ? 'success' : 'info');
+      });
+    }
+
+    if (btnApplyReplacePalette) {
+      btnApplyReplacePalette.addEventListener('click', () => {
+        if (!state.doc || detectedArtworkColors.length === 0) {
+          showToast('Please analyze artwork first.', 'info');
+          return;
+        }
+        if (!confirm(`Replace current palette with ${detectedArtworkColors.length} detected colors? Existing cell pixels will be preserved and mapped to the new palette.`)) return;
+
+        state.beginStroke();
+        const newPalette = {};
+        detectedArtworkColors.forEach((hex, i) => {
+          newPalette[i + 1] = hex;
+        });
+        state.doc.palette = newPalette;
+
+        state.endStroke(`Replace Palette from Artwork (${detectedArtworkColors.length} colors)`);
+        triggerEventAutosave();
+        renderPalette();
+        showToast(`Palette replaced with ${detectedArtworkColors.length} colors!`, 'success');
+      });
+    }
+
     // Action Toolbar buttons
     bindAction('btn-align-center', () => {
       const cell = state.getActiveCell();
@@ -5797,25 +6144,17 @@ namespace NOIRADIX.Editor
     });
 
     bindAction('btn-sheet-flip-h', () => {
-      if (state.doc) {
-        for (const cid in state.doc.cells) {
-          Tools.flipHorizontal(state.doc.cells[cid], state.doc.meta.cellSize.w);
-        }
-        state.saveSnapshot('Flip Whole Sheet Horizontal');
-        triggerEventAutosave();
-        refreshAll();
-      }
+      if (!state.doc) return;
+      const targetCellId = selectedGridCellId || state.activeCellId || 'cell_0_0';
+      const { r } = getCellRowCol(targetCellId);
+      flipRow(r, true);
     });
 
     bindAction('btn-sheet-flip-v', () => {
-      if (state.doc) {
-        for (const cid in state.doc.cells) {
-          Tools.flipVertical(state.doc.cells[cid], state.doc.meta.cellSize.h);
-        }
-        state.saveSnapshot('Flip Whole Sheet Vertical');
-        triggerEventAutosave();
-        refreshAll();
-      }
+      if (!state.doc) return;
+      const targetCellId = selectedGridCellId || state.activeCellId || 'cell_0_0';
+      const { r } = getCellRowCol(targetCellId);
+      flipRow(r, false);
     });
 
     bindAction('btn-sheet-align-center', () => {

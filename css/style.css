@@ -275,7 +275,7 @@ body {
   gap: 8px;
   height: 32px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: -0.2px;
   margin-right: 4px;
   color: var(--text-main);
@@ -284,16 +284,16 @@ body {
 
 .brand-icon {
   color: var(--accent-primary);
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .brand-logo-img {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
   flex-shrink: 0;
 }
 

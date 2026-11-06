@@ -129,11 +129,11 @@
               <i class="fa-solid fa-compass"></i> Auto 8-Dir
             </button>
             <div class="bar-separator"></div>
-            <button id="btn-sheet-flip-h" class="btn btn-sm btn-secondary" title="Flip whole sheet horizontally">
-              <i class="fa-solid fa-arrows-left-right"></i> Flip H
+            <button id="btn-sheet-flip-h" class="btn btn-sm btn-secondary" title="Flip selected row horizontally (Row-level only)">
+              <i class="fa-solid fa-arrows-left-right"></i> Flip Row H
             </button>
-            <button id="btn-sheet-flip-v" class="btn btn-sm btn-secondary" title="Flip whole sheet vertically">
-              <i class="fa-solid fa-arrows-up-down"></i> Flip V
+            <button id="btn-sheet-flip-v" class="btn btn-sm btn-secondary" title="Flip selected row vertically (Row-level only)">
+              <i class="fa-solid fa-arrows-up-down"></i> Flip Row V
             </button>
             <button id="btn-sheet-align-center" class="btn btn-sm btn-secondary" title="Align all cells to center">
               <i class="fa-solid fa-align-center"></i> Center All
@@ -346,6 +346,56 @@
 
             <!-- Swatches Grid -->
             <div id="palette-swatches" class="palette-swatches-grid"></div>
+
+            <!-- Generate from Artwork Subsection -->
+            <div class="palette-generator-section" id="palette-generator-section" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle, rgba(0,0,0,0.08));">
+              <div class="generator-header flex-between" style="cursor: pointer; user-select: none;" id="btn-toggle-palette-gen">
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color, #6366f1);"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate from Artwork</span>
+                <i class="fa-solid fa-chevron-down" id="palette-gen-chevron" style="font-size: 11px; transition: transform 0.2s;"></i>
+              </div>
+
+              <div id="palette-gen-body" class="palette-gen-body" style="margin-top: 8px;">
+                <div class="flex-column gap-6">
+                  <div class="flex-between">
+                    <label class="form-label" style="margin: 0; font-size: 11px;">Source:</label>
+                    <select id="select-palette-gen-source" class="modern-select select-xs" style="width: 140px;">
+                      <option value="active-cell" selected>Active Cell</option>
+                      <option value="all-cells">Entire Document</option>
+                    </select>
+                  </div>
+                  <div class="flex-between">
+                    <label class="form-label" style="margin: 0; font-size: 11px;">Mode:</label>
+                    <select id="select-palette-gen-mode" class="modern-select select-xs" style="width: 140px;">
+                      <option value="exact" selected>Exact Colors</option>
+                      <option value="reduce">Reduce Colors</option>
+                    </select>
+                  </div>
+                  <div class="flex-between hidden" id="group-palette-gen-max">
+                    <label class="form-label" style="margin: 0; font-size: 11px;">Max Colors:</label>
+                    <input type="number" id="input-palette-gen-max" class="modern-input input-xs" value="16" min="2" max="64" style="width: 70px;">
+                  </div>
+                </div>
+
+                <button id="btn-analyze-artwork" class="btn btn-xs btn-primary full-width" style="margin-top: 8px;" title="Scan pixels and detect unique colors">
+                  <i class="fa-solid fa-magnifying-glass"></i> Analyze Artwork
+                </button>
+
+                <div id="palette-gen-results" class="palette-gen-results hidden" style="margin-top: 8px;">
+                  <div class="results-summary flex-between" style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">
+                    <span id="palette-gen-count">Detected: 0 colors</span>
+                  </div>
+                  <div id="palette-gen-preview-swatches" class="palette-swatches-grid" style="margin-bottom: 8px; max-height: 80px; overflow-y: auto;"></div>
+                  <div class="flex-row gap-6">
+                    <button id="btn-apply-add-palette" class="btn btn-xs btn-accent flex-1" title="Preserve existing palette and add missing unique colors">
+                      <i class="fa-solid fa-plus"></i> Add to Palette
+                    </button>
+                    <button id="btn-apply-replace-palette" class="btn btn-xs btn-secondary flex-1" title="Replace entire palette and remap cell pixels atomically">
+                      <i class="fa-solid fa-rotate"></i> Replace Palette
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -731,18 +781,18 @@
   <div id="grid-context-menu" class="studio-context-menu hidden">
     <div class="context-menu-item" data-grid-action="edit">
       <i class="fa-solid fa-pen-to-square"></i>
-      <span>Edit Frame Pixels</span>
+      <span>Edit (Current) Frame Pixels</span>
       <span class="context-shortcut">Double-click</span>
     </div>
     <div class="context-menu-divider"></div>
     <div class="context-menu-item" data-grid-action="copy">
       <i class="fa-solid fa-copy"></i>
-      <span>Copy Frame</span>
+      <span>Copy (Current) Frame</span>
       <span class="context-shortcut">Ctrl+C</span>
     </div>
     <div class="context-menu-item" data-grid-action="paste">
       <i class="fa-solid fa-paste"></i>
-      <span>Paste Frame</span>
+      <span>Paste to (Current) Frame</span>
       <span class="context-shortcut">Ctrl+V</span>
     </div>
     <div class="context-menu-item" data-grid-action="duplicate">
@@ -752,15 +802,28 @@
     <div class="context-menu-divider"></div>
     <div class="context-menu-item" data-grid-action="flip-h">
       <i class="fa-solid fa-arrows-left-right"></i>
-      <span>Flip Frame Horizontally</span>
+      <span>Flip (Current) Frame Horizontally</span>
     </div>
     <div class="context-menu-item" data-grid-action="flip-v">
       <i class="fa-solid fa-arrows-up-down"></i>
-      <span>Flip Frame Vertically</span>
+      <span>Flip (Current) Frame Vertically</span>
     </div>
     <div class="context-menu-item text-danger" data-grid-action="clear">
       <i class="fa-solid fa-eraser"></i>
-      <span>Clear Frame Pixels</span>
+      <span>Clear (Current) Frame Pixels</span>
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-grid-action="duplicate-row">
+      <i class="fa-solid fa-clone"></i>
+      <span id="ctx-dup-row-label">Duplicate Row...</span>
+    </div>
+    <div class="context-menu-item" data-grid-action="flip-row-h">
+      <i class="fa-solid fa-arrows-left-right"></i>
+      <span>Flip Entire Row H</span>
+    </div>
+    <div class="context-menu-item" data-grid-action="flip-row-v">
+      <i class="fa-solid fa-arrows-up-down"></i>
+      <span>Flip Entire Row V</span>
     </div>
     <div class="context-menu-divider"></div>
     <div class="context-menu-item text-danger" data-grid-action="delete-row">
