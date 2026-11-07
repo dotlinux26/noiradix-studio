@@ -817,10 +817,12 @@ const PIX2 = (function () {
           } else {
             const [x1, y1] = p1;
             const [x2, y2] = p2;
+            const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
+            const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
             if (Math.abs(x1) <= MAX_COORD_ABS && Math.abs(y1) <= MAX_COORD_ABS &&
                 Math.abs(x2) <= MAX_COORD_ABS && Math.abs(y2) <= MAX_COORD_ABS) {
               drawLineBresenham(x1, y1, x2, y2, (x, y) => {
-                if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
+                if (x >= 0 && x < cellW && y >= 0 && y < cellH) {
                   currentCell.pixels[`${x},${y}`] = color;
                 }
               });
@@ -846,8 +848,10 @@ const PIX2 = (function () {
           } else {
             const [x, y] = origin;
             const [w, h] = dims;
-            const maxBoundW = (currentCell.size ? currentCell.size.w : doc.meta.cell_size.w) * 2;
-            const maxBoundH = (currentCell.size ? currentCell.size.h : doc.meta.cell_size.h) * 2;
+            const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
+            const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
+            const maxBoundW = cellW * 2;
+            const maxBoundH = cellH * 2;
             const clampedW = Math.min(Math.max(0, w), maxBoundW);
             const clampedH = Math.min(Math.max(0, h), maxBoundH);
             if (clampedW * clampedH <= 262144) {
@@ -855,7 +859,7 @@ const PIX2 = (function () {
                 for (let dx = 0; dx < clampedW; dx++) {
                   if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
                     const px = x + dx, py = y + dy;
-                    if (Math.abs(px) <= MAX_COORD_ABS && Math.abs(py) <= MAX_COORD_ABS) {
+                    if (px >= 0 && px < cellW && py >= 0 && py < cellH) {
                       currentCell.pixels[`${px},${py}`] = color;
                     }
                   }
@@ -892,13 +896,15 @@ const PIX2 = (function () {
             });
           } else {
             const [x, y] = pt;
+            const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
+            const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
             let axisX, colToken;
             if (parts.length >= 4) {
               axisX = parseFloat(parts[2]);
-              if (isNaN(axisX)) axisX = ((doc.meta.cell_size.w - 1) / 2);
+              if (isNaN(axisX)) axisX = ((cellW - 1) / 2);
               colToken = parts[3];
             } else {
-              axisX = ((doc.meta.cell_size.w - 1) / 2);
+              axisX = ((cellW - 1) / 2);
               colToken = parts[2];
             }
             const color = resolveColor(colToken, doc.palette);
@@ -908,10 +914,12 @@ const PIX2 = (function () {
                 line: i + 1,
                 message: `Unresolved color "${colToken}" in sym_dot command`
               });
-            } else if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
-              currentCell.pixels[`${x},${y}`] = color;
+            } else {
+              if (x >= 0 && x < cellW && y >= 0 && y < cellH) {
+                currentCell.pixels[`${x},${y}`] = color;
+              }
               const mx = Math.round(2 * axisX - x);
-              if (Math.abs(mx) <= MAX_COORD_ABS) {
+              if (mx >= 0 && mx < cellW && y >= 0 && y < cellH) {
                 currentCell.pixels[`${mx},${y}`] = color;
               }
             }

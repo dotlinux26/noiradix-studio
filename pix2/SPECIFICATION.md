@@ -193,25 +193,26 @@ To guarantee that any compiler (Rust, Go, C++, Python, JavaScript) produces byte
 
 ### 4.3 Line Primitive: `line` (Standard Integer Bresenham Algorithm)
 - **Syntax:** `line x1,y1 x2,y2 <col>`
-- **Algorithm:** All conforming implementations MUST use the canonical 2D integer Bresenham algorithm:
+- **Algorithm:** All conforming implementations MUST use the canonical integer Bresenham algorithm with strict inequality tie-breaking:
   ```
   dx = abs(x2 - x1)
+  dy = abs(y2 - y1)
   sx = x1 < x2 ? 1 : -1
-  dy = -abs(y2 - y1)
   sy = y1 < y2 ? 1 : -1
-  err = dx + dy
+  err = dx - dy
   while true:
-    plot(x1, y1, col)
+    if 0 <= x1 < W and 0 <= y1 < H:
+      plot(x1, y1, col)
     if x1 == x2 and y1 == y2: break
     e2 = 2 * err
-    if e2 >= dy:
-      err += dy
+    if e2 > -dy:
+      err -= dy
       x1 += sx
-    if e2 <= dx:
+    if e2 < dx:
       err += dx
       y1 += sy
   ```
-- **Tie-Breaking Guarantee:** By evaluating `e2 >= dy` followed by `e2 <= dx`, diagonal steps are handled consistently without float rounding drift.
+- **Tie-Breaking Guarantee:** By evaluating `if (e2 > -dy)` followed by `if (e2 < dx)`, diagonal steps and octant transitions are handled identically across all language runtimes without floating-point rounding divergence. For example, `line 2,2 3,4` deterministically plots `(2,2) -> (2,3) -> (3,4)`. Pixels outside the cell bounds $[0..W-1, 0..H-1]$ are clipped.
 
 ### 4.4 Rectangle Primitive: `rect`
 - **Syntax:** `rect x,y w,h <col> [outline|fill]`
@@ -237,13 +238,14 @@ To guarantee that any compiler (Rust, Go, C++, Python, JavaScript) produces byte
 - **Syntax:** `sym_dot x,y [axisX] <col>`
 - **Parameters:**
   - Coordinate $(x, y)$ to plot.
-  - `axisX` (float, optional): Reflection axis. If omitted, defaults to $(W - 1) / 2$ (e.g. $7.5$ for $16\times 16$).
+  - `axisX` (float, optional): Reflection axis. If omitted, defaults to $(W - 1) / 2$ based on effective cell width $W$ (`cell.size.w` or `default_cell.w`, e.g. $7.5$ for $16\times 16$, $4.5$ for $10\times 10$).
 - **Reflection Formula:**
   $$x_{\text{mirror}} = \text{round}(2 \times \text{axisX} - x)$$
 - **Semantics:**
-  1. Plots $(x, y)$ with `<col>`.
-  2. If $x_{\text{mirror}} \neq x$ and $0 \le x_{\text{mirror}} < W$, plots $(x_{\text{mirror}}, y)$ with `<col>`.
+  1. If $0 \le x < W$ and $0 \le y < H$, plots $(x, y)$ with `<col>`.
+  2. If $x_{\text{mirror}} \neq x$ and $0 \le x_{\text{mirror}} < W$ and $0 \le y < H$, plots $(x_{\text{mirror}}, y)$ with `<col>`.
   3. If $x_{\text{mirror}} == x$ (on the symmetry axis), it is plotted exactly once.
+  4. Any coordinates outside $[0..W-1, 0..H-1]$ are clipped.
 
 ---
 
@@ -461,5 +463,6 @@ AnimProperty       ::= WS* "name:" WS* StringLiteral EOL
 FrameList          ::= "[" WS* (Identifier (WS* "," WS* Identifier)*)? WS* "]"
 Boolean            ::= "true" | "false"
 Dimension          ::= Integer "x" Integer
+
 EndMarker          ::= "@end" EOL?
 ```

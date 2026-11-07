@@ -1,12 +1,12 @@
 {
   "meta": {
-    "title": "Vector Primitives Conformance",
+    "title": "Normative Drawing Primitives Conformance",
     "author": "dotlinux26",
     "version": "1.0",
     "color_mode": "RGBA",
     "coordinate_origin": "top-left",
     "grid": {
-      "cols": 1,
+      "cols": 3,
       "rows": 1
     },
     "cell_size": {
@@ -19,13 +19,14 @@
   "palette": {
     "1": "#ffffff",
     "2": "#57546f",
-    "3": "#ff0000"
+    "3": "#ff0000",
+    "4": "#00ff00"
   },
   "animations": {},
   "cells": {
     "primitive_test": {
       "id": "primitive_test",
-      "name": "Primitives Raster Test",
+      "name": "Primitives Raster and Tie-Breaking",
       "row": 0,
       "col": 0,
       "direction": "down",
@@ -35,12 +36,12 @@
         "3,2": "#ffffff",
         "4,2": "#ffffff",
         "5,2": "#ffffff",
-        "2,3": "#ffffff",
+        "2,3": "#57546f",
         "3,3": "#ffffff",
         "4,3": "#ffffff",
         "5,3": "#ffffff",
         "2,4": "#ffffff",
-        "3,4": "#ffffff",
+        "3,4": "#57546f",
         "4,4": "#ffffff",
         "5,4": "#ffffff",
         "2,5": "#ffffff",
@@ -70,6 +71,80 @@
       "size": {
         "w": 16,
         "h": 16
+      }
+    },
+    "flood_fill_test": {
+      "id": "flood_fill_test",
+      "name": "4-Way Flood Fill and Diagonal Isolation",
+      "row": 0,
+      "col": 1,
+      "direction": "down",
+      "frame": 1,
+      "pixels": {
+        "1,0": "#57546f",
+        "0,1": "#57546f",
+        "0,0": "#ffffff",
+        "6,6": "#57546f",
+        "7,6": "#57546f",
+        "8,6": "#57546f",
+        "9,6": "#57546f",
+        "10,6": "#57546f",
+        "11,6": "#57546f",
+        "6,7": "#57546f",
+        "11,7": "#57546f",
+        "6,8": "#57546f",
+        "11,8": "#57546f",
+        "6,9": "#57546f",
+        "11,9": "#57546f",
+        "6,10": "#57546f",
+        "11,10": "#57546f",
+        "6,11": "#57546f",
+        "7,11": "#57546f",
+        "8,11": "#57546f",
+        "9,11": "#57546f",
+        "10,11": "#57546f",
+        "11,11": "#57546f",
+        "8,8": "#ff0000",
+        "8,9": "#ff0000",
+        "8,10": "#ff0000",
+        "9,10": "#ff0000",
+        "9,9": "#ff0000",
+        "9,8": "#ff0000",
+        "9,7": "#ff0000",
+        "10,7": "#ff0000",
+        "10,8": "#ff0000",
+        "10,9": "#ff0000",
+        "10,10": "#ff0000",
+        "8,7": "#ff0000",
+        "7,7": "#ff0000",
+        "7,8": "#ff0000",
+        "7,9": "#ff0000",
+        "7,10": "#ff0000"
+      },
+      "size": {
+        "w": 16,
+        "h": 16
+      }
+    },
+    "clipping_and_custom_size": {
+      "id": "clipping_and_custom_size",
+      "name": "Clipping and Custom Cell Dimensions",
+      "row": 0,
+      "col": 2,
+      "direction": "down",
+      "frame": 2,
+      "pixels": {
+        "8,8": "#ffffff",
+        "9,8": "#ffffff",
+        "8,9": "#ffffff",
+        "9,9": "#ffffff",
+        "2,2": "#ffffff",
+        "7,2": "#ffffff",
+        "0,9": "#ffffff"
+      },
+      "size": {
+        "w": 10,
+        "h": 10
       }
     }
   },

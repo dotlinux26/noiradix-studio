@@ -1,14 +1,14 @@
 @pix2 1.0
 
 @meta
-  title: "Vector Primitives Conformance"
+  title: "Normative Drawing Primitives Conformance"
   author: "dotlinux26"
   version: "1.0"
   color_mode: "RGBA"
   coordinate_origin: "top-left"
 
 @grid
-  columns: 1
+  columns: 3
   rows: 1
   default_cell: 16x16
   gap: 0
@@ -19,9 +19,10 @@
   1: #ffffff
   2: #57546f
   3: #ff0000
+  4: #00ff00
 
 @cell primitive_test
-  name: "Primitives Raster Test"
+  name: "Primitives Raster and Tie-Breaking"
   direction: down
   frame: 0
   grid_pos: 0,0
@@ -29,8 +30,31 @@
   rect 2,2 4x4 1 fill
   rect 8,2 4x4 2 outline
   line 2,10 6,14 1
+  line 2,2 3,4 2
   sym_dot 4,8 7.5 2
   p 2,2 3
 
-@end
+@cell flood_fill_test
+  name: "4-Way Flood Fill and Diagonal Isolation"
+  direction: down
+  frame: 1
+  grid_pos: 0,1
+  size: 16x16
+  p 1,0 2
+  p 0,1 2
+  fill 0,0 1
+  rect 6,6 6x6 2 outline
+  fill 8,8 3
+  fill 8,8 3
 
+@cell clipping_and_custom_size
+  name: "Clipping and Custom Cell Dimensions"
+  direction: down
+  frame: 2
+  grid_pos: 0,2
+  size: 10x10
+  rect 8,8 4x4 1 fill
+  sym_dot 2,2 1
+  sym_dot 9,9 1
+
+@end

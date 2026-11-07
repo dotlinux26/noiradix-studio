@@ -126,12 +126,32 @@ const primVectorText = fs.readFileSync(path.join(vectorsDir, 'canonical_primitiv
 const primDoc = PIX2.parse(primVectorText);
 const primBaseline = JSON.parse(fs.readFileSync(path.join(vectorsDir, 'canonical_primitives_raster.json'), 'utf8'));
 assert.deepStrictEqual(primDoc, primBaseline, 'Rasterized primitives must strictly match immutable baseline');
+
 const primCell = primDoc.cells['primitive_test'];
 assert.strictEqual(primCell.pixels['2,2'], '#ff0000', 'Last-write-wins: p 2,2 #ff0000 must overwrite rect fill pixel');
+assert.strictEqual(primCell.pixels['2,3'], '#57546f', 'Bresenham line tie-breaking must step through (2,3)');
+assert.strictEqual(primCell.pixels['3,4'], '#57546f', 'Bresenham line endpoint (3,4) plotted');
+assert.strictEqual(primCell.pixels['3,3'], '#ffffff', 'Line 2,2 3,4 must not traverse (3,3) leaving rect fill intact');
 assert.strictEqual(primCell.pixels['4,8'], '#57546f', 'Symmetry dot must plot original coordinate');
 assert.strictEqual(primCell.pixels['11,8'], '#57546f', 'Symmetry dot must plot mirrored coordinate round(2*7.5 - 4) = 11');
 assert.strictEqual(primCell.pixels['9,3'], undefined, 'Outline rect interior must remain pure transparent');
-console.log('  [PASS] canonical_primitives_raster.pix2 verified: Bresenham, rect outline/fill, sym_dot, and LWW rules');
+
+const floodCell = primDoc.cells['flood_fill_test'];
+assert.strictEqual(floodCell.pixels['0,0'], '#ffffff', '4-way flood fill paints seed point');
+assert.strictEqual(floodCell.pixels['1,1'], undefined, '4-way flood fill must never leak across diagonal barrier');
+assert.strictEqual(floodCell.pixels['8,8'], '#ff0000', 'Flood fill fills enclosed outline interior');
+assert.strictEqual(floodCell.pixels['5,5'], undefined, 'Flood fill must not leak outside enclosed outline');
+
+const clipCell = primDoc.cells['clipping_and_custom_size'];
+assert.strictEqual(clipCell.pixels['8,8'], '#ffffff', 'Rect within cell bounds is painted');
+assert.strictEqual(clipCell.pixels['9,9'], '#ffffff', 'Rect within cell bounds is painted');
+assert.strictEqual(clipCell.pixels['10,10'], undefined, 'Rect outside cell bounds must be clipped');
+assert.strictEqual(clipCell.pixels['10,8'], undefined, 'Rect X overflow must be clipped');
+assert.strictEqual(clipCell.pixels['8,10'], undefined, 'Rect Y overflow must be clipped');
+assert.strictEqual(clipCell.pixels['7,2'], '#ffffff', 'sym_dot reflects across custom cell width axis (10-1)/2 = 4.5');
+assert.strictEqual(clipCell.pixels['0,9'], '#ffffff', 'sym_dot (9,9) reflects to (0,9) on 10x10 cell');
+
+console.log('  [PASS] canonical_primitives_raster.pix2 verified: Bresenham tie-breaking, 4-way flood fill, clipping, and symmetry');
 
 // Test 10: Structured Diagnostic API conformance
 const structuredVal = PIX2.validate(docOob, { strict: false });

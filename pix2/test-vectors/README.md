@@ -9,7 +9,7 @@ This directory contains reference test vectors designed to verify the conformanc
 A conforming PIX2 parser must satisfy the following requirements:
 
 1. **Deterministic Parse Result**: Parsing `canonical_valid_hero.pix2` must produce an Abstract Syntax Tree (AST) semantically identical to `canonical_valid_hero.json`.
-2. **Drawing Primitives Determinism**: Parsing `canonical_primitives_raster.pix2` must evaluate `line`, `rect` (fill/outline), `sym_dot`, and Last-Write-Wins (LWW) rules into exact pixels matching `canonical_primitives_raster.json`.
+2. **Drawing Primitives Determinism**: Parsing `canonical_primitives_raster.pix2` must evaluate `line` (canonical integer Bresenham with tie-breaking), `rect` (fill/outline with boundary clipping), `fill` (4-way flood fill with diagonal isolation), `sym_dot` (cell-size aware reflection), and Last-Write-Wins (LWW) rules into exact pixels matching `canonical_primitives_raster.json`.
 3. **Comment Disambiguation**: Hex colors (e.g. `#57546f`) must never be truncated or swallowed as comments, even when trailing comments follow on the same line.
 4. **Strict Number Parsing**: Coordinate parsing must reject floats (`1.5`) and malformed alphanumeric tokens (e.g. `1abc,3`). Test vector: `invalid_syntax_coordinate.pix2`.
 5. **Validation Integrity & Structured Diagnostics**:
@@ -24,7 +24,7 @@ A conforming PIX2 parser must satisfy the following requirements:
 | :--- | :--- | :--- |
 | `canonical_valid_hero.pix2` | Valid | Parses into `canonical_valid_hero.json` AST with zero warnings. |
 | `canonical_valid_hero.json` | Baseline AST | Normative JSON representation of `canonical_valid_hero.pix2`. |
-| `canonical_primitives_raster.pix2` | Vector Primitives | Tests Bresenham line, rect fill/outline, sym_dot, and LWW overwrite rules. |
+| `canonical_primitives_raster.pix2` | Vector Primitives | Tests Bresenham line tie-breaking, rect fill/outline, 4-way flood fill, sym_dot custom sizing, and LWW overwrite rules. |
 | `canonical_primitives_raster.json` | Baseline Raster | Expected pixel AST representation of `canonical_primitives_raster.pix2`. |
 | `invalid_syntax_coordinate.pix2` | Invalid Syntax | Rejects non-integer coordinate `1abc,3`. |
 | `invalid_missing_frame.pix2` | Invalid Semantics | Validator flags missing frame reference `phantom_cell_404`. |
