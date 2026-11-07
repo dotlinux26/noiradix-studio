@@ -709,6 +709,17 @@
       btn.style.left = `${Math.min(Math.max(curLeft, pad), maxLeft)}px`;
       btn.style.top = `${Math.min(Math.max(curTop, pad), maxTop)}px`;
     });
+
+    // Auto-open modal ONCE on first-time visit only
+    try {
+      const hasSeenAbout = localStorage.getItem('noiradix_about_seen');
+      if (!hasSeenAbout) {
+        localStorage.setItem('noiradix_about_seen', 'true');
+        setTimeout(() => {
+          openAboutModal();
+        }, 400);
+      }
+    } catch (_) {}
   }
 
   // ===========================================================================
