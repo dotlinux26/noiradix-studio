@@ -257,6 +257,7 @@ flowchart TD
 * **[Formal EBNF Grammar](PIX2/PIX2_GRAMMAR.md):** Unambiguous grammar specification for building external parsers and language servers.
 * **[Validation Criteria & Diagnostics](PIX2/PIX2_VALIDATION_RULES.md):** Strict boundary checks and error codes to ensure generated sprites are 100% valid.
 * **[Machine-Verifiable Examples](PIX2/PIX2_EXAMPLES.md):** Canonical samples covering static props, 4-directional walk strips, and 8-directional combat sprites.
+* **[Future Directions & Coordinate-Aware Raster Editing](PIX2/PIX2_FUTURE_DIRECTIONS.md):** Exploratory research proposal for extending PIX2 principles to high-resolution raster workflows (ROI selection, local PIX2 Patch, and deterministic coordinate editing).
 
 ---
 

@@ -72,7 +72,7 @@ Y = H-1[0, H-1]   [1, H-1]            [W-1, H-1]
 A `.pix2` file consists of 4 primary sections:
 1. `@meta` — Sheet metadata, grid dimensions, and resolution.
 2. `@palette` — Indexed shorthand color table.
-3. `@animations` — Animation states, frame sequences, FPS, and loop modes.
+3. `@animation <id>` — Directional animation states, frame sequences, FPS, and loop modes.
 4. `@cell <id>` — Individual frames containing drawn pixels and commands.
 
 Comments start with `#` and can appear anywhere.
@@ -101,16 +101,25 @@ Maps integer IDs to 6-character or 8-character Hex colors:
 ```
 *Note:* Transparency is **never** added to the palette. Any coordinate not assigned a color is automatically fully transparent.
 
-### 3.3 Section: `@animations`
-Defines playback clips for 4-direction and 8-direction animation controllers:
+### 3.3 Section: `@animation <id>` (Canonical)
+Defines directional animation clips with frame sequences, playback speed, and loop mode:
 ```pix2
-@animations
-  walk_down:  [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
-  walk_up:    [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
-  walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
-  walk_left:  [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop
+@animation walk_down
+  name: "Walk Down"
+  direction: down
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+  fps: 6
+  loop: true
 ```
-- Syntax: `<name>: [<cell_id>, ...] @ <speed>fps [loop|once]`
+- Properties:
+  - `name: "<string>"` — Human-readable animation clip title.
+  - `direction: <direction>` — Direction tag (`down`, `up`, `right`, `left`, `down_right`, etc.).
+  - `frames: [<id>, ...]` — Ordered array of `@cell` identifiers.
+  - `fps: <integer>` — Playback framerate (standard default: `6`–`8` FPS).
+  - `loop: <boolean>` — `true` for continuous locomotion, `false` for one-shot action.
+
+*(Legacy block compatibility: Parsers also accept the single-line block format `@animations \n walk_down: [c0, c1] @ 6fps loop` for backward compatibility).*
+
 - Standard Direction Names:
   - **4-Direction:** `down`, `up`, `right`, `left`
   - **8-Direction:** `down`, `down_right`, `right`, `up_right`, `up`, `up_left`, `left`, `down_left`

@@ -189,6 +189,26 @@ test('PIX2.validate flags illegal prototype keys', () => {
   assert.ok(result.errors.some(e => e.includes('prototype pollution')));
 });
 
+test('PIX2.validate flags out-of-bounds pixel coordinates in strict mode', () => {
+  const doc = PIX2.createDocument();
+  doc.cells['cell_0_0'].pixels['99,99'] = '#ffffff';
+  const resWarn = PIX2.validate(doc);
+  assert.ok(resWarn.warnings.some(w => w.includes('outside bounds')));
+  const resStrict = PIX2.validate(doc, { strict: true });
+  assert.strictEqual(resStrict.valid, false);
+  assert.ok(resStrict.errors.some(e => e.includes('outside bounds')));
+});
+
+test('PIX2.validate flags non-existent animation frame references', () => {
+  const doc = PIX2.createDocument();
+  doc.animations['ghost_walk'] = { frames: ['ghost_missing_frame_99'] };
+  const resWarn = PIX2.validate(doc);
+  assert.ok(resWarn.warnings.some(w => w.includes('references non-existent cell')));
+  const resStrict = PIX2.validate(doc, { strict: true });
+  assert.strictEqual(resStrict.valid, false);
+  assert.ok(resStrict.errors.some(e => e.includes('references non-existent cell')));
+});
+
 // ---------------------------------------------------------------------------
 // TEST GROUP 4: Client-Side XSS & Sanitization Defense
 // ---------------------------------------------------------------------------

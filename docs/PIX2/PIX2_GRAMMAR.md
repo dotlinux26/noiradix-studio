@@ -67,7 +67,7 @@ GridEntry          ::= WS* ("columns" | "cols") ":" WS* Integer
 PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
 PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?
 
-CellSection        ::= "@cell" WS+ Identifier EOL (CellProperty | PixelRecord)*
+CellSection        ::= "@cell" WS+ Identifier EOL (CellProperty | PixelRecord | VectorPrimitive)*
 CellProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
                      | WS* "frame:" WS* Integer EOL
@@ -79,8 +79,19 @@ DirectionEnum      ::= "down" | "up" | "right" | "left"
                      | "none" | "any"
 
 PixelRecord        ::= WS* ("pixel" | "p") WS+ Coordinate WS+ ColorRef EOL
+                     | WS* ("dot" | "d") WS+ Coordinate WS+ ColorRef EOL
 Coordinate         ::= Integer "," Integer
 ColorRef           ::= HexColor | Identifier | Integer
+
+VectorPrimitive    ::= LinePrimitive | RectPrimitive | FillPrimitive | SymmetryPrimitive
+
+LinePrimitive      ::= WS* "line" WS+ Coordinate WS+ Coordinate WS+ ColorRef EOL
+RectPrimitive      ::= WS* ("rect" | "r") WS+ Coordinate WS+ Dimension WS+ ColorRef EOL
+                     | WS* ("rect_fill" | "rf") WS+ Coordinate WS+ Dimension WS+ ColorRef EOL
+FillPrimitive      ::= WS* "fill" WS+ Coordinate WS+ ColorRef EOL
+SymmetryPrimitive  ::= WS* ("sym_dot" | "sdot" | "sym") WS+ Coordinate WS+ ColorRef EOL
+                     | WS* ("sym_line" | "sline") WS+ Coordinate WS+ Coordinate WS+ ColorRef EOL
+                     | WS* ("sym_rect" | "srect") WS+ Coordinate WS+ Dimension WS+ ColorRef EOL
 
 AnimationSection   ::= "@animation" WS+ Identifier EOL (AnimProperty)*
 AnimProperty       ::= WS* "name:" WS* StringLiteral EOL

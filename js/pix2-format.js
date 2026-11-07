@@ -927,9 +927,14 @@ const PIX2 = (function () {
   }
 
   /**
-   * Validates a document structure and flags any prototype pollution or anomalous bounds.
+   * Validates a document structure and flags prototype pollution, out-of-bounds coordinates, or missing references.
+   * @param {Object} doc - Parsed PIX2 document object.
+   * @param {Object} [options] - Optional settings ({ strict: boolean }).
+   * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
    */
-  function validate(doc) {
+  function validate(doc, options) {
+    const opts = options || {};
+    const strict = opts.strict === true;
     const errors = [];
     const warnings = [];
 
@@ -961,6 +966,51 @@ const PIX2 = (function () {
         for (const id of propNames) {
           if (FORBIDDEN_KEYS.has(id.toLowerCase())) {
             errors.push(`Illegal prototype pollution identifier in ${key}: "${id}"`);
+          }
+        }
+      }
+    }
+
+    // Semantic checks: Cell coordinate bounds & pixel integrity
+    const defaultW = (doc.meta && doc.meta.cellSize && doc.meta.cellSize.w) || 16;
+    const defaultH = (doc.meta && doc.meta.cellSize && doc.meta.cellSize.h) || 16;
+
+    if (doc.cells && typeof doc.cells === 'object') {
+      for (const cellId in doc.cells) {
+        const cell = doc.cells[cellId];
+        if (!cell || typeof cell !== 'object') continue;
+        const cellW = (cell.size && cell.size.w) || defaultW;
+        const cellH = (cell.size && cell.size.h) || defaultH;
+
+        if (cell.pixels && typeof cell.pixels === 'object') {
+          for (const coord in cell.pixels) {
+            const commaIdx = coord.indexOf(',');
+            if (commaIdx > 0) {
+              const x = parseInt(coord.slice(0, commaIdx), 10);
+              const y = parseInt(coord.slice(commaIdx + 1), 10);
+              if (isNaN(x) || isNaN(y) || x < 0 || x >= cellW || y < 0 || y >= cellH) {
+                const msg = `Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
+                if (strict) errors.push(msg);
+                else warnings.push(msg);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Semantic checks: Animation frame reference integrity
+    if (doc.animations && typeof doc.animations === 'object') {
+      for (const animId in doc.animations) {
+        const anim = doc.animations[animId];
+        if (!anim || typeof anim !== 'object') continue;
+        if (anim.frames && Array.isArray(anim.frames)) {
+          for (const frameId of anim.frames) {
+            if (!doc.cells || !doc.cells[frameId]) {
+              const msg = `Animation "${animId}": references non-existent cell "${frameId}"`;
+              if (strict) errors.push(msg);
+              else warnings.push(msg);
+            }
           }
         }
       }

@@ -86,6 +86,11 @@ We do not attempt to out-compete monolithic 1,000-feature drawing apps on brush 
 5. **Git-Native Versionability:**  
    Sprites cease to be opaque binary blobs polluting Git repositories and Git LFS. Every single visual change is a clean text diff that can be reviewed in GitHub Pull Requests, branched, merged, and safely rolled back.
 
+> [!TIP]
+> **Beyond 2D Sprites: Researching Coordinate-Aware High-Resolution Editing**  
+> Wondering how structured coordinates could apply to Full HD or 2K raster workflows without bloating into millions of text lines? Read our non-normative research proposal:  
+> 📄 **[PIX2 Future Directions: Coordinate-Aware Raster Editing](docs/PIX2/PIX2_FUTURE_DIRECTIONS.md)** — exploring ROI selection, localized PIX2 Patch application, and deterministic image modification.
+
 ---
 
 ## 📸 Studio Visual Tour
