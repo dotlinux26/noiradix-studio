@@ -5774,7 +5774,11 @@ const outText = PIX2.serialize(doc);</code></pre>
     let paletteSummary = '';
     if (state.doc.palette && Object.keys(state.doc.palette).length > 0) {
       paletteSummary = Object.entries(state.doc.palette)
-        .map(([id, col]) => `  ${id}: ${col.hex}  # ${col.name || 'Color'}`)
+        .map(([id, col]) => {
+          const hex = typeof col === 'string' ? col : (col && col.hex ? col.hex : '#ffffff');
+          const name = typeof col === 'object' && col && col.name ? col.name : `Color ${id}`;
+          return `  ${id}: ${hex}  # ${name}`;
+        })
         .join('\n');
     } else {
       paletteSummary = `  1: #181425  # Outline Dark Charcoal
@@ -5809,12 +5813,35 @@ You are equipped with the full suite of NOIRADIX Studio production capabilities.
    - Use 'sym_dot x,y ${m.axisXStr} <color>' for bilateral frontal symmetry.
    - Use 'rect x,y w,h <color> fill' to instantly fill solid rectangular body mass in 1 line.
    - Use 'p x,y <pal_id>' for compact sparse pixel placement.
-4. ANIMATION BINDINGS:
+4. ANIMATION BINDINGS (CANONICAL MULTI-LINE SYNTAX):
    - Hook up all walk animation cycles at 6fps loop:
-     @animation walk_down: [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
-     @animation walk_up: [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
-     @animation walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
-     @animation walk_left: [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop
+@animation walk_down
+  name: "Walk Down"
+  direction: down
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+  fps: 6
+  loop: true
+
+@animation walk_up
+  name: "Walk Up"
+  direction: up
+  frames: [cell_1_0, cell_1_1, cell_1_2, cell_1_3]
+  fps: 6
+  loop: true
+
+@animation walk_right
+  name: "Walk Right"
+  direction: right
+  frames: [cell_2_0, cell_2_1, cell_2_2, cell_2_3]
+  fps: 6
+  loop: true
+
+@animation walk_left
+  name: "Walk Left"
+  direction: left
+  frames: [cell_3_0, cell_3_1, cell_3_2, cell_3_3]
+  fps: 6
+  loop: true
 
 #### PRODUCTION RECIPE 2: DISCRETE 4-FRAME WALK & GHOST LOCOMOTION FORMULAS
 1. 4-FRAME MATHEMATICAL WALK FORMULA:
@@ -5865,12 +5892,35 @@ You are tasked with generating a complete game character from scratch in all car
    - Use 'sym_dot x,y ${m.axisXStr} <color>' for bilateral frontal symmetry.
    - Use 'rect x,y w,h <color> fill' to instantly fill solid rectangular body mass in 1 line.
    - Use 'p x,y <pal_id>' for compact sparse pixel placement.
-4. ANIMATION BINDINGS:
+4. ANIMATION BINDINGS (CANONICAL MULTI-LINE SYNTAX):
    - Hook up all walk animation cycles at 6fps loop:
-     @animation walk_down: [cell_0_0, cell_0_1, cell_0_2, cell_0_3] @ 6fps loop
-     @animation walk_up: [cell_1_0, cell_1_1, cell_1_2, cell_1_3] @ 6fps loop
-     @animation walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
-     @animation walk_left: [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop`;
+@animation walk_down
+  name: "Walk Down"
+  direction: down
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+  fps: 6
+  loop: true
+
+@animation walk_up
+  name: "Walk Up"
+  direction: up
+  frames: [cell_1_0, cell_1_1, cell_1_2, cell_1_3]
+  fps: 6
+  loop: true
+
+@animation walk_right
+  name: "Walk Right"
+  direction: right
+  frames: [cell_2_0, cell_2_1, cell_2_2, cell_2_3]
+  fps: 6
+  loop: true
+
+@animation walk_left
+  name: "Walk Left"
+  direction: left
+  frames: [cell_3_0, cell_3_1, cell_3_2, cell_3_3]
+  fps: 6
+  loop: true`;
     } else if (mode === 'walk-animation') {
       specializedInstructions = `### SPECIALIZED OBJECTIVE: DISCRETE WALK & GHOST LOCOMOTION ANIMATION
 You are tasked with transforming static character poses into fluid, natural animations:
@@ -5949,13 +5999,28 @@ PIX2 is a deterministic, coordinate-addressed plain-text sprite format. Unlike r
      * 4: Highlight / Rim Light (Bright tone e.g. #9d8ec2)
      * 5: Glowing Accent / Eyes / Gem (Vivid saturated e.g. #00ffff, #ff0055, #ffd700)
 5. MATHEMATICAL MACROS & DRAWING COMMANDS:
-   - \`p x,y <pal_id|hex>\` or \`pixel x,y <pal_id|hex>\`: Plots a single pixel at (x,y). Multiple pixel tokens can be placed on one line: \`p 5,2 1  p 6,2 2  p 7,2 #ffffff\`.
-   - \`sym_dot x,y axisX <col>\`: Plots (x,y) and automatically plots its mirror at Math.round(2*axisX - x, y). For cell width ${cw}, center axis is ${m.axisXStr}.
+   - \`p x,y <pal_id|hex>\` or \`pixel x,y <pal_id|hex>\`: Plots a single discrete pixel at integer coordinates (x,y). Multiple pixel tokens can be placed on one line: \`p 5,2 1  p 6,2 2  p 7,2 #ffffff\`.
+   - \`dot x,y <pal_id|hex>\` or \`d x,y <pal_id|hex>\`: Discrete dot drawing macro.
+   - \`sym_dot x,y axisX <col>\`: Plots (x,y) and its bilateral reflection at Math.round(2*axisX - x, y). For cell width ${cw}, center axis is ${m.axisXStr}.
    - \`line x0,y0 x1,y1 <col>\`: Draws a Bresenham discrete line (weapons, outlines, diagonal borders).
    - \`rect x,y w,h <col> fill\`: Instantly fills a solid rectangular region of width w and height h. Highly recommended for filling solid torso, robe, and cloak bodies in a single line!
    - \`rect x,y w,h <col> outline\`: Draws a rectangular boundary box.
    - \`fill x,y <col>\`: 4-way flood fill inside bounded pixels.
    - \`; comment\` or \`# comment\`: Explanatory commentary.
+
+6. CANONICAL MULTI-LINE ANIMATION SPECIFICATION:
+   - Animations MUST use the canonical multi-line format with ordered frame arrays:
+     @animation <id>
+       name: "<Display Title>"
+       direction: <down|up|right|left|none>
+       frames: [cell_id_0, cell_id_1, ...]
+       fps: 6
+       loop: true
+
+7. TOOL BOUNDARY & DIVISION OF LABOR:
+   - NOIRADIX Studio does NOT perform raster autotracing or convert PNG/JPG images into pixel art.
+   - You (the AI) compute discrete coordinate logic, spatial proportions, and walk cycle mathematics.
+   - The human artist loads your .pix2 code into NOIRADIX Studio to visually retouch pixels, refine facial expressions, and export 1-click packages to Unity 2D.
 
 ## 3. CANONICAL RESOLUTION REFERENCE TABLE & DISCRETE MATHEMATICS
 In PIX2, coordinates and center axes are calculated with exact discrete mathematics:

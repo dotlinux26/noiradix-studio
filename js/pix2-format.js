@@ -177,16 +177,40 @@ const PIX2 = (function () {
   const STRICT_INT_REGEX = /^-?[0-9]+$/;
 
   /**
-   * Parse a strict integer string without allowing trailing non-digit characters (e.g. "1abc").
+   * Parse a strict integer string without allowing trailing non-digit characters (e.g. "1abc")
+   * and ensuring value is within Number.isSafeInteger bounds.
    * @param {*} val
    * @returns {number} Integer or NaN
    */
   function parseStrictInt(val) {
-    if (typeof val === 'number') return Number.isInteger(val) ? val : Math.trunc(val);
+    if (typeof val === 'number') return Number.isSafeInteger(val) ? val : Math.trunc(val);
     if (typeof val !== 'string') return NaN;
     const trimmed = val.trim();
     if (!STRICT_INT_REGEX.test(trimmed)) return NaN;
-    return parseInt(trimmed, 10);
+    const num = parseInt(trimmed, 10);
+    return Number.isSafeInteger(num) ? num : NaN;
+  }
+
+  /**
+   * Bind non-enumerable backward-compatibility alias for cellSize <-> cell_size.
+   * Ensures JSON.stringify only outputs canonical snake_case `cell_size` without duplicate keys.
+   * @param {Object} meta
+   */
+  function attachCellSizeAlias(meta) {
+    if (!meta || typeof meta !== 'object') return;
+    if (!meta.cell_size) {
+      meta.cell_size = meta.cellSize || { w: 16, h: 16 };
+    }
+    try {
+      Object.defineProperty(meta, 'cellSize', {
+        get() { return this.cell_size; },
+        set(val) { this.cell_size = val; },
+        enumerable: false,
+        configurable: true
+      });
+    } catch (e) {
+      meta.cellSize = meta.cell_size;
+    }
   }
 
   /**
