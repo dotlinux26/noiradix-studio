@@ -64,9 +64,9 @@
         <span class="btn-text" id="theme-btn-label">Dark</span>
       </button>
 
-      <button id="btn-open-spec" class="btn btn-secondary btn-compact" title="View PIX2 Specification & AI Prompts">
-        <i class="fa-solid fa-book-bookmark"></i>
-        <span class="btn-text">Spec</span>
+      <button id="btn-import-code" class="btn btn-secondary btn-compact" title="Paste & Import .PIX2 Code Directly">
+        <i class="fa-solid fa-file-import"></i>
+        <span class="btn-text">Import</span>
       </button>
 
       <button id="btn-load-demo" class="btn btn-secondary btn-compact" title="Load Wispling Demo Sprite">
@@ -1226,6 +1226,56 @@
         <button id="btn-cancel-new-file" class="btn btn-secondary">Cancel</button>
         <button id="btn-confirm-new-file" class="btn btn-accent">
           <i class="fa-solid fa-plus"></i> Create File
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= IMPORT PIX2 CODE MODAL ================= -->
+  <div id="modal-import-code" class="studio-modal-backdrop hidden">
+    <div class="studio-modal-dialog import-code-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-file-import text-accent"></i>
+          <span>Import .PIX2 Code</span>
+        </div>
+        <button id="btn-close-import-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body import-code-modal-body">
+        <!-- 1. Target File Name -->
+        <div class="template-section">
+          <label class="form-label" for="import-file-name-input">
+            <i class="fa-solid fa-file-code"></i> File Name (.pix2):
+          </label>
+          <input type="text" id="import-file-name-input" class="modern-input full-width font-mono" value="imported_sprite.pix2" placeholder="e.g. hero_ai.pix2">
+          <span class="field-hint">Physical file name on disk. Auto-extracted from @meta.title or editable.</span>
+        </div>
+
+        <!-- 2. Paste Area -->
+        <div class="template-section">
+          <div class="flex-row justify-between align-center" style="margin-bottom: 6px;">
+            <label class="form-label" for="import-code-textarea" style="margin-bottom: 0;">
+              <i class="fa-solid fa-code"></i> Paste .PIX2 Code Here:
+            </label>
+            <div class="flex-row gap-4">
+              <button type="button" id="btn-import-paste-clipboard" class="btn btn-xs btn-secondary" title="Paste from Clipboard">
+                <i class="fa-solid fa-paste"></i> Paste Clipboard
+              </button>
+              <button type="button" id="btn-import-clear-code" class="btn btn-xs btn-secondary" title="Clear text">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+          </div>
+          <textarea id="import-code-textarea" class="import-code-textarea full-width" rows="12" placeholder="Paste .pix2 DSL code here...&#10;&#10;Example:&#10;@meta.version 1.0&#10;@meta.title &quot;Hero&quot;&#10;@grid.cols 4&#10;@grid.rows 4&#10;@grid.cell_width 16&#10;@grid.cell_height 16&#10;..."></textarea>
+          <div id="import-code-error" class="hidden" style="margin-top: 6px; padding: 8px 12px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; font-size: 12px; font-family: monospace; white-space: pre-wrap;"></div>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-import-code" class="btn btn-secondary">Cancel</button>
+        <button id="btn-confirm-import-code" class="btn btn-accent">
+          <i class="fa-solid fa-file-import"></i> Import &amp; Load into Studio
         </button>
       </div>
     </div>

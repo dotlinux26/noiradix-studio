@@ -32,6 +32,7 @@ Single-key tool shortcuts are active in the Cell Editor whenever text inputs or 
 | Shortcut | Scope | Action |
 | :--- | :--- | :--- |
 | <kbd>Ctrl</kbd> + <kbd>N</kbd> | Global | Opens the **New File Modal** with file naming and layout presets. |
+| <kbd>Ctrl</kbd> + <kbd>I</kbd> | Global | Opens the **Import PIX2 Code Modal** to paste & load DSL code from AI or clipboard. |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | Global | Opens a `.pix2` file from disk via File System Access API. |
 | <kbd>Ctrl</kbd> + <kbd>S</kbd> | Global | Saves directly to the disk file (Chromium) or downloads (Fallback). |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | Global | **Save As** dialog to commit document under a new file path. |

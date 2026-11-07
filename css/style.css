@@ -2609,19 +2609,44 @@ body {
 
 /* ================= ACTION & DIRECTION TEMPLATE & NEW FILE MODALS ================= */
 .template-modal-dialog,
-.new-file-modal-dialog {
-  width: 580px;
+.new-file-modal-dialog,
+.import-code-modal-dialog {
+  width: 640px;
   max-width: 95vw;
 }
 
 .template-modal-body,
-.new-file-modal-body {
+.new-file-modal-body,
+.import-code-modal-body {
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-height: 70vh;
+  max-height: 75vh;
   overflow-y: auto;
+}
+
+.import-code-textarea {
+  min-height: 220px;
+  max-height: 50vh;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg-canvas, #12141a);
+  color: var(--text-main, #e2e8f0);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.import-code-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
 .field-hint {

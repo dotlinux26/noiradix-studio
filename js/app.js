@@ -316,7 +316,7 @@
     dom.statusSymmetryLabel = document.getElementById('status-symmetry-label');
     dom.statusZoomLabel = document.getElementById('status-zoom-label');
     dom.statusToolLabel = document.getElementById('status-tool-label');
-    dom.btnOpenSpec = document.getElementById('btn-open-spec');
+    dom.btnImportCode = document.getElementById('btn-import-code');
     dom.btnReloadFile = document.getElementById('btn-reload-file');
 
     // Grid Overview Inspector elements
@@ -436,6 +436,17 @@
     dom.btnCloseNewFileModal = document.getElementById('btn-close-new-file-modal');
     dom.btnCancelNewFile = document.getElementById('btn-cancel-new-file');
     dom.btnConfirmNewFile = document.getElementById('btn-confirm-new-file');
+
+    // Import Code Modal elements
+    dom.modalImportCode = document.getElementById('modal-import-code');
+    dom.importFileNameInput = document.getElementById('import-file-name-input');
+    dom.importCodeTextarea = document.getElementById('import-code-textarea');
+    dom.importCodeError = document.getElementById('import-code-error');
+    dom.btnCloseImportModal = document.getElementById('btn-close-import-modal');
+    dom.btnCancelImportCode = document.getElementById('btn-cancel-import-code');
+    dom.btnConfirmImportCode = document.getElementById('btn-confirm-import-code');
+    dom.btnImportPasteClipboard = document.getElementById('btn-import-paste-clipboard');
+    dom.btnImportClearCode = document.getElementById('btn-import-clear-code');
   }
 
   // ===========================================================================
@@ -1069,6 +1080,144 @@
     closeNewFileModal();
     refreshAll();
     showToast(`Created new file "${cleanFileName}"!`, 'success');
+  }
+
+  // ===========================================================================
+  // IMPORT PIX2 CODE MODAL (Paste & Load Direct to Studio)
+  // ===========================================================================
+
+  function openImportCodeModal() {
+    if (isDocumentDirty) {
+      if (!confirm('You have unsaved changes. Discard and import new code?')) {
+        return;
+      }
+    }
+    if (!dom.modalImportCode) return;
+
+    if (dom.importFileNameInput) {
+      dom.importFileNameInput.value = 'imported_sprite.pix2';
+    }
+    if (dom.importCodeTextarea) {
+      dom.importCodeTextarea.value = '';
+    }
+    if (dom.importCodeError) {
+      dom.importCodeError.classList.add('hidden');
+      dom.importCodeError.textContent = '';
+    }
+
+    dom.modalImportCode.classList.remove('hidden');
+
+    setTimeout(() => {
+      if (dom.importCodeTextarea) {
+        dom.importCodeTextarea.focus();
+      }
+    }, 50);
+  }
+
+  function closeImportCodeModal() {
+    if (dom.modalImportCode) {
+      dom.modalImportCode.classList.add('hidden');
+    }
+  }
+
+  function showImportCodeError(msg) {
+    if (dom.importCodeError) {
+      dom.importCodeError.textContent = msg;
+      dom.importCodeError.classList.remove('hidden');
+    } else {
+      showToast(msg, 'error');
+    }
+  }
+
+  function detectTitleInImportCode(text) {
+    if (!text || !dom.importFileNameInput) return;
+    const match = text.match(/@meta\.title\s+(?:"([^"]+)"|'([^']+)'|([^\s\r\n#;]+))/i);
+    if (match) {
+      const foundTitle = match[1] || match[2] || match[3];
+      if (foundTitle && foundTitle.trim()) {
+        const cleanName = sanitizeSafeFilename(foundTitle.trim(), '.pix2', 'imported_sprite');
+        dom.importFileNameInput.value = cleanName;
+      }
+    }
+  }
+
+  async function pasteClipboardIntoImport() {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        showToast('Clipboard access not permitted. Please press Ctrl+V directly.', 'warning');
+        return;
+      }
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        showToast('Clipboard is empty!', 'info');
+        return;
+      }
+      if (dom.importCodeTextarea) {
+        dom.importCodeTextarea.value = text;
+        dom.importCodeTextarea.focus();
+        if (dom.importCodeError) {
+          dom.importCodeError.classList.add('hidden');
+          dom.importCodeError.textContent = '';
+        }
+        detectTitleInImportCode(text);
+        showToast('Pasted from clipboard!', 'success');
+      }
+    } catch (err) {
+      showToast('Could not access clipboard. Please press Ctrl+V directly.', 'info');
+    }
+  }
+
+  function confirmImportCode() {
+    const rawCode = dom.importCodeTextarea ? dom.importCodeTextarea.value.trim() : '';
+    if (!rawCode) {
+      showImportCodeError('Please paste some .pix2 code before importing.');
+      return;
+    }
+
+    let parsedDoc;
+    try {
+      parsedDoc = PIX2.parse(rawCode);
+    } catch (err) {
+      showImportCodeError(err.message || 'Syntax error in .pix2 code');
+      return;
+    }
+
+    if (!parsedDoc || !parsedDoc.cells || parsedDoc.cells.size === 0) {
+      showImportCodeError('Invalid document: No cell or sprite frames found in .pix2 code.');
+      return;
+    }
+
+    // Determine target filename
+    const userSpecifiedName = dom.importFileNameInput ? dom.importFileNameInput.value.trim() : '';
+    let targetFileName = userSpecifiedName;
+    if (!targetFileName || targetFileName === 'imported_sprite.pix2') {
+      if (parsedDoc.meta && parsedDoc.meta.title) {
+        targetFileName = sanitizeSafeFilename(parsedDoc.meta.title, '.pix2', 'imported_sprite');
+      } else {
+        targetFileName = 'imported_sprite.pix2';
+      }
+    } else {
+      targetFileName = sanitizeSafeFilename(targetFileName, '.pix2', 'imported_sprite');
+    }
+
+    currentFileHandle = null;
+    clearPersistedFileHandle();
+    currentFileName = targetFileName;
+    currentFilePath = targetFileName;
+    lastSavedContent = rawCode;
+    lastKnownFileModified = Date.now();
+
+    state.setDocument(parsedDoc, false);
+    state.activeTabId = 'tab-grid-overview';
+
+    centerCellCanvas();
+    centerGridCanvas();
+    closeImportCodeModal();
+    setDirty(true);
+    triggerEventAutosave();
+    refreshAll();
+
+    showToast(`Successfully imported "${targetFileName}" (${parsedDoc.cells.size} frames)!`, 'success');
   }
 
   function refreshAll() {
@@ -6970,6 +7119,53 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (dom.newFileCellH && ch) dom.newFileCellH.value = ch;
     });
 
+    // Import PIX2 Code Modal Events
+    dom.btnCloseImportModal?.addEventListener('click', closeImportCodeModal);
+    dom.btnCancelImportCode?.addEventListener('click', closeImportCodeModal);
+    dom.btnConfirmImportCode?.addEventListener('click', confirmImportCode);
+    dom.btnImportPasteClipboard?.addEventListener('click', pasteClipboardIntoImport);
+    dom.btnImportClearCode?.addEventListener('click', () => {
+      if (dom.importCodeTextarea) {
+        dom.importCodeTextarea.value = '';
+        dom.importCodeTextarea.focus();
+      }
+      if (dom.importCodeError) {
+        dom.importCodeError.classList.add('hidden');
+        dom.importCodeError.textContent = '';
+      }
+    });
+
+    dom.importCodeTextarea?.addEventListener('input', () => {
+      if (dom.importCodeError && !dom.importCodeError.classList.contains('hidden')) {
+        dom.importCodeError.classList.add('hidden');
+        dom.importCodeError.textContent = '';
+      }
+      detectTitleInImportCode(dom.importCodeTextarea.value);
+    });
+
+    dom.importCodeTextarea?.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        confirmImportCode();
+      }
+    });
+
+    dom.modalImportCode?.addEventListener('click', (e) => {
+      if (e.target === dom.modalImportCode) {
+        closeImportCodeModal();
+      }
+    });
+
+    dom.importFileNameInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmImportCode();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeImportCodeModal();
+      }
+    });
+
     // Export Atlas Preview Zoom level buttons (Magnifying Glass Controls)
     document.querySelectorAll('#export-zoom-group [data-scale]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -7907,10 +8103,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
     bindAction('btn-export-atlas', exportAtlasPng);
     bindAction('btn-load-demo', loadDefaultProject);
-    bindAction('btn-open-spec', () => {
-      state.activeTabId = 'tab-pix2-code';
-      refreshAll();
-    });
+    bindAction('btn-import-code', openImportCodeModal);
 
     // Code Editor Buttons
     if (dom.btnApplyCode) dom.btnApplyCode.addEventListener('click', applyCodeToDoc);
@@ -8074,6 +8267,13 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if ((e.ctrlKey || e.metaKey) && key === 'n') {
         e.preventDefault();
         openNewFileModal();
+        return;
+      }
+
+      // Import Code (Ctrl + I)
+      if ((e.ctrlKey || e.metaKey) && key === 'i') {
+        e.preventDefault();
+        openImportCodeModal();
         return;
       }
 
