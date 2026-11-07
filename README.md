@@ -34,7 +34,10 @@ Let’s be honest: no human artist or game developer is going to sit down and ty
 ### 2. Logic-Driven Code Over Blurry Diffusion Models
 Most generative AI tools rely on heavy diffusion models that hallucinate anti-aliased, blurry pixels, mismatched eye heights, and distorted palettes that cannot be used in real pixel art games.
 * With `.pix2`, an LLM doesn't "hallucinate" pixels; it **computes exact discrete coordinates**:
-  $$\text{x\_sym} = \text{width} - 1 - x$$
+  ```python
+  # Exact bilateral mirror symmetry formula
+  x_mirror = width - 1 - x
+  ```
 * The result is **100% deterministic, crisp, integer-grid pixel art** without expensive GPUs or blurry diffusion artifacts.
 
 ### 3. Exclusively Focused on 2D Pixel Art
