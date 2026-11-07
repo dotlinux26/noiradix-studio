@@ -78,7 +78,7 @@
   - [x] Onion skinning support
 - [x] Upgrade Keyboard Shortcuts (`Alt+Wheel`, `Space+Drag`, `V`, `B`, `E`, `G`, `I`, `L`, `U`, `S`, `X`, `D`, `Ctrl+0`, `Ctrl+Shift+R`)
 - [x] Roundtrip test suite in `tests/test-roundtrip.js` (96/96 PASSED across 12 groups)
-- [x] Security test suite in `tests/test-security.js` (20/20 PASSED across 4 groups)
+- [x] Security test suite in `tests/test-security.js` (21/21 PASSED across 4 groups)
 - [x] TextMate regex pattern & capture group suite in `tests/test-tmLanguage.js` (6/6 checks PASSED)
 - [x] Normative test vector conformance suite in `tests/test-vectors-conformance.js` (11/11 tests PASSED against immutable baselines)
 - [x] Real-time external file watcher & live hot-reload engine with smart conflict resolution
@@ -93,9 +93,9 @@
 
 ---
 
-## 4. Current Milestone: Phase 5 Soft Feature Freeze & Stabilization
+## 4. Final Milestone: Phase 5 Total Feature Freeze & v1.0 Specification Release (CLOSED)
 
-- **NOIRADIX Studio Application:** Soft Feature Freeze. No new UI features or breaking architecture changes. Focus exclusively on performance, precision, and regression prevention.
-- **PIX2 Reference Engine:** Feature Freeze. Stable parser, serializer, and data model.
-- **PIX2 v1.0 Standard:** Stabilization Candidate & Formal Specification Freeze. EBNF, lexical grammar, drawing primitives semantics, and test vector baselines are fully decoupled, normative, and synchronized.
+- **NOIRADIX Studio Application:** Total Feature Freeze. Active development closed. Enters maintenance-only mode (bug fixes, security patches).
+- **PIX2 Reference Engine:** Frozen (Production v1.0). Fully verified against normative test vectors.
+- **PIX2 v1.0 Standard:** Frozen v1.0 Standard Specification (Production Ready). EBNF, lexical grammar, drawing primitives semantics, and test vector baselines are fully decoupled, immutable, normative, and synchronized.
 - **Acceptance Status:** 134/134 tests passing cleanly in continuous integration.

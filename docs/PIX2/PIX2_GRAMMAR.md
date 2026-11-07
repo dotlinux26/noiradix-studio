@@ -130,13 +130,27 @@ EndMarker          ::= "@end" EOL?
 
 To guarantee deterministic rasterization across all compiler implementations:
 
-1. **Sequential Evaluation & Last-Write-Wins (LWW):** Commands within a `@cell` block execute in strict top-to-bottom, left-to-right order. Later writes at coordinate $(x, y)$ overwrite earlier writes.
-2. **Line (`line x1,y1 x2,y2 <col>`):** Conforming parsers MUST execute canonical integer Bresenham algorithm with `err = dx - dy`, testing `e2 > -dy` before `e2 < dx` for deterministic tie-breaking (e.g. `line 2,2 3,4` produces `(2,2) -> (2,3) -> (3,4)`). Pixels outside $[0..W-1, 0..H-1]$ are clipped.
-3. **Rectangle (`rect x,y w,h <col> [outline|fill]`):** Bounded by $[x..x+w-1, y..y+h-1]$. `outline` mode (default) paints only the outer perimeter; `fill` mode paints all interior pixels. Coordinates outside cell bounds $[0..W-1, 0..H-1]$ are clipped.
-4. **Flood Fill (`fill x,y <col>`):** 4-way von Neumann connectivity. Replaces contiguous matching target pixels within $[0..W-1, 0..H-1]$. Diagonal corner-touches do not connect or leak. If target color equals fill color, terminates immediately as a no-op.
-5. **Bilateral Symmetry (`sym_dot x,y [axisX] <col>`):** Computes $x_{\text{mirror}} = \text{round}(2 \times \text{axisX} - x)$ where `axisX` defaults to $(W - 1) / 2$ based on effective cell width $W$. Plots $(x, y)$ and $(x_{\text{mirror}}, y)$ only within $[0..W-1, 0..H-1]$. Plotted once if $x_{\text{mirror}} == x$.
-6. **Conformance Resource Limits & Anti-DoS Bounds:** To protect parser memory and prevent execution freezes under adversarial or astronomical input, all conforming implementations MUST enforce the following limits:
-   - **Maximum Coordinate Bound (`MAX_COORD_ABS` = 2048):** Any coordinate $(x, y)$ where $|x| > 2048$ or $|y| > 2048$ MUST be rejected from rasterization with a diagnostic error (`PIX2_ERR_RESOURCE_LIMIT`).
-   - **Maximum Line Steps (`MAX_BRESENHAM_STEPS` = 4096):** Bresenham line loops must terminate after at most 4096 steps.
-   - **Maximum Flood Fill Steps (`MAX_FLOOD_STEPS` = 65536):** Flood fill execution is capped at $\min(65536, 4 \times W \times H)$ iterations.
-   - **Rectangle Validation:** Dimensions must satisfy $w \ge 1, h \ge 1$. Rectangles with $w < 1$ or $h < 1$ must trigger `PIX2_ERR_INVALID_COORDINATE`. Mode must strictly be `outline` or `fill`; any other token must trigger `PIX2_ERR_INVALID_RECT_MODE`.
+### 4.1 Evaluation Order & Last-Write-Wins (LWW) Policy
+Commands within a `@cell` block execute in strict top-to-bottom, left-to-right order. Later writes at coordinate $(x, y)$ overwrite earlier writes.
+
+### 4.2 Pixel Primitives: `pixel`, `p`, `dot`, `d`
+Plots a single discrete pixel at coordinate $(x, y)$ with resolved color.
+
+### 4.3 Line Primitive: `line` (Standard Integer Bresenham Algorithm)
+Conforming parsers MUST execute canonical integer Bresenham algorithm with `err = dx - dy`, testing `e2 > -dy` before `e2 < dx` for deterministic tie-breaking (e.g. `line 2,2 3,4` produces `(2,2) -> (2,3) -> (3,4)`). Pixels outside $[0..W-1, 0..H-1]$ are clipped.
+
+### 4.4 Rectangle Primitive: `rect`
+Bounded by $[x..x+w-1, y..y+h-1]$. `outline` mode (default) paints only the outer perimeter; `fill` mode paints all interior pixels. Coordinates outside cell bounds $[0..W-1, 0..H-1]$ are clipped.
+
+### 4.5 Flood Fill Primitive: `fill`
+4-way von Neumann connectivity. Replaces contiguous matching target pixels within $[0..W-1, 0..H-1]$. Diagonal corner-touches do not connect or leak. If target color equals fill color, terminates immediately as a no-op.
+
+### 4.6 Bilateral Symmetry Primitive: `sym_dot`
+Computes $x_{\text{mirror}} = \text{round}(2 \times \text{axisX} - x)$ where `axisX` defaults to $(W - 1) / 2$ based on effective cell width $W$. Plots $(x, y)$ and $(x_{\text{mirror}}, y)$ only within $[0..W-1, 0..H-1]$. Plotted once if $x_{\text{mirror}} == x$.
+
+### 4.7 Conformance Resource Limits & Anti-DoS Bounds
+To protect parser memory and prevent execution freezes under adversarial or astronomical input, all conforming implementations MUST enforce the following limits:
+- **Maximum Coordinate Bound (`MAX_COORD_ABS` = 2048):** Any coordinate $(x, y)$ where $|x| > 2048$ or $|y| > 2048$ MUST be rejected from rasterization with a diagnostic error (`PIX2_ERR_RESOURCE_LIMIT`).
+- **Maximum Line Steps (`MAX_BRESENHAM_STEPS` = 4096):** Bresenham line loops must terminate after at most 4096 steps.
+- **Maximum Flood Fill Steps (`MAX_FLOOD_STEPS` = 65536):** Flood fill execution is capped at $\min(65536, 4 \times W \times H)$ iterations.
+- **Rectangle Validation:** Dimensions must satisfy $w \ge 1, h \ge 1$. Rectangles with $w < 1$ or $h < 1$ must trigger `PIX2_ERR_INVALID_COORDINATE`. Mode must strictly be `outline` or `fill`; any other token must trigger `PIX2_ERR_INVALID_RECT_MODE`.
