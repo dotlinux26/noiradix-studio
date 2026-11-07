@@ -5978,6 +5978,45 @@ It bridges human game artists and AI coding assistants through deterministic spr
 ## 2. THE PIX2 LANGUAGE PHILOSOPHY & SYNTAX SPECIFICATION
 PIX2 is a deterministic, coordinate-addressed plain-text sprite format. Unlike raster PNGs or fuzzy diffusion images, PIX2 code is discrete, mathematically exact, and human/AI readable.
 
+### Canonical Document Anatomy:
+Every complete PIX2 document must follow this exact section structure:
+\`\`\`pix2
+@pix2 1.0
+
+@meta
+  title: "${meta.title || 'Hero'}"
+  author: "User"
+  version: "1.0"
+  color_mode: RGBA
+  coordinate_origin: top-left
+
+@grid
+  columns: ${cols}
+  rows: ${rows}
+  cell_size: ${cw}x${ch}
+  gap: 0
+  margin: 0
+
+@palette
+${paletteSummary}
+
+@cell cell_0_0
+  name: "Down 0"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  p ${Math.floor(m.axisX)},${m.eyes.y[0]} 1
+
+@animation walk_down
+  name: "Walk Down"
+  direction: down
+  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
+  fps: 6
+  loop: true
+
+@end
+\`\`\`
+
 ### Core Invariants:
 1. SOLID SPRITE MASS MANDATE (ABSOLUTELY NO HOLLOW WIREFRAME SHELLS):
    - Pixel art sprites are SOLID game entities with mass, volume, and depth.
@@ -5989,7 +6028,8 @@ PIX2 is a deterministic, coordinate-addressed plain-text sprite format. Unlike r
    - NEVER output a background layer, black canvas fill, or transparent placeholder dots.
 3. DISCRETE INTEGER COORDINATES:
    - Origin (0,0) is at the top-left corner.
-   - Valid coordinates strictly satisfy 0 <= x < ${cw} and 0 <= y < ${ch}.
+   - Valid coordinates strictly satisfy non-negative integers: 0 <= x < ${cw} and 0 <= y < ${ch}.
+   - Floating-point coordinates (e.g. 4.5, 7.2) or trailing characters (e.g. 1abc) are STRICTLY FORBIDDEN.
 4. COLOR PALETTE ARCHITECTURE:
    - Pixels reference palette IDs defined in \`@palette\` (e.g. \`1\`, \`2\`, \`outline\`) or direct hex (\`#RRGGBB\` or \`#RRGGBBAA\` for semi-transparency).
    - Always define a cohesive 5-6 tone palette with:
@@ -6120,7 +6160,15 @@ CRITICAL RULE: NEVER output 4 identical cells in an animation row! In game engin
 ${serialized}
 \`\`\`
 
-## 9. USER INSTRUCTION
+## 9. STRICT OUTPUT PROTOCOL (NO CONVERSATIONAL FILLER):
+- Output ONLY valid, executable .pix2 DSL code enclosed inside a single \`\`\`pix2 ... \`\`\` code block.
+- For complete characters / projects: return the entire .pix2 document starting with \`@pix2 1.0\` and terminating with \`@end\`.
+- For surgical patches / edits: output ONLY the targeted \`@cell <id>\` or \`@palette\` blocks to conserve tokens.
+- NEVER prefix your response with chatty conversational introductions like "Sure, here is your sprite:".
+- NEVER append markdown explanations, prose, or design rationales after the code block.
+- Any non-code prose will corrupt direct clipboard imports into NOIRADIX Studio (<kbd>Ctrl</kbd> + <kbd>I</kbd>) and trigger parser errors.
+
+## 10. USER INSTRUCTION
 [Please formulate your design, animation, or character modification request here.]
 `;
 
