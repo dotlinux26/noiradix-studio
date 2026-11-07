@@ -1229,6 +1229,7 @@
     renderTabs();
     updateProjectTitleUI();
     updateFileStatusUI();
+    updateResolutionButtons();
     renderPalette();
     populateAnimDropdowns();
 
@@ -1307,6 +1308,19 @@
     if (dirtyDot) {
       dirtyDot.classList.toggle('is-dirty', isDocumentDirty);
     }
+  }
+
+  function updateResolutionButtons() {
+    if (!state.doc || !state.doc.meta || !state.doc.meta.cellSize) return;
+    const curW = state.doc.meta.cellSize.w;
+    const curH = state.doc.meta.cellSize.h;
+    const resKey = `${curW}x${curH}`;
+
+    document.querySelectorAll('.pill-btn[data-res]').forEach(btn => {
+      const isMatch = btn.dataset.res === resKey;
+      btn.classList.toggle('active', isMatch);
+      btn.setAttribute('aria-pressed', isMatch ? 'true' : 'false');
+    });
   }
 
   // ===========================================================================

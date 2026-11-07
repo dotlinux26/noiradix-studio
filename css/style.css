@@ -619,6 +619,18 @@ body {
   color: var(--text-main);
 }
 
+.pill-btn.active {
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 1px 6px rgba(124, 58, 237, 0.45);
+}
+
+.pill-btn.active:hover {
+  background: linear-gradient(135deg, #6d28d9, #4f46e5);
+  color: #ffffff !important;
+}
+
 .pill-btn:active {
   background-color: var(--accent-primary);
   color: #fff;
