@@ -606,16 +606,19 @@
   // ===========================================================================
 
   function updateStudioPlayButtonUI() {
-    if (!dom.btnStudioPlay) return;
-    if (studioAnimPlayer && studioAnimPlayer.isPlaying) {
-      dom.btnStudioPlay.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
-      dom.btnStudioPlay.title = 'Pause Animation';
-      dom.btnStudioPlay.classList.add('is-playing');
-    } else {
-      dom.btnStudioPlay.innerHTML = '<i class="fa-solid fa-play"></i> Play';
-      dom.btnStudioPlay.title = 'Play Animation';
-      dom.btnStudioPlay.classList.remove('is-playing');
-    }
+    const playButtons = [dom.btnStudioPlay, document.getElementById('btn-timeline-play')].filter(Boolean);
+    const isPlaying = studioAnimPlayer && studioAnimPlayer.isPlaying;
+    playButtons.forEach(btn => {
+      if (isPlaying) {
+        btn.innerHTML = btn.id === 'btn-timeline-play' ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-pause"></i> Pause';
+        btn.title = 'Pause Animation (Space)';
+        btn.classList.add('is-playing');
+      } else {
+        btn.innerHTML = btn.id === 'btn-timeline-play' ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-play"></i> Play';
+        btn.title = 'Play Animation (Space)';
+        btn.classList.remove('is-playing');
+      }
+    });
   }
 
   function updateFloatingPlayButtonUI() {
@@ -3318,6 +3321,25 @@
     }
   }
 
+  function selectStudioFrame(idx) {
+    if (!state.doc) return;
+    const clip = state.doc.animations[activeStudioClipId];
+    if (!clip || !clip.frames || clip.frames.length === 0) return;
+    const safeIdx = Math.max(0, Math.min(idx, clip.frames.length - 1));
+    const cellId = clip.frames[safeIdx];
+
+    // Explicit selection pauses playback so the user can inspect or edit that frame
+    if (studioAnimPlayer) {
+      if (studioAnimPlayer.isPlaying) {
+        studioAnimPlayer.stop();
+        updateStudioPlayButtonUI();
+      }
+      studioAnimPlayer.currentFrameIdx = safeIdx;
+      studioAnimPlayer.render();
+    }
+    updateStudioActiveFrameUI(safeIdx, cellId);
+  }
+
   function renderTimelineFramesStrip(clip) {
     if (!dom.timelineFramesStrip || !clip) return;
     dom.timelineFramesStrip.innerHTML = '';
@@ -3332,7 +3354,7 @@
       const card = document.createElement('div');
       card.setAttribute('data-idx', idx);
       card.className = `timeline-frame-card ${studioAnimPlayer && studioAnimPlayer.currentFrameIdx === idx ? 'active' : ''}`;
-      card.title = `${cell ? (cell.name || cellId) : cellId} (${cellId})`;
+      card.title = `${cell ? (cell.name || cellId) : cellId} (${cellId}) - Click to select, Double-click to edit`;
 
       const thumbCanvas = document.createElement('canvas');
       thumbCanvas.className = 'timeline-thumbnail-canvas';
@@ -3405,12 +3427,18 @@
 
       card.appendChild(actions);
 
-      card.addEventListener('click', () => {
-        if (studioAnimPlayer) {
-          studioAnimPlayer.currentFrameIdx = idx;
-          studioAnimPlayer.render();
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.timeline-mini-btn')) return;
+        selectStudioFrame(idx);
+      });
+
+      card.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.timeline-mini-btn')) return;
+        selectStudioFrame(idx);
+        if (cellId && state.doc && state.doc.cells[cellId]) {
+          state.openCellTab(cellId);
+          refreshAll();
         }
-        updateStudioActiveFrameUI(idx, cellId);
       });
 
       dom.timelineFramesStrip.appendChild(card);
@@ -7822,39 +7850,59 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       });
     }
 
-    if (dom.btnStudioPlay) {
-      dom.btnStudioPlay.addEventListener('click', () => {
-        if (!studioAnimPlayer) return;
+    const btnTimelinePlay = document.getElementById('btn-timeline-play');
+    const btnTimelinePrev = document.getElementById('btn-timeline-prev');
+    const btnTimelineNext = document.getElementById('btn-timeline-next');
+
+    const toggleStudioPlayback = () => {
+      if (!studioAnimPlayer) return;
+      if (studioAnimPlayer.isPlaying) {
+        studioAnimPlayer.stop();
+      } else {
+        studioAnimPlayer.start();
+      }
+      updateStudioPlayButtonUI();
+    };
+
+    const stepStudioPrevFrame = () => {
+      if (studioAnimPlayer) {
         if (studioAnimPlayer.isPlaying) {
           studioAnimPlayer.stop();
-          dom.btnStudioPlay.innerHTML = '<i class="fa-solid fa-play"></i> Play';
-        } else {
-          studioAnimPlayer.start();
-          dom.btnStudioPlay.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+          updateStudioPlayButtonUI();
         }
-      });
-    }
+        studioAnimPlayer.stepFrame(-1);
+        studioAnimPlayer.render();
+        selectStudioFrame(studioAnimPlayer.currentFrameIdx);
+      }
+    };
 
-    if (dom.btnStudioPrev) {
-      dom.btnStudioPrev.addEventListener('click', () => {
-        if (studioAnimPlayer) {
-          studioAnimPlayer.stepFrame(-1);
-          studioAnimPlayer.render();
-          if (state.doc && state.doc.animations[activeStudioClipId]) {
-            renderTimelineFramesStrip(state.doc.animations[activeStudioClipId]);
-          }
+    const stepStudioNextFrame = () => {
+      if (studioAnimPlayer) {
+        if (studioAnimPlayer.isPlaying) {
+          studioAnimPlayer.stop();
+          updateStudioPlayButtonUI();
         }
-      });
-    }
+        studioAnimPlayer.stepFrame(1);
+        studioAnimPlayer.render();
+        selectStudioFrame(studioAnimPlayer.currentFrameIdx);
+      }
+    };
 
-    if (dom.btnStudioNext) {
-      dom.btnStudioNext.addEventListener('click', () => {
-        if (studioAnimPlayer) {
-          studioAnimPlayer.stepFrame(1);
-          studioAnimPlayer.render();
-          if (state.doc && state.doc.animations[activeStudioClipId]) {
-            renderTimelineFramesStrip(state.doc.animations[activeStudioClipId]);
-          }
+    if (dom.btnStudioPlay) dom.btnStudioPlay.addEventListener('click', toggleStudioPlayback);
+    if (btnTimelinePlay) btnTimelinePlay.addEventListener('click', toggleStudioPlayback);
+    if (dom.btnStudioPrev) dom.btnStudioPrev.addEventListener('click', stepStudioPrevFrame);
+    if (btnTimelinePrev) btnTimelinePrev.addEventListener('click', stepStudioPrevFrame);
+    if (dom.btnStudioNext) dom.btnStudioNext.addEventListener('click', stepStudioNextFrame);
+    if (btnTimelineNext) btnTimelineNext.addEventListener('click', stepStudioNextFrame);
+
+    if (dom.timelineFramesStrip) {
+      dom.timelineFramesStrip.addEventListener('click', (e) => {
+        if (e.target.closest('.timeline-mini-btn')) return;
+        const card = e.target.closest('.timeline-frame-card');
+        if (!card) return;
+        const idx = parseInt(card.getAttribute('data-idx'), 10);
+        if (!isNaN(idx)) {
+          selectStudioFrame(idx);
         }
       });
     }
@@ -8483,35 +8531,52 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     function enableHorizontalDragScroll(container) {
       if (!container) return;
       let isDown = false;
+      let isDragging = false;
       let startX = 0;
       let startScrollLeft = 0;
 
       container.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
         if (['BUTTON', 'SELECT', 'INPUT'].includes(e.target.tagName)) return;
-        if (e.target.closest('button, select, input')) return;
+        if (e.target.closest('button, select, input, .timeline-mini-btn')) return;
         isDown = true;
+        isDragging = false;
         startX = e.clientX;
         startScrollLeft = container.scrollLeft;
-        container.classList.add('is-dragging');
-        try { container.setPointerCapture(e.pointerId); } catch (_) {}
       });
 
       container.addEventListener('pointermove', (e) => {
         if (!isDown) return;
         const dx = e.clientX - startX;
-        container.scrollLeft = startScrollLeft - dx;
+        if (!isDragging && Math.abs(dx) > 4) {
+          isDragging = true;
+          container.classList.add('is-dragging');
+          try { container.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        if (isDragging) {
+          container.scrollLeft = startScrollLeft - dx;
+        }
       });
 
       const stopDrag = (e) => {
         if (isDown) {
+          if (isDragging) {
+            container.classList.remove('is-dragging');
+            try { if (e && e.pointerId) container.releasePointerCapture(e.pointerId); } catch (_) {}
+          }
           isDown = false;
-          container.classList.remove('is-dragging');
-          try { if (e && e.pointerId) container.releasePointerCapture(e.pointerId); } catch (_) {}
+          setTimeout(() => { isDragging = false; }, 40);
         }
       };
 
       container.addEventListener('pointerup', stopDrag);
       container.addEventListener('pointercancel', stopDrag);
+      container.addEventListener('click', (e) => {
+        if (isDragging) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
 
       container.addEventListener('wheel', (e) => {
         const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
@@ -8912,6 +8977,45 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         else if (key === 's') {
           const symBtn = document.getElementById('btn-symmetry-toggle');
           if (symBtn) symBtn.click();
+        }
+      }
+
+      // Animation Studio keyboard controls (Space: Play/Pause, Left/Right: Prev/Next frame)
+      if (state.activeTabId === 'tab-anim-studio') {
+        if (e.code === 'Space' || key === ' ') {
+          e.preventDefault();
+          if (studioAnimPlayer) {
+            if (studioAnimPlayer.isPlaying) studioAnimPlayer.stop();
+            else studioAnimPlayer.start();
+            updateStudioPlayButtonUI();
+          }
+          return;
+        }
+        if (e.key === 'ArrowLeft' || key === '[' || key === ',') {
+          e.preventDefault();
+          if (studioAnimPlayer) {
+            if (studioAnimPlayer.isPlaying) {
+              studioAnimPlayer.stop();
+              updateStudioPlayButtonUI();
+            }
+            studioAnimPlayer.stepFrame(-1);
+            studioAnimPlayer.render();
+            selectStudioFrame(studioAnimPlayer.currentFrameIdx);
+          }
+          return;
+        }
+        if (e.key === 'ArrowRight' || key === ']' || key === '.') {
+          e.preventDefault();
+          if (studioAnimPlayer) {
+            if (studioAnimPlayer.isPlaying) {
+              studioAnimPlayer.stop();
+              updateStudioPlayButtonUI();
+            }
+            studioAnimPlayer.stepFrame(1);
+            studioAnimPlayer.render();
+            selectStudioFrame(studioAnimPlayer.currentFrameIdx);
+          }
+          return;
         }
       }
 

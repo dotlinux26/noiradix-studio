@@ -2419,6 +2419,7 @@ body {
   flex-shrink: 0;
   transition: all 0.15s;
   position: relative;
+  user-select: none;
 }
 
 .timeline-frame-card:hover {
@@ -2428,9 +2429,9 @@ body {
 }
 
 .timeline-frame-card.active {
-  border-color: var(--accent-primary);
-  background-color: rgba(99, 102, 241, 0.08);
-  box-shadow: 0 0 0 2px var(--accent-primary);
+  border-color: var(--accent-primary) !important;
+  background-color: rgba(99, 102, 241, 0.12) !important;
+  box-shadow: 0 0 0 2.5px var(--accent-primary) !important;
 }
 
 .timeline-thumbnail-canvas {
@@ -2440,6 +2441,7 @@ body {
   border: 1px solid var(--border-subtle);
   image-rendering: pixelated;
   background-color: var(--canvas-bg);
+  pointer-events: none;
 }
 
 .timeline-frame-info {
@@ -2450,11 +2452,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  pointer-events: none;
 }
 
 .timeline-card-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
+  pointer-events: auto;
 }
 
 .timeline-mini-btn {
