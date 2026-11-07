@@ -3628,5 +3628,31 @@ body.dark-theme .export-preview-viewport {
 .about-footer-license {
   font-size: 11px;
   color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.about-legal-links {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.about-legal-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.about-legal-links a:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.about-legal-links .sep {
+  opacity: 0.5;
 }
 
