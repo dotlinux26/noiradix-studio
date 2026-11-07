@@ -1,0 +1,36 @@
+@pix2 1.0
+
+@meta
+  title: "Vector Primitives Conformance"
+  author: "dotlinux26"
+  version: "1.0"
+  color_mode: "RGBA"
+  coordinate_origin: "top-left"
+
+@grid
+  columns: 1
+  rows: 1
+  default_cell: 16x16
+  gap: 0
+  margin: 0
+  background: none
+
+@palette
+  1: #ffffff
+  2: #57546f
+  3: #ff0000
+
+@cell primitive_test
+  name: "Primitives Raster Test"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  size: 16x16
+  rect 2,2 4x4 1 fill
+  rect 8,2 4x4 2 outline
+  line 2,10 6,14 1
+  sym_dot 4,8 7.5 2
+  p 2,2 3
+
+@end
+

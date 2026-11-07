@@ -17,9 +17,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1. CI Test Suite: Syntax integrity & 131 automated unit tests across 4 suites
+  # 1. CI Test Suite: Syntax integrity & 133 automated unit tests across 4 suites
   test:
-    name: Run Automated Test Suites (131 Tests)
+    name: Run Automated Test Suites (133 Tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -48,7 +48,7 @@ jobs:
       - name: Run TextMate Regex Pattern & Capture Group Tests (6 Checks)
         run: node tests/test-tmLanguage.js
 
-      - name: Run Normative Test Vector Conformance Tests (9 Tests)
+      - name: Run Normative Test Vector Conformance Tests (11 Tests)
         run: node tests/test-vectors-conformance.js
 
   # 2. CD Deployment: Deploy static web application to GitHub Pages

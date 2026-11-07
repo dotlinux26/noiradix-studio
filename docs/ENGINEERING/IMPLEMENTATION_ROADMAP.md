@@ -79,12 +79,15 @@
 - [x] Upgrade Keyboard Shortcuts (`Alt+Wheel`, `Space+Drag`, `V`, `B`, `E`, `G`, `I`, `L`, `U`, `S`, `X`, `D`, `Ctrl+0`, `Ctrl+Shift+R`)
 - [x] Roundtrip test suite in `tests/test-roundtrip.js` (96/96 PASSED across 12 groups)
 - [x] Security test suite in `tests/test-security.js` (20/20 PASSED across 4 groups)
-- [x] TextMate grammar pattern behavior suite in `tests/test-tmLanguage.js` (6/6 checks PASSED)
-- [x] Normative test vector conformance suite in `tests/test-vectors-conformance.js` (9/9 tests PASSED against immutable baseline)
+- [x] TextMate regex pattern & capture group suite in `tests/test-tmLanguage.js` (6/6 checks PASSED)
+- [x] Normative test vector conformance suite in `tests/test-vectors-conformance.js` (11/11 tests PASSED against immutable baselines)
 - [x] Real-time external file watcher & live hot-reload engine with smart conflict resolution
 - [x] AI Prompt Studio with 4 specialized prompt templates (Full Character, Walk Animation, Accessory Overlay, Surgical Patch)
 - [x] Eliminated all hardcoded machine paths and hardened export templates
 - [x] Standalone distribution in `pix2/` with dual licensing (Apache-2.0 / CC BY 4.0)
+- [x] Single canonical specification in `pix2/SPECIFICATION.md` & synchronized EBNF
+- [x] Normative drawing primitives semantics (line Bresenham, rect outline/fill, sym_dot, LWW)
+- [x] Structured Diagnostic API in `validate()` returning typed diagnostic metadata
 - [x] VS Code Extension distribution in `tools/vscode-pix2/` with TextMate grammar
 - [x] GitHub Actions automated CI/CD deploying 100% green to `https://noiradix.me/`
 
@@ -93,5 +96,6 @@
 ## 4. Current Milestone: Phase 5 Soft Feature Freeze & Stabilization
 
 - **NOIRADIX Studio Application:** Soft Feature Freeze. No new UI features or breaking architecture changes. Focus exclusively on performance, precision, and regression prevention.
-- **PIX2 v1.0 Standard:** Stabilization Candidate & Formal Specification Freeze. EBNF, lexical grammar, and test vector baselines are fully decoupled, normative, and synchronized.
-- **Acceptance Status:** 131/131 tests passing cleanly in continuous integration.
+- **PIX2 Reference Engine:** Feature Freeze. Stable parser, serializer, and data model.
+- **PIX2 v1.0 Standard:** Stabilization Candidate & Formal Specification Freeze. EBNF, lexical grammar, drawing primitives semantics, and test vector baselines are fully decoupled, normative, and synchronized.
+- **Acceptance Status:** 133/133 tests passing cleanly in continuous integration.

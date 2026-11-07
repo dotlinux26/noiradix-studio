@@ -74,12 +74,14 @@ Phase 4: AI Agent Interface & Security Hardening (COMPLETED)
   - Real-time external hot-reload & smart conflict resolution (Live Human-AI pairing)
   - Contextual AI prompt generator (4 specialized prompt modes)
   - Complete client-side security hardening (Zero XSS, Prototype Pollution & DoS defenses)
-  - 131/131 Automated tests passing across 4 suites
+  - 133/133 Automated tests passing across 4 suites
 
 Phase 5: Stabilization Candidate & Soft Feature Freeze (CURRENT)
   - Canonical snake_case AST enforcement (cell_size)
   - Dual licensing (CC BY 4.0 for Specification, Apache-2.0 for Reference Engine)
-  - Normative test vectors for third-party compiler implementers
+  - Normative test vectors for third-party compiler implementers (11 test vectors)
+  - Unified canonical specification (pix2/SPECIFICATION.md & EBNF determinism)
+  - Structured Diagnostic API contract ({ code, severity, message, cell_id, coordinate })
   - VS Code language tooling with TextMate grammar
   - Continuous Integration via GitHub Actions running all 4 test suites
 ```

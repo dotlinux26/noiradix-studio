@@ -123,3 +123,15 @@ EndMarker          ::= "@end" EOL?
 3. **Reference Integrity in Animations**: Every cell ID referenced in `@animation <id>` `frames: [...]` must exist in the `@cell` definitions of the document.
 4. **Color Reference Resolution**: If a pixel references an identifier or integer (e.g. `pixel 5,8 outline`), that identifier must exist in the `@palette` section. If undefined, it falls back to parsing as direct hex or logs a semantic warning.
 5. **Pure Transparency Guarantee**: A cell with zero pixel records is completely transparent. No pixel records may represent alpha zero (`#00000000`). If a pixel's alpha is zero, the record must be erased.
+
+---
+
+## 4. Normative Drawing Primitive Semantics
+
+To guarantee deterministic rasterization across all compiler implementations:
+
+1. **Sequential Evaluation & Last-Write-Wins (LWW):** Commands within a `@cell` block execute in strict top-to-bottom, left-to-right order. Later writes at coordinate $(x, y)$ overwrite earlier writes.
+2. **Line (`line x1,y1 x2,y2 <col>`):** Conforming parsers MUST execute canonical integer Bresenham algorithm with `e2 >= dy` tested before `e2 <= dx` for deterministic tie-breaking.
+3. **Rectangle (`rect x,y w,h <col> [outline|fill]`):** Bounded by $[x..x+w-1, y..y+h-1]$. `outline` mode (default) paints only the outer perimeter; `fill` mode paints all interior pixels.
+4. **Flood Fill (`fill x,y <col>`):** 4-way von Neumann connectivity. Replaces contiguous matching target pixels within $[0..W-1, 0..H-1]$. If target color equals fill color, terminates as a no-op.
+5. **Bilateral Symmetry (`sym_dot x,y [axisX] <col>`):** Computes $x_{\text{mirror}} = \text{round}(2 \times \text{axisX} - x)$ where `axisX` defaults to $(W - 1) / 2$. Plots $(x, y)$ and $(x_{\text{mirror}}, y)$ when $0 \le x_{\text{mirror}} < W$. Plotted once if $x_{\text{mirror}} == x$.

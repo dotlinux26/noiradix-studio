@@ -69,39 +69,93 @@ Y = H-1[0, H-1]   [1, H-1]            [W-1, H-1]
 
 ## 3. PIX2 Language Grammar & Structure
 
-A `.pix2` file consists of 4 primary sections:
-1. `@meta` — Sheet metadata, grid dimensions, and resolution.
-2. `@palette` — Indexed shorthand color table.
-3. `@animation <id>` — Directional animation states, frame sequences, FPS, and loop modes.
-4. `@cell <id>` — Individual frames containing drawn pixels and commands.
+A conforming `.pix2` file follows a deterministic section hierarchy:
+1. `@pix2 <version>` — Mandatory format header (e.g. `@pix2 1.0`).
+2. `@meta` — Document metadata (title, author, version, color_mode, coordinate_origin).
+3. `@grid` — Layout parameters (columns, rows, default_cell / cell_size, gap, margin, background).
+4. `@palette` (Optional) — Shorthand table mapping integer or string IDs to HEX colors.
+5. `@cell <id>` (Zero or more) — Individual frame cells with drawing commands and sparse pixel maps.
+6. `@animation <id>` (Zero or more) — Directional animation clips with frame lists, FPS, and loop modes.
+7. `@end` (Optional) — Canonical document termination marker. Non-comment content after `@end` is prohibited.
 
-Comments start with `#` and can appear anywhere.
+### 3.1 Lexical Comment Rules
+PIX2 adopts strict comment parsing to eliminate conflicts with HEX color syntax (`#RRGGBB`):
+1. **Explicit Semicolon Comment (Preferred):**  
+   The `;` character initiates an inline or line comment until the end of the line:
+   ```pix2
+   ; Full line comment
+   1: #FFFFFF ; White palette color
+   ```
+2. **Whitespace-Guarded Hash Comment (Backward Compatible):**  
+   A `#` character is treated as a comment delimiter **ONLY IF**:
+   - It is preceded by whitespace or starts at column 0 of the line, **AND**
+   - It is NOT followed by a valid 3, 4, 6, or 8-digit hexadecimal sequence.
+   ```pix2
+   # Full line comment
+   pixel 7,12 #57546F # Trailing comment because preceded by space
+   ```
 
-### 3.1 Section: `@meta`
+### 3.2 Section: `@pix2` (Format Header)
+Every PIX2 document MUST start with the format header specifying the language version:
+```pix2
+@pix2 1.0
+```
+
+### 3.3 Section: `@meta`
+Contains global metadata about the sprite sheet:
 ```pix2
 @meta
   title: "Player Wispling"
   author: "dotlinux26"
   version: "1.0"
-  grid: 4x4
-  cell_size: 16x16
+  color_mode: "RGBA"
+  coordinate_origin: "top-left"
 ```
-- `grid`: `<cols>x<rows>` (e.g. `4x4` = 16 cells, `8x4` = 32 cells).
-- `cell_size`: `<width>x<height>` in pixels per cell.
 
-### 3.2 Section: `@palette`
-Maps integer IDs to 6-character or 8-character Hex colors:
+### 3.4 Section: `@grid`
+Defines the sheet layout and base cell resolution:
+```pix2
+@grid
+  columns: 4
+  rows: 4
+  default_cell: 16x16
+  gap: 0
+  margin: 0
+  background: none
+```
+- `columns` (or `cols`): Total columns in sprite atlas grid.
+- `rows`: Total rows in sprite atlas grid.
+- `default_cell` (or `cell_size`): Default `<width>x<height>` in pixels per cell.
+- `gap`: Inter-cell padding in pixels (default: `0`).
+- `margin`: Exterior sheet border margin in pixels (default: `0`).
+- `background`: Canvas background rendering (`none` / `transparent`).
+
+### 3.5 Section: `@palette` (Optional)
+Maps integer IDs or string keys to 3, 4, 6, or 8-digit Hex colors:
 ```pix2
 @palette
-  1: #ffffff  # Body White
-  2: #57546f  # Outline Dark Slate
-  3: #dde8ef  # Shade Light Blue
-  4: #ffb0bc  # Blush Pink
-  5: #46435c  # Pupil Dark Purple
+  1: #ffffff  ; Body White
+  2: #57546f  ; Outline Dark Slate
+  3: #dde8ef  ; Shade Light Blue
+  shadow: #1e1b4b ; Dark Shadow
 ```
 *Note:* Transparency is **never** added to the palette. Any coordinate not assigned a color is automatically fully transparent.
 
-### 3.3 Section: `@animation <id>` (Canonical)
+### 3.6 Section: `@cell <id>` (or `@frame <id>`)
+Each cell defines a specific sprite or animation frame with optional metadata:
+```pix2
+@cell cell_0_0
+  name: "Down 0"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  size: 16x16
+  p 4,0 2 p 5,0 2 p 6,0 2 p 7,0 2
+```
+- `grid_pos: <row>,<col>` binds decoupled cell IDs to a logical grid slot.
+- `size: <w>x<h>` overrides `default_cell` dimensions for non-uniform cells.
+
+### 3.7 Section: `@animation <id>` (Canonical Multi-Line)
 Defines directional animation clips with frame sequences, playback speed, and loop mode:
 ```pix2
 @animation walk_down
@@ -110,45 +164,86 @@ Defines directional animation clips with frame sequences, playback speed, and lo
   frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
   fps: 6
   loop: true
+  mode: loop
 ```
 - Properties:
   - `name: "<string>"` — Human-readable animation clip title.
-  - `direction: <direction>` — Direction tag (`down`, `up`, `right`, `left`, `down_right`, etc.).
+  - `direction: <direction>` — Direction tag (`down`, `up`, `right`, `left`, `down_right`, `down_left`, `up_right`, `up_left`, `none`, `any`).
   - `frames: [<id>, ...]` — Ordered array of `@cell` identifiers.
   - `fps: <integer>` — Playback framerate (standard default: `6`–`8` FPS).
-  - `loop: <boolean>` — `true` for continuous locomotion, `false` for one-shot action.
+  - `loop: <boolean>` — `true` for continuous looping, `false` for one-shot action.
+  - `mode: <string>` — `loop`, `once`, or `pingpong`.
 
 *(Legacy block compatibility: Parsers also accept the single-line block format `@animations \n walk_down: [c0, c1] @ 6fps loop` for backward compatibility).*
 
-- Standard Direction Names:
-  - **4-Direction:** `down`, `up`, `right`, `left`
-  - **8-Direction:** `down`, `down_right`, `right`, `up_right`, `up`, `up_left`, `left`, `down_left`
-
-### 3.4 Section: `@cell <id>`
-Each cell defines a specific sprite or animation frame:
-```pix2
-@cell cell_0_0
-  name: "Down 0"
-  p 4,0 2 p 5,0 2 p 6,0 2 p 7,0 2 p 8,0 2 p 9,0 2 p 10,0 2 p 11,0 2
-  p 3,1 2 p 4,1 1 p 5,1 1 p 6,1 1 p 7,1 1 p 8,1 1 p 9,1 1 p 10,1 1 p 11,1 1 p 12,1 2
-```
-
 ---
 
-## 4. Drawing Commands & Primitives (For AI Generation)
+## 4. Normative Specification of Drawing Primitives & Deterministic Rasterization
 
-When an AI drafts or modifies a cell, it can write **either** sparse coordinates or high-level drawing primitives. The PIX2 parser evaluates them sequentially:
+To guarantee that any compiler (Rust, Go, C++, Python, JavaScript) produces byte-for-byte identical pixel matrices, the rasterization behavior of all primitives is strictly standardized:
 
-| Command | Syntax | Description | Example |
-| :--- | :--- | :--- | :--- |
-| **Plot Pixel** | `p x,y <col>` | Sets single pixel at `(x, y)` | `p 7,8 5` |
-| **Dot** | `dot x,y <col>` | Synonym for single pixel | `dot 7,8 #ffffff` |
-| **Line** | `line x1,y1 x2,y2 <col>` | Bresenham straight line | `line 2,2 13,2 2` |
-| **Rectangle** | `rect x,y w,h <col> [mode]` | Box (`outline` or `fill`) | `rect 3,2 10,12 1 fill` |
-| **Flood Fill** | `fill x,y <col>` | 4-way flood fill contiguous area | `fill 7,7 1` |
-| **Symmetric Dot** | `sym_dot x,y axisX <col>` | Plots `(x,y)` and mirrors across axis | `sym_dot 4,7 7.5 5` |
+### 4.1 Evaluation Order & Last-Write-Wins (LWW) Policy
+- All pixel records and vector commands within a `@cell` block MUST be evaluated in strict sequential document order (top-to-bottom, left-to-right).
+- If multiple commands write to the same coordinate $(x, y)$, the later write overwrites any earlier write (**Last-Write-Wins**).
 
-`<col>` can be an integer palette ID (e.g. `1`, `2`) or a direct hex color (e.g. `#ffffff`).
+### 4.2 Pixel Primitives: `pixel`, `p`, `dot`, `d`
+- **Syntax:** `p x,y <col>` or `pixel x,y <col>`
+- **Semantics:** Plots a single discrete pixel at coordinate $(x, y)$ with color `<col>`.
+- `<col>` may be an integer palette ID (e.g. `1`), an identifier key (e.g. `shadow`), or an inline `#HEX` code.
+
+### 4.3 Line Primitive: `line` (Standard Integer Bresenham Algorithm)
+- **Syntax:** `line x1,y1 x2,y2 <col>`
+- **Algorithm:** All conforming implementations MUST use the canonical 2D integer Bresenham algorithm:
+  ```
+  dx = abs(x2 - x1)
+  sx = x1 < x2 ? 1 : -1
+  dy = -abs(y2 - y1)
+  sy = y1 < y2 ? 1 : -1
+  err = dx + dy
+  while true:
+    plot(x1, y1, col)
+    if x1 == x2 and y1 == y2: break
+    e2 = 2 * err
+    if e2 >= dy:
+      err += dy
+      x1 += sx
+    if e2 <= dx:
+      err += dx
+      y1 += sy
+  ```
+- **Tie-Breaking Guarantee:** By evaluating `e2 >= dy` followed by `e2 <= dx`, diagonal steps are handled consistently without float rounding drift.
+
+### 4.4 Rectangle Primitive: `rect`
+- **Syntax:** `rect x,y w,h <col> [outline|fill]`
+- **Parameters:**
+  - Origin $(x, y)$ is the inclusive top-left corner.
+  - Dimensions $w \ge 1, h \ge 1$.
+  - Mode: `outline` (default if omitted) or `fill`.
+- **Bounding Box:** Covers coordinates $(x + dx, y + dy)$ where $0 \le dx < w$ and $0 \le dy < h$.
+- **Semantics:**
+  - `mode == "fill"`: Plots every coordinate $(x + dx, y + dy)$ for all $0 \le dx < w$ and $0 \le dy < h$.
+  - `mode == "outline"`: Plots $(x + dx, y + dy)$ ONLY where $dx == 0$ OR $dx == w - 1$ OR $dy == 0$ OR $dy == h - 1$.
+  - Any coordinate lying outside the cell bounds $[0..W-1, 0..H-1]$ is clipped.
+
+### 4.5 Flood Fill Primitive: `fill`
+- **Syntax:** `fill x,y <col>`
+- **Neighborhood:** 4-connected (von Neumann neighborhood: cardinal directions up, down, left, right).
+- **Semantics:**
+  - Reads `targetColor = cell.pixels[(x, y)]` (or `undefined` / transparent).
+  - If `targetColor == fillColor`, the command terminates immediately as a no-op.
+  - Otherwise, replaces all 4-connected contiguous pixels matching `targetColor` with `fillColor`, bounded strictly by $[0..W-1, 0..H-1]$.
+
+### 4.6 Bilateral Symmetry Primitive: `sym_dot`
+- **Syntax:** `sym_dot x,y [axisX] <col>`
+- **Parameters:**
+  - Coordinate $(x, y)$ to plot.
+  - `axisX` (float, optional): Reflection axis. If omitted, defaults to $(W - 1) / 2$ (e.g. $7.5$ for $16\times 16$).
+- **Reflection Formula:**
+  $$x_{\text{mirror}} = \text{round}(2 \times \text{axisX} - x)$$
+- **Semantics:**
+  1. Plots $(x, y)$ with `<col>`.
+  2. If $x_{\text{mirror}} \neq x$ and $0 \le x_{\text{mirror}} < W$, plots $(x_{\text{mirror}}, y)$ with `<col>`.
+  3. If $x_{\text{mirror}} == x$ (on the symmetry axis), it is plotted exactly once.
 
 ---
 
@@ -305,26 +400,23 @@ USER TASK:
 
 ### Formal EBNF Definition
 ```ebnf
-PIX2Document       ::= HeaderSection MetaSection GridSection PaletteSection CellSection* AnimationSection* EndMarker?
+PIX2Document       ::= FormatHeader MetaSection GridSection PaletteSection? CellSection* AnimationSection* EndMarker?
 
-HeaderSection      ::= "@pix2" WS+ Version EOL
-Version            ::= "1.0"
+FormatHeader       ::= "@pix2" WS+ VersionNumber EOL
+VersionNumber      ::= [0-9]+ "." [0-9]+
 
-MetaSection        ::= "@meta" EOL (MetaProperty EOL)+
-MetaProperty       ::= WS* "title:" WS* StringLiteral
-                     | WS* "author:" WS* StringLiteral
-                     | WS* "version:" WS* StringLiteral
-                     | WS* "color_mode:" WS* ("RGBA" | "RGB")
-                     | WS* "coordinate_origin:" WS* "top-left"
+MetaSection        ::= "@meta" EOL (MetaEntry EOL)+
+MetaEntry          ::= WS* Key ":" WS* Value
+Key                ::= "title" | "author" | "version" | "type" | "color_mode" | "coordinate_origin" | Identifier
+Value              ::= StringLiteral | Identifier
 
-GridSection        ::= "@grid" EOL (GridProperty EOL)+
-GridProperty       ::= WS* ("columns" | "cols") ":" WS* Integer
-                     | WS* "rows:" WS* Integer
-                     | WS* "grid:" WS* Dimension
+GridSection        ::= "@grid" EOL (GridEntry EOL)+
+GridEntry          ::= WS* ("columns" | "cols") ":" WS* Integer
+                     | WS* ("rows") ":" WS* Integer
                      | WS* ("default_cell" | "cell_size") ":" WS* Dimension
-                     | WS* "gap:" WS* Integer
-                     | WS* "margin:" WS* Integer
-                     | WS* "background:" WS* ("none" | "transparent")
+                     | WS* ("gap") ":" WS* Integer
+                     | WS* ("margin") ":" WS* Integer
+                     | WS* ("background") ":" WS* ("none" | "transparent")
 
 PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
 PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?

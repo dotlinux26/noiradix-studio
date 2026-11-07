@@ -1290,42 +1290,59 @@ const PIX2 = (function () {
     const strict = opts.strict === true;
     const errors = [];
     const warnings = [];
+    const structuredDiagnostics = [];
+
+    function recordDiagnostic(code, severity, message, details) {
+      const fullMsg = `[${code}] ${message}`;
+      const isError = severity === 'error' || (strict && severity === 'warning');
+      if (isError) {
+        errors.push(fullMsg);
+      } else {
+        warnings.push(fullMsg);
+      }
+      const entry = Object.assign({
+        code,
+        severity: isError ? 'error' : 'warning',
+        message
+      }, details || {});
+      structuredDiagnostics.push(entry);
+    }
 
     if (!doc || typeof doc !== 'object') {
-      return { valid: false, errors: ['Document is not an object'], warnings };
+      const msg = 'Document is not an object';
+      errors.push(msg);
+      structuredDiagnostics.push({ code: 'PIX2_ERR_INVALID_DOCUMENT', severity: 'error', message: msg });
+      return { valid: false, errors, warnings, diagnostics: structuredDiagnostics };
     }
 
     if (!doc.meta || typeof doc.meta !== 'object') {
-      errors.push('Missing or invalid @meta object');
+      recordDiagnostic('PIX2_ERR_MISSING_META', 'error', 'Missing or invalid @meta object');
     } else {
       if (strict && (!doc.meta.version || doc.meta.version !== '1.0')) {
-        errors.push(`Unsupported or missing @pix2 version header: "${doc.meta.version || 'none'}" (expected "1.0")`);
+        recordDiagnostic('PIX2_ERR_UNSUPPORTED_VERSION', 'error', `Unsupported or missing @pix2 version header: "${doc.meta.version || 'none'}" (expected "1.0")`);
       }
       if (!doc.meta.grid || typeof doc.meta.grid.cols !== 'number' || typeof doc.meta.grid.rows !== 'number') {
-        errors.push('Invalid grid definition');
+        recordDiagnostic('PIX2_ERR_INVALID_GRID', 'error', 'Invalid grid definition');
       } else {
         if (doc.meta.grid.cols < 1 || doc.meta.grid.cols > MAX_GRID_COLS) {
-          warnings.push(`Grid columns clamped to max ${MAX_GRID_COLS}`);
+          recordDiagnostic('PIX2_WARN_CLAMPED_COLS', 'warning', `Grid columns clamped to max ${MAX_GRID_COLS}`);
         }
         if (doc.meta.grid.rows < 1 || doc.meta.grid.rows > MAX_GRID_ROWS) {
-          warnings.push(`Grid rows clamped to max ${MAX_GRID_ROWS}`);
+          recordDiagnostic('PIX2_WARN_CLAMPED_ROWS', 'warning', `Grid rows clamped to max ${MAX_GRID_ROWS}`);
         }
       }
       const cellDim = doc.meta.cell_size || doc.meta.cellSize;
       if (!cellDim || typeof cellDim.w !== 'number' || typeof cellDim.h !== 'number') {
-        errors.push('Invalid cell_size definition');
+        recordDiagnostic('PIX2_ERR_INVALID_CELL_SIZE', 'error', 'Invalid cell_size definition');
       }
     }
 
     // Include parser diagnostics if attached
     if (doc._diagnostics && Array.isArray(doc._diagnostics)) {
       for (const diag of doc._diagnostics) {
-        const msg = `[${diag.code}] Line ${diag.line}: ${diag.message}`;
-        if (diag.code.startsWith('PIX2_ERR_') || strict) {
-          errors.push(msg);
-        } else {
-          warnings.push(msg);
-        }
+        const isErr = diag.code.startsWith('PIX2_ERR_');
+        const sev = isErr ? 'error' : 'warning';
+        recordDiagnostic(diag.code, sev, `Line ${diag.line}: ${diag.message}`, { line: diag.line });
       }
     }
 
@@ -1335,7 +1352,7 @@ const PIX2 = (function () {
         if (!isSafeIdentifier(palId)) continue;
         const hex = doc.palette[palId];
         if (!isValidHex(hex)) {
-          errors.push(`Palette entry "${palId}" has invalid hex color "${hex}"`);
+          recordDiagnostic('PIX2_ERR_INVALID_HEX', 'error', `Palette entry "${palId}" has invalid hex color "${hex}"`);
         }
       }
     }
@@ -1345,7 +1362,7 @@ const PIX2 = (function () {
         const propNames = Object.getOwnPropertyNames(doc[key]);
         for (const id of propNames) {
           if (FORBIDDEN_KEYS.has(id.toLowerCase())) {
-            errors.push(`Illegal prototype pollution identifier in ${key}: "${id}"`);
+            recordDiagnostic('PIX2_ERR_PROTOTYPE_POLLUTION', 'error', `Illegal prototype pollution identifier in ${key}: "${id}"`);
           }
         }
       }
@@ -1367,20 +1384,16 @@ const PIX2 = (function () {
           for (const coord in cell.pixels) {
             const parsed = parseCoordinate(coord);
             if (!parsed) {
-              const msg = `[PIX2_ERR_INVALID_COORDINATE] Cell "${cellId}": malformed pixel coordinate format "${coord}"`;
-              if (strict) errors.push(msg);
-              else warnings.push(msg);
+              recordDiagnostic('PIX2_ERR_INVALID_COORDINATE', 'warning', `Cell "${cellId}": malformed pixel coordinate format "${coord}"`, { cell_id: cellId, raw_coordinate: coord });
               continue;
             }
             const [x, y] = parsed;
             if (x < 0 || x >= cellW || y < 0 || y >= cellH) {
-              const msg = `[PIX2_WARN_OUT_OF_BOUNDS] Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
-              if (strict) errors.push(msg);
-              else warnings.push(msg);
+              recordDiagnostic('PIX2_WARN_OUT_OF_BOUNDS', 'warning', `Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`, { cell_id: cellId, coordinate: [x, y], bounds: { w: cellW, h: cellH } });
             }
             const col = cell.pixels[coord];
             if (!isValidHex(col)) {
-              errors.push(`[PIX2_ERR_INVALID_COLOR] Cell "${cellId}": pixel at (${x}, ${y}) has invalid color value "${col}"`);
+              recordDiagnostic('PIX2_ERR_INVALID_COLOR', 'error', `Cell "${cellId}": pixel at (${x}, ${y}) has invalid color value "${col}"`, { cell_id: cellId, coordinate: [x, y], color: col });
             }
           }
         }
@@ -1395,9 +1408,7 @@ const PIX2 = (function () {
         if (anim.frames && Array.isArray(anim.frames)) {
           for (const frameId of anim.frames) {
             if (!doc.cells || !doc.cells[frameId]) {
-              const msg = `[PIX2_ERR_MISSING_FRAME] Animation "${animId}": references non-existent cell "${frameId}"`;
-              if (strict) errors.push(msg);
-              else warnings.push(msg);
+              recordDiagnostic('PIX2_ERR_MISSING_FRAME', 'warning', `Animation "${animId}": references non-existent cell "${frameId}"`, { anim_id: animId, frame_id: frameId });
             }
           }
         }
@@ -1407,7 +1418,8 @@ const PIX2 = (function () {
     return {
       valid: errors.length === 0,
       errors,
-      warnings
+      warnings,
+      diagnostics: structuredDiagnostics
     };
   }
 

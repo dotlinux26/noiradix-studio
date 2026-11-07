@@ -121,6 +121,32 @@ const trailingVal = PIX2.validate(trailingDoc, { strict: true });
 assert.strictEqual(trailingVal.valid, false, 'Document with trailing content after @end must fail strict validation');
 console.log('  [PASS] Trailing content after @end marker flagged with diagnostic and failed strict validation');
 
+// Test 9: Deterministic vector primitives rasterization & LWW overwrite rule
+const primVectorText = fs.readFileSync(path.join(vectorsDir, 'canonical_primitives_raster.pix2'), 'utf8');
+const primDoc = PIX2.parse(primVectorText);
+const primBaseline = JSON.parse(fs.readFileSync(path.join(vectorsDir, 'canonical_primitives_raster.json'), 'utf8'));
+assert.deepStrictEqual(primDoc, primBaseline, 'Rasterized primitives must strictly match immutable baseline');
+const primCell = primDoc.cells['primitive_test'];
+assert.strictEqual(primCell.pixels['2,2'], '#ff0000', 'Last-write-wins: p 2,2 #ff0000 must overwrite rect fill pixel');
+assert.strictEqual(primCell.pixels['4,8'], '#57546f', 'Symmetry dot must plot original coordinate');
+assert.strictEqual(primCell.pixels['11,8'], '#57546f', 'Symmetry dot must plot mirrored coordinate round(2*7.5 - 4) = 11');
+assert.strictEqual(primCell.pixels['9,3'], undefined, 'Outline rect interior must remain pure transparent');
+console.log('  [PASS] canonical_primitives_raster.pix2 verified: Bresenham, rect outline/fill, sym_dot, and LWW rules');
+
+// Test 10: Structured Diagnostic API conformance
+const structuredVal = PIX2.validate(docOob, { strict: false });
+assert.ok(Array.isArray(structuredVal.diagnostics), 'Validation result must include structured diagnostics array');
+const oobDiag = structuredVal.diagnostics.find(d => d.code === 'PIX2_WARN_OUT_OF_BOUNDS');
+assert.ok(oobDiag, 'Diagnostics array must include PIX2_WARN_OUT_OF_BOUNDS entry');
+assert.strictEqual(oobDiag.severity, 'warning', 'Non-strict out-of-bounds must have warning severity');
+assert.strictEqual(oobDiag.cell_id, 'hero_cell', 'Diagnostic must report affected cell_id');
+assert.deepStrictEqual(oobDiag.coordinate, [99, 99], 'Diagnostic must report exact out-of-bounds coordinate');
+
+const structuredStrict = PIX2.validate(docOob, { strict: true });
+const oobStrictDiag = structuredStrict.diagnostics.find(d => d.code === 'PIX2_WARN_OUT_OF_BOUNDS');
+assert.strictEqual(oobStrictDiag.severity, 'error', 'Strict out-of-bounds must promote severity to error');
+console.log('  [PASS] Structured Diagnostic API verified: code, severity, cell_id, and coordinate metadata emitted');
+
 console.log('\n====================================================');
 console.log('ALL TEST VECTORS VALIDATED SUCCESSFULLY');
 console.log('====================================================');

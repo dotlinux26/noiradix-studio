@@ -14,7 +14,7 @@ The test suite operates standalone using Node.js without third-party test framew
   # 3. TextMate regex pattern & capture group suite (6 checks)
   node tests/test-tmLanguage.js
 
-  # 4. Normative test vector conformance suite (9 tests)
+  # 4. Normative test vector conformance suite (11 tests)
   node tests/test-vectors-conformance.js
 
   # 5. Syntax validation across all engine modules
@@ -107,7 +107,7 @@ The test suite operates standalone using Node.js without third-party test framew
 
 ---
 
-### Test Suite 4: Normative Test Vector Conformance (`test-vectors-conformance.js` — 9 Tests)
+### Test Suite 4: Normative Test Vector Conformance (`test-vectors-conformance.js` — 11 Tests)
 
 * **Test 1:** Synchronization verification: byte-for-byte SHA-256 equivalence between standalone `pix2/js/pix2-format.js` and root `js/pix2-format.js`.
 * **Test 2:** Deep semantic structural equality against immutable baseline `canonical_valid_hero.json`.
@@ -118,6 +118,8 @@ The test suite operates standalone using Node.js without third-party test framew
 * **Test 7:** Roundtrip preservation of unused palette entries and string quotes.
 * **Test 8:** Missing version parameter in `@pix2` directive flagged with diagnostic and failed strict validation.
 * **Test 9:** Trailing non-comment content after `@end` marker flagged with diagnostic and failed strict validation.
+* **Test 10:** Deterministic vector primitives rasterization (`canonical_primitives_raster.pix2`): Bresenham line, rect fill/outline, sym_dot, and Last-Write-Wins (LWW) overwrite rules.
+* **Test 11:** Structured Diagnostic API contract emitting `code`, `severity`, `cell_id`, and exact `coordinate` metadata.
 
 ---
 
@@ -128,7 +130,7 @@ The test suite operates standalone using Node.js without third-party test framew
 TEST RESULTS: 96 / 96 PASSED (Roundtrip & Features)
 SECURITY TEST RESULTS: 20 / 20 PASSED (Defenses & Anti-DoS)
 REGEX PATTERN RESULTS: 6 / 6 PASSED (TextMate Regex Patterns)
-CONFORMANCE TEST RESULTS: 9 / 9 PASSED (Normative Vectors)
-TOTAL ACCEPTANCE: 131 / 131 PASSED (100%)
+CONFORMANCE TEST RESULTS: 11 / 11 PASSED (Normative Vectors)
+TOTAL ACCEPTANCE: 133 / 133 PASSED (100%)
 ====================================================
 ```

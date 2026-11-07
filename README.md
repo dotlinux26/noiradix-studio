@@ -454,14 +454,14 @@ noiradix-studio/
     ├── test-roundtrip.js            # Semantic determinism & feature verification suite (96 tests)
     ├── test-security.js             # Malicious payload & anti-DoS defense suite (20 tests)
     ├── test-tmLanguage.js           # TextMate regex pattern & capture group suite (6 checks)
-    └── test-vectors-conformance.js  # Normative conformance test vector suite (9 tests)
+    └── test-vectors-conformance.js  # Normative conformance test vector suite (11 tests)
 ```
 
 ---
 
 ## 🧪 Testing & Quality Assurance
 
-Run the automated test suites using Node.js (131 tests, zero external npm dependencies):
+Run the automated test suites using Node.js (133 tests, zero external npm dependencies):
 ```bash
 # 1. Semantic roundtrip & feature tests (96/96)
 node tests/test-roundtrip.js
@@ -472,7 +472,7 @@ node tests/test-security.js
 # 3. TextMate regex pattern & capture group checks (6/6)
 node tests/test-tmLanguage.js
 
-# 4. Normative test vector conformance (9/9)
+# 4. Normative test vector conformance (11/11)
 node tests/test-vectors-conformance.js
 ```
 
