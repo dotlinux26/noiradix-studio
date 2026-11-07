@@ -90,12 +90,39 @@ html, body {
   padding: 0 12px;
   gap: 12px;
   z-index: 100;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pa-header::-webkit-scrollbar {
+  display: none;
 }
 
 .pa-brand-group {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pa-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pa-tools-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pa-brand {
@@ -296,6 +323,19 @@ html, body {
   padding: 8px 0;
   gap: 6px;
   z-index: 10;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pa-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pa-tool-btn,
+.pa-tool-sep {
+  flex-shrink: 0;
 }
 
 .pa-tool-btn {
@@ -361,14 +401,7 @@ html, body {
 .pa-canvas-container {
   position: absolute;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  background-image:
-    linear-gradient(45deg, var(--checker-dark) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--checker-dark) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--checker-dark) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--checker-dark) 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
-  background-color: var(--checker-light);
+  background: transparent;
   transform-origin: center center;
 }
 
@@ -397,18 +430,40 @@ html, body {
   font-size: 11px;
   color: var(--text-dim);
   z-index: 5;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.pa-status-left, .pa-status-right {
+.pa-canvas-statusbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pa-status-left,
+.pa-status-right {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pa-status-item {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pa-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pa-color-dot {
@@ -624,6 +679,33 @@ html, body {
   padding: 0 12px;
   gap: 16px;
   z-index: 100;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pa-palette-deck::-webkit-scrollbar {
+  display: none;
+}
+
+.pa-active-colors,
+.pa-color-inputs,
+.pa-palette-presets,
+.pa-swatches-scroll {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pa-sym-svg {
+  display: block;
+  stroke: var(--text-main);
+  transition: stroke 0.15s ease;
+}
+
+.pa-tool-btn.active .pa-sym-svg {
+  stroke: #ffffff;
 }
 
 .pa-active-colors {

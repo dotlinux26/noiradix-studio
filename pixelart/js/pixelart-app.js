@@ -54,7 +54,7 @@
     h: 64,
     title: 'Pixel Artwork',
 
-    // Tools: 'pen' | 'eraser' | 'bucket' | 'line' | 'rect' | 'rect-fill' | 'select' | 'picker' | 'pan'
+    // Tools: 'pen' | 'eraser' | 'bucket' | 'line' | 'rect' | 'rect-fill' | 'circle' | 'circle-fill' | 'select' | 'picker' | 'pan'
     currentTool: 'pen',
     symH: false,
     symV: false,
@@ -63,6 +63,15 @@
     selection: null, // { x, y, w, h }
     isSelecting: false,
     clipboard: null, // { w, h, pixels }
+
+    // Floating Selection Drag & Transform State
+    isMovingSelection: false,
+    floatingPixels: null,
+    floatingOriginalSel: null,
+    floatingCurrentX: 0,
+    floatingCurrentY: 0,
+    moveStartX: 0,
+    moveStartY: 0,
 
     // Colors
     primaryColor: '#4f46e5',
@@ -144,11 +153,97 @@
     updateUi();
     updateAiPromptView();
 
+    // Responsive Drag & Mouse-Wheel Horizontal Scroll
+    enableHorizontalDragScroll(document.querySelector('.pa-header'));
+    enableHorizontalDragScroll(document.querySelector('.pa-canvas-statusbar'));
+    enableHorizontalDragScroll(document.querySelector('.pa-palette-deck'));
+    enableHorizontalDragScroll(document.querySelector('.pa-swatches-scroll'));
+
+    // Responsive Drag & Mouse-Wheel Vertical Scroll
+    enableVerticalDragScroll(document.getElementById('pa-toolbar'));
+
     // Fit canvas to viewport
     setTimeout(fitCanvasToViewport, 50);
 
     // Periodic Autosave every 20 seconds
     setInterval(triggerAutosave, 20000);
+  }
+
+  function enableHorizontalDragScroll(container) {
+    if (!container) return;
+    let isDown = false;
+    let isDragging = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+
+    container.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (e.target.closest('button, select, input, textarea, .pa-btn, .pa-icon-btn, .pa-color-slot')) return;
+      isDown = true;
+      isDragging = false;
+      startX = e.clientX;
+      startScrollLeft = container.scrollLeft;
+    });
+
+    container.addEventListener('pointermove', (e) => {
+      if (!isDown) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 3) isDragging = true;
+      container.scrollLeft = startScrollLeft - dx;
+    });
+
+    const stopDrag = () => { isDown = false; };
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
+
+    container.addEventListener('wheel', (e) => {
+      const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      const deltaX = e.deltaMode === 1 ? e.deltaX * 33 : e.deltaX;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        e.preventDefault();
+        container.scrollLeft += deltaY;
+      } else if (Math.abs(deltaX) > 0) {
+        container.scrollLeft += deltaX;
+      }
+    }, { passive: false });
+  }
+
+  function enableVerticalDragScroll(container) {
+    if (!container) return;
+    let isDown = false;
+    let isDragging = false;
+    let startY = 0;
+    let startScrollTop = 0;
+
+    container.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (e.target.closest('button, select, input, textarea, .pa-tool-btn')) return;
+      isDown = true;
+      isDragging = false;
+      startY = e.clientY;
+      startScrollTop = container.scrollTop;
+    });
+
+    container.addEventListener('pointermove', (e) => {
+      if (!isDown) return;
+      const dy = e.clientY - startY;
+      if (Math.abs(dy) > 3) isDragging = true;
+      container.scrollTop = startScrollTop - dy;
+    });
+
+    const stopDrag = () => { isDown = false; };
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
+
+    container.addEventListener('wheel', (e) => {
+      const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      if (Math.abs(deltaY) > 0) {
+        e.preventDefault();
+        container.scrollTop += deltaY;
+      }
+    }, { passive: false });
   }
 
   function cacheDom() {
@@ -297,25 +392,45 @@
 
     ctx.clearRect(0, 0, totalW, totalH);
 
-    const cell = getArtworkCell();
-    if (!cell || !cell.pixels) return;
+    // 1. Pixel-Aligned Checkerboard Background (1:1 with art pixels)
+    const isDark = document.body.classList.contains('dark-theme');
+    const c1 = isDark ? '#1a1d29' : '#ffffff';
+    const c2 = isDark ? '#121520' : '#e2e8f0';
 
-    // 1. Render all non-transparent pixels (Integer zoom * zoom block)
-    for (const key in cell.pixels) {
-      const parts = key.split(',');
-      const px = parseInt(parts[0], 10);
-      const py = parseInt(parts[1], 10);
-      const color = cell.pixels[key];
+    // When zoom >= 4, each checker tile is EXACTLY 1 artwork pixel (zoom x zoom screen px)
+    // When zoom < 4, checker tile is an integer multiple of zoom so it never splits an art pixel
+    const tileArtPixels = zoom >= 4 ? 1 : (zoom === 1 ? 16 : 8);
+    const tileCanvasSize = tileArtPixels * zoom;
 
-      if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
-        ctx.fillStyle = color;
-        ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+    for (let cy = 0; cy < totalH; cy += tileCanvasSize) {
+      for (let cx = 0; cx < totalW; cx += tileCanvasSize) {
+        const col = Math.floor(cx / tileCanvasSize);
+        const row = Math.floor(cy / tileCanvasSize);
+        ctx.fillStyle = ((col + row) % 2 === 0) ? c1 : c2;
+        const curW = Math.min(tileCanvasSize, totalW - cx);
+        const curH = Math.min(tileCanvasSize, totalH - cy);
+        ctx.fillRect(cx, cy, curW, curH);
       }
     }
 
-    // 2. Razor-Sharp Normative Pixel Grid Overlay (Active at zoom >= 8)
-    if (state.showGrid && zoom >= 8) {
-      const isDark = document.body.classList.contains('dark-theme');
+    const cell = getArtworkCell();
+    if (cell && cell.pixels) {
+      // 2. Render all artwork pixels (Integer zoom * zoom block)
+      for (const key in cell.pixels) {
+        const parts = key.split(',');
+        const px = parseInt(parts[0], 10);
+        const py = parseInt(parts[1], 10);
+        const color = cell.pixels[key];
+
+        if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
+          ctx.fillStyle = color;
+          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+        }
+      }
+    }
+
+    // 3. Razor-Sharp Pixel Grid Overlay (Active at zoom >= 4)
+    if (state.showGrid && zoom >= 4) {
       ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -336,7 +451,7 @@
       ctx.stroke();
     }
 
-    // 3. Bilateral Symmetry Axis Guidelines
+    // 4. Bilateral Symmetry Axis Guidelines
     if (state.symH) {
       const axisX = Math.floor((state.w / 2) * zoom) + 0.5;
       ctx.strokeStyle = '#a855f7';
@@ -372,14 +487,28 @@
     const zoom = state.zoom;
     const ctx = dom.ctxPreview;
 
+    // Render floating pixels being dragged/transformed on preview canvas
+    if (state.floatingPixels) {
+      for (const relKey in state.floatingPixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const px = x + rx;
+        const py = y + ry;
+        if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
+          ctx.fillStyle = state.floatingPixels[relKey];
+          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+        }
+      }
+    }
+
+    // Dashed Marquee Outline
     ctx.save();
     ctx.strokeStyle = '#4f46e5';
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 3]);
+    ctx.setLineDash([4, 4]);
     ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, w * zoom - 1, h * zoom - 1);
 
     ctx.strokeStyle = '#ffffff';
-    ctx.lineDashOffset = 3;
+    ctx.lineDashOffset = 4;
     ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, w * zoom - 1, h * zoom - 1);
     ctx.restore();
   }
@@ -586,10 +715,44 @@
 
     // Selection Tool Handling
     if (state.currentTool === 'select') {
+      // Check if clicking inside active selection -> Move / Drag it!
+      if (state.selection &&
+          x >= state.selection.x && x < state.selection.x + state.selection.w &&
+          y >= state.selection.y && y < state.selection.y + state.selection.h) {
+        state.isMovingSelection = true;
+        state.moveStartX = x;
+        state.moveStartY = y;
+        if (!state.floatingPixels) {
+          state.floatingOriginalSel = { ...state.selection };
+          state.floatingCurrentX = state.selection.x;
+          state.floatingCurrentY = state.selection.y;
+          state.floatingPixels = {};
+          for (let py = 0; py < state.selection.h; py++) {
+            for (let px = 0; px < state.selection.w; px++) {
+              const key = `${state.selection.x + px},${state.selection.y + py}`;
+              if (cell.pixels && cell.pixels[key]) {
+                state.floatingPixels[`${px},${py}`] = cell.pixels[key];
+                delete cell.pixels[key];
+              }
+            }
+          }
+          repaintCanvas();
+        }
+        renderSelectionMarquee();
+        return;
+      }
+
+      // Clicking outside -> Commit floating selection first, then create new marquee
+      commitFloatingSelection();
       state.isSelecting = true;
       state.selection = { x, y, w: 1, h: 1 };
       renderSelectionMarquee();
       return;
+    }
+
+    // If using any drawing tool, commit any pending floating selection
+    if (state.floatingPixels) {
+      commitFloatingSelection();
     }
 
     // Picker
@@ -635,6 +798,18 @@
       return;
     }
 
+    // Moving active selection
+    if (state.isMovingSelection && state.floatingOriginalSel) {
+      const dx = x - state.moveStartX;
+      const dy = y - state.moveStartY;
+      state.floatingCurrentX = state.floatingOriginalSel.x + dx;
+      state.floatingCurrentY = state.floatingOriginalSel.y + dy;
+      state.selection.x = state.floatingCurrentX;
+      state.selection.y = state.floatingCurrentY;
+      renderSelectionMarquee();
+      return;
+    }
+
     if (!state.isDrawing) return;
 
     const cell = getArtworkCell();
@@ -671,9 +846,13 @@
     } else if (state.currentTool === 'line') {
       drawPreviewLine(state.dragStartX, state.dragStartY, x, y, activeColor);
     } else if (state.currentTool === 'rect') {
-      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, false);
+      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, false, e.shiftKey, e.altKey);
     } else if (state.currentTool === 'rect-fill') {
-      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, true);
+      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, true, e.shiftKey, e.altKey);
+    } else if (state.currentTool === 'circle') {
+      drawPreviewCircle(state.dragStartX, state.dragStartY, x, y, activeColor, false, e.shiftKey, e.altKey);
+    } else if (state.currentTool === 'circle-fill') {
+      drawPreviewCircle(state.dragStartX, state.dragStartY, x, y, activeColor, true, e.shiftKey, e.altKey);
     }
   }
 
@@ -681,6 +860,12 @@
     if (state.isPanning) {
       state.isPanning = false;
       dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+      return;
+    }
+
+    if (state.isMovingSelection) {
+      state.isMovingSelection = false;
+      renderSelectionMarquee();
       return;
     }
 
@@ -704,16 +889,18 @@
       repaintCanvas();
     } else if (state.currentTool === 'rect' || state.currentTool === 'rect-fill') {
       const fillMode = state.currentTool === 'rect-fill';
-      const minX = Math.min(state.dragStartX, x);
-      const maxX = Math.max(state.dragStartX, x);
-      const minY = Math.min(state.dragStartY, y);
-      const maxY = Math.max(state.dragStartY, y);
-      const rw = maxX - minX + 1;
-      const rh = maxY - minY + 1;
-
+      const { minX, minY, rw, rh } = computeShapeBounds(state.dragStartX, state.dragStartY, x, y, e.shiftKey, e.altKey);
       _Tools.rect(minX, minY, rw, rh, fillMode, (px, py) => {
         plotPixelWithSymmetry(cell, px, py, activeColor);
       });
+      repaintCanvas();
+    } else if (state.currentTool === 'circle' || state.currentTool === 'circle-fill') {
+      const fillMode = state.currentTool === 'circle-fill';
+      const { minX, maxX, minY, maxY } = computeShapeBounds(state.dragStartX, state.dragStartY, x, y, e.shiftKey, e.altKey);
+      const points = rasterizeEllipse(minX, minY, maxX, maxY, fillMode);
+      for (const pt of points) {
+        plotPixelWithSymmetry(cell, pt.x, pt.y, activeColor);
+      }
       repaintCanvas();
     }
 
@@ -723,6 +910,111 @@
     // Canvas -> Code sync strictly on Pointer Up for 60fps performance!
     syncCanvasToSource();
     triggerAutosave();
+  }
+
+  function computeShapeBounds(startX, startY, curX, curY, shiftKey, altKey) {
+    let minX, maxX, minY, maxY;
+
+    if (altKey) {
+      let rx = Math.abs(curX - startX);
+      let ry = Math.abs(curY - startY);
+      if (shiftKey) {
+        rx = ry = Math.max(rx, ry);
+      }
+      minX = startX - rx;
+      maxX = startX + rx;
+      minY = startY - ry;
+      maxY = startY + ry;
+    } else {
+      let w = Math.abs(curX - startX);
+      let h = Math.abs(curY - startY);
+      if (shiftKey) {
+        const size = Math.max(w, h);
+        const signX = curX >= startX ? 1 : -1;
+        const signY = curY >= startY ? 1 : -1;
+        curX = startX + signX * size;
+        curY = startY + signY * size;
+      }
+      minX = Math.min(startX, curX);
+      maxX = Math.max(startX, curX);
+      minY = Math.min(startY, curY);
+      maxY = Math.max(startY, curY);
+    }
+
+    return { minX, maxX, minY, maxY, rw: maxX - minX + 1, rh: maxY - minY + 1 };
+  }
+
+  function rasterizeEllipse(x0, y0, x1, y1, fill) {
+    let a = Math.abs(x1 - x0);
+    let b = Math.abs(y1 - y0);
+    let b1 = b & 1;
+    let dx = 4 * (1 - a) * b * b;
+    let dy = 4 * (b1 + 1) * a * a;
+    let err = dx + dy + b1 * a * a;
+    let e2;
+
+    if (x0 > x1) { const t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { const t = y0; y0 = y1; y1 = t; }
+    let y_top = y0 + Math.floor((b + 1) / 2);
+    let y_bot = y_top - b1;
+    a = 8 * a * a;
+    b1 = 8 * b * b;
+
+    const scanlines = {};
+    const outlinePoints = [];
+
+    const plot4 = (x_left, x_right, yt, yb) => {
+      if (fill) {
+        if (!scanlines[yt]) scanlines[yt] = [x_left, x_right];
+        else {
+          scanlines[yt][0] = Math.min(scanlines[yt][0], x_left);
+          scanlines[yt][1] = Math.max(scanlines[yt][1], x_right);
+        }
+        if (!scanlines[yb]) scanlines[yb] = [x_left, x_right];
+        else {
+          scanlines[yb][0] = Math.min(scanlines[yb][0], x_left);
+          scanlines[yb][1] = Math.max(scanlines[yb][1], x_right);
+        }
+      } else {
+        outlinePoints.push({ x: x_left, y: yt });
+        outlinePoints.push({ x: x_right, y: yt });
+        outlinePoints.push({ x: x_left, y: yb });
+        outlinePoints.push({ x: x_right, y: yb });
+      }
+    };
+
+    do {
+      plot4(x0, x1, y_top, y_bot);
+      e2 = 2 * err;
+      if (e2 <= dy) { y_top++; y_bot--; err += dy += a; }
+      if (e2 >= dx || 2 * err > dy) { x0++; x1--; err += dx += b1; }
+    } while (x0 <= x1);
+
+    while (y_top - y_bot <= b) {
+      plot4(x0 - 1, x1 + 1, y_top, y_bot);
+      y_top++; y_bot--;
+    }
+
+    const result = [];
+    if (fill) {
+      for (const sy in scanlines) {
+        const y = parseInt(sy, 10);
+        const [minX, maxX] = scanlines[sy];
+        for (let x = minX; x <= maxX; x++) {
+          result.push({ x, y });
+        }
+      }
+    } else {
+      const seen = new Set();
+      for (const pt of outlinePoints) {
+        const k = `${pt.x},${pt.y}`;
+        if (!seen.has(k)) {
+          seen.add(k);
+          result.push(pt);
+        }
+      }
+    }
+    return result;
   }
 
   function drawPreviewLine(x0, y0, x1, y1, color) {
@@ -736,22 +1028,31 @@
     });
   }
 
-  function drawPreviewRect(x0, y0, x1, y1, color, fill) {
+  function drawPreviewRect(x0, y0, x1, y1, color, fill, shiftKey, altKey) {
     const zoom = state.zoom;
     dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
     dom.ctxPreview.fillStyle = color;
-    const minX = Math.min(x0, x1);
-    const maxX = Math.max(x0, x1);
-    const minY = Math.min(y0, y1);
-    const maxY = Math.max(y0, y1);
-    const rw = maxX - minX + 1;
-    const rh = maxY - minY + 1;
+    const { minX, minY, rw, rh } = computeShapeBounds(x0, y0, x1, y1, shiftKey, altKey);
 
     _Tools.rect(minX, minY, rw, rh, fill, (px, py) => {
       dom.ctxPreview.fillRect(px * zoom, py * zoom, zoom, zoom);
       if (state.symH) dom.ctxPreview.fillRect((state.w - 1 - px) * zoom, py * zoom, zoom, zoom);
       if (state.symV) dom.ctxPreview.fillRect(px * zoom, (state.h - 1 - py) * zoom, zoom, zoom);
     });
+  }
+
+  function drawPreviewCircle(x0, y0, x1, y1, color, fill, shiftKey, altKey) {
+    const zoom = state.zoom;
+    dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
+    dom.ctxPreview.fillStyle = color;
+    const { minX, maxX, minY, maxY } = computeShapeBounds(x0, y0, x1, y1, shiftKey, altKey);
+
+    const points = rasterizeEllipse(minX, minY, maxX, maxY, fill);
+    for (const pt of points) {
+      dom.ctxPreview.fillRect(pt.x * zoom, pt.y * zoom, zoom, zoom);
+      if (state.symH) dom.ctxPreview.fillRect((state.w - 1 - pt.x) * zoom, pt.y * zoom, zoom, zoom);
+      if (state.symV) dom.ctxPreview.fillRect(pt.x * zoom, (state.h - 1 - pt.y) * zoom, zoom, zoom);
+    }
   }
 
   function pickColorAt(x, y) {
@@ -775,6 +1076,28 @@
     }
   }
 
+  function commitFloatingSelection() {
+    if (!state.floatingPixels || !state.selection) return;
+    const cell = getArtworkCell();
+    if (cell) {
+      if (!cell.pixels) cell.pixels = {};
+      for (const relKey in state.floatingPixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const destX = state.selection.x + rx;
+        const destY = state.selection.y + ry;
+        if (destX >= 0 && destX < state.w && destY >= 0 && destY < state.h) {
+          cell.pixels[`${destX},${destY}`] = state.floatingPixels[relKey];
+        }
+      }
+      pushHistory();
+      repaintCanvas();
+      syncCanvasToSource();
+      triggerAutosave();
+    }
+    state.floatingPixels = null;
+    state.floatingOriginalSel = null;
+  }
+
   // ===========================================================================
   // SELECTION & TRANSFORM HELPERS
   // ===========================================================================
@@ -782,6 +1105,15 @@
     if (!state.selection) return;
     const cell = getArtworkCell();
     if (!cell || !cell.pixels) return;
+
+    if (state.floatingPixels) {
+      state.clipboard = {
+        w: state.selection.w,
+        h: state.selection.h,
+        pixels: { ...state.floatingPixels }
+      };
+      return;
+    }
 
     const { x, y, w, h } = state.selection;
     const copiedPixels = {};
@@ -805,6 +1137,18 @@
   }
 
   function deleteSelection() {
+    if (state.floatingPixels) {
+      state.floatingPixels = null;
+      state.floatingOriginalSel = null;
+      state.selection = null;
+      renderSelectionMarquee();
+      repaintCanvas();
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+      return;
+    }
+
     if (!state.selection) return;
     const cell = getArtworkCell();
     if (!cell || !cell.pixels) return;
@@ -816,6 +1160,8 @@
       }
     }
 
+    state.selection = null;
+    renderSelectionMarquee();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -824,20 +1170,10 @@
 
   function pasteSelection() {
     if (!state.clipboard || !state.clipboard.pixels) return;
-    const cell = getArtworkCell();
-    if (!cell) return;
+    commitFloatingSelection();
 
     const startX = state.selection ? state.selection.x : 0;
     const startY = state.selection ? state.selection.y : 0;
-
-    for (const relKey in state.clipboard.pixels) {
-      const [rx, ry] = relKey.split(',').map(Number);
-      const nx = startX + rx;
-      const ny = startY + ry;
-      if (nx >= 0 && nx < state.w && ny >= 0 && ny < state.h) {
-        cell.pixels[`${nx},${ny}`] = state.clipboard.pixels[relKey];
-      }
-    }
 
     state.selection = {
       x: startX,
@@ -845,11 +1181,13 @@
       w: state.clipboard.w,
       h: state.clipboard.h
     };
+    state.floatingOriginalSel = { ...state.selection };
+    state.floatingCurrentX = startX;
+    state.floatingCurrentY = startY;
+    state.floatingPixels = { ...state.clipboard.pixels };
 
-    repaintCanvas();
-    pushHistory();
+    renderSelectionMarquee();
     syncCanvasToSource();
-    triggerAutosave();
   }
 
   function fillSelection() {
@@ -864,16 +1202,61 @@
       }
     }
 
+    state.floatingPixels = null;
+    state.floatingOriginalSel = null;
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
     triggerAutosave();
   }
 
-  // Transform Actions
+  function ensureFloatingSelection() {
+    if (state.floatingPixels || !state.selection) return;
+    const cell = getArtworkCell();
+    if (!cell) return;
+    state.floatingOriginalSel = { ...state.selection };
+    state.floatingCurrentX = state.selection.x;
+    state.floatingCurrentY = state.selection.y;
+    state.floatingPixels = {};
+    for (let py = 0; py < state.selection.h; py++) {
+      for (let px = 0; px < state.selection.w; px++) {
+        const key = `${state.selection.x + px},${state.selection.y + py}`;
+        if (cell.pixels && cell.pixels[key]) {
+          state.floatingPixels[`${px},${py}`] = cell.pixels[key];
+          delete cell.pixels[key];
+        }
+      }
+    }
+  }
+
+  // Transform Actions (Selection or Full Canvas)
   function rotateArtwork() {
     const cell = getArtworkCell();
     if (!cell) return;
+
+    if (state.selection) {
+      ensureFloatingSelection();
+      const newFloating = {};
+      const oldW = state.selection.w;
+      const oldH = state.selection.h;
+      for (const relKey in state.floatingPixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const nx = oldH - 1 - ry;
+        const ny = rx;
+        newFloating[`${nx},${ny}`] = state.floatingPixels[relKey];
+      }
+      state.floatingPixels = newFloating;
+      state.selection.w = oldH;
+      state.selection.h = oldW;
+      if (state.floatingOriginalSel) {
+        state.floatingOriginalSel.w = oldH;
+        state.floatingOriginalSel.h = oldW;
+      }
+      repaintCanvas();
+      renderSelectionMarquee();
+      return;
+    }
+
     _Tools.rotate90Clockwise(cell, state.w, state.h);
     repaintCanvas();
     pushHistory();
@@ -884,6 +1267,22 @@
   function flipArtworkH() {
     const cell = getArtworkCell();
     if (!cell) return;
+
+    if (state.selection) {
+      ensureFloatingSelection();
+      const newFloating = {};
+      const sw = state.selection.w;
+      for (const relKey in state.floatingPixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const nx = sw - 1 - rx;
+        newFloating[`${nx},${ry}`] = state.floatingPixels[relKey];
+      }
+      state.floatingPixels = newFloating;
+      repaintCanvas();
+      renderSelectionMarquee();
+      return;
+    }
+
     _Tools.flipHorizontal(cell, state.w);
     repaintCanvas();
     pushHistory();
@@ -891,10 +1290,91 @@
     triggerAutosave();
   }
 
-  function alignArtworkCenter() {
+  function flipArtworkV() {
     const cell = getArtworkCell();
     if (!cell) return;
-    _Tools.alignCenter(cell, state.w, state.h, 'both');
+
+    if (state.selection) {
+      ensureFloatingSelection();
+      const newFloating = {};
+      const sh = state.selection.h;
+      for (const relKey in state.floatingPixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const ny = sh - 1 - ry;
+        newFloating[`${rx},${ny}`] = state.floatingPixels[relKey];
+      }
+      state.floatingPixels = newFloating;
+      repaintCanvas();
+      renderSelectionMarquee();
+      return;
+    }
+
+    _Tools.flipVertical(cell, state.h);
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  function alignArtwork(direction = 'center') {
+    commitFloatingSelection();
+    const cell = getArtworkCell();
+    if (!cell || !cell.pixels) return;
+
+    const coords = Object.keys(cell.pixels).map(k => k.split(',').map(Number));
+    if (coords.length === 0) return;
+
+    let minX = state.w, maxX = 0, minY = state.h, maxY = 0;
+    coords.forEach(([x, y]) => {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    });
+
+    const boxW = maxX - minX + 1;
+    const boxH = maxY - minY + 1;
+    let shiftX = 0;
+    let shiftY = 0;
+
+    switch (direction) {
+      case 'left':
+        shiftX = -minX;
+        break;
+      case 'right':
+        shiftX = (state.w - boxW) - minX;
+        break;
+      case 'center-h':
+        shiftX = Math.floor((state.w - boxW) / 2) - minX;
+        break;
+      case 'top':
+        shiftY = -minY;
+        break;
+      case 'bottom':
+        shiftY = (state.h - boxH) - minY;
+        break;
+      case 'center-v':
+        shiftY = Math.floor((state.h - boxH) / 2) - minY;
+        break;
+      case 'center':
+      default:
+        shiftX = Math.floor((state.w - boxW) / 2) - minX;
+        shiftY = Math.floor((state.h - boxH) / 2) - minY;
+        break;
+    }
+
+    if (shiftX === 0 && shiftY === 0) return;
+
+    const newPixels = {};
+    for (const k in cell.pixels) {
+      const [x, y] = k.split(',').map(Number);
+      const nx = x + shiftX;
+      const ny = y + shiftY;
+      if (nx >= 0 && nx < state.w && ny >= 0 && ny < state.h) {
+        newPixels[`${nx},${ny}`] = cell.pixels[k];
+      }
+    }
+    cell.pixels = newPixels;
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -902,6 +1382,19 @@
   }
 
   function nudgeArtwork(dx, dy) {
+    if (state.selection) {
+      ensureFloatingSelection();
+      state.selection.x += dx;
+      state.selection.y += dy;
+      if (state.floatingOriginalSel) {
+        state.floatingCurrentX += dx;
+        state.floatingCurrentY += dy;
+      }
+      repaintCanvas();
+      renderSelectionMarquee();
+      return;
+    }
+
     const cell = getArtworkCell();
     if (!cell) return;
     _Tools.nudge(cell, dx, dy, state.w, state.h);
@@ -1316,13 +1809,28 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     // Wheel Zoom centered on cursor
     dom.viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
+      const oldZoom = state.zoom;
       const delta = e.deltaY < 0 ? 1 : -1;
-      const newZoom = Math.max(1, Math.min(64, state.zoom + delta));
-      if (newZoom !== state.zoom) {
-        state.zoom = newZoom;
-        resizeCanvasesToZoom();
-        repaintCanvas();
-      }
+      const newZoom = Math.max(1, Math.min(64, oldZoom + delta));
+      if (newZoom === oldZoom) return;
+
+      // Analytical Invariant Cursor-Centered Zoom:
+      // Point under the mouse cursor remains invariant in viewport screen coordinates
+      const rect = dom.canvasMain.getBoundingClientRect();
+      const unscaledX = (e.clientX - rect.left) / oldZoom;
+      const unscaledY = (e.clientY - rect.top) / oldZoom;
+
+      const deltaW = (state.w * (newZoom - oldZoom)) / 2;
+      const deltaH = (state.h * (newZoom - oldZoom)) / 2;
+      const shiftX = unscaledX * (newZoom - oldZoom);
+      const shiftY = unscaledY * (newZoom - oldZoom);
+
+      state.zoom = newZoom;
+      state.panX += Math.round(deltaW - shiftX);
+      state.panY += Math.round(deltaH - shiftY);
+
+      resizeCanvasesToZoom();
+      repaintCanvas();
     }, { passive: false });
 
     // Source Code Editor Input
@@ -1334,15 +1842,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     // Tool Buttons
     document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.pa-tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.currentTool = btn.dataset.tool;
-
-        // Reset selection if changing tool away from select
-        if (state.currentTool !== 'select' && state.selection) {
-          state.selection = null;
-          renderSelectionMarquee();
-        }
+        selectTool(btn.dataset.tool);
       });
     });
 
@@ -1361,10 +1861,21 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       repaintCanvas();
     });
 
-    // Transform Action Buttons
+    // Transform & Align Action Buttons
     document.getElementById('btn-rotate-90').addEventListener('click', rotateArtwork);
     document.getElementById('btn-flip-h').addEventListener('click', flipArtworkH);
-    document.getElementById('btn-align-center').addEventListener('click', alignArtworkCenter);
+    const btnFlipV = document.getElementById('btn-flip-v');
+    if (btnFlipV) btnFlipV.addEventListener('click', flipArtworkV);
+
+    document.getElementById('btn-align-center').addEventListener('click', () => alignArtwork('center'));
+    const btnAlignLeft = document.getElementById('btn-align-left');
+    if (btnAlignLeft) btnAlignLeft.addEventListener('click', () => alignArtwork('left'));
+    const btnAlignRight = document.getElementById('btn-align-right');
+    if (btnAlignRight) btnAlignRight.addEventListener('click', () => alignArtwork('right'));
+    const btnAlignTop = document.getElementById('btn-align-top');
+    if (btnAlignTop) btnAlignTop.addEventListener('click', () => alignArtwork('top'));
+    const btnAlignBottom = document.getElementById('btn-align-bottom');
+    if (btnAlignBottom) btnAlignBottom.addEventListener('click', () => alignArtwork('bottom'));
 
     // Undo / Redo / Clear
     document.getElementById('btn-undo').addEventListener('click', undo);
@@ -1620,6 +2131,18 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       } else if (e.key === 'u' || e.key === 'U') {
         if (e.shiftKey) selectTool('rect-fill');
         else selectTool('rect');
+      } else if (e.key === 'c' || e.key === 'C') {
+        if (e.shiftKey) selectTool('circle-fill');
+        else selectTool('circle');
+      } else if (e.key === 'r' || e.key === 'R') {
+        rotateArtwork();
+      } else if (e.key === 'Escape') {
+        commitFloatingSelection();
+        state.selection = null;
+        renderSelectionMarquee();
+      } else if (e.key === 'Enter') {
+        commitFloatingSelection();
+        renderSelectionMarquee();
       } else if (e.key === 'm' || e.key === 'M') {
         selectTool('select');
       } else if (e.key === 'i' || e.key === 'I') {
@@ -1641,6 +2164,9 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
   }
 
   function selectTool(toolName) {
+    if (state.currentTool !== toolName && state.floatingPixels) {
+      commitFloatingSelection();
+    }
     state.currentTool = toolName;
     document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((b) => {
       b.classList.toggle('active', b.dataset.tool === toolName);

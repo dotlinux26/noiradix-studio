@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — Functional & UI/UX Specification
 
 **Document ID:** `docs/PIXELART/SPECIFICATION.md`  
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Date:** 2026-11-08  
 **Route:** `/pixelart/`  
 **License:** Apache-2.0  
@@ -32,14 +32,18 @@ The workspace follows a responsive split-view architecture:
 | [Line]  |         |      /\                 | |         | @grid                                    |
 | [Rect]  |         |     /  \       *        | |         |   columns: 1                             |
 | [Fill-R]|         |    /    \     ***       | |         |   rows: 1                                |
-| [Select]|         |   /      \     *        | |         |   default_cell: 128x128                  |
-| [Picker]|         |  /________\             | |         | @cell artwork                            |
-| [Pan]   |         +-------------------------+ |         |   p 64,32 #ffe66d                        |
-| [Mirror]|                                     |         |   line 20,80 64,40 #ff6b8b               |
-| [Rotate]|                                     |         | @end                                     |
-| [Center]|                                     |         |                                          |
-| Undo    |                                     |         |                                          |
-| Redo    | [Zoom: 12x] [-] [+] [Fit] (X:64 Y:32|         | Status: [● Synced] (138 Pixels)          |
+| [Circle]|         |   /      \     *        | |         |   default_cell: 128x128                  |
+| [Fill-C]|         |  /________\             | |         | @cell artwork                            |
+| [Select]|         +-------------------------+ |         |   p 64,32 #ffe66d                        |
+| [Picker]|                                     |         |   line 20,80 64,40 #ff6b8b               |
+| [Pan]   |                                     |         | @end                                     |
+| [Sym-H] |                                     |         |                                          |
+| [Sym-V] |                                     |         |                                          |
+| [Rotate]|                                     |         |                                          |
+| [Flip-H]|                                     |         |                                          |
+| [Flip-V]|                                     |         |                                          |
+| [Align] |                                     |         | Status: [● Synced] (138 Pixels)          |
+| Undo    | [Zoom: 12x] [-] [+] [Fit] [1x] (X,Y) |         | Diagnostics: Standard v1.0 Clean         |
 +---------+-------------------------------------+---------+------------------------------------------+
 | Palette: [Primary] [Secondary] [Swap]  #Hex [RGBA Slider]  | Status: [● Synced] (138 Pixels)      |
 | Swatches: [ 1 ][ 2 ][ 3 ][ 4 ][ 5 ][ 6 ][ 7 ][ 8 ] [+]     | Diagnostics: Clean                   |
@@ -58,16 +62,20 @@ The workspace follows a responsive split-view architecture:
 * **AI Assistant:** Opens AI Prompt Generator & PIX2 Code Injector modal.
 * **View Modes:** Split View (Dual Pane), Canvas Only, Code Only.
 * **Theme Toggle:** Dark / Light mode with persistence in `localStorage`.
+* **Universal Horizontal Drag-Scroll:** Protected with `flex-shrink: 0; white-space: nowrap;` and smooth mouse-wheel + background drag scrolling.
 
-### 2.2 Left Toolbar & Feature Parity with Studio
+### 2.2 Left Toolbar & Feature Set
 * **Pencil (`B`):** Freehand pixel drawing with continuous Bresenham interpolation between cursor samples.
 * **Eraser (`E`):** Erases drawn pixels back to transparent.
 * **Paint Bucket (`G`):** 4-way contiguous flood fill for closed regions.
 * **Line Tool (`L`):** Renders straight lines using normative PIX2 Bresenham rasterization with real-time drag preview.
-* **Rectangle Outline Tool (`U`):** Draws rectangular outlines (`<i class="fa-regular fa-square"></i>`).
-* **Filled Rectangle Tool (`Shift+U`):** Draws filled rectangles using the standard solid square icon (`<i class="fa-solid fa-square"></i>`).
+* **Rectangle Outline Tool (`U`):** Draws rectangular outlines (`<i class="fa-regular fa-square"></i>`). Holds `Shift` for 1:1 square, `Alt` to expand from center point outward.
+* **Filled Rectangle Tool (`Shift+U`):** Draws filled rectangles using the standard solid square icon (`<i class="fa-solid fa-square"></i>`). Supports `Shift` and `Alt`.
+* **Circle / Ellipse Outline Tool (`C`):** Integer Bresenham midpoint ellipse contour (`<i class="fa-regular fa-circle"></i>`). Holds `Shift` for 1:1 perfect circle, `Alt` to expand from center outward.
+* **Filled Circle / Ellipse Tool (`Shift+C`):** Solid filled circle (`<i class="fa-solid fa-circle"></i>`). Supports `Shift` and `Alt`.
 * **Selection Marquee Tool (`M` / `V`):**
   * Drag to select rectangular area with animated dashed marquee.
+  * **Interactive Move/Drag:** Clicking inside active selection picks up pixels into a floating buffer, allowing smooth live drag-and-drop.
   * **Copy (`Ctrl+C`):** Copies selected pixels to clipboard.
   * **Cut (`Ctrl+X`):** Copies and clears selected region.
   * **Paste (`Ctrl+V`):** Pastes clipboard content at selection origin.
@@ -75,19 +83,28 @@ The workspace follows a responsive split-view architecture:
   * **Fill Selection (`F`):** Fills all pixels in selection with active color.
 * **Eyedropper (`I`):** Samples pixel color from canvas into primary color.
 * **Hand / Pan Tool (`P` / `Space + Drag`):** Drags the canvas view freely across the viewport.
-* **Bilateral Symmetry Mirror (`H` / `V`):** Horizontal and vertical mirror drawing with purple dashed axis guidelines.
-* **Transform Operations:**
-  * **Rotate 90° Clockwise:** Rotates cell pixels $90^\circ$ around the canvas center.
-  * **Flip Horizontal:** Mirrors the entire artwork across the vertical center line.
-  * **Align Center:** Bounding-box aligns all drawn content to the exact center of the canvas.
-  * **Nudge Pixels (Arrow Keys):** Moves all pixels 1px up, down, left, or right.
+* **Bilateral Symmetry Guides (`H` / `Shift+H`):**
+  * Horizontal Symmetry (Left ↔ Right): Dedicated SVG icon with vertical dashed mirror axis.
+  * Vertical Symmetry (Top ↕ Bottom): Dedicated SVG icon with horizontal dashed mirror axis.
+* **Geometric Transformation Engine:**
+  * **Rotate 90° Clockwise (`R`):** Rotates selection if active, otherwise whole canvas.
+  * **Flip Horizontal:** Mirrors selection if active across its midline, otherwise mirrors whole canvas.
+  * **Flip Vertical:** Mirrors selection if active across its midline, otherwise mirrors whole canvas.
+  * **Multi-Axis Alignment Suite:**
+    * **Align Center (`fa-crosshairs`):** Centers content on both X & Y axes.
+    * **Align Left (`fa-align-left`):** Snaps content to left canvas edge.
+    * **Align Right (`fa-align-right`):** Snaps content to right canvas edge.
+    * **Align Top (`fa-arrows-up-to-line`):** Snaps content to top canvas edge.
+    * **Align Bottom (`fa-arrows-down-to-line`):** Snaps content to bottom canvas edge.
+  * **Nudge Pixels (Arrow Keys):** Moves active selection or canvas pixels 1px up, down, left, or right.
 * **Undo (`Ctrl+Z`) & Redo (`Ctrl+Y` / `Ctrl+Shift+Z`):** 50-level full document state history.
 * **Clear Canvas:** Wipes current artboard with confirmation and history snapshot.
+* **Vertical Drag-Scroll:** The toolbar supports smooth vertical scrolling on short screens (`enableVerticalDragScroll`).
 
 ### 2.3 Canvas Artboard & High-Precision Grid
-* **Integer Resolution Matrix:** The HTML5 Canvas width and height are scaled to `w * zoom` and `h * zoom`. Pixels are drawn as `zoom × zoom` integer blocks, completely eliminating CSS subpixel floating-point drift.
-* **Razor-Sharp Normative Grid:** Grid lines are rendered directly onto the canvas with half-pixel $(+0.5\text{px})$ offset at zoom levels $\ge 8\times$, perfectly separating pixel boundaries.
-* **Viewport Navigation:** Smooth mouse wheel zoom (1x to 64x integer multiples) centered on cursor, and panning with middle click or Hand tool.
+* **Pixel-Aligned Checkerboard:** Rendered directly onto `dom.ctxMain`. At `zoom >= 4`, each checker tile is **EXACTLY** 1 artwork pixel (`zoom × zoom` screen px), eliminating all visual vibration/eye strain.
+* **Razor-Sharp Normative Grid:** Grid lines are rendered directly onto the canvas with half-pixel $(+0.5\text{px})$ offset at zoom levels $\ge 4\times$, perfectly separating pixel boundaries.
+* **Analytical Invariant Cursor Zoom:** Smooth mouse wheel zoom (1x to 64x integer multiples) mathematically invariant under the cursor position.
 * **Status Readout:** Real-time $(X, Y)$ coordinate readout and color under cursor.
 
 ### 2.4 Draggable Split Pane Resizer
@@ -107,6 +124,7 @@ The workspace follows a responsive split-view architecture:
 * **Preset Palettes:** PICO-8 (16), Game Boy Classic (4), Sweetie 16, Endesga 32, Noiradix Cyber (8).
 * **Custom Swatches:** Click swatch to select; right-click swatch to replace with current color; click `+` to append new color.
 * **Auto-Synchronization:** Swatches automatically serialize into the `@palette` section of the `.pix2` document.
+* **Universal Horizontal Drag-Scroll:** Smooth drag and wheel scrolling across colors and palette presets.
 
 ---
 
@@ -120,23 +138,29 @@ The workspace follows a responsive split-view architecture:
 | `L` | Line Tool |
 | `U` | Rectangle Outline Tool |
 | `Shift + U` | Filled Rectangle Tool |
-| `M` / `V` | Selection Marquee Tool |
+| `C` | Circle / Ellipse Outline Tool |
+| `Shift + C` | Filled Circle / Ellipse Tool |
+| `Hold Shift` | Constrain 1:1 Aspect Ratio (Square / Circle) |
+| `Hold Alt` | Expand Shape from Center Point Outward |
+| `M` / `V` | Selection Marquee Tool (Drag inside to move) |
 | `I` | Eyedropper / Color Picker |
-| `P` | Hand / Pan Tool |
+| `P` | Hand / Pan Tool (or hold `Space`) |
 | `X` | Swap Primary & Secondary Colors |
-| `H` / `V` | Horizontal / Vertical Symmetry Mirror |
-| `Arrows` | Nudge Pixels (1px Offset) |
+| `H` / `Shift + H` | Horizontal / Vertical Bilateral Symmetry |
+| `R` | Rotate 90° Clockwise (Selection or Canvas) |
+| `Arrows` | Nudge Pixels / Selection (1px Offset) |
 | `Ctrl + C` / `Ctrl + V` | Copy / Paste Selection |
 | `Ctrl + X` | Cut Selection |
-| `Delete` / `Backspace` | Clear Selection |
+| `Delete` / `Backspace` | Clear Selection / Delete Floating Pixels |
 | `F` | Fill Selection with Primary Color |
+| `Enter` | Commit Floating Selection |
+| `Escape` | Cancel / Commit Selection |
 | `Ctrl + Z` | Undo |
 | `Ctrl + Y` / `Ctrl + Shift + Z` | Redo |
 | `Ctrl + S` | Save `.pix2` file |
 | `Ctrl + O` | Open file |
 | `Ctrl + N` | New Canvas |
-| `Space + Drag` | Pan canvas |
-| `Mouse Wheel` | Zoom in / out (centered on cursor) |
+| `Mouse Wheel` | Invariant Cursor-Centered Zoom |
 
 ---
 

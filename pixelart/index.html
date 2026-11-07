@@ -83,28 +83,34 @@
     
     <!-- LEFT TOOLBAR -->
     <aside class="pa-toolbar" id="pa-toolbar">
-      <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B) - Draw pixels">
+      <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B) — Draw pixels">
         <i class="fa-solid fa-pencil"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="eraser" title="Eraser (E) - Erase pixels">
+      <button class="pa-tool-btn" data-tool="eraser" title="Eraser (E) — Erase pixels">
         <i class="fa-solid fa-eraser"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="bucket" title="Paint Bucket (G) - 4-way flood fill">
+      <button class="pa-tool-btn" data-tool="bucket" title="Paint Bucket (G) — 4-way flood fill">
         <i class="fa-solid fa-fill-drip"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="line" title="Line Tool (L) - Bresenham straight line">
+      <button class="pa-tool-btn" data-tool="line" title="Line Tool (L) — Bresenham straight line">
         <i class="fa-solid fa-slash"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="rect" title="Rectangle Outline Tool (U)">
+      <button class="pa-tool-btn" data-tool="rect" title="Rectangle Outline Tool (U) [Hold Shift for 1:1 Square, Alt for Center]">
         <i class="fa-regular fa-square"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="rect-fill" title="Filled Rectangle Tool (Shift+U)">
+      <button class="pa-tool-btn" data-tool="rect-fill" title="Filled Rectangle Tool (Shift+U) [Hold Shift for 1:1 Square, Alt for Center]">
         <i class="fa-solid fa-square"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (M / V)">
+      <button class="pa-tool-btn" data-tool="circle" title="Circle / Ellipse Outline Tool (C) [Hold Shift for 1:1 Circle, Alt for Center]">
+        <i class="fa-regular fa-circle"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="circle-fill" title="Filled Circle / Ellipse Tool (Shift+C) [Hold Shift for 1:1 Circle, Alt for Center]">
+        <i class="fa-solid fa-circle"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (M / V) — Drag to move selection">
         <i class="fa-solid fa-crop-simple"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I) - Sample color">
+      <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I) — Sample color">
         <i class="fa-solid fa-eye-dropper"></i>
       </button>
       <button class="pa-tool-btn" data-tool="pan" title="Hand / Pan Tool (Space+Drag)">
@@ -113,25 +119,52 @@
 
       <div class="pa-tool-sep"></div>
 
-      <!-- Symmetry Toggles -->
-      <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Mirror Symmetry (H)">
+      <!-- Symmetry Toggles (Custom Visual Mirror Axis SVGs) -->
+      <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Symmetry Guide (H) [Mirror Left ↔ Right across vertical center]">
+        <svg class="pa-sym-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="3 3"/>
+          <circle cx="6" cy="12" r="3" fill="currentColor"/>
+          <circle cx="18" cy="12" r="3" fill="currentColor"/>
+        </svg>
+      </button>
+      <button id="btn-toggle-sym-v" class="pa-tool-btn" title="Vertical Symmetry Guide (Shift+H) [Mirror Top ↕ Bottom across horizontal center]">
+        <svg class="pa-sym-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="3 3"/>
+          <circle cx="12" cy="6" r="3" fill="currentColor"/>
+          <circle cx="12" cy="18" r="3" fill="currentColor"/>
+        </svg>
+      </button>
+
+      <div class="pa-tool-sep"></div>
+
+      <!-- Transform Tools (Selection or Full Canvas) -->
+      <button id="btn-rotate-90" class="pa-tool-btn" title="Rotate 90° Clockwise (R) [Selection or Canvas]">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+      <button id="btn-flip-h" class="pa-tool-btn" title="Flip Horizontal (Mirror X) [Selection or Canvas]">
         <i class="fa-solid fa-arrows-left-right"></i>
       </button>
-      <button id="btn-toggle-sym-v" class="pa-tool-btn" title="Vertical Mirror Symmetry (V)">
+      <button id="btn-flip-v" class="pa-tool-btn" title="Flip Vertical (Mirror Y) [Selection or Canvas]">
         <i class="fa-solid fa-arrows-up-down"></i>
       </button>
 
       <div class="pa-tool-sep"></div>
 
-      <!-- Transform Tools -->
-      <button id="btn-rotate-90" class="pa-tool-btn" title="Rotate 90° Clockwise">
-        <i class="fa-solid fa-arrow-rotate-right"></i>
+      <!-- Align Tools -->
+      <button id="btn-align-center" class="pa-tool-btn" title="Align Center (Both Axes)">
+        <i class="fa-solid fa-crosshairs"></i>
       </button>
-      <button id="btn-flip-h" class="pa-tool-btn" title="Flip Canvas Horizontally">
-        <i class="fa-solid fa-arrows-split-up-and-left"></i>
+      <button id="btn-align-left" class="pa-tool-btn" title="Align Left (Snap to Left Canvas Edge)">
+        <i class="fa-solid fa-align-left"></i>
       </button>
-      <button id="btn-align-center" class="pa-tool-btn" title="Align / Center Artwork to Canvas">
-        <i class="fa-solid fa-compress"></i>
+      <button id="btn-align-right" class="pa-tool-btn" title="Align Right (Snap to Right Canvas Edge)">
+        <i class="fa-solid fa-align-right"></i>
+      </button>
+      <button id="btn-align-top" class="pa-tool-btn" title="Align Top (Snap to Top Canvas Edge)">
+        <i class="fa-solid fa-arrows-up-to-line"></i>
+      </button>
+      <button id="btn-align-bottom" class="pa-tool-btn" title="Align Bottom (Snap to Bottom Canvas Edge)">
+        <i class="fa-solid fa-arrows-down-to-line"></i>
       </button>
 
       <div class="pa-tool-sep"></div>
@@ -141,7 +174,7 @@
         <i class="fa-solid fa-rotate-left"></i>
       </button>
       <button id="btn-redo" class="pa-tool-btn" title="Redo (Ctrl+Y)">
-        <i class="fa-solid fa-rotate-right"></i>
+        <i class="fa-solid fa-arrow-rotate-right"></i>
       </button>
       <button id="btn-clear-canvas" class="pa-tool-btn pa-tool-danger" title="Clear Canvas">
         <i class="fa-solid fa-trash-can"></i>
@@ -423,11 +456,16 @@
             <tr><td><kbd>L</kbd></td><td>Line Tool (Bresenham)</td></tr>
             <tr><td><kbd>U</kbd></td><td>Rectangle Outline Tool</td></tr>
             <tr><td><kbd>Shift+U</kbd></td><td>Filled Rectangle Tool</td></tr>
-            <tr><td><kbd>M</kbd></td><td>Selection Marquee (Move, Copy, Paste)</td></tr>
+            <tr><td><kbd>C</kbd></td><td>Circle / Ellipse Outline Tool</td></tr>
+            <tr><td><kbd>Shift+C</kbd></td><td>Filled Circle / Ellipse Tool</td></tr>
+            <tr><td><kbd>Hold Shift</kbd></td><td>Constrain 1:1 Aspect Ratio (Square / Circle)</td></tr>
+            <tr><td><kbd>Hold Alt</kbd></td><td>Expand Shape from Center Point Outward</td></tr>
+            <tr><td><kbd>M</kbd> / <kbd>V</kbd></td><td>Selection Marquee (Drag inside to move)</td></tr>
             <tr><td><kbd>I</kbd></td><td>Eyedropper / Color Picker</td></tr>
-            <tr><td><kbd>P</kbd></td><td>Pan / Hand Tool</td></tr>
+            <tr><td><kbd>P</kbd></td><td>Pan / Hand Tool (or hold <kbd>Space</kbd>)</td></tr>
             <tr><td><kbd>X</kbd></td><td>Swap Primary &amp; Secondary Colors</td></tr>
-            <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>Horizontal / Vertical Symmetry Mirror</td></tr>
+            <tr><td><kbd>H</kbd> / <kbd>Shift+H</kbd></td><td>Horizontal / Vertical Bilateral Symmetry</td></tr>
+            <tr><td><kbd>R</kbd></td><td>Rotate 90° (Selection or Canvas)</td></tr>
             <tr><td><kbd>Arrows</kbd></td><td>Nudge Pixels (1px Offset)</td></tr>
             <tr><td><kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd></td><td>Copy / Paste Selection</td></tr>
             <tr><td><kbd>Ctrl+X</kbd></td><td>Cut Selection</td></tr>
@@ -436,8 +474,7 @@
             <tr><td><kbd>Ctrl+S</kbd></td><td>Save / Download .pix2 File</td></tr>
             <tr><td><kbd>Ctrl+O</kbd></td><td>Open File</td></tr>
             <tr><td><kbd>Ctrl+N</kbd></td><td>New Canvas Modal</td></tr>
-            <tr><td><kbd>Space + Drag</kbd></td><td>Pan Canvas Artboard</td></tr>
-            <tr><td><kbd>Wheel</kbd></td><td>Cursor-Centered Integer Zoom</td></tr>
+            <tr><td><kbd>Wheel</kbd></td><td>Cursor-Centered Integer Zoom (Pixel Anchor Invariant)</td></tr>
           </tbody>
         </table>
       </div>

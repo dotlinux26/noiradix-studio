@@ -149,7 +149,178 @@ Between the artboard and code editor sits a draggable divider (`#pa-split-resize
 
 ---
 
-## 8. Summary of Engineering Commitments
-1. **Complete Parity with Studio:** Selection marquee, Cut/Copy/Paste/Fill, Rotate 90°, Flip H/V, Center content, Arrow key nudge, and Dual Autosave are fully supported.
-2. **Standard Iconography:** Filled rectangle uses the standard solid square (`fa-solid fa-square`), distinct from marquee selection (`fa-crop-simple`).
-3. **No Breaking Changes:** The PIX2 v1.0 Standard and NOIRADIX Studio remain frozen and verified by 134 automated unit and security tests.
+## 8. The Universal Responsive Drag-Scroll Pattern (Quy tắc Thiết kế Thanh ngang & Cột dọc Bất di Bất dịch)
+
+A core UX requirement established for NOIRADIX PixelArt is that **no toolbar, header, statusbar, or palette deck should ever wrap, squish its contents, or show clunky native scrollbars**. 
+
+To achieve this, the codebase enforces the **Twin Responsive Drag-Scroll Standard** across all horizontal bars and vertical toolbars:
+
+### 8.1 Horizontal Drag-Scroll Standard (`enableHorizontalDragScroll`)
+Applied to:
+* Top Header (`.pa-header`)
+* Canvas Statusbar (`.pa-canvas-statusbar`)
+* Bottom Palette Deck (`.pa-palette-deck`)
+* Palette Swatches Strip (`.pa-swatches-scroll`)
+
+**The CSS Contract:**
+```css
+/* Container contract: single-line, auto horizontal scroll, hidden scrollbars */
+.pa-horizontal-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.pa-horizontal-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Child group contract: absolutely prohibited from shrinking or wrapping */
+.pa-child-group {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+```
+
+**The JavaScript Contract:**
+* **Mouse Wheel:** Intercepts `wheel` events and adds `e.deltaY` to `container.scrollLeft`.
+* **Pointer Drag:** Allows dragging on empty bar background to smoothly scroll left/right without triggering child buttons.
+
+### 8.2 Vertical Drag-Scroll Standard (`enableVerticalDragScroll`)
+Applied to:
+* Left Tool Palette (`.pa-toolbar`)
+* Preset Pickers & Modals
+
+**The CSS Contract:**
+```css
+.pa-toolbar {
+  width: 44px;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.pa-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.pa-tool-btn, .pa-tool-sep {
+  flex-shrink: 0;
+}
+```
+
+**The JavaScript Contract:**
+* Handles natural mouse wheel and vertical background pointer drag to smoothly scroll tool columns on short displays (e.g. laptops, tablets).
+
+---
+
+## 9. Pixel-Aligned 1:1 Canvas Checkerboard Engine
+
+Previous iterations relied on CSS `background-size: 16px 16px` on the viewport container. When zooming to non-factor levels (e.g. $11\times$, $7\times$), the CSS checkerboard crossed through the middle of pixels, causing severe moiré vibration and visual strain ("cay mắt").
+
+### The Fix: Direct Canvas-Level Dynamic Checkerboard
+The static CSS background was removed from `.pa-canvas-container` (`background: transparent`). Instead, `dom.ctxMain` renders the checkerboard directly prior to drawing pixel data:
+
+```javascript
+// Step size in canvas pixels:
+// When zoom >= 4, each checker tile is EXACTLY 1 artwork pixel (zoom x zoom screen px)
+// When zoom < 4, checker tile is an integer multiple of zoom (8x or 16x) to prevent fractional pixels
+const tileArtPixels = zoom >= 4 ? 1 : (zoom === 1 ? 16 : 8);
+const tileCanvasSize = tileArtPixels * zoom;
+
+for (let cy = 0; cy < totalH; cy += tileCanvasSize) {
+  for (let cx = 0; cx < totalW; cx += tileCanvasSize) {
+    const col = Math.floor(cx / tileCanvasSize);
+    const row = Math.floor(cy / tileCanvasSize);
+    ctx.fillStyle = ((col + row) % 2 === 0) ? c1 : c2;
+    ctx.fillRect(cx, cy, Math.min(tileCanvasSize, totalW - cx), Math.min(tileCanvasSize, totalH - cy));
+  }
+}
+```
+
+**Outcome:**
+* When `zoom >= 4`, every checker square **IS** the artwork pixel!
+* Razor-sharp $+0.5\text{px}$ grid lines align with 0% error on checker borders.
+* Complete visual comfort with zero eye fatigue.
+
+---
+
+## 10. Analytical Invariant Cursor-Centered Zoom Formula
+
+When zooming with the mouse wheel, the point on the canvas directly under the cursor must remain strictly stationary on the screen.
+
+### Closed-Form Invariant Math:
+```javascript
+const rect = dom.canvasMain.getBoundingClientRect();
+const unscaledX = (e.clientX - rect.left) / oldZoom;
+const unscaledY = (e.clientY - rect.top) / oldZoom;
+
+const deltaW = (state.w * (newZoom - oldZoom)) / 2;
+const deltaH = (state.h * (newZoom - oldZoom)) / 2;
+const shiftX = unscaledX * (newZoom - oldZoom);
+const shiftY = unscaledY * (newZoom - oldZoom);
+
+state.zoom = newZoom;
+state.panX += Math.round(deltaW - shiftX);
+state.panY += Math.round(deltaH - shiftY);
+```
+Regardless of cursor position (center, corners, edges, or outside canvas), the anchor point remains mathematically invariant.
+
+---
+
+## 11. Interactive Floating Selection & Geometric Transformations
+
+Selection in NOIRADIX PixelArt supports full professional workflow:
+1. **Marquee Drag:** Select region with animated dashed outline.
+2. **Interactive Drag-to-Move:** Clicking inside an active selection picks up the pixels into a floating buffer (`state.floatingPixels`) and deletes them from the underlying cell. Moving the pointer renders the floating pixels smoothly on `dom.ctxPreview`.
+3. **Commit on Action:** Clicking outside, switching tools, copy, paste, or pressing `Enter`/`Escape` stamps the floating pixels permanently into the cell at the new location and syncs with `.pix2` source.
+4. **Selection-Aware Transformations:**
+   * **Flip Horizontal:** If a selection is active, flips pixels inside the marquee across its vertical midline. Otherwise flips canvas.
+   * **Flip Vertical:** If a selection is active, flips pixels inside the marquee across its horizontal midline. Otherwise flips canvas.
+   * **Rotate 90° Clockwise:** If a selection is active, rotates pixels $90^\circ$ inside the bounding box and swaps marquee width/height. Otherwise rotates canvas.
+   * **Nudge:** Arrow keys nudge the active selection or whole canvas by 1px.
+   * **Delete / Clear:** Discards selection pixels.
+
+---
+
+## 12. Multi-Axis Alignment Suite
+
+Provides 1-click geometric alignment of artwork content within the canvas bounds:
+* **Align Left (`fa-align-left`):** Snaps leftmost drawn pixel to $X = 0$.
+* **Align Right (`fa-align-right`):** Snaps rightmost drawn pixel to $X = W - \text{boxW}$.
+* **Align Center Horizontal (`fa-align-center`):** Centers content on the horizontal axis.
+* **Align Top (`fa-arrows-up-to-line`):** Snaps topmost drawn pixel to $Y = 0$.
+* **Align Bottom (`fa-arrows-down-to-line`):** Snaps bottommost drawn pixel to $Y = H - \text{boxH}$.
+* **Align Center Vertical (`fa-arrows-to-dot`):** Centers content on the vertical axis.
+* **Align Center Both Axes (`fa-crosshairs`):** Centers content on both $X$ and $Y$ simultaneously.
+
+---
+
+## 13. Alois Zingl Midpoint Ellipse & Shape Engine
+
+Implements Alois Zingl's normative integer Bresenham ellipse algorithm:
+* **Circle / Ellipse Outline (`C`):** Renders single-pixel-wide closed ellipse contours without gaps or floats.
+* **Filled Circle / Ellipse (`Shift+C`):** Computes scanline extents $[X_{\min}, X_{\max}]$ per $Y$ for solid rasterization.
+* **Shift Modifier:** Constrains shape aspect ratio to $1:1$ (perfect square or perfect circle).
+* **Alt Modifier:** Anchors shape at the starting drag coordinate, expanding outward symmetrically from center.
+
+---
+
+## 14. Summary of Engineering Commitments
+1. **Complete Parity with Studio & Beyond:** Selection marquee, Cut/Copy/Paste/Fill, Drag-to-move selection, Rotate 90°, Flip H/V, Multi-axis alignment, Arrow key nudge, and Dual Autosave are fully supported.
+2. **Unambiguous Iconography:**
+   * Filled Rectangle: `<i class="fa-solid fa-square"></i>`
+   * Filled Circle: `<i class="fa-solid fa-circle"></i>`
+   * Symmetry H & V: Custom visual mirror-axis SVGs with dashed centerline.
+   * Flip H & V: `<i class="fa-solid fa-arrows-left-right"></i>` and `<i class="fa-solid fa-arrows-up-down"></i>`.
+3. **Twin Responsive Drag-Scroll Pattern:** Universal horizontal & vertical drag-scroll applied across all toolbars and statusbars.
+4. **No Breaking Changes:** The PIX2 v1.0 Standard and NOIRADIX Studio remain frozen and verified by 134 automated unit and security tests.
