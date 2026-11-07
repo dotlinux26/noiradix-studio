@@ -1367,20 +1367,20 @@ const PIX2 = (function () {
           for (const coord in cell.pixels) {
             const parsed = parseCoordinate(coord);
             if (!parsed) {
-              const msg = `Cell "${cellId}": malformed pixel coordinate format "${coord}"`;
+              const msg = `[PIX2_ERR_INVALID_COORDINATE] Cell "${cellId}": malformed pixel coordinate format "${coord}"`;
               if (strict) errors.push(msg);
               else warnings.push(msg);
               continue;
             }
             const [x, y] = parsed;
             if (x < 0 || x >= cellW || y < 0 || y >= cellH) {
-              const msg = `Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
+              const msg = `[PIX2_WARN_OUT_OF_BOUNDS] Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
               if (strict) errors.push(msg);
               else warnings.push(msg);
             }
             const col = cell.pixels[coord];
             if (!isValidHex(col)) {
-              errors.push(`Cell "${cellId}": pixel at (${x}, ${y}) has invalid color value "${col}"`);
+              errors.push(`[PIX2_ERR_INVALID_COLOR] Cell "${cellId}": pixel at (${x}, ${y}) has invalid color value "${col}"`);
             }
           }
         }
@@ -1395,7 +1395,7 @@ const PIX2 = (function () {
         if (anim.frames && Array.isArray(anim.frames)) {
           for (const frameId of anim.frames) {
             if (!doc.cells || !doc.cells[frameId]) {
-              const msg = `Animation "${animId}": references non-existent cell "${frameId}"`;
+              const msg = `[PIX2_ERR_MISSING_FRAME] Animation "${animId}": references non-existent cell "${frameId}"`;
               if (strict) errors.push(msg);
               else warnings.push(msg);
             }

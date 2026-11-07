@@ -453,7 +453,7 @@ noiradix-studio/
 └── tests/
     ├── test-roundtrip.js            # Semantic determinism & feature verification suite (96 tests)
     ├── test-security.js             # Malicious payload & anti-DoS defense suite (20 tests)
-    ├── test-tmLanguage.js           # TextMate grammar pattern behavior suite (6 checks)
+    ├── test-tmLanguage.js           # TextMate regex pattern & capture group suite (6 checks)
     └── test-vectors-conformance.js  # Normative conformance test vector suite (9 tests)
 ```
 
@@ -469,7 +469,7 @@ node tests/test-roundtrip.js
 # 2. Malicious payload & anti-DoS defenses (20/20)
 node tests/test-security.js
 
-# 3. TextMate grammar pattern behavior checks (6/6)
+# 3. TextMate regex pattern & capture group checks (6/6)
 node tests/test-tmLanguage.js
 
 # 4. Normative test vector conformance (9/9)

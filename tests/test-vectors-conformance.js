@@ -78,11 +78,11 @@ console.log('  [PASS] invalid_missing_frame.pix2 correctly flagged missing frame
 const oobText = fs.readFileSync(path.join(vectorsDir, 'invalid_out_of_bounds.pix2'), 'utf8');
 const docOob = PIX2.parse(oobText);
 const oobWarn = PIX2.validate(docOob);
-assert.ok(oobWarn.warnings.some(w => w.includes('outside bounds')));
+assert.ok(oobWarn.warnings.some(w => w.includes('PIX2_WARN_OUT_OF_BOUNDS') && w.includes('outside bounds')), 'Warning must include PIX2_WARN_OUT_OF_BOUNDS diagnostic code');
 const oobStrict = PIX2.validate(docOob, { strict: true });
 assert.strictEqual(oobStrict.valid, false);
-assert.ok(oobStrict.errors.some(e => e.includes('outside bounds')));
-console.log('  [PASS] invalid_out_of_bounds.pix2 correctly flagged out-of-bounds coordinates');
+assert.ok(oobStrict.errors.some(e => e.includes('PIX2_WARN_OUT_OF_BOUNDS') && e.includes('outside bounds')), 'Strict error must include PIX2_WARN_OUT_OF_BOUNDS diagnostic code');
+console.log('  [PASS] invalid_out_of_bounds.pix2 correctly flagged out-of-bounds coordinates with PIX2_WARN_OUT_OF_BOUNDS');
 
 // Test 6: Roundtrip preservation of unused palette entries & string escaping
 const testDoc = PIX2.createDocument('Wizard "Dark Moon"', 2, 2, 16, 16);

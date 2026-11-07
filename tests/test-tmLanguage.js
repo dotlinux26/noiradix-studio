@@ -3,7 +3,7 @@ const path = require('path');
 const assert = require('assert');
 
 console.log('====================================================');
-console.log('RUNNING PIX2 TEXTMATE GRAMMAR PATTERN BEHAVIOR SUITE');
+console.log('RUNNING PIX2 TEXTMATE REGEX PATTERN & CAPTURE GROUP SUITE');
 console.log('====================================================\n');
 
 const grammarPath = path.join(__dirname, '..', 'syntaxes', 'pix2.tmLanguage.json');
@@ -97,25 +97,32 @@ assert.ok(matchCoord, 'Negative coordinate must match');
 assert.strictEqual(matchCoord[0], '-5,-10', 'Negative coordinate must retain leading minus sign intact');
 console.log('  [PASS] Negative coordinate parsing maintains sign integrity');
 
-// 3.4. Palette & Property Keys with Key-Value Separator Captures
+// 3.4. Palette & Property Keys with Exact Key-Value Separator Captures
 const propPattern = new RegExp(repo.properties.patterns[0].match);
 const customKeyPattern = new RegExp(repo.properties.patterns[1].match);
 
 const titleMatch = 'title: "Wizard"'.match(propPattern);
 assert.ok(titleMatch, 'Standard property "title:" must match');
 assert.strictEqual(titleMatch[1], 'title', 'Group 1 must capture property name without colon');
-assert.strictEqual(titleMatch[2].trim(), ':', 'Group 2 must capture punctuation separator');
+assert.strictEqual(titleMatch[2], ':', 'Group 2 must strictly capture ":" without whitespace');
 
-const cellSizeMatch = 'cell_size: 16x16'.match(propPattern);
-assert.ok(cellSizeMatch, 'Standard property "cell_size:" must match');
-assert.strictEqual(cellSizeMatch[1], 'cell_size', 'Group 1 must capture property name');
+const spacedProp = '  cell_size   : 16x16'.match(propPattern);
+assert.ok(spacedProp, 'Property with spaces before colon must match');
+assert.strictEqual(spacedProp[1], 'cell_size', 'Group 1 must capture property name');
+assert.strictEqual(spacedProp[2], ':', 'Group 2 must strictly capture ":" excluding preceding whitespace');
 
 const shadowMatch = 'shadow: #111111'.match(customKeyPattern);
 assert.ok(shadowMatch, 'Custom palette key "shadow:" must match fallback pattern');
 assert.strictEqual(shadowMatch[1], 'shadow', 'Group 1 must capture custom key identifier');
-assert.strictEqual(shadowMatch[2].trim(), ':', 'Group 2 must capture punctuation separator');
-console.log('  [PASS] Standard properties and custom palette keys tokenized with separated key-value punctuation');
+assert.strictEqual(shadowMatch[2], ':', 'Group 2 must strictly capture ":" without whitespace');
+
+const spacedKey = '  primary_color   : #123456'.match(customKeyPattern);
+assert.ok(spacedKey, 'Custom key with spaces before colon must match');
+assert.strictEqual(spacedKey[1], 'primary_color');
+assert.strictEqual(spacedKey[2], ':', 'Group 2 must strictly capture ":" excluding preceding whitespace');
+
+console.log('  [PASS] Standard properties and custom palette keys tokenized with exact separated punctuation');
 
 console.log('\n====================================================');
-console.log('ALL TEXTMATE GRAMMAR PATTERN BEHAVIOR TESTS PASSED');
+console.log('ALL TEXTMATE REGEX PATTERN & CAPTURE GROUP TESTS PASSED');
 console.log('====================================================');

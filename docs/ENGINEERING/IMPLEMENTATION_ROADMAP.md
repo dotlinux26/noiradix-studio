@@ -19,61 +19,38 @@
 
 ---
 
-## 2. Active User Feedback & Immediate Actions (P0 / P1)
+## 2. Completed User Feedback & Implemented Solutions (P0 / P1)
 
 ### Issue A: Smashed / Overlapping Grid Column Headers ("vỡ đồ họa nè dính nè")
 - **Cause:** `Col 0 (Frame 0)` text in canvas header was wider (~85px) than column slot width ($16 \times 3 + 16 = 64\text{px}$), causing adjacent column titles to collide and overlap.
-- **Action:**
-  1. Change column headers to compact, clean badges: `C0 (F0)`, `C1 (F1)` or simple `Col 0`, `Col 1` with auto-adjusting font size.
-  2. Increase column gap and padding in Grid Overview so text never collides.
-  3. Allow inline editing and renaming of Row and Column labels!
+- **Resolution:** [RESOLVED & IMPLEMENTED]
+  1. Replaced with compact badges: `Col 0`, `Col 1` with centered spacing.
+  2. Increased inter-cell column gap to 24px in Grid Overview so text never collides.
+  3. Added interactive inline editing and renaming for Row and Column labels.
 
 ### Issue B: Custom Animation Management & Unlocking 4-Dir Restriction
-- **Feedback:** "phần mềm này không khóa chết animation v đâu phải có panel để ng dùng tự thêm soát sửa cột hàng , tự thêm tự đặt tên cho animation và cái animation preview cũng phải hỗ trợ việc xem các animation tự thêm đấy ngoài các animaiton cơ bản ra"
-- **Action:**
-  1. Unbind animations from hardcoded rows.
-  2. Add dedicated **Animation Manager Panel** in Grid Inspector and dedicated **Animation Studio Workspace**:
-     - `+ New Animation` (name, direction tag, fps, loop mode).
-     - Delete animation, rename animation.
-     - Add/remove cells from animation sequence with click and reorder.
-  3. In Floating Animation Studio & Animation Workspace:
-     - Animation selector dropdown displays ALL animations in the project (`walk_down`, `attack`, `jump`, `death`, `idle`, etc.).
-     - Playing/previewing any selected custom animation with live FPS and frame counter.
+- **Feedback:** Need flexible panel to add/edit/delete rows, columns, and custom animations beyond standard 4 directions.
+- **Resolution:** [RESOLVED & IMPLEMENTED]
+  1. Unbound animations from fixed 4-directional rows to arbitrary named clips (`walk_down`, `attack`, `jump`, `death`, `idle`).
+  2. Integrated dedicated **Animation Manager Panel** in Grid Inspector: create, rename, delete clips, and reorder frames.
+  3. Floating Animation Studio & workspace dropdown supports previewing all animations with live FPS and looping controls.
 
 ### Issue C: Dedicated Animation Workspace / Screen ("chế độ màn hình xem chuyên biệt")
-- **Feedback:** "cần có chế độ màn hình xem chuyên biệt"
-- **Action:**
-  - Add a dedicated top-level tab: **[🎬 Animation Studio]** alongside [Grid Overview], [Cell Editor], and [PIX2 Code & AI].
-  - Dedicated full-screen timeline workspace with:
-    - Large centered animation canvas (zoomable 2x to 16x).
-    - Horizontal frame timeline strip with thumbnails: `[Frame 0] [Frame 1] [Frame 2] ... [+]`.
-    - Frame controls: duplicate, delete, move left/right, frame duration.
-    - Animation clip library with quick switching.
-    - Onion Skinning toggle with forward/backward frame ghosting.
+- **Feedback:** Need dedicated screen mode for full animation authoring and timeline scrubbing.
+- **Resolution:** [RESOLVED & IMPLEMENTED]
+  1. Added dedicated top-level **[🎬 Animation Studio]** (`#view-animation-studio`) tab alongside Grid Overview, Cell Editor, and Code & AI.
+  2. Integrated centered animation canvas with dynamic zoom (up to 25x auto-fit).
+  3. Built horizontal frame timeline strip with thumbnails, duplicate/delete controls, and onion skinning ghosting.
 
 ### Issue D: Full Keyboard Shortcuts Suite
-- **Required Shortcuts:**
-  - `Alt + Wheel` / `Wheel`: Zoom in/out centered on mouse position.
-  - `Space + Drag`: Pan workspace canvas.
-  - `V`: Selection tool.
-  - `B`: Pencil.
-  - `E`: Eraser.
-  - `G`: Paint Bucket.
-  - `I`: Eyedropper.
-  - `L`: Line tool.
-  - `U`: Rectangle tool.
-  - `S`: Symmetry Mirror toggle.
-  - `X`: Swap primary & secondary colors.
-  - `D`: Reset default colors.
-  - `Ctrl + 0`: Reset zoom & pan.
-  - `Ctrl + Z`: Undo.
-  - `Ctrl + Y`: Redo.
+- **Feedback:** Professional pixel artists require single-key shortcuts and canvas navigation.
+- **Resolution:** [RESOLVED & IMPLEMENTED]
+  Implemented full shortcut suite: `Alt + Wheel` / `Wheel` (anchor zoom), `Space + Drag` (canvas pan), `V` (Select), `B` (Pencil), `E` (Eraser), `G` (Bucket), `I` (Eyedropper), `L` (Line), `U` (Rect), `S` (Symmetry), `X` (Swap colors), `D` (Reset colors), `Ctrl + 0` (Reset view), `Ctrl + Z` (Undo), `Ctrl + Y` (Redo).
 
 ### Issue E: Grid Row & Column Management
-- **Action:**
-  - Add buttons: `[+ Add Row]`, `[- Remove Row]`, `[+ Add Col]`, `[- Remove Col]`.
-  - Allow renaming rows (e.g., Row 0: "Down", Row 1: "Up", or Row 0: "Idle", Row 1: "Attack").
-  - Allow assigning any cell on the grid to any animation state.
+- **Feedback:** Allow dynamic row and column addition/removal on canvas.
+- **Resolution:** [RESOLVED & IMPLEMENTED]
+  Added interactive `[+ Add Row]`, `[- Remove Row]`, `[+ Add Col]`, `[- Remove Col]` controls, row renaming, and cell-to-animation bindings.
 
 ---
 

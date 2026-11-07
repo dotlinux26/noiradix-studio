@@ -11,7 +11,7 @@ The test suite operates standalone using Node.js without third-party test framew
   # 2. Security, prototype-pollution & anti-DoS defense suite (20 tests)
   node tests/test-security.js
 
-  # 3. TextMate grammar pattern behavior suite (6 checks)
+  # 3. TextMate regex pattern & capture group suite (6 checks)
   node tests/test-tmLanguage.js
 
   # 4. Normative test vector conformance suite (9 tests)
@@ -96,14 +96,14 @@ The test suite operates standalone using Node.js without third-party test framew
 
 ---
 
-### Test Suite 3: TextMate Grammar Pattern Behavior Tests (`test-tmLanguage.js` — 6 Checks)
+### Test Suite 3: TextMate Regex Pattern & Capture Group Tests (`test-tmLanguage.js` — 6 Checks)
 
 * **Check 1: JSON Structure & Schema Conformance:** Validates strict JSON syntax and schema compliance.
 * **Check 2: RegExp Pattern Compilation:** Ensures all regex patterns in repository compile cleanly without runtime errors.
 * **Check 3: Comment vs Hex Color Disambiguation:** Strictly validates that `#RRGGBB` hex colors are not swallowed as comments, and comments require preceding whitespace. Rejects invalid 5 and 7-digit hex sequences.
 * **Check 4: Directives & Section Identifier Captures:** Verifies capture group 1 (`@cell`, `@animation`, `@pix2`) and group 4 (section identifiers/versions) across all 9 directives.
 * **Check 5: Negative Coordinate Parsing:** Verifies signed integer coordinates (`-5,-10`) retain minus signs without corruption.
-* **Check 6: Standard Properties & Custom Palette Keys:** Verifies property key tokenization and separated key-value punctuation (`support.type.property-name.pix2` + `punctuation.separator.key-value.pix2`).
+* **Check 6: Standard Properties & Custom Palette Keys:** Verifies property key tokenization and strictly separated key-value punctuation (`support.type.property-name.pix2` + `punctuation.separator.key-value.pix2` with whitespace excluded).
 
 ---
 
@@ -114,7 +114,7 @@ The test suite operates standalone using Node.js without third-party test framew
 * **Test 3:** Canonical AST JSON serialization emitting only `cell_size` without duplicate keys.
 * **Test 4:** Diagnostic emission for malformed coordinates (`invalid_syntax_coordinate.pix2`).
 * **Test 5:** Strict validation error for missing animation frames (`invalid_missing_frame.pix2`).
-* **Test 6:** Strict validation error for out-of-bounds coordinates (`invalid_out_of_bounds.pix2`).
+* **Test 6:** Strict validation error for out-of-bounds coordinates with diagnostic code `PIX2_WARN_OUT_OF_BOUNDS` (`invalid_out_of_bounds.pix2`).
 * **Test 7:** Roundtrip preservation of unused palette entries and string quotes.
 * **Test 8:** Missing version parameter in `@pix2` directive flagged with diagnostic and failed strict validation.
 * **Test 9:** Trailing non-comment content after `@end` marker flagged with diagnostic and failed strict validation.
@@ -127,7 +127,7 @@ The test suite operates standalone using Node.js without third-party test framew
 ====================================================
 TEST RESULTS: 96 / 96 PASSED (Roundtrip & Features)
 SECURITY TEST RESULTS: 20 / 20 PASSED (Defenses & Anti-DoS)
-GRAMMAR PATTERN RESULTS: 6 / 6 PASSED (TextMate Grammar Patterns)
+REGEX PATTERN RESULTS: 6 / 6 PASSED (TextMate Regex Patterns)
 CONFORMANCE TEST RESULTS: 9 / 9 PASSED (Normative Vectors)
 TOTAL ACCEPTANCE: 131 / 131 PASSED (100%)
 ====================================================

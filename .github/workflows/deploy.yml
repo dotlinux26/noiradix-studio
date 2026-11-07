@@ -45,7 +45,7 @@ jobs:
       - name: Run Security & Anti-DoS Defense Tests (20 Tests)
         run: node tests/test-security.js
 
-      - name: Run TextMate Grammar Pattern Behavior Tests (6 Checks)
+      - name: Run TextMate Regex Pattern & Capture Group Tests (6 Checks)
         run: node tests/test-tmLanguage.js
 
       - name: Run Normative Test Vector Conformance Tests (9 Tests)

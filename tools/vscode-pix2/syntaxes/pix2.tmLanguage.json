@@ -67,7 +67,7 @@
     "properties": {
       "patterns": [
         {
-          "match": "(?<=^|\\s)(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode)(\\s*:)",
+          "match": "(?<=^|\\s)(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode)\\s*(:)",
           "captures": {
             "1": {
               "name": "support.type.property-name.pix2"
@@ -78,7 +78,7 @@
           }
         },
         {
-          "match": "(?<=^|\\s)([a-zA-Z0-9_-]+)(\\s*:)",
+          "match": "(?<=^|\\s)([a-zA-Z0-9_-]+)\\s*(:)",
           "captures": {
             "1": {
               "name": "variable.other.property.pix2"
