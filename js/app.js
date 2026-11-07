@@ -8678,6 +8678,13 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
   // ===========================================================================
 
   function bindKeyboardShortcuts() {
+    window.addEventListener('beforeunload', (e) => {
+      if (isDocumentDirty || (state.doc && !currentFileHandle && Object.keys(state.doc.cells).length > 0)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
     window.addEventListener('keydown', (e) => {
       const isInputActive = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
       const key = e.key.toLowerCase();
