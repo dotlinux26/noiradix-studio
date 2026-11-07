@@ -2609,21 +2609,42 @@ body {
 
 /* ================= ACTION & DIRECTION TEMPLATE & NEW FILE MODALS ================= */
 .template-modal-dialog,
-.new-file-modal-dialog,
+.new-file-modal-dialog {
+  width: 580px;
+  max-width: 95vw;
+}
+
 .import-code-modal-dialog {
-  width: 640px;
+  width: 680px;
   max-width: 95vw;
 }
 
 .template-modal-body,
-.new-file-modal-body,
-.import-code-modal-body {
+.new-file-modal-body {
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.import-code-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
   max-height: 75vh;
   overflow-y: auto;
+}
+
+.import-code-header-bar {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .import-code-textarea {
