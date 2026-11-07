@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOIRADIX PixelArt — Canvas &amp; Live PIX2 Code Editor</title>
+  <meta name="description" content="A lightweight, client-side 2D pixel art editor and live bi-directional PIX2 source code editor. Draw freely on canvas or edit structured .pix2 code in real-time.">
+  <link rel="icon" type="image/svg+xml" href="../noiradix-studio-logo.svg">
+
+  <!-- FontAwesome Icons (Local, Offline) -->
+  <link rel="stylesheet" href="../css/fontawesome/all.min.css">
+
+  <!-- PixelArt Stylesheet -->
+  <link rel="stylesheet" href="css/pixelart.css">
+</head>
+<body class="light-theme">
+
+  <!-- ================= TOP NAVIGATION BAR ================= -->
+  <header class="pa-header">
+    <div class="pa-brand-group">
+      <a href="../" class="pa-btn pa-btn-subtle" title="Back to NOIRADIX Studio (Sprites &amp; Unity)">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>Studio</span>
+      </a>
+      <div class="pa-brand">
+        <img src="../noiradix-studio-logo.svg" alt="NOIRADIX" class="pa-logo">
+        <span class="pa-brand-name">NOIRADIX</span>
+        <span class="pa-app-badge">PixelArt</span>
+      </div>
+      <div class="pa-doc-info">
+        <input type="text" id="pa-doc-title" class="pa-title-input" value="Pixel Artwork" title="Click to rename artwork" aria-label="Artwork Title">
+        <span class="pa-dim-badge" id="pa-dim-badge">64×64</span>
+      </div>
+    </div>
+
+    <div class="pa-actions-group">
+      <button id="btn-new-canvas" class="pa-btn" title="New Canvas (Ctrl+N)">
+        <i class="fa-solid fa-file-circle-plus"></i>
+        <span>New</span>
+      </button>
+      <button id="btn-open-file" class="pa-btn" title="Open .pix2 File (Ctrl+O)">
+        <i class="fa-solid fa-folder-open"></i>
+        <span>Open</span>
+      </button>
+      <button id="btn-save-pix2" class="pa-btn" title="Save .pix2 File (Ctrl+S)">
+        <i class="fa-solid fa-floppy-disk"></i>
+        <span>Save</span>
+      </button>
+      <button id="btn-export-png" class="pa-btn pa-btn-accent" title="Export PNG image">
+        <i class="fa-solid fa-file-image"></i>
+        <span>Export PNG</span>
+      </button>
+      <button id="btn-ai-assistant" class="pa-btn pa-btn-ai" title="AI PixelArt Prompt Studio">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        <span>AI Studio</span>
+      </button>
+    </div>
+
+    <div class="pa-tools-group">
+      <div class="pa-view-toggles" role="group" aria-label="Layout View Modes">
+        <button id="btn-view-split" class="pa-icon-btn active" title="Split View (Canvas + Code)">
+          <i class="fa-solid fa-table-columns"></i>
+        </button>
+        <button id="btn-view-canvas" class="pa-icon-btn" title="Canvas Only">
+          <i class="fa-solid fa-palette"></i>
+        </button>
+        <button id="btn-view-code" class="pa-icon-btn" title="PIX2 Code Only">
+          <i class="fa-solid fa-code"></i>
+        </button>
+      </div>
+
+      <button id="btn-theme-toggle" class="pa-icon-btn" title="Toggle Theme (Dark / Light)">
+        <i class="fa-solid fa-moon"></i>
+      </button>
+      <button id="btn-help-modal" class="pa-icon-btn" title="Help &amp; Keyboard Shortcuts">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MAIN WORKSPACE (SPLIT VIEW) ================= -->
+  <main class="pa-workspace" id="pa-workspace">
+    
+    <!-- LEFT TOOLBAR -->
+    <aside class="pa-toolbar" id="pa-toolbar">
+      <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B)">
+        <i class="fa-solid fa-pencil"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="eraser" title="Eraser (E)">
+        <i class="fa-solid fa-eraser"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="bucket" title="Paint Bucket / Fill (G)">
+        <i class="fa-solid fa-fill-drip"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="line" title="Line Tool (L)">
+        <i class="fa-solid fa-slash"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="rect" title="Rectangle Tool (U)">
+        <i class="fa-regular fa-square"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I)">
+        <i class="fa-solid fa-eye-dropper"></i>
+      </button>
+
+      <div class="pa-tool-sep"></div>
+
+      <button id="btn-toggle-rect-fill" class="pa-tool-btn" title="Rectangle Mode: Outline (Click to toggle Fill)">
+        <i class="fa-solid fa-vector-square"></i>
+      </button>
+      <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Mirror Symmetry (H)">
+        <i class="fa-solid fa-arrows-left-right"></i>
+      </button>
+      <button id="btn-toggle-sym-v" class="pa-tool-btn" title="Vertical Mirror Symmetry (V)">
+        <i class="fa-solid fa-arrows-up-down"></i>
+      </button>
+
+      <div class="pa-tool-sep"></div>
+
+      <button id="btn-undo" class="pa-tool-btn" title="Undo (Ctrl+Z)">
+        <i class="fa-solid fa-rotate-left"></i>
+      </button>
+      <button id="btn-redo" class="pa-tool-btn" title="Redo (Ctrl+Y)">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+      <button id="btn-clear-canvas" class="pa-tool-btn pa-tool-danger" title="Clear Canvas">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
+    </aside>
+
+    <!-- CENTER CANVAS PANE -->
+    <section class="pa-canvas-pane" id="pa-canvas-pane">
+      <div class="pa-canvas-viewport" id="pa-canvas-viewport">
+        <div class="pa-canvas-container" id="pa-canvas-container">
+          <canvas id="pa-canvas-main" width="64" height="64" class="pa-canvas-layer"></canvas>
+          <canvas id="pa-canvas-preview" width="64" height="64" class="pa-canvas-layer pa-canvas-overlay"></canvas>
+        </div>
+      </div>
+
+      <!-- Canvas Statusbar -->
+      <footer class="pa-canvas-statusbar">
+        <div class="pa-status-left">
+          <span class="pa-status-item">
+            <i class="fa-solid fa-crosshairs"></i>
+            <span id="pa-coord-label">0, 0</span>
+          </span>
+          <span class="pa-status-item">
+            <span class="pa-color-dot" id="pa-hover-color-dot"></span>
+            <span id="pa-hover-color-label">Transparent</span>
+          </span>
+        </div>
+
+        <div class="pa-status-right">
+          <button id="btn-toggle-grid" class="pa-status-btn active" title="Toggle Pixel Grid">
+            <i class="fa-solid fa-border-all"></i>
+            <span>Grid</span>
+          </button>
+          <div class="pa-zoom-controls">
+            <button id="btn-zoom-out" class="pa-icon-btn btn-xs" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
+            <span id="pa-zoom-label" class="pa-zoom-label">12×</span>
+            <button id="btn-zoom-in" class="pa-icon-btn btn-xs" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
+            <button id="btn-zoom-fit" class="pa-btn-xs" title="Auto Fit">Fit</button>
+            <button id="btn-zoom-100" class="pa-btn-xs" title="Actual 1x">1×</button>
+          </div>
+        </div>
+      </footer>
+    </section>
+
+    <!-- RIGHT PIX2 SOURCE CODE PANE -->
+    <section class="pa-code-pane" id="pa-code-pane">
+      <header class="pa-code-header">
+        <div class="pa-code-title">
+          <i class="fa-solid fa-file-code text-accent"></i>
+          <span>PIX2 Source Code</span>
+          <span class="pa-sync-badge synced" id="pa-sync-badge">
+            <i class="fa-solid fa-circle"></i> Synced
+          </span>
+        </div>
+
+        <div class="pa-code-actions">
+          <button id="btn-copy-code" class="pa-btn-xs" title="Copy code to clipboard">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copy</span>
+          </button>
+          <button id="btn-download-pix2" class="pa-btn-xs" title="Download .pix2 file">
+            <i class="fa-solid fa-download"></i>
+            <span>.pix2</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="pa-code-body">
+        <div class="pa-code-gutter" id="pa-code-gutter" aria-hidden="true"></div>
+        <textarea id="pa-code-editor" class="pa-code-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Type PIX2 code here..."></textarea>
+      </div>
+
+      <footer class="pa-code-statusbar" id="pa-code-statusbar">
+        <div class="pa-code-status-left">
+          <span id="pa-code-lines-count">1 line</span>
+          <span class="pa-sep">•</span>
+          <span id="pa-code-pixels-count">0 pixels</span>
+        </div>
+        <div class="pa-code-status-right">
+          <span id="pa-diagnostic-pill" class="pa-diagnostic-pill clean">
+            <i class="fa-solid fa-check"></i> Standard v1.0
+          </span>
+        </div>
+      </footer>
+    </section>
+
+  </main>
+
+  <!-- ================= BOTTOM PALETTE DECK ================= -->
+  <footer class="pa-palette-deck">
+    <div class="pa-active-colors">
+      <div class="pa-color-slot primary" id="pa-color-primary-slot" title="Primary Color (Left Click). Click to pick.">
+        <div class="pa-color-preview" id="pa-color-primary-preview" style="background-color: #4f46e5;"></div>
+      </div>
+      <button id="btn-swap-colors" class="pa-swap-btn" title="Swap Colors (X)">
+        <i class="fa-solid fa-arrow-right-arrow-left"></i>
+      </button>
+      <div class="pa-color-slot secondary" id="pa-color-secondary-slot" title="Secondary Color (Right Click / Eraser). Click to pick.">
+        <div class="pa-color-preview" id="pa-color-secondary-preview" style="background-color: #ffffff;"></div>
+      </div>
+    </div>
+
+    <div class="pa-color-inputs">
+      <div class="pa-hex-wrapper">
+        <span class="pa-hex-prefix">#</span>
+        <input type="text" id="pa-color-hex" class="pa-hex-input" value="4f46e5" maxlength="8" spellcheck="false" title="Hex code (#RGB, #RRGGBB, #RRGGBBAA)">
+      </div>
+      <input type="color" id="pa-color-picker-native" class="pa-native-picker" value="#4f46e5" title="Open Native Color Picker">
+
+      <div class="pa-alpha-wrapper">
+        <span class="pa-alpha-label">Alpha</span>
+        <input type="range" id="pa-alpha-slider" min="0" max="255" value="255" class="pa-alpha-slider" title="Color Alpha Transparency (0 - 255)">
+        <span id="pa-alpha-val" class="pa-alpha-val">255</span>
+      </div>
+    </div>
+
+    <div class="pa-palette-presets">
+      <select id="pa-palette-select" class="pa-select" title="Load Preset Palette">
+        <option value="pico8">PICO-8 (16)</option>
+        <option value="endesga32">Endesga (32)</option>
+        <option value="gameboy">Game Boy (4)</option>
+        <option value="sweetie16">Sweetie 16</option>
+        <option value="noiradix" selected>Noiradix Classic</option>
+      </select>
+    </div>
+
+    <div class="pa-swatches-scroll">
+      <div class="pa-swatches" id="pa-swatches-container"></div>
+      <button id="btn-add-palette-color" class="pa-swatch-add-btn" title="Add current color to palette">
+        <i class="fa-solid fa-plus"></i>
+      </button>
+    </div>
+  </footer>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- NEW CANVAS MODAL -->
+  <div id="modal-new-canvas" class="pa-modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="pa-modal-dialog">
+      <div class="pa-modal-header">
+        <h3><i class="fa-solid fa-file-circle-plus text-accent"></i> New PixelArt Canvas</h3>
+        <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pa-modal-body">
+        <p class="pa-modal-hint">Select a standard pixel art dimension or specify a custom size up to 512×512.</p>
+        
+        <div class="pa-presets-grid">
+          <button class="pa-preset-chip" data-size="16">16 × 16</button>
+          <button class="pa-preset-chip" data-size="24">24 × 24</button>
+          <button class="pa-preset-chip" data-size="32">32 × 32</button>
+          <button class="pa-preset-chip" data-size="48">48 × 48</button>
+          <button class="pa-preset-chip active" data-size="64">64 × 64</button>
+          <button class="pa-preset-chip" data-size="96">96 × 96</button>
+          <button class="pa-preset-chip" data-size="128">128 × 128</button>
+          <button class="pa-preset-chip" data-size="256">256 × 256</button>
+        </div>
+
+        <div class="pa-custom-size-row">
+          <div class="pa-input-group">
+            <label for="input-custom-w">Width (px)</label>
+            <input type="number" id="input-custom-w" min="1" max="512" value="64">
+          </div>
+          <span class="pa-times">×</span>
+          <div class="pa-input-group">
+            <label for="input-custom-h">Height (px)</label>
+            <input type="number" id="input-custom-h" min="1" max="512" value="64">
+          </div>
+        </div>
+      </div>
+      <div class="pa-modal-footer">
+        <button class="pa-btn" data-close-modal>Cancel</button>
+        <button id="btn-confirm-new-canvas" class="pa-btn pa-btn-accent">Create Canvas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPORT PNG MODAL -->
+  <div id="modal-export-png" class="pa-modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="pa-modal-dialog">
+      <div class="pa-modal-header">
+        <h3><i class="fa-solid fa-file-image text-accent"></i> Export PNG Image</h3>
+        <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pa-modal-body">
+        <div class="pa-export-preview-box">
+          <canvas id="pa-export-preview-canvas" width="128" height="128"></canvas>
+        </div>
+
+        <div class="pa-scale-selector">
+          <label>Scale Multiplier:</label>
+          <div class="pa-scale-buttons">
+            <button class="pa-scale-btn" data-scale="1">1×</button>
+            <button class="pa-scale-btn" data-scale="2">2×</button>
+            <button class="pa-scale-btn" data-scale="4">4×</button>
+            <button class="pa-scale-btn active" data-scale="8">8×</button>
+            <button class="pa-scale-btn" data-scale="16">16×</button>
+            <button class="pa-scale-btn" data-scale="32">32×</button>
+          </div>
+          <div class="pa-scale-info">
+            Output Size: <strong id="pa-export-dim-label">512 × 512 px</strong>
+          </div>
+        </div>
+      </div>
+      <div class="pa-modal-footer">
+        <button class="pa-btn" data-close-modal>Cancel</button>
+        <button id="btn-download-png" class="pa-btn pa-btn-accent">
+          <i class="fa-solid fa-download"></i> Download PNG
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI ASSISTANT MODAL -->
+  <div id="modal-ai-assistant" class="pa-modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="pa-modal-dialog pa-modal-lg">
+      <div class="pa-modal-header">
+        <h3><i class="fa-solid fa-wand-magic-sparkles text-ai"></i> AI PixelArt Prompt Studio</h3>
+        <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pa-modal-body">
+        <p class="pa-modal-hint">
+          Large Language Models (ChatGPT, Claude) can generate crisp 2D pixel art directly using the <strong>PIX2 v1.0 standard</strong> without diffusion blur. Select a prompt template below or paste generated code to inject it directly into your canvas!
+        </p>
+
+        <div class="pa-ai-tabs">
+          <button class="pa-ai-tab active" data-template="portrait">Character Portrait</button>
+          <button class="pa-ai-tab" data-template="item">Game Item / Icon</button>
+          <button class="pa-ai-tab" data-template="landscape">Scenery / Landscape</button>
+          <button class="pa-ai-tab" data-template="inject">Inject PIX2 Code</button>
+        </div>
+
+        <div class="pa-ai-tab-content" id="pa-ai-prompt-view">
+          <textarea id="pa-ai-prompt-text" class="pa-ai-prompt-area" readonly></textarea>
+          <div class="pa-ai-actions-row">
+            <button id="btn-copy-ai-prompt" class="pa-btn pa-btn-accent">
+              <i class="fa-regular fa-copy"></i> Copy Prompt for LLM
+            </button>
+            <span class="pa-ai-copy-hint">Paste this into ChatGPT, Claude or your AI agent.</span>
+          </div>
+        </div>
+
+        <div class="pa-ai-tab-content hidden" id="pa-ai-inject-view">
+          <textarea id="pa-ai-inject-code" class="pa-ai-prompt-area" placeholder="Paste generated @pix2 ... @end code here..."></textarea>
+          <div class="pa-ai-actions-row">
+            <button id="btn-confirm-ai-inject" class="pa-btn pa-btn-accent">
+              <i class="fa-solid fa-bolt"></i> Render Code to Canvas
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="pa-modal-footer">
+        <button class="pa-btn" data-close-modal>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP & SHORTCUTS MODAL -->
+  <div id="modal-help" class="pa-modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="pa-modal-dialog">
+      <div class="pa-modal-header">
+        <h3><i class="fa-solid fa-circle-question text-accent"></i> Help &amp; Keyboard Shortcuts</h3>
+        <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pa-modal-body">
+        <table class="pa-shortcuts-table">
+          <thead>
+            <tr><th>Shortcut</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><kbd>B</kbd></td><td>Pencil (Continuous drawing)</td></tr>
+            <tr><td><kbd>E</kbd></td><td>Eraser</td></tr>
+            <tr><td><kbd>G</kbd></td><td>Paint Bucket (Flood Fill)</td></tr>
+            <tr><td><kbd>L</kbd></td><td>Line Tool (Bresenham)</td></tr>
+            <tr><td><kbd>U</kbd></td><td>Rectangle Tool (Outline / Fill)</td></tr>
+            <tr><td><kbd>I</kbd></td><td>Eyedropper / Color Picker</td></tr>
+            <tr><td><kbd>X</kbd></td><td>Swap Primary &amp; Secondary Colors</td></tr>
+            <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>Horizontal / Vertical Symmetry Mirror</td></tr>
+            <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo</td></tr>
+            <tr><td><kbd>Ctrl+Y</kbd></td><td>Redo</td></tr>
+            <tr><td><kbd>Ctrl+S</kbd></td><td>Save / Download .pix2 File</td></tr>
+            <tr><td><kbd>Ctrl+O</kbd></td><td>Open File</td></tr>
+            <tr><td><kbd>Ctrl+N</kbd></td><td>New Canvas Modal</td></tr>
+            <tr><td><kbd>Space + Drag</kbd></td><td>Pan Canvas Artboard</td></tr>
+            <tr><td><kbd>Wheel</kbd></td><td>Cursor-Centered Integer Zoom</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pa-modal-footer">
+        <button class="pa-btn pa-btn-accent" data-close-modal>Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden File Input for Opening .pix2 or PNG -->
+  <input type="file" id="pa-hidden-file-input" accept=".pix2,.txt,image/png,image/jpeg" style="display: none;">
+
+  <!-- Core PIX2 Reference Engine (Reused from parent) -->
+  <script src="../js/pix2-format.js"></script>
+
+  <!-- Tools Algorithm Library (Reused from parent) -->
+  <script src="../js/tools.js"></script>
+
+  <!-- PixelArt Application Logic -->
+  <script src="js/pixelart-app.js"></script>
+</body>
+</html>

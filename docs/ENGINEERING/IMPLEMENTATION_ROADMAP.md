@@ -99,3 +99,11 @@
 - **PIX2 Reference Engine:** Frozen (Production v1.0). Fully verified against normative test vectors.
 - **PIX2 v1.0 Standard:** Frozen v1.0 Standard Specification (Production Ready). EBNF, lexical grammar, drawing primitives semantics, and test vector baselines are fully decoupled, immutable, normative, and synchronized.
 - **Acceptance Status:** 134/134 tests passing cleanly in continuous integration.
+
+---
+
+## 5. Ecosystem Sibling: NOIRADIX PixelArt (`noiradix.me/pixelart/`)
+
+- **Role:** Dedicated standalone 2D pixel art painting environment and live bi-directional PIX2 source code editor.
+- **Governance:** Does NOT modify or unfreeze NOIRADIX Studio or the PIX2 v1.0 Standard. Reuses the frozen `js/pix2-format.js` reference engine without alteration.
+- **Documentation:** Full architectural reuse plan and technical specifications documented in [`docs/PIXELART/ARCHITECTURE_AND_REUSE_PLAN.md`](../PIXELART/ARCHITECTURE_AND_REUSE_PLAN.md) and [`docs/PIXELART/SPECIFICATION.md`](../PIXELART/SPECIFICATION.md).

@@ -38,6 +38,7 @@ jobs:
           node --check js/animation-player.js
           node --check js/tools.js
           node --check pix2/js/pix2-format.js
+          node --check pixelart/js/pixelart-app.js
 
       - name: Run Semantic Roundtrip & Feature Tests (96 Tests)
         run: node tests/test-roundtrip.js
