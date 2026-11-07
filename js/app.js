@@ -5017,6 +5017,7 @@
   function renderCodeEditor() {
     if (!state.doc || !dom.codeTextarea) return;
     dom.codeTextarea.value = PIX2.serialize(state.doc);
+    updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
   }
 
   function applyCodeToDoc() {
@@ -5038,173 +5039,227 @@
   // AI SPECIFICATION & CONTEXTUAL PROMPT STUDIO
   // ===========================================================================
 
+  function getSpriteMath(cw, ch) {
+    cw = Math.min(Math.max(1, parseInt(cw, 10) || 16), 512);
+    ch = Math.min(Math.max(1, parseInt(ch, 10) || 16), 512);
+    const axisX = (cw - 1) / 2;
+    const axisXStr = axisX.toFixed(1);
+
+    // Dynamic vertical landmarks proportional to canvas height
+    const topMargin = Math.max(1, Math.round(ch * 0.05));
+    const headEndY = Math.max(topMargin + 3, Math.round(ch * 0.38));
+    const eyeStartY = Math.max(topMargin + 2, Math.round(ch * 0.28));
+    const eyeEndY = Math.min(headEndY - 1, Math.round(ch * 0.36));
+    const torsoStartY = headEndY + 1;
+    const torsoEndY = Math.max(torsoStartY + 3, Math.round(ch * 0.72));
+    const legsStartY = torsoEndY + 1;
+    const legsEndY = Math.max(legsStartY + 1, ch - 2);
+    const groundY = ch - 1;
+
+    // Dynamic horizontal widths & bounds proportional to canvas width
+    const bodyW = Math.max(6, Math.round(cw * 0.65));
+    const startX = Math.floor((cw - bodyW) / 2);
+    const endX = startX + bodyW - 1;
+
+    const headW = Math.max(6, Math.round(cw * 0.55));
+    const headStartX = Math.floor((cw - headW) / 2);
+    const headEndX = headStartX + headW - 1;
+
+    const eyeOffset = Math.max(1, Math.round(cw * 0.12));
+    const eyeLeftX = Math.round(axisX - eyeOffset - 0.5);
+    const eyeRightX = Math.round(axisX + eyeOffset + 0.5);
+
+    return {
+      cw, ch, axisX, axisXStr,
+      head: { y: [topMargin, headEndY], w: headW, x: [headStartX, headEndX] },
+      eyes: { y: [eyeStartY, eyeEndY], leftX: eyeLeftX, rightX: eyeRightX },
+      torso: { y: [torsoStartY, torsoEndY], w: bodyW, x: [startX, endX] },
+      legs: { y: [legsStartY, legsEndY] },
+      groundY
+    };
+  }
+
   function updateAiGuidePane(mode = 'all-in-one') {
     const titleEl = document.getElementById('ai-guide-title');
     const contentEl = document.getElementById('ai-guide-content');
     if (!contentEl) return;
 
+    const cw = (state.doc && state.doc.meta && state.doc.meta.cellSize) ? state.doc.meta.cellSize.w : 16;
+    const ch = (state.doc && state.doc.meta && state.doc.meta.cellSize) ? state.doc.meta.cellSize.h : 16;
+    const m = getSpriteMath(cw, ch);
+
+    const canonicalTableHtml = `
+      <table class="guide-table">
+        <thead>
+          <tr>
+            <th>Kích thước Cell</th>
+            <th>Toạ độ hợp lệ</th>
+            <th>Trục giữa (Center Axis)</th>
+            <th>Lệnh đối xứng (Bilateral Symmetry)</th>
+            <th>Công thức lật gương (Mirror)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>16 × 16</strong></td>
+            <td>0 đến 15</td>
+            <td><code>X = 7.5</code></td>
+            <td><code>sym_dot x,y 7.5 &lt;màu&gt;</code></td>
+            <td><code>x' = 15 - x</code></td>
+          </tr>
+          <tr>
+            <td><strong>24 × 24</strong></td>
+            <td>0 đến 23</td>
+            <td><code>X = 11.5</code></td>
+            <td><code>sym_dot x,y 11.5 &lt;màu&gt;</code></td>
+            <td><code>x' = 23 - x</code></td>
+          </tr>
+          <tr>
+            <td><strong>32 × 32</strong></td>
+            <td>0 đến 31</td>
+            <td><code>X = 15.5</code></td>
+            <td><code>sym_dot x,y 15.5 &lt;màu&gt;</code></td>
+            <td><code>x' = 31 - x</code></td>
+          </tr>
+          <tr>
+            <td><strong>64 × 64</strong></td>
+            <td>0 đến 63</td>
+            <td><code>X = 31.5</code></td>
+            <td><code>sym_dot x,y 31.5 &lt;màu&gt;</code></td>
+            <td><code>x' = 63 - x</code></td>
+          </tr>
+          <tr>
+            <td><strong>W × H (Custom)</strong></td>
+            <td>0..W-1, 0..H-1</td>
+            <td><code>axisX = (W-1)/2</code></td>
+            <td><code>sym_dot x,y axisX &lt;màu&gt;</code></td>
+            <td><code>x' = (W - 1) - x</code></td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    const activeBoundsBoxHtml = `
+      <div class="guide-formula-box" style="border-left: 3px solid #3b82f6; margin-bottom: 10px;">
+        <p><strong>🎯 Canvas hiện tại (${cw}×${ch}):</strong> Trục giữa <code>axisX = ${m.axisXStr}</code></p>
+        <p><strong>Đầu &amp; Tóc:</strong> Y = ${m.head.y[0]}..${m.head.y[1]}, X = ${m.head.x[0]}..${m.head.x[1]} (Rộng ~ ${m.head.w}px)</p>
+        <p><strong>Mắt:</strong> Y = ${m.eyes.y[0]}..${m.eyes.y[1]} (Mắt trái: X ≈ ${m.eyes.leftX}, Mắt phải: X ≈ ${m.eyes.rightX})</p>
+        <p><strong>Thân / Áo / Giáp:</strong> Y = ${m.torso.y[0]}..${m.torso.y[1]}, X = ${m.torso.x[0]}..${m.torso.x[1]} (Rộng ~ ${m.torso.w}px)</p>
+        <p><strong>Chân / Đuôi bóng ma (Wisps):</strong> Y = ${m.legs.y[0]}..${m.legs.y[1]}</p>
+        <p><strong>Mặt đất / Đổ bóng chân:</strong> Y = ${m.groundY} (Hàng cuối cùng)</p>
+      </div>
+    `;
+
     if (mode === 'all-in-one') {
-      if (titleEl) titleEl.textContent = '🌟 All-in-One Master Cognitive Guide';
+      if (titleEl) titleEl.textContent = '🌟 All-in-One Master Cognitive Guide (Toàn diện & Siêu chi tiết)';
       contentEl.innerHTML = `
-        <h4>1. Studio Ecosystem &amp; Live Hot-Reload</h4>
-        <p class="guide-desc">Desktop-grade coordinate pixel studio with real-time file watcher. Any external file write triggers instant live hot-reload without losing unsaved changes.</p>
+        <h4>1. Bảng tra chuẩn hóa tọa độ &amp; Trục đối xứng (Bilateral Symmetry)</h4>
+        ${canonicalTableHtml}
 
-        <h4>2. Mathematical Primitives &amp; Discrete Coords</h4>
-        <div class="guide-formula-box">
-          <p><strong>Discrete Coords:</strong> (0,0) is top-left. Strictly 0 &le; X &lt; W and 0 &le; Y &lt; H.</p>
-          <p><strong>Shorthand Plot:</strong> <code>p x,y &lt;pal_id|hex&gt;</code></p>
-          <p><strong>Bilateral Center Symmetry:</strong> <code>sym_dot x,y axisX &lt;col&gt;</code> (axis = 7.5 for 16×16)</p>
-          <p><strong>Bresenham Line:</strong> <code>line x0,y0 x1,y1 &lt;col&gt;</code> (weapons, diagonal silhouettes)</p>
-          <p><strong>Bounding Rect:</strong> <code>rect x,y w,h &lt;col&gt; [fill|outline]</code></p>
-          <p><strong>Flood Fill:</strong> <code>fill x,y &lt;col&gt;</code> (bounded 4-way fill)</p>
+        <h4>2. Tọa độ tính toán động cho Canvas hiện tại (${cw}×${ch})</h4>
+        ${activeBoundsBoxHtml}
+
+        <h4>3. Nguyên tắc Pixel ĐẶC (CẤM TUYỆT ĐỐI VẼ KHUNG RỖNG / WIREFRAME)</h4>
+        <div class="guide-formula-box" style="border-left: 3px solid #ef4444;">
+          <p><strong>Bắt buộc tô kín thân:</strong> Pixel art là hình khối đặc có thể tích và chiều sâu, KHÔNG PHẢI hình vẽ nét rỗng! Bên trong đường viền của đầu, thân, áo, cánh tay PHẢI ĐƯỢC TÔ KÍN 100% bằng pixel màu.</p>
+          <p><strong>Điểm mù trong suốt:</strong> Chỉ có khoảng không nền bên ngoài nhân vật mới để trống trong suốt.</p>
+          <p><strong>Mẹo tô đặc siêu tốc trong PIX2:</strong> Dùng <code>rect x,y w,h &lt;màu&gt; fill</code> để tô kín khối ngực/áo chỉ trong 1 dòng! Dùng <code>sym_dot</code> rải kín hàng ngang đối xứng.</p>
         </div>
 
-        <h4>3. Anatomy &amp; Center Symmetry Formula (16×16)</h4>
-        <div class="guide-formula-box">
-          <p><strong>Head / Hair:</strong> Y = 1 to 6, X = 4 to 11 (8px wide)</p>
-          <p><strong>Eyes:</strong> Y = 7 to 8 (2–3px apart, outline + eye color)</p>
-          <p><strong>Torso / Outfit:</strong> Y = 9 to 12 (8–10px wide)</p>
-          <p><strong>Feet / Ground:</strong> Y = 13 to 15 (leave transparent base margin)</p>
-        </div>
-
-        <h4>4. Mathematical 4-Frame Walk Locomotion</h4>
+        <h4>4. Ngôn ngữ &amp; Lệnh vẽ toán học trong PIX2</h4>
         <ul class="guide-cmd-list">
-          <li><strong>Frame 0 (Contact):</strong> Neutral standing pose, feet grounded.</li>
-          <li><strong>Frame 1 (Step Left):</strong> Bob torso -1px on Y (Y - 1), left foot forward.</li>
-          <li><strong>Frame 2 (Passing):</strong> Neutral height, feet crossing center.</li>
-          <li><strong>Frame 3 (Step Right):</strong> Bob torso -1px on Y (Y - 1), right foot forward.</li>
-          <li><strong>Secondary Motion:</strong> Capes, tails, weapons lag 1 frame behind primary movement.</li>
+          <li><code>p x,y &lt;pal_id|hex&gt;</code> — Chấm pixel (có thể viết nhiều điểm trên 1 dòng: <code>p 5,2 1  p 6,2 2</code>)</li>
+          <li><code>sym_dot x,y axisX &lt;col&gt;</code> — Đối xứng 2 bên trục giữa tự động (ví dụ axisX = ${m.axisXStr})</li>
+          <li><code>rect x,y w,h &lt;col&gt; fill</code> — Tô kín hình chữ nhật đặc (thân, áo, giáp)</li>
+          <li><code>rect x,y w,h &lt;col&gt; outline</code> — Vẽ viền hộp chữ nhật (khiên, khung)</li>
+          <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Đường thẳng Bresenham (kiếm, gậy phép, viền chéo)</li>
+          <li><code>fill x,y &lt;col&gt;</code> — Đổ màu 4 hướng kín vùng biên</li>
         </ul>
 
-        <h4>5. Equipment &amp; Accessory Overlay</h4>
-        <p class="guide-desc">Non-destructive layering: Headgear on crown Y = 0 to 5; Weapons at hand level X = 2 to 4 or 12 to 14; Shields and wings flanking sides.</p>
-
-        <h4>6. Surgical Patch Directives</h4>
-        <p class="guide-desc">Target individual <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives to recolor or fix frames with zero token waste.</p>
-
-        <h4>7. Anti-Hallucination Guardrails</h4>
-        <div class="tip-box">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <span><strong>Zero Background:</strong> Never output background fill! Unspecified coordinates are 100% transparent. Valid coordinates are strictly 0 &le; x &lt; width, 0 &le; y &lt; height.</span>
-        </div>
-      `;
-    } else if (mode === 'full-character') {
-      if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)';
-      contentEl.innerHTML = `
-        <h4>1. NOIRADIX Studio Character Architecture</h4>
-        <p class="guide-desc">The character is structured into directional rows on a grid matrix. Studio's Animation Player automatically loops each direction.</p>
-        
-        <h4>2. Anatomy &amp; Center Symmetry (16×16)</h4>
-        <div class="guide-formula-box">
-          <p><strong>Head / Hair:</strong> Y = 1 to 6, X = 4 to 11 (8px wide)</p>
-          <p><strong>Eyes:</strong> Y = 7 to 8 (2–3px apart, outline + eye color)</p>
-          <p><strong>Torso / Outfit:</strong> Y = 9 to 12 (8–10px wide)</p>
-          <p><strong>Bilateral Symmetry:</strong> Axis is center X = 7.5 (Front &amp; Back)</p>
-          <p><strong>Shorthand Macro:</strong> <code>sym_dot x,y 7.5 &lt;color&gt;</code></p>
-        </div>
-
-        <h4>3. Directional Frame Mapping</h4>
+        <h4>5. Công thức bước đi 4 khung hình chống trùng lặp (Anti-Lazy Locomotion)</h4>
         <ul class="guide-cmd-list">
-          <li><code>down_0..3</code>: Front facing (bilateral symmetry, 2 eyes)</li>
-          <li><code>up_0..3</code>: Back view (hair/cloak only, no facial features)</li>
-          <li><code>right_0..3</code>: Profile facing right (offset eyes/nose)</li>
-          <li><code>left_0..3</code>: Profile facing left (mirror of right)</li>
+          <li><strong>Frame 0 (Tiếp đất / Bay cao):</strong> Dáng chuẩn ban đầu, chân chạm đất.</li>
+          <li><strong>Frame 1 (Nhún bước trái / Bay nghiêng phải):</strong> Thân nhún xuống 1px (Y+1) hoặc nâng 1px (Y-1). Chân trái bước tới (chân phải lùi). Với bóng ma: đuôi wisps uốn cong sang phải (+1..+2px X).</li>
+          <li><strong>Frame 2 (Bung chân / Điểm rơi):</strong> Chân đi qua trục giữa. Bóng ma kéo dài đuôi, mắt phát sáng rực rỡ hơn.</li>
+          <li><strong>Frame 3 (Nhún bước phải / Bay nghiêng trái):</strong> Thân nhún 1px (Y-1). Chân phải bước tới (chân trái lùi). Với bóng ma: đuôi wisps uốn cong sang trái (-1..-2px X).</li>
+          <li><strong>Chuyển động thứ cấp (Secondary Motion):</strong> Áo choàng, vạt áo, đuôi tóc, wisps ma quái LUÔN trễ 1 khung hình so với chuyển động thân.</li>
         </ul>
 
-        <h4>4. Anti-Hallucination Guardrail</h4>
-        <div class="tip-box">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <span><strong>Zero Background:</strong> Never output background fill! Non-existent coordinates are 100% transparent. Valid coordinates are strictly 0 &le; x &lt; width, 0 &le; y &lt; height.</span>
-        </div>
-      `;
-    } else if (mode === 'walk-animation') {
-      if (titleEl) titleEl.textContent = '🎬 Walk Cycle & Animation Math';
-      contentEl.innerHTML = `
-        <h4>1. Mathematical 4-Frame Walk Formula</h4>
+        <h4>6. Quy chuẩn 4 hướng góc nhìn (Directional Perspectives)</h4>
         <div class="guide-formula-box">
-          <p><strong>Frame 0 (Contact):</strong> Neutral standing pose, feet planted.</p>
-          <p><strong>Frame 1 (Step Left):</strong> Bob torso -1px on Y (Y - 1), left foot steps forward.</p>
-          <p><strong>Frame 2 (Passing):</strong> Neutral height, feet crossing center.</p>
-          <p><strong>Frame 3 (Step Right):</strong> Bob torso -1px on Y (Y - 1), right foot steps forward.</p>
+          <p><strong>Down (Đi xuống):</strong> Nhìn trực diện phía trước. Đối xứng trục giữa <code>axisX = ${m.axisXStr}</code>. Hai mắt sáng rõ.</p>
+          <p><strong>Up (Đi lên):</strong> Nhìn từ sau lưng. Đối xứng trục giữa <code>axisX = ${m.axisXStr}</code>. TUYỆT ĐỐI KHÔNG vẽ mắt/mặt, chỉ vẽ lưng, tóc, mũ trùm, áo choàng.</p>
+          <p><strong>Right (Sang phải):</strong> Góc nghiêng 3/4 nhìn sang phải. Mặt và mắt lệch về mép phải, lưng hướng về trái.</p>
+          <p><strong>Left (Sang trái):</strong> Đối xứng lật gương 100% của Right! Lấy mọi điểm (x,y) bên Right chuyển thành <code>(${cw - 1} - x, y)</code>.</p>
         </div>
-
-        <h4>2. Animation Directives in PIX2</h4>
-        <pre><code>@animation walk_down
-  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
-  fps: 6
-  loop: true</code></pre>
-
-        <h4>3. Secondary Motion</h4>
-        <p class="guide-desc">Cloaks, hair tails, antennae, and weapons should lag 1 frame behind primary torso movement for organic fluid motion.</p>
-
-        <div class="tip-box">
-          <i class="fa-solid fa-film"></i>
-          <span><strong>Instant Live Preview:</strong> As soon as external AI saves the file, Studio hot-reloads and the Animation Player immediately loops your clip!</span>
-        </div>
-      `;
-    } else if (mode === 'accessory-equipment') {
-      if (titleEl) titleEl.textContent = '🗡️ Equipment & Accessory Overlay';
-      contentEl.innerHTML = `
-        <h4>1. Non-Destructive Equipment Layering</h4>
-        <p class="guide-desc">Equipment overlays onto existing character cells without erasing base silhouette pixels.</p>
-
-        <h4>2. Equipment Placement Zones (16×16)</h4>
-        <div class="guide-formula-box">
-          <p><strong>Hats / Helmets / Crowns:</strong> Top crown Y = 0 to 5</p>
-          <p><strong>Weapons (Sword / Staff):</strong> Hand level X = 2 to 4 or 12 to 14</p>
-          <p><strong>Cloaks / Wings / Shields:</strong> Flanking sides X = 1..3, X = 13..15</p>
-        </div>
-
-        <h4>3. Bresenham Line Macro for Weapons</h4>
-        <ul class="guide-cmd-list">
-          <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Diagonal sword blades, staff shafts</li>
-          <li><code>rect x,y w,h &lt;col&gt; outline</code> — Shield rims and armor plates</li>
-        </ul>
 
         <div class="tip-box">
           <i class="fa-solid fa-palette"></i>
-          <span><strong>Palette Expansion:</strong> Add dedicated accessory color IDs (e.g. gold, steel, ruby) directly into <code>@palette</code>.</span>
+          <span><strong>Bảng màu 5-6 tone chuẩn:</strong> 1: Viền đen/chàm tối &bull; 2: Bóng đổ tối &bull; 3: Màu da/áo chính &bull; 4: Vệt sáng viền &bull; 5: Mắt/Hiệu ứng phát sáng &bull; 6: Phụ kiện kim loại.</span>
         </div>
+      `;
+    } else if (mode === 'full-character') {
+      if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (Tạo trọn bộ nhân vật 4 hướng / 8 hướng)';
+      contentEl.innerHTML = `
+        <h4>1. Bảng tra chuẩn hóa tọa độ &amp; Trục giữa (${cw}×${ch})</h4>
+        ${canonicalTableHtml}
+        ${activeBoundsBoxHtml}
+
+        <h4>2. Bắt buộc: Nhân vật đặc khối (Không vẽ khung rỗng)</h4>
+        <p class="guide-desc">Bên trong đường viền bao quanh PHẢI ĐƯỢC TÔ KÍN 100% bằng pixel màu (da, tóc, giáp, áo choàng). Không được để trống trong suốt bên trong cơ thể!</p>
+
+        <h4>3. Bản đồ các góc nhìn 4 hướng</h4>
+        <ul class="guide-cmd-list">
+          <li><code>down_0..3</code>: Mặt trước (đối xứng tâm <code>axisX = ${m.axisXStr}</code>, 2 mắt rõ ràng)</li>
+          <li><code>up_0..3</code>: Lưng sau (đối xứng tâm <code>axisX = ${m.axisXStr}</code>, tóc/áo choàng, không có mắt/miệng)</li>
+          <li><code>right_0..3</code>: Góc nghiêng 3/4 sang phải (mắt và mũi lệch về phía mép phải)</li>
+          <li><code>left_0..3</code>: Lật gương hoàn hảo của right: <code>x_left = ${cw - 1} - x_right</code></li>
+        </ul>
+      `;
+    } else if (mode === 'walk-animation') {
+      if (titleEl) titleEl.textContent = '🎬 Walk & Float Animation (Toán học chuyển động)';
+      contentEl.innerHTML = `
+        <h4>1. Công thức 4 khung hình chuyển động (Tuyệt đối không lặp lại ảnh tĩnh)</h4>
+        <div class="guide-formula-box">
+          <p><strong>Khung 0 (Neutral):</strong> Dáng đứng hoặc lơ lửng ban đầu chuẩn xác.</p>
+          <p><strong>Khung 1 (Bước trái / Bay nghiêng phải):</strong> Thân nhún Y±1, chân trái tiến tới hoặc vạt đuôi ma quẹt sang phải.</p>
+          <p><strong>Khung 2 (Đi ngang / Điểm trũng):</strong> Thân trở về độ cao chuẩn, hai chân đi ngang nhau hoặc đuôi kéo dài.</p>
+          <p><strong>Khung 3 (Bước phải / Bay nghiêng trái):</strong> Thân nhún Y±1, chân phải tiến tới hoặc vạt đuôi ma quẹt sang trái.</p>
+        </div>
+
+        <h4>2. Chuyển động quán tính thứ cấp</h4>
+        <p class="guide-desc">Tà áo choàng, đuôi tóc dài, phụ kiện đeo, vệt sáng lơ lửng của bóng ma bắt buộc trễ 1 khung hình so với thân chính để tạo độ mượt mà.</p>
+      `;
+    } else if (mode === 'accessory-equipment') {
+      if (titleEl) titleEl.textContent = '🗡️ Accessory & Equipment (Trang bị & Vũ khí đè lớp)';
+      contentEl.innerHTML = `
+        <h4>1. Tọa độ lắp ghép trang bị trên canvas ${cw}×${ch}</h4>
+        <div class="guide-formula-box">
+          <p><strong>Mũ / Nón / Vương miện:</strong> Đỉnh đầu Y = 0 đến ${m.head.y[0] + 3}</p>
+          <p><strong>Vũ khí (Kiếm / Gậy / Cung):</strong> Ngang tầm tay X = 1..${m.torso.x[0]} hoặc ${m.torso.x[1]}..${cw - 1}, Y = ${m.torso.y[0]}..${m.torso.y[1]}</p>
+          <p><strong>Khiên / Cánh / Áo choàng:</strong> Ốp hai bên sườn X = 0..${m.torso.x[0]} và ${m.torso.x[1]}..${cw - 1}</p>
+        </div>
+        <h4>2. Lệnh vẽ vũ khí</h4>
+        <p class="guide-desc">Sử dụng <code>line x0,y0 x1,y1 &lt;col&gt;</code> để vung lưỡi kiếm chéo sắc bén hoặc cán thương dài.</p>
       `;
     } else if (mode === 'surgical-patch') {
-      if (titleEl) titleEl.textContent = '🩹 Surgical Frame / Color Patch';
+      if (titleEl) titleEl.textContent = '🩹 Surgical Patch (Chắp vá & Chỉnh sửa chính xác)';
       contentEl.innerHTML = `
-        <h4>1. Surgical Frame-Level Addressing</h4>
-        <p class="guide-desc">Instruct the AI to output ONLY the specific <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives that need changes, keeping all other frames untouched.</p>
-
-        <h4>2. Selective Replacement Examples</h4>
-        <pre><code>; Recolor eyes to Glowing Cyan
+        <h4>1. Sửa đổi tập trung theo từng Cell</h4>
+        <p class="guide-desc">Chỉ xuất ra đúng <code>@cell &lt;id&gt;</code> hoặc <code>@palette</code> cần đổi, giữ nguyên 100% các ô khác để tiết kiệm token và tránh làm hỏng chuyển động đã có.</p>
+        <pre><code>; Đổi màu mắt ma sang Xanh Ngọc phát sáng
 @cell cell_0_0
-  p 7,7 #00ffff p 8,7 #00ffff
-
-; Update palette theme
-@palette
-  1: #ffeaa7 ; Warm Body
-  2: #2d3436 ; Dark Outline</code></pre>
-
-        <div class="tip-box">
-          <i class="fa-solid fa-bolt"></i>
-          <span><strong>Zero Token Waste:</strong> Surgical patches reduce token consumption by 90% and prevent accidental regression on existing animation frames.</span>
-        </div>
+  p ${m.eyes.leftX},${m.eyes.y[0]} #00ffff  p ${m.eyes.rightX},${m.eyes.y[0]} #00ffff</code></pre>
       `;
     } else {
-      if (titleEl) titleEl.textContent = '📋 Studio Architecture & Programmatic API';
+      if (titleEl) titleEl.textContent = '📋 Architecture & Programmatic API';
       contentEl.innerHTML = `
-        <h4>1. NOIRADIX Studio Overview</h4>
-        <p class="guide-desc">An AI-native, coordinate-addressed pixel art studio with live hot-reloading, bilateral symmetry, 4-dir/8-dir animation player, and Unity/TexturePacker exporters.</p>
-
-        <h4>2. JavaScript / Node.js Engine API</h4>
+        <h4>1. Hệ sinh thái NOIRADIX Studio</h4>
+        <p class="guide-desc">Môi trường thiết kế pixel art định vị tọa độ, hỗ trợ tự động tải lại (hot-reload) khi ghi file trên đĩa, bộ phát chuyển động 4/8 hướng và xuất Unity/TexturePacker.</p>
+        <h4>2. Thư viện JavaScript &amp; API</h4>
         <pre><code>const doc = PIX2.parse(fileContent);
-const cell = doc.cells['cell_0_0'];
-cell.pixels['7,2'] = 2; // plot pixel
+doc.cells['cell_0_0'].pixels['${m.eyes.leftX},${m.eyes.y[0]}'] = '#00ffff';
 const outText = PIX2.serialize(doc);</code></pre>
-
-        <h4>3. Game Engine Integrations</h4>
-        <ul class="guide-cmd-list">
-          <li><strong>Unity 2D Package:</strong> Slices frames &amp; generates <code>.anim</code> clips via included <code>Pix2UnityImporter.cs</code>.</li>
-          <li><strong>TexturePacker:</strong> Standard JSON Hash format with animation dictionaries.</li>
-          <li><strong>Live Hot-Reload:</strong> Watches disk file via File System Access API.</li>
-        </ul>
       `;
     }
   }
@@ -5218,12 +5273,19 @@ const outText = PIX2.serialize(doc);</code></pre>
     const ch = meta.cellSize.h;
     const cols = meta.grid.cols;
     const rows = meta.grid.rows;
+    const m = getSpriteMath(cw, ch);
 
     let paletteSummary = '';
-    if (state.doc.palette) {
+    if (state.doc.palette && Object.keys(state.doc.palette).length > 0) {
       paletteSummary = Object.entries(state.doc.palette)
         .map(([id, col]) => `  ${id}: ${col.hex}  # ${col.name || 'Color'}`)
         .join('\n');
+    } else {
+      paletteSummary = `  1: #181425  # Outline Dark Charcoal
+  2: #2e2842  # Core Deep Shadow
+  3: #5a4e7c  # Midtone Body Base
+  4: #9d8ec2  # Highlight Rim Light
+  5: #00ffff  # Glowing Accent / Eyes`;
     }
 
     let cellInventory = Object.keys(state.doc.cells || {}).join(', ') || 'none';
@@ -5236,17 +5298,20 @@ You are equipped with the full suite of NOIRADIX Studio production capabilities.
 
 #### PRODUCTION RECIPE 1: COMPLETE 4-DIRECTIONAL & 8-DIRECTIONAL CHARACTER CREATION
 1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):
-   - Head & Hair: Top Y in [1..6], centered around X ~ ${((cw - 1) / 2).toFixed(1)}. Width = 8px.
-   - Eyes: Y in [7..8], spaced 2-3 pixels apart. Use dark outline and contrasting eye color.
-   - Torso & Clothing: Y in [9..12], width = 8-10 pixels.
-   - Legs & Shadow: Y in [13..15]. Leave transparent margins below feet.
+   - Center Axis: axisX = ${m.axisXStr}
+   - Head & Hair: Top Y in [${m.head.y[0]}..${m.head.y[1]}], Width = ${m.head.w}px (X in [${m.head.x[0]}..${m.head.x[1]}])
+   - Eyes: Y in [${m.eyes.y[0]}..${m.eyes.y[1]}], spaced across center (Left Eye X ~ ${m.eyes.leftX}, Right Eye X ~ ${m.eyes.rightX})
+   - Torso & Garments: Y in [${m.torso.y[0]}..${m.torso.y[1]}], Width = ${m.torso.w}px (X in [${m.torso.x[0]}..${m.torso.x[1]}])
+   - Legs / Ghost Wisps: Y in [${m.legs.y[0]}..${m.legs.y[1]}]. Leave transparent margin at bottom.
+   - Ground Shadow: Y = ${m.groundY}
 2. DIRECTIONAL PERSPECTIVES:
-   - 'down_0': Frontal view with bilateral center symmetry. Both eyes clearly visible.
+   - 'down_0': Frontal view with bilateral center symmetry on axisX = ${m.axisXStr}. Both eyes clearly visible.
    - 'up_0': Back view showing back of head, hair, and cloak. NO eyes, nose, or mouth visible.
-   - 'right_0': 3/4 side profile facing right. Eyes and nose shifted toward right edge (X ~ ${cw - 5}).
-   - 'left_0': Facing left. Exact horizontal mirror of 'right_0'.
-3. ACCELERATION MACROS:
-   - Use 'sym_dot x,y ${((cw - 1) / 2).toFixed(1)} <color>' for bilateral frontal symmetry.
+   - 'right_0': 3/4 side profile facing right. Eyes shifted toward right edge (X ~ ${cw - 5}).
+   - 'left_0': Facing left. STRICT INVARIANT: Exact horizontal mirror of 'right_0' (x_left = ${cw - 1} - x_right).
+3. SOLID ACCELERATION MACROS:
+   - Use 'sym_dot x,y ${m.axisXStr} <color>' for bilateral frontal symmetry.
+   - Use 'rect x,y w,h <color> fill' to instantly fill solid rectangular body mass in 1 line.
    - Use 'p x,y <pal_id>' for compact sparse pixel placement.
 4. ANIMATION BINDINGS:
    - Hook up all walk animation cycles at 6fps loop:
@@ -5255,21 +5320,26 @@ You are equipped with the full suite of NOIRADIX Studio production capabilities.
      @animation walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
      @animation walk_left: [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop
 
-#### PRODUCTION RECIPE 2: DISCRETE 4-FRAME WALK CYCLE & LOCOMOTION FORMULA
+#### PRODUCTION RECIPE 2: DISCRETE 4-FRAME WALK & GHOST LOCOMOTION FORMULAS
 1. 4-FRAME MATHEMATICAL WALK FORMULA:
    - Frame 0 (Contact): Neutral standing contact pose, both feet grounded.
-   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up by 1px: Y - 1). Left foot forward, right foot trailing back.
+   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up: Y - 1). Left foot forward, right foot trailing back.
    - Frame 2 (Passing): Neutral torso height. Legs passing each other in center.
    - Frame 3 (Step Right): Bob torso by 1px (Y - 1). Right foot forward, left foot trailing back.
-2. SECONDARY MOTION PHYSICS:
+2. 4-FRAME GHOST / FLOATING / FLYING FORMULA:
+   - Frame 0 (Hover High): Body at top baseline. Tail wisps centered.
+   - Frame 1 (Sway Right + Dip): Body bobs DOWN by 1px (Y + 1). Tail wisps trail and curl to the right (+1..+2px X shift).
+   - Frame 2 (Hover Low): Body at lowest dip. Tail wisps stretch vertically. Eyes/core pulse brighter.
+   - Frame 3 (Sway Left + Rise): Body rises up. Tail wisps trail and curl to the left (-1..-2px X shift).
+3. SECONDARY MOTION PHYSICS:
    - Trailing capes, hair tails, antennae, and held weapons MUST lag 1 frame behind primary body bobbing.
 
 #### PRODUCTION RECIPE 3: NON-DESTRUCTIVE ACCESSORY & EQUIPMENT OVERLAY
 1. NON-DESTRUCTIVE OVERLAY INVARIANT:
    - Preserve existing character silhouette and facial pixels underneath unless intentionally obscured.
-   - Hats / Helmets / Crowns: Draw on top crown Y in [0..5].
-   - Weapons (Swords, Staves, Bows): Position at hand level (X in [2..4] or [12..14]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
-   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..3] and [13..15]) and behind back frames.
+   - Hats / Helmets / Crowns: Draw on top crown Y in [0..${m.head.y[0] + 3}].
+   - Weapons (Swords, Staves, Bows): Position at hand level (X in [1..${m.torso.x[0]}] or [${m.torso.x[1]}..${cw - 1}]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
+   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..${m.torso.x[0]}] and [${m.torso.x[1]}..${cw - 1}]) and behind back frames.
 2. PALETTE EXPANSION:
    - Introduce new equipment material color IDs in '@palette' (e.g. gold '#ffd700', steel '#94a3b8', ruby '#ef4444').
 
@@ -5281,20 +5351,23 @@ You are equipped with the full suite of NOIRADIX Studio production capabilities.
 2. RECOLORING:
    - Modify the '@palette' hex value or remap palette IDs inside targeted cells.`;
     } else if (mode === 'full-character') {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: COMPLETE 4-DIRECTIONAL CHARACTER CREATION
-You are tasked with generating a complete game character from scratch in all 4 cardinal directions:
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: COMPLETE 4-DIRECTIONAL & 8-DIRECTIONAL CHARACTER CREATION
+You are tasked with generating a complete game character from scratch in all cardinal directions:
 1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):
-   - Head & Hair: Top Y in [1..6], centered around X ~ ${((cw - 1) / 2).toFixed(1)}. Width = 8px.
-   - Eyes: Y in [7..8], spaced 2-3 pixels apart. Use dark outline and contrasting eye color.
-   - Torso & Clothing: Y in [9..12], width = 8-10 pixels.
-   - Legs & Shadow: Y in [13..15]. Leave transparent margins below feet.
+   - Center Axis: axisX = ${m.axisXStr}
+   - Head & Hair: Top Y in [${m.head.y[0]}..${m.head.y[1]}], Width = ${m.head.w}px (X in [${m.head.x[0]}..${m.head.x[1]}])
+   - Eyes: Y in [${m.eyes.y[0]}..${m.eyes.y[1]}], spaced across center (Left Eye X ~ ${m.eyes.leftX}, Right Eye X ~ ${m.eyes.rightX})
+   - Torso & Clothing: Y in [${m.torso.y[0]}..${m.torso.y[1]}], Width = ${m.torso.w}px (X in [${m.torso.x[0]}..${m.torso.x[1]}])
+   - Legs & Shadow: Y in [${m.legs.y[0]}..${m.legs.y[1]}]. Leave transparent margin below feet.
+   - Ground Contact: Y = ${m.groundY}
 2. DIRECTIONAL PERSPECTIVES:
-   - 'down_0': Frontal view with bilateral center symmetry. Both eyes clearly visible.
+   - 'down_0': Frontal view with bilateral center symmetry on axisX = ${m.axisXStr}. Both eyes clearly visible.
    - 'up_0': Back view showing back of head, hair, and cloak. NO eyes, nose, or mouth visible.
    - 'right_0': 3/4 side profile facing right. Eyes and nose shifted toward right edge (X ~ ${cw - 5}).
-   - 'left_0': Facing left. Exact horizontal mirror of 'right_0'.
-3. ACCELERATION MACROS:
-   - Use 'sym_dot x,y ${((cw - 1) / 2).toFixed(1)} <color>' for bilateral frontal symmetry.
+   - 'left_0': Facing left. STRICT INVARIANT: Exact horizontal mirror of 'right_0' (x_left = ${cw - 1} - x_right).
+3. SOLID ACCELERATION MACROS:
+   - Use 'sym_dot x,y ${m.axisXStr} <color>' for bilateral frontal symmetry.
+   - Use 'rect x,y w,h <color> fill' to instantly fill solid rectangular body mass in 1 line.
    - Use 'p x,y <pal_id>' for compact sparse pixel placement.
 4. ANIMATION BINDINGS:
    - Hook up all walk animation cycles at 6fps loop:
@@ -5303,25 +5376,30 @@ You are tasked with generating a complete game character from scratch in all 4 c
      @animation walk_right: [cell_2_0, cell_2_1, cell_2_2, cell_2_3] @ 6fps loop
      @animation walk_left: [cell_3_0, cell_3_1, cell_3_2, cell_3_3] @ 6fps loop`;
     } else if (mode === 'walk-animation') {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: DISCRETE WALK CYCLE & LOCOMOTION ANIMATION
-You are tasked with transforming static character poses into fluid, natural walking animations:
+      specializedInstructions = `### SPECIALIZED OBJECTIVE: DISCRETE WALK & GHOST LOCOMOTION ANIMATION
+You are tasked with transforming static character poses into fluid, natural animations:
 1. 4-FRAME MATHEMATICAL WALK FORMULA:
-   - Frame 0 (Contact): Neutral standing contact pose, both feet grounded.
-   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up by 1px: Y - 1). Left foot forward, right foot trailing back.
+   - Frame 0 (Contact): Neutral standing contact pose, both feet grounded at Y = ${m.legs.y[1]}.
+   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up: Y - 1). Left foot forward, right foot trailing back.
    - Frame 2 (Passing): Neutral torso height. Legs passing each other in center.
    - Frame 3 (Step Right): Bob torso by 1px (Y - 1). Right foot forward, left foot trailing back.
-2. SECONDARY MOTION PHYSICS:
+2. 4-FRAME GHOST / FLOATING / FLYING FORMULA:
+   - Frame 0 (Hover High): Body at top baseline. Tail wisps centered.
+   - Frame 1 (Sway Right + Dip): Body bobs DOWN by 1px (Y + 1). Tail wisps trail and curl to the right (+1..+2px X shift).
+   - Frame 2 (Hover Low): Body at lowest dip. Tail wisps stretch vertically. Eyes/core pulse brighter.
+   - Frame 3 (Sway Left + Rise): Body rises up. Tail wisps trail and curl to the left (-1..-2px X shift).
+3. SECONDARY MOTION PHYSICS:
    - Trailing capes, hair tails, antennae, and held weapons MUST lag 1 frame behind primary body bobbing.
-3. OUTPUT FORMAT:
+4. OUTPUT FORMAT:
    - Provide the complete '@animation' definitions and corresponding '@cell' frame records.`;
     } else if (mode === 'accessory-equipment') {
       specializedInstructions = `### SPECIALIZED OBJECTIVE: NON-DESTRUCTIVE ACCESSORY & EQUIPMENT OVERLAY
 You are tasked with adding equipment, costumes, weapons, or cosmetics onto existing character sprites:
 1. NON-DESTRUCTIVE OVERLAY INVARIANT:
    - Preserve existing character silhouette and facial pixels underneath unless intentionally obscured.
-   - Hats / Helmets / Crowns: Draw on top crown Y in [0..5].
-   - Weapons (Swords, Staves, Bows): Position at hand level (X in [2..4] or [12..14]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
-   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..3] and [13..15]) and behind back frames.
+   - Hats / Helmets / Crowns: Draw on top crown Y in [0..${m.head.y[0] + 3}].
+   - Weapons (Swords, Staves, Bows): Position at hand level (X in [1..${m.torso.x[0]}] or [${m.torso.x[1]}..${cw - 1}]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
+   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..${m.torso.x[0]}] and [${m.torso.x[1]}..${cw - 1}]) and behind back frames.
 2. PALETTE EXPANSION:
    - Introduce new equipment material color IDs in '@palette' (e.g. gold '#ffd700', steel '#94a3b8', ruby '#ef4444').`;
     } else if (mode === 'surgical-patch') {
@@ -5355,74 +5433,133 @@ It bridges human game artists and AI coding assistants through deterministic spr
 PIX2 is a deterministic, coordinate-addressed plain-text sprite format. Unlike raster PNGs or fuzzy diffusion images, PIX2 code is discrete, mathematically exact, and human/AI readable.
 
 ### Core Invariants:
-1. PURE TRANSPARENCY: Transparent pixels do NOT exist in the file. Only explicitly drawn pixels are saved. NEVER output a background layer, black canvas fill, or transparent placeholder dots.
-2. DISCRETE INTEGER COORDINATES: Origin (0,0) is at the top-left corner. Valid coordinates strictly satisfy 0 <= x < ${cw} and 0 <= y < ${ch}.
-3. PALETTE-MAPPED COLORS: Pixels reference palette IDs defined in \`@palette\` (e.g. \`1\`, \`2\`, \`outline\`) or direct hex (\`#RRGGBB\` or \`#RRGGBBAA\` for semi-transparency).
-4. MATHEMATICAL MACROS & DRAWING COMMANDS:
-   - \`p x,y <pal_id|hex>\` or \`pixel x,y <pal_id|hex>\`: Plots a single pixel at (x,y).
-   - \`sym_dot x,y axisX <col>\`: Plots (x,y) and automatically plots its mirror at (2*axisX - x, y). For cell width ${cw}, center axis is ${((cw - 1) / 2).toFixed(1)}.
+1. SOLID SPRITE MASS MANDATE (ABSOLUTELY NO HOLLOW WIREFRAME SHELLS):
+   - Pixel art sprites are SOLID game entities with mass, volume, and depth.
+   - Drawing an empty outline loop with a hollow transparent inside is a CATASTROPHIC FAILURE.
+   - The interior of the head, face, hair, chest, body, robes, cape, armor, and limbs MUST be 100% solidly packed with color pixels.
+   - Transparent pixels exist ONLY as the empty air outside the character's outer boundary.
+2. PURE CANVAS TRANSPARENCY:
+   - Transparent pixels do NOT exist in the file. Only explicitly drawn pixels are saved.
+   - NEVER output a background layer, black canvas fill, or transparent placeholder dots.
+3. DISCRETE INTEGER COORDINATES:
+   - Origin (0,0) is at the top-left corner.
+   - Valid coordinates strictly satisfy 0 <= x < ${cw} and 0 <= y < ${ch}.
+4. COLOR PALETTE ARCHITECTURE:
+   - Pixels reference palette IDs defined in \`@palette\` (e.g. \`1\`, \`2\`, \`outline\`) or direct hex (\`#RRGGBB\` or \`#RRGGBBAA\` for semi-transparency).
+   - Always define a cohesive 5-6 tone palette with:
+     * 1: Outline / Silhouette (Dark Slate / Charcoal e.g. #181425)
+     * 2: Deep Shadow / Ambient Shading (Muted tone e.g. #2e2842)
+     * 3: Midtone Primary Body / Robe / Skin (Base color e.g. #5a4e7c)
+     * 4: Highlight / Rim Light (Bright tone e.g. #9d8ec2)
+     * 5: Glowing Accent / Eyes / Gem (Vivid saturated e.g. #00ffff, #ff0055, #ffd700)
+5. MATHEMATICAL MACROS & DRAWING COMMANDS:
+   - \`p x,y <pal_id|hex>\` or \`pixel x,y <pal_id|hex>\`: Plots a single pixel at (x,y). Multiple pixel tokens can be placed on one line: \`p 5,2 1  p 6,2 2  p 7,2 #ffffff\`.
+   - \`sym_dot x,y axisX <col>\`: Plots (x,y) and automatically plots its mirror at Math.round(2*axisX - x, y). For cell width ${cw}, center axis is ${m.axisXStr}.
    - \`line x0,y0 x1,y1 <col>\`: Draws a Bresenham discrete line (weapons, outlines, diagonal borders).
-   - \`rect x,y w,h <col> [fill|outline]\`: Draws a rectangular bounding box.
-   - \`fill x,y <col>\`: 4-way flood fill.
+   - \`rect x,y w,h <col> fill\`: Instantly fills a solid rectangular region of width w and height h. Highly recommended for filling solid torso, robe, and cloak bodies in a single line!
+   - \`rect x,y w,h <col> outline\`: Draws a rectangular boundary box.
+   - \`fill x,y <col>\`: 4-way flood fill inside bounded pixels.
+   - \`; comment\` or \`# comment\`: Explanatory commentary.
 
-### File Structure Example:
-\`\`\`pix2
-@pix2 1.0
+## 3. CANONICAL RESOLUTION REFERENCE TABLE & DISCRETE MATHEMATICS
+In PIX2, coordinates and center axes are calculated with exact discrete mathematics:
 
-@meta
-  title: "Player Hero"
-  grid: ${cols}x${rows}
-  cell_size: ${cw}x${ch}
+| Cell Resolution | Valid Coordinate Range | Center Axis (axisX) | Bilateral Symmetry Command | Mirror Reflection Formula |
+|:---|:---|:---|:---|:---|
+| 16 × 16 | X, Y in [0..15] | X = 7.5 | \`sym_dot x,y 7.5 <color>\` | \`x_mirror = 15 - x\` |
+| 24 × 24 | X, Y in [0..23] | X = 11.5 | \`sym_dot x,y 11.5 <color>\` | \`x_mirror = 23 - x\` |
+| 32 × 32 | X, Y in [0..31] | X = 15.5 | \`sym_dot x,y 15.5 <color>\` | \`x_mirror = 31 - x\` |
+| 64 × 64 | X, Y in [0..63] | X = 31.5 | \`sym_dot x,y 31.5 <color>\` | \`x_mirror = 63 - x\` |
+| Custom W × H | X in [0..W-1], Y in [0..H-1] | \`axisX = (W - 1) / 2\` | \`sym_dot x,y axisX <color>\` | \`x_mirror = (W - 1) - x\` |
 
-@palette
-  1: #ffffff  # Body Primary
-  2: #57546f  # Outline Dark Slate
-  3: #ffb0bc  # Blush Accent
-  4: #46435c  # Eye Dark Purple
+### Universal Proportional Scaling Formulas (For Any Resolution W × H):
+If asked to generate or scale to any resolution W × H, use these exact proportional ratios:
+- Horizontal Center Axis: \`axisX = (W - 1) / 2\`
+- Horizontal Bounding Box: Width ≈ 60% to 75% of W.
+  * \`startX = Math.floor(W * 0.15)\`
+  * \`endX = Math.floor(W * 0.85)\`
+- Vertical Anatomy Landmarks (from top Y = 0 to bottom Y = H - 1):
+  * Margin Top (Headroom): \`Y = 0 .. Math.max(1, Math.round(H * 0.05))\`
+  * Head & Hair:           \`Y = Math.max(1, Math.round(H * 0.05)) .. Math.round(H * 0.38)\`
+  * Eyes & Visor:          \`Y = Math.round(H * 0.28) .. Math.round(H * 0.36)\`
+  * Torso, Robe & Arms:    \`Y = Math.round(H * 0.40) .. Math.round(H * 0.72)\`
+  * Legs / Feet / Wisps:   \`Y = Math.round(H * 0.74) .. (H - 2)\`
+  * Ground Shadow / Base:  \`Y = H - 1\`
 
-@cell cell_0_0
-  name: "Down 0"
-  direction: down
-  frame: 0
-  p 7,2 2 p 8,2 2
-  sym_dot 6,3 ${((cw - 1) / 2).toFixed(1)} 1
-
-@animation walk_down
-  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
-  fps: 6
-  loop: true
-
-@end
-\`\`\`
-
-## 3. PROGRAMMATIC API & SCRIPTING USAGE:
-- **JavaScript / Node.js Engine:**
-  \`\`\`javascript
-  const doc = PIX2.parse(fileContent);
-  doc.cells['cell_0_0'].pixels['7,2'] = 2; // set pixel at (7,2) to palette 2
-  const text = PIX2.serialize(doc);
-  \`\`\`
-- **Python Asset Pipelines:**
-  Parse directives using regex (\`@meta\`, \`@palette\`, \`@cell\`, \`p x,y col\`).
-- **Unity 2D Engine (C#):**
-  \`NOIRADIX.Editor.Pix2UnityImporter.ImportPix2Json(jsonPath)\` slices sprites and creates Unity AnimationClips.
-
-## 4. CURRENT PROJECT CONTEXT
+## 4. CURRENT PROJECT CONTEXT & COMPUTED BOUNDS (${cw}x${ch})
 - Project Title: "${meta.title || 'Sprite'}"
-- Grid: ${cols} columns x ${rows} rows (Total ${cols * rows} cells)
-- Cell Dimensions: ${cw}x${ch} pixels
+- Grid Matrix: ${cols} columns x ${rows} rows (Total ${cols * rows} cells)
+- Active Cell Dimensions: ${cw}x${ch} pixels
+- **Exact Computed Center Axis:** \`axisX = ${m.axisXStr}\`
+- **Computed Anatomy Bounds for ${cw}x${ch}:**
+  * Head & Hair: Y in [${m.head.y[0]}..${m.head.y[1]}], Width = ${m.head.w}px (X in [${m.head.x[0]}..${m.head.x[1]}])
+  * Eyes: Y in [${m.eyes.y[0]}..${m.eyes.y[1]}], spaced across center (Left Eye X ~ ${m.eyes.leftX}, Right Eye X ~ ${m.eyes.rightX})
+  * Torso & Robe: Y in [${m.torso.y[0]}..${m.torso.y[1]}], Width = ${m.torso.w}px (X in [${m.torso.x[0]}..${m.torso.x[1]}])
+  * Legs / Wisps: Y in [${m.legs.y[0]}..${m.legs.y[1]}]
+  * Ground Contact / Shadow: Y = ${m.groundY}
 - Existing Cells: [${cellInventory}]
 - Current Palette:
 ${paletteSummary}
 
-## 5. ${specializedInstructions}
+## 5. SOLID PIXEL ART CRAFTING PRINCIPLES & DYNAMIC CODE EXAMPLE
+A pixel art character has mass, volume, and depth.
+How to code a solid character in PIX2:
+1. **Never leave hollow rings.** When drawing a head at Y = ${m.eyes.y[0]} from X = ${m.head.x[0]} to ${m.head.x[1]}:
+   - Outline at left and right extremes.
+   - Solid face/hair/skin pixels completely filling every coordinate in between!
+2. **Speed Tip for Solid Fills:**
+   - Use \`rect x,y w,h <col> fill\` to fill solid chest/torso rectangles in 1 line.
+   - Use \`sym_dot\` across horizontal rows to fill both halves simultaneously.
+3. **Example of Solid Cell Structure (${cw}x${ch}):**
+\`\`\`pix2
+@cell cell_0_0
+  name: "Down 0"
+  direction: down
+  frame: 0
+  ; Solid Crown & Hair (symmetric outline + solid fill)
+  sym_dot ${Math.round(m.axisX - 2)},${m.head.y[0] + 1} ${m.axisXStr} 1  sym_dot ${Math.round(m.axisX - 1)},${m.head.y[0] + 1} ${m.axisXStr} 3  sym_dot ${Math.floor(m.axisX)},${m.head.y[0] + 1} ${m.axisXStr} 4
+  sym_dot ${Math.round(m.axisX - 3)},${m.head.y[0] + 2} ${m.axisXStr} 1  sym_dot ${Math.round(m.axisX - 2)},${m.head.y[0] + 2} ${m.axisXStr} 3  sym_dot ${Math.round(m.axisX - 1)},${m.head.y[0] + 2} ${m.axisXStr} 3  sym_dot ${Math.floor(m.axisX)},${m.head.y[0] + 2} ${m.axisXStr} 3
+  ; Eyes & Face (solid skin + glowing eyes)
+  sym_dot ${Math.round(m.axisX - 3)},${m.eyes.y[0]} ${m.axisXStr} 1  p ${m.eyes.leftX},${m.eyes.y[0]} 5  p ${m.eyes.leftX + 1},${m.eyes.y[0]} 3  p ${m.eyes.rightX - 1},${m.eyes.y[0]} 3  p ${m.eyes.rightX},${m.eyes.y[0]} 5  sym_dot ${Math.floor(m.axisX)},${m.eyes.y[0]} ${m.axisXStr} 3
+  ; Solid Torso / Cloak (using rect fill for instant solid mass)
+  rect ${m.torso.x[0] + 1},${m.torso.y[0]} ${m.torso.w - 2},${m.torso.y[1] - m.torso.y[0] + 1} 3 fill
+  line ${m.torso.x[0]},${m.torso.y[0]} ${m.torso.x[0]},${m.torso.y[1]} 1
+  line ${m.torso.x[1]},${m.torso.y[0]} ${m.torso.x[1]},${m.torso.y[1]} 1
+  ; Legs / Wisps / Feet
+  sym_dot ${Math.round(m.axisX - 2)},${m.legs.y[0]} ${m.axisXStr} 1  sym_dot ${Math.round(m.axisX - 1)},${m.legs.y[0]} ${m.axisXStr} 2  sym_dot ${Math.floor(m.axisX)},${m.legs.y[0]} ${m.axisXStr} 3
+  sym_dot ${Math.round(m.axisX - 1)},${m.legs.y[1]} ${m.axisXStr} 1  sym_dot ${Math.floor(m.axisX)},${m.legs.y[1]} ${m.axisXStr} 2
+\`\`\`
 
-## 6. CURRENT SOURCE CODE
+## 6. ANTI-LAZY 4-FRAME & 8-FRAME LOCOMOTION ENGINE
+CRITICAL RULE: NEVER output 4 identical cells in an animation row! In game engines, identical frames make the character look frozen and dead. Each frame MUST have visible changes:
+
+### A. BIPEDAL / HUMANOID WALK CYCLE (6 FPS LOOP):
+- Frame 0 (Neutral Contact): Standing baseline pose. Both feet grounded at Y = ${m.legs.y[1]}.
+- Frame 1 (Step Left): Torso & head bob down by 1px (or bob up: shift Y - 1). Left foot steps forward (shift X by -1..-2px), right foot trails back.
+- Frame 2 (Passing Pose): Body returns to neutral vertical height. Feet pass each other at center axis.
+- Frame 3 (Step Right): Torso & head bob down by 1px (Y - 1). Right foot steps forward (shift X by +1..+2px), left foot trails back.
+
+### B. GHOST / WISP / FLOATING / FLYING / SLIME CYCLE (6 FPS LOOP):
+- Frame 0 (Hover High): Body at top vertical baseline. Tail wisps centered.
+- Frame 1 (Sway Right + Dip): Body bobs down by 1px (Y + 1). Tail wisps curve to the right (shift bottom X by +1..+2px).
+- Frame 2 (Hover Low): Body at lowest dip. Tail wisps stretch vertically. Glowing eyes or core pulse with brighter tone.
+- Frame 3 (Sway Left + Rise): Body rises back up. Tail wisps curve to the left (shift bottom X by -1..-2px).
+
+### C. DIRECTIONAL PERSPECTIVES:
+- Down ('down_0..3'): Front view with bilateral symmetry on axisX = ${m.axisXStr}. Both eyes clearly visible.
+- Up ('up_0..3'): Back view with bilateral symmetry on axisX = ${m.axisXStr}. NO facial features, only back of head, hair, cloak, and shoulders.
+- Right ('right_0..3'): 3/4 profile facing right. Head and body shifted toward right edge (X ~ ${cw - 5}). Right eye prominent, nose/chin facing right edge, cloak trailing left.
+- Left ('left_0..3'): STRICT INVARIANT: Exact horizontal mirror of 'right_0..3'.
+  For every pixel at (x,y) in right_N, plot at ((${cw - 1}) - x, y) in left_N.
+
+## 7. ${specializedInstructions}
+
+## 8. CURRENT SOURCE CODE
 \`\`\`pix2
 ${serialized}
 \`\`\`
 
-## 7. USER INSTRUCTION
+## 9. USER INSTRUCTION
 [Please formulate your design, animation, or character modification request here.]
 `;
 
