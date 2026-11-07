@@ -25,26 +25,23 @@ console.log('  [PASS] Standalone pix2/js/pix2-format.js and root js/pix2-format.
 const PIX2 = require('../pix2/js/pix2-format.js');
 const vectorsDir = path.join(__dirname, '..', 'pix2', 'test-vectors');
 
-// Test 2: canonical_valid_hero.pix2 parse & deep AST comparison
+// Test 2: canonical_valid_hero.pix2 parse & deep AST comparison against immutable baseline
 const validPix2 = fs.readFileSync(path.join(vectorsDir, 'canonical_valid_hero.pix2'), 'utf8');
 const parsedDoc = PIX2.parse(validPix2);
-
-// Re-write canonical_valid_hero.json from the canonical AST
 const canonicalJsonStr = JSON.stringify(parsedDoc, null, 2);
-fs.writeFileSync(path.join(vectorsDir, 'canonical_valid_hero.json'), canonicalJsonStr, 'utf8');
 
 // Verify JSON only contains canonical 'cell_size' and NO duplicate 'cellSize'
 assert.strictEqual(canonicalJsonStr.includes('"cellSize"'), false, 'Canonical AST JSON must not contain non-enumerable cellSize alias');
 assert.strictEqual(canonicalJsonStr.includes('"cell_size"'), true, 'Canonical AST JSON must contain canonical snake_case cell_size');
 
-// Re-read and perform deep structural equality check
+// Read immutable baseline fixture and perform deep structural equality check
 const expectedJson = JSON.parse(fs.readFileSync(path.join(vectorsDir, 'canonical_valid_hero.json'), 'utf8'));
-assert.deepStrictEqual(JSON.parse(canonicalJsonStr), expectedJson, 'Parsed document must be structurally identical to baseline AST');
+assert.deepStrictEqual(JSON.parse(canonicalJsonStr), expectedJson, 'Parsed document must be structurally identical to immutable baseline AST');
 
 const validation = PIX2.validate(parsedDoc, { strict: true });
 assert.strictEqual(validation.valid, true, 'canonical_valid_hero must be valid');
 assert.strictEqual(validation.errors.length, 0, 'canonical_valid_hero must have zero errors');
-console.log('  [PASS] canonical_valid_hero.pix2 matches baseline AST under deep semantic comparison');
+console.log('  [PASS] canonical_valid_hero.pix2 matches immutable baseline AST under deep semantic comparison');
 console.log('  [PASS] Canonical AST JSON serialization emits only canonical cell_size (zero duplicate keys)');
 
 // Test 3: invalid_syntax_coordinate.pix2 must trigger diagnostic and fail strict validation
@@ -98,6 +95,31 @@ const reparsedDoc = PIX2.parse(serialized);
 assert.strictEqual(reparsedDoc.meta.title, 'Wizard "Dark Moon"', 'Unescaping string literal preserves original title');
 assert.strictEqual(reparsedDoc.palette['un_used_color'], '#123456', 'Reparsed document preserves unused palette entry');
 console.log('  [PASS] Unused palette entries and string quotes preserved across roundtrip');
+
+// Test 7: Missing version in @pix2 header directive triggers diagnostic
+const missingVerDoc = PIX2.parse(`
+@pix2
+@cell cell_0_0
+  p 0,0 #ffffff
+@end
+`);
+assert.ok(missingVerDoc._diagnostics.some(d => d.code === 'PIX2_ERR_MISSING_VERSION'), 'Parser must flag missing version in @pix2 directive');
+const missingVerVal = PIX2.validate(missingVerDoc, { strict: true });
+assert.strictEqual(missingVerVal.valid, false, 'Document with missing header version must fail strict validation');
+console.log('  [PASS] Missing version in @pix2 directive flagged with diagnostic and failed strict validation');
+
+// Test 8: Trailing content after @end marker triggers diagnostic
+const trailingDoc = PIX2.parse(`
+@pix2 1.0
+@cell cell_0_0
+  p 0,0 #ffffff
+@end
+illegal trailing content after document termination
+`);
+assert.ok(trailingDoc._diagnostics.some(d => d.code === 'PIX2_WARN_TRAILING_CONTENT'), 'Parser must flag trailing content after @end marker');
+const trailingVal = PIX2.validate(trailingDoc, { strict: true });
+assert.strictEqual(trailingVal.valid, false, 'Document with trailing content after @end must fail strict validation');
+console.log('  [PASS] Trailing content after @end marker flagged with diagnostic and failed strict validation');
 
 console.log('\n====================================================');
 console.log('ALL TEST VECTORS VALIDATED SUCCESSFULLY');

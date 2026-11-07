@@ -365,6 +365,7 @@ const PIX2 = (function () {
 
     const lines = (text || '').normalize('NFC').split(/\r\n|\r|\n/);
     const doc = createDocument('Untitled', 4, 4, 16, 16);
+    doc.meta.version = null; // Requires explicit @pix2 version directive in source
     doc.palette = {};
     doc.cells = {};
     doc.animations = {};
@@ -388,7 +389,23 @@ const PIX2 = (function () {
 
         if (secName === 'pix2') {
           hasPix2Header = true;
-          doc.meta.version = sanitizeKey(parts[1] || '1.0', '1.0');
+          if (parts.length >= 2 && parts[1]) {
+            doc.meta.version = sanitizeKey(parts[1], '');
+            if (doc.meta.version !== '1.0') {
+              diagnostics.push({
+                code: 'PIX2_ERR_UNSUPPORTED_VERSION',
+                line: i + 1,
+                message: `Unsupported PIX2 version: "${doc.meta.version}" (expected "1.0")`
+              });
+            }
+          } else {
+            doc.meta.version = null;
+            diagnostics.push({
+              code: 'PIX2_ERR_MISSING_VERSION',
+              line: i + 1,
+              message: 'Missing version parameter in @pix2 header directive (expected "@pix2 1.0")'
+            });
+          }
           continue;
         } else if (secName === 'meta') {
           currentSection = 'meta';
@@ -473,6 +490,17 @@ const PIX2 = (function () {
           doc.cells[cellId] = currentCell;
           continue;
         } else if (secName === 'end') {
+          // Check for any illegal trailing content after @end marker
+          for (let j = i + 1; j < lines.length; j++) {
+            const trailing = stripComment(lines[j]);
+            if (trailing) {
+              diagnostics.push({
+                code: 'PIX2_WARN_TRAILING_CONTENT',
+                line: j + 1,
+                message: `Unexpected trailing content after @end marker: "${trailing.slice(0, 64)}"`
+              });
+            }
+          }
           break;
         }
       }

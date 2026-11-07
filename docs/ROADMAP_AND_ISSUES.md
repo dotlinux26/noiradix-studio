@@ -19,9 +19,9 @@
 | **BUG-07** | **P1** | Engine | Cell IDs rigidly hardcoded to `cell_r_c` preventing custom naming like `ghost_idle`. | **RESOLVED & VERIFIED** (Decoupled identity from grid pos) |
 | **BUG-08** | **P1** | Studio | Animation player locked to 4 directional walk rows only. | **RESOLVED & VERIFIED** (Supports arbitrary custom clips) |
 | **FEAT-01**| **P1** | Studio | Dedicated Animation Studio Tab with visual timeline strip & Onion Skin. | **IMPLEMENTED** (`#view-anim-studio`) |
-| **FEAT-02**| **P1** | Engine | Anchor-centered zoom on mouse hover pixel / selection. | **IN PROGRESS** |
-| **FEAT-03**| **P1** | File | Desktop-like File Management (File System Access API `Ctrl+S`, `Ctrl+O`). | **IN PROGRESS** |
-| **FEAT-04**| **P1** | State | Dual Autosave (30s time + 1.5s event) with crash recovery snapshot. | **IN PROGRESS** |
+| **FEAT-02**| **P1** | Engine | Anchor-centered zoom on mouse hover pixel / selection. | **IMPLEMENTED & VERIFIED** (Invariance math) |
+| **FEAT-03**| **P1** | File | Desktop-like File Management (File System Access API `Ctrl+S`, `Ctrl+O`). | **IMPLEMENTED & VERIFIED** (Native + Fallback) |
+| **FEAT-04**| **P1** | State | Dual Autosave (30s time + 1.5s event) with crash recovery snapshot. | **IMPLEMENTED & VERIFIED** (IndexedDB / LocalStorage) |
 
 ---
 
@@ -63,19 +63,25 @@ Phase 2: UI Overhaul & Workspace Structure (COMPLETED)
   - Symmetrical gutters & ruler integration
   - Column header text collision resolved
 
-Phase 3: Desktop File Lifecycle & Anchor Zoom (CURRENT)
+Phase 3: Desktop File Lifecycle & Anchor Zoom (COMPLETED)
   - Native File System Access API (real Ctrl+S save)
   - Anchor-centered zoom on hovered pixel
   - Dual autosave & crash recovery snapshot in LocalStorage/IndexedDB
   - Full document-wide Undo/Redo
 
-Phase 4: AI Agent Native Interface & Public Release
+Phase 4: AI Agent Interface & Security Hardening (COMPLETED)
   - Formal AI prompt templates & CLI parser
   - Real-time external hot-reload & smart conflict resolution (Live Human-AI pairing)
   - Contextual AI prompt generator (4 specialized prompt modes)
   - Complete client-side security hardening (Zero XSS, Prototype Pollution & DoS defenses)
-  - One-click GitHub & itch.io Alpha release
-  - Donation links (Ko-fi, GitHub Sponsors) & community documentation
+  - 125/125 Automated tests passing across 4 suites
+
+Phase 5: Stabilization Candidate & Soft Feature Freeze (CURRENT)
+  - Canonical snake_case AST enforcement (cell_size)
+  - Dual licensing (CC BY 4.0 for Specification, Apache-2.0 for Reference Engine)
+  - Normative test vectors for third-party compiler implementers
+  - VS Code language tooling with TextMate grammar
+  - Continuous Integration via GitHub Actions running all 4 test suites
 ```
 
 ---

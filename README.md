@@ -451,29 +451,39 @@ noiradix-studio/
 │   └── test-vectors/            # Normative conformance test vectors for 3rd-party ports
 │
 └── tests/
-    ├── test-roundtrip.js        # Deterministic parse-serialize roundtrip test suite
-    └── test-security.js         # Malicious payload & prototype pollution test suite
+    ├── test-roundtrip.js            # Semantic determinism & feature verification suite (96 tests)
+    ├── test-security.js             # Malicious payload & anti-DoS defense suite (20 tests)
+    ├── test-tmLanguage.js           # TextMate grammar tokenization test suite (2 tests)
+    └── test-vectors-conformance.js  # Normative conformance test vector suite (7 tests)
 ```
 
 ---
 
-## 🧪 Testing & Validation
+## 🧪 Testing & Quality Assurance
 
-Run the deterministic roundtrip and security test suites using Node.js:
+Run the automated test suites using Node.js (125 tests, zero external npm dependencies):
 ```bash
-# Semantic roundtrip tests (96/96)
+# 1. Semantic roundtrip & feature tests (96/96)
 node tests/test-roundtrip.js
 
-# Malicious payload & anti-DoS tests (14/14)
+# 2. Malicious payload & anti-DoS defenses (20/20)
 node tests/test-security.js
+
+# 3. TextMate grammar & tokenization validation (2/2)
+node tests/test-tmLanguage.js
+
+# 4. Normative test vector conformance (7/7)
+node tests/test-vectors-conformance.js
 ```
 
-Verify JavaScript syntax:
+Verify JavaScript engine syntax across root and standalone packages:
 ```bash
 node --check js/app.js
 node --check js/pix2-format.js
 node --check js/editor-state.js
 node --check js/animation-player.js
+node --check js/tools.js
+node --check pix2/js/pix2-format.js
 ```
 
 ---
