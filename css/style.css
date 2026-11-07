@@ -1480,28 +1480,56 @@ body {
 }
 
 .code-pane-header {
-  height: 44px;
+  min-height: 48px;
+  height: auto;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 8px 16px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .code-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-weight: 600;
   font-size: 13px;
   color: var(--text-main);
+  white-space: nowrap;
+}
+
+.code-title .badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.code-title .badge-subtle {
+  background-color: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.code-title .badge-warning {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .code-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .code-textarea {
@@ -1515,7 +1543,113 @@ body {
   border: none;
   outline: none;
   resize: none;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 2;
+  transition: background-color 0.2s, box-shadow 0.2s;
 }
+
+.code-textarea[readonly] {
+  background-color: var(--bg-primary);
+  color: var(--text-muted);
+  cursor: text;
+}
+
+.code-textarea.editing-active {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.4);
+}
+
+/* ==========================================================================
+   PIX2 SYNTAX HIGHLIGHTED CODE VIEWER
+   ========================================================================== */
+.code-viewer-container {
+  flex: 1;
+  overflow: auto;
+  background-color: var(--code-bg, #0f172a);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 14px 0;
+  tab-size: 2;
+  white-space: pre;
+  user-select: text;
+  cursor: text;
+}
+
+.code-line {
+  display: flex;
+  min-height: 20px;
+  padding: 0 16px 0 0;
+}
+
+.code-line:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.line-num {
+  width: 44px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 14px;
+  color: var(--text-muted, #64748b);
+  user-select: none;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.line-content {
+  flex: 1;
+  color: var(--code-text, #e2e8f0);
+}
+
+/* Syntax Color Tokens */
+.syn-dir { color: #c084fc; font-weight: 600; } /* Purple @directive */
+.syn-key { color: #38bdf8; font-weight: 500; } /* Light Blue key: */
+.syn-cmd { color: #f472b6; font-weight: 600; } /* Pink/Magenta drawing commands */
+.syn-str { color: #4ade80; } /* Green strings */
+.syn-kw  { color: #fb923c; font-weight: 500; } /* Orange keywords */
+.syn-num { color: #facc15; } /* Yellow numbers & coordinates */
+.syn-cmt { color: #64748b; font-style: italic; } /* Slate gray comments */
+.syn-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #a7f3d0;
+  font-family: var(--font-mono, monospace);
+}
+.syn-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  vertical-align: middle;
+}
+
+/* Light Theme Syntax Adjustments */
+[data-theme="light"] .code-viewer-container {
+  background-color: #f8fafc;
+}
+[data-theme="light"] .code-line:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+[data-theme="light"] .line-num {
+  color: #94a3b8;
+}
+[data-theme="light"] .line-content {
+  color: #1e293b;
+}
+[data-theme="light"] .syn-dir { color: #7c3aed; font-weight: 600; }
+[data-theme="light"] .syn-key { color: #0284c7; font-weight: 500; }
+[data-theme="light"] .syn-cmd { color: #db2777; font-weight: 600; }
+[data-theme="light"] .syn-str { color: #16a34a; }
+[data-theme="light"] .syn-kw  { color: #ea580c; font-weight: 500; }
+[data-theme="light"] .syn-num { color: #b45309; }
+[data-theme="light"] .syn-cmt { color: #94a3b8; font-style: italic; }
+[data-theme="light"] .syn-color { color: #047857; }
+[data-theme="light"] .syn-swatch { border: 1px solid rgba(0, 0, 0, 0.3); }
 
 .ai-guide-pane {
   background-color: var(--bg-secondary);

@@ -292,10 +292,14 @@
     dom.btnAddColor = document.getElementById('btn-add-color');
 
     // Code & Prompt
+    dom.codeViewer = document.getElementById('pix2-code-viewer');
     dom.codeTextarea = document.getElementById('pix2-code-text');
     dom.btnApplyCode = document.getElementById('btn-apply-code');
     dom.btnCopyAiPrompt = document.getElementById('btn-copy-ai-prompt');
     dom.selectAiPromptMode = document.getElementById('select-ai-prompt-mode');
+    dom.btnCopyRawCode = document.getElementById('btn-copy-raw-code');
+    dom.btnToggleEditCode = document.getElementById('btn-toggle-edit-code');
+    dom.codeModeBadge = document.getElementById('code-mode-badge');
 
     // Info labels
     dom.labelCoords = document.getElementById('label-mouse-coords');
@@ -5011,13 +5015,200 @@
   }
 
   // ===========================================================================
-  // PIX2 CODE & AI INTEGRATION
+  // PIX2 CODE & SYNTAX HIGHLIGHTED VIEWER
   // ===========================================================================
 
+  let isCodeEditingUnlocked = false;
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function splitLineComment(rawLine) {
+    if (!rawLine) return { code: '', comment: '' };
+    const semiIdx = rawLine.indexOf(';');
+    const text = (semiIdx >= 0 ? rawLine.slice(0, semiIdx) : rawLine);
+    let comment = (semiIdx >= 0 ? rawLine.slice(semiIdx) : '');
+
+    let code = '';
+    let inQuote = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"' || ch === "'") inQuote = !inQuote;
+      if (!inQuote && ch === '#') {
+        const rest = text.slice(i);
+        const hexMatch = rest.match(/^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"']|$)/);
+        if (hexMatch) {
+          code += hexMatch[0];
+          i += hexMatch[0].length - 1;
+          continue;
+        } else {
+          comment = text.slice(i) + comment;
+          break;
+        }
+      }
+      code += ch;
+    }
+    return { code, comment };
+  }
+
+  function highlightPix2Code(code) {
+    if (!code) return '';
+    const lines = code.split('\n');
+    return lines.map((line, idx) => {
+      const { code: codePart, comment: commentPart } = splitLineComment(line);
+
+      let html = escapeHtml(codePart);
+
+      // 1. Strings (mask to avoid token collision)
+      html = html.replace(/(&quot;.*?&quot;|"[^"]*"|'[^']*')/g, '___PIXSTR_$1___');
+
+      // 2. Section directives (@meta, @grid, @palette, @cell, etc.)
+      html = html.replace(/(@[a-zA-Z0-9_]+)/g, '<span class="syn-dir">$1</span>');
+
+      // 3. Keys followed by colon (key:)
+      html = html.replace(/\b([a-zA-Z0-9_]+):/g, '<span class="syn-key">$1</span>:');
+
+      // 4. Drawing commands & vector macros
+      html = html.replace(/\b(sym_dot|line|rect|fill|pixel|dot)\b/g, '<span class="syn-cmd">$1</span>');
+      html = html.replace(/(^|\s)(p)(?=\s|$)/g, '$1<span class="syn-cmd">$2</span>');
+
+      // 5. Hex colors with color preview dot swatch
+      html = html.replace(/(#[0-9a-fA-F]{3,8})\b/g, (m) => {
+        return '<span class="syn-color"><span class="syn-swatch" style="background-color:' + m + '"></span>' + m + '</span>';
+      });
+
+      // 6. Keywords
+      html = html.replace(/\b(true|false|loop|once|outline|none|down|up|right|left|down_right|down_left|up_right|up_left)\b/g, '<span class="syn-kw">$1</span>');
+
+      // 7. Numbers, dimensions, coordinates (outside tags)
+      html = html.replace(/\b(\d+(?:,\d+|\.\d+|x\d+)?)\b(?![^<]*>)/g, '<span class="syn-num">$1</span>');
+
+      // 8. Restore strings
+      html = html.replace(/___PIXSTR_(.*?)___/g, '<span class="syn-str">$1</span>');
+
+      if (commentPart) {
+        html += '<span class="syn-cmt">' + escapeHtml(commentPart) + '</span>';
+      }
+
+      const lineNum = '<span class="line-num">' + (idx + 1) + '</span>';
+      return '<div class="code-line">' + lineNum + '<span class="line-content">' + (html || ' ') + '</span></div>';
+    }).join('');
+  }
+
   function renderCodeEditor() {
-    if (!state.doc || !dom.codeTextarea) return;
-    dom.codeTextarea.value = PIX2.serialize(state.doc);
+    if (!state.doc) return;
+    const serialized = PIX2.serialize(state.doc);
+    if (dom.codeTextarea) dom.codeTextarea.value = serialized;
+
+    if (!isCodeEditingUnlocked) {
+      if (dom.codeViewer) {
+        dom.codeViewer.innerHTML = highlightPix2Code(serialized);
+        dom.codeViewer.classList.remove('hidden');
+      }
+      if (dom.codeTextarea) {
+        dom.codeTextarea.classList.add('hidden');
+        dom.codeTextarea.readOnly = true;
+      }
+      if (dom.codeModeBadge) {
+        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+        dom.codeModeBadge.className = 'badge badge-subtle';
+      }
+      if (dom.btnToggleEditCode) {
+        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
+        dom.btnToggleEditCode.classList.remove('btn-warning');
+        dom.btnToggleEditCode.classList.add('btn-secondary');
+        dom.btnToggleEditCode.title = 'Unlock to edit PIX2 code manually';
+      }
+      if (dom.btnApplyCode) {
+        dom.btnApplyCode.classList.add('hidden');
+      }
+    }
     updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
+  }
+
+  function toggleCodeEditMode() {
+    if (!dom.codeTextarea) return;
+
+    if (!isCodeEditingUnlocked) {
+      const confirmed = confirm(
+        '⚠️ DIRECT CODE EDITING WARNING:\n\n' +
+        'Manually modifying PIX2 code can corrupt sprite syntax or desynchronize animation sequences if the format grammar is not followed accurately.\n\n' +
+        '💡 RECOMMENDED: Use your AI Copilot!\n' +
+        'Click "Copy for AI Prompt" or "Copy PIX2 Code" to let an AI modify the code safely and intelligently.\n\n' +
+        'Are you sure you want to unlock direct code editing?'
+      );
+      if (!confirmed) return;
+
+      isCodeEditingUnlocked = true;
+      if (dom.codeViewer) dom.codeViewer.classList.add('hidden');
+      if (dom.codeTextarea) {
+        dom.codeTextarea.classList.remove('hidden');
+        dom.codeTextarea.readOnly = false;
+        dom.codeTextarea.classList.add('editing-active');
+        dom.codeTextarea.focus();
+      }
+
+      if (dom.btnToggleEditCode) {
+        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-lock"></i> Lock Code';
+        dom.btnToggleEditCode.classList.remove('btn-secondary');
+        dom.btnToggleEditCode.classList.add('btn-warning');
+        dom.btnToggleEditCode.title = 'Lock code and revert to safe syntax viewer';
+      }
+
+      if (dom.codeModeBadge) {
+        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-pen"></i> Direct Editing Active';
+        dom.codeModeBadge.className = 'badge badge-warning';
+      }
+
+      if (dom.btnApplyCode) {
+        dom.btnApplyCode.classList.remove('hidden');
+      }
+
+      showToast('Direct code editing enabled. Click "Apply to Canvas" to commit changes.', 'warning');
+    } else {
+      isCodeEditingUnlocked = false;
+      if (dom.codeTextarea) {
+        dom.codeTextarea.classList.add('hidden');
+        dom.codeTextarea.readOnly = true;
+        dom.codeTextarea.classList.remove('editing-active');
+      }
+
+      if (dom.codeViewer && state.doc) {
+        const serialized = PIX2.serialize(state.doc);
+        if (dom.codeTextarea) dom.codeTextarea.value = serialized;
+        dom.codeViewer.innerHTML = highlightPix2Code(serialized);
+        dom.codeViewer.classList.remove('hidden');
+      }
+
+      if (dom.btnToggleEditCode) {
+        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
+        dom.btnToggleEditCode.classList.remove('btn-warning');
+        dom.btnToggleEditCode.classList.add('btn-secondary');
+        dom.btnToggleEditCode.title = 'Unlock to edit PIX2 code manually';
+      }
+
+      if (dom.codeModeBadge) {
+        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+        dom.codeModeBadge.className = 'badge badge-subtle';
+      }
+
+      if (dom.btnApplyCode) {
+        dom.btnApplyCode.classList.add('hidden');
+      }
+
+      showToast('Code locked in safe syntax view mode.', 'info');
+    }
+  }
+
+  function copyRawPix2Code() {
+    if (!state.doc) return;
+    const code = dom.codeTextarea ? dom.codeTextarea.value : PIX2.serialize(state.doc);
+    navigator.clipboard.writeText(code).then(() => {
+      showToast('Copied raw .PIX2 code to clipboard!', 'success');
+    }).catch(() => {
+      alert('Could not copy automatically. You can copy the code manually.');
+    });
   }
 
   function applyCodeToDoc() {
@@ -5028,8 +5219,33 @@
       state.setDocument(newDoc, true);
       state.saveSnapshot('Apply Code');
       triggerEventAutosave();
+
+      // Automatically lock code editing after successful apply for safety
+      isCodeEditingUnlocked = false;
+      if (dom.codeTextarea) {
+        dom.codeTextarea.classList.add('hidden');
+        dom.codeTextarea.readOnly = true;
+        dom.codeTextarea.classList.remove('editing-active');
+      }
+      if (dom.codeViewer) {
+        dom.codeViewer.innerHTML = highlightPix2Code(code);
+        dom.codeViewer.classList.remove('hidden');
+      }
+      if (dom.btnToggleEditCode) {
+        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
+        dom.btnToggleEditCode.classList.remove('btn-warning');
+        dom.btnToggleEditCode.classList.add('btn-secondary');
+      }
+      if (dom.codeModeBadge) {
+        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+        dom.codeModeBadge.className = 'badge badge-subtle';
+      }
+      if (dom.btnApplyCode) {
+        dom.btnApplyCode.classList.add('hidden');
+      }
+
       refreshAll();
-      showToast('PIX2 Code parsed & applied successfully!', 'success');
+      showToast('PIX2 Code parsed & applied to canvas successfully!', 'success');
     } catch (err) {
       alert(`Error parsing PIX2 code:\n${err.message}`);
     }
@@ -5092,47 +5308,47 @@
       <table class="guide-table">
         <thead>
           <tr>
-            <th>Kích thước Cell</th>
-            <th>Toạ độ hợp lệ</th>
-            <th>Trục giữa (Center Axis)</th>
-            <th>Lệnh đối xứng (Bilateral Symmetry)</th>
-            <th>Công thức lật gương (Mirror)</th>
+            <th>Cell Resolution</th>
+            <th>Valid Coords</th>
+            <th>Center Axis (axisX)</th>
+            <th>Bilateral Symmetry Macro</th>
+            <th>Reflection Math</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>16 × 16</strong></td>
-            <td>0 đến 15</td>
+            <td>0 to 15</td>
             <td><code>X = 7.5</code></td>
-            <td><code>sym_dot x,y 7.5 &lt;màu&gt;</code></td>
+            <td><code>sym_dot x,y 7.5 &lt;color&gt;</code></td>
             <td><code>x' = 15 - x</code></td>
           </tr>
           <tr>
             <td><strong>24 × 24</strong></td>
-            <td>0 đến 23</td>
+            <td>0 to 23</td>
             <td><code>X = 11.5</code></td>
-            <td><code>sym_dot x,y 11.5 &lt;màu&gt;</code></td>
+            <td><code>sym_dot x,y 11.5 &lt;color&gt;</code></td>
             <td><code>x' = 23 - x</code></td>
           </tr>
           <tr>
             <td><strong>32 × 32</strong></td>
-            <td>0 đến 31</td>
+            <td>0 to 31</td>
             <td><code>X = 15.5</code></td>
-            <td><code>sym_dot x,y 15.5 &lt;màu&gt;</code></td>
+            <td><code>sym_dot x,y 15.5 &lt;color&gt;</code></td>
             <td><code>x' = 31 - x</code></td>
           </tr>
           <tr>
             <td><strong>64 × 64</strong></td>
-            <td>0 đến 63</td>
+            <td>0 to 63</td>
             <td><code>X = 31.5</code></td>
-            <td><code>sym_dot x,y 31.5 &lt;màu&gt;</code></td>
+            <td><code>sym_dot x,y 31.5 &lt;color&gt;</code></td>
             <td><code>x' = 63 - x</code></td>
           </tr>
           <tr>
             <td><strong>W × H (Custom)</strong></td>
             <td>0..W-1, 0..H-1</td>
             <td><code>axisX = (W-1)/2</code></td>
-            <td><code>sym_dot x,y axisX &lt;màu&gt;</code></td>
+            <td><code>sym_dot x,y axisX &lt;color&gt;</code></td>
             <td><code>x' = (W - 1) - x</code></td>
           </tr>
         </tbody>
@@ -5141,122 +5357,122 @@
 
     const activeBoundsBoxHtml = `
       <div class="guide-formula-box" style="border-left: 3px solid #3b82f6; margin-bottom: 10px;">
-        <p><strong>🎯 Canvas hiện tại (${cw}×${ch}):</strong> Trục giữa <code>axisX = ${m.axisXStr}</code></p>
-        <p><strong>Đầu &amp; Tóc:</strong> Y = ${m.head.y[0]}..${m.head.y[1]}, X = ${m.head.x[0]}..${m.head.x[1]} (Rộng ~ ${m.head.w}px)</p>
-        <p><strong>Mắt:</strong> Y = ${m.eyes.y[0]}..${m.eyes.y[1]} (Mắt trái: X ≈ ${m.eyes.leftX}, Mắt phải: X ≈ ${m.eyes.rightX})</p>
-        <p><strong>Thân / Áo / Giáp:</strong> Y = ${m.torso.y[0]}..${m.torso.y[1]}, X = ${m.torso.x[0]}..${m.torso.x[1]} (Rộng ~ ${m.torso.w}px)</p>
-        <p><strong>Chân / Đuôi bóng ma (Wisps):</strong> Y = ${m.legs.y[0]}..${m.legs.y[1]}</p>
-        <p><strong>Mặt đất / Đổ bóng chân:</strong> Y = ${m.groundY} (Hàng cuối cùng)</p>
+        <p><strong>🎯 Active Canvas (${cw}×${ch}):</strong> Center Axis <code>axisX = ${m.axisXStr}</code></p>
+        <p><strong>Head &amp; Hair:</strong> Y = ${m.head.y[0]}..${m.head.y[1]}, X = ${m.head.x[0]}..${m.head.x[1]} (Width ~ ${m.head.w}px)</p>
+        <p><strong>Eyes:</strong> Y = ${m.eyes.y[0]}..${m.eyes.y[1]} (Left: X ≈ ${m.eyes.leftX}, Right: X ≈ ${m.eyes.rightX})</p>
+        <p><strong>Torso / Outfit / Armor:</strong> Y = ${m.torso.y[0]}..${m.torso.y[1]}, X = ${m.torso.x[0]}..${m.torso.x[1]} (Width ~ ${m.torso.w}px)</p>
+        <p><strong>Legs / Ghost Wisps:</strong> Y = ${m.legs.y[0]}..${m.legs.y[1]}</p>
+        <p><strong>Ground Shadow / Clearance:</strong> Y = ${m.groundY} (Bottom boundary)</p>
       </div>
     `;
 
     if (mode === 'all-in-one') {
-      if (titleEl) titleEl.textContent = '🌟 All-in-One Master Cognitive Guide (Toàn diện & Siêu chi tiết)';
+      if (titleEl) titleEl.textContent = '🌟 All-in-One Master Cognitive Guide (Complete Reference)';
       contentEl.innerHTML = `
-        <h4>1. Bảng tra chuẩn hóa tọa độ &amp; Trục đối xứng (Bilateral Symmetry)</h4>
+        <h4>1. Canonical Coordinate &amp; Bilateral Symmetry Reference Table</h4>
         ${canonicalTableHtml}
 
-        <h4>2. Tọa độ tính toán động cho Canvas hiện tại (${cw}×${ch})</h4>
+        <h4>2. Live Computed Anatomy Landmarks for Active Canvas (${cw}×${ch})</h4>
         ${activeBoundsBoxHtml}
 
-        <h4>3. Nguyên tắc Pixel ĐẶC (CẤM TUYỆT ĐỐI VẼ KHUNG RỖNG / WIREFRAME)</h4>
+        <h4>3. Solid Sprite Mass Mandate (Strictly No Hollow Wireframes)</h4>
         <div class="guide-formula-box" style="border-left: 3px solid #ef4444;">
-          <p><strong>Bắt buộc tô kín thân:</strong> Pixel art là hình khối đặc có thể tích và chiều sâu, KHÔNG PHẢI hình vẽ nét rỗng! Bên trong đường viền của đầu, thân, áo, cánh tay PHẢI ĐƯỢC TÔ KÍN 100% bằng pixel màu.</p>
-          <p><strong>Điểm mù trong suốt:</strong> Chỉ có khoảng không nền bên ngoài nhân vật mới để trống trong suốt.</p>
-          <p><strong>Mẹo tô đặc siêu tốc trong PIX2:</strong> Dùng <code>rect x,y w,h &lt;màu&gt; fill</code> để tô kín khối ngực/áo chỉ trong 1 dòng! Dùng <code>sym_dot</code> rải kín hàng ngang đối xứng.</p>
+          <p><strong>Mandatory Solid Interior:</strong> Pixel art sprites are solid physical entities with volume, NOT hollow wireframes! The interior of the head, face, torso, clothing, and limbs MUST be 100% packed with solid color pixels.</p>
+          <p><strong>Transparent Boundary:</strong> Transparent pixels exist ONLY in the open air outside the character silhouette.</p>
+          <p><strong>Fast Solid Filling:</strong> Use <code>rect x,y w,h &lt;col&gt; fill</code> to instantly pack torso/cape blocks in 1 line! Use <code>sym_dot</code> to plot horizontal rows symmetrically.</p>
         </div>
 
-        <h4>4. Ngôn ngữ &amp; Lệnh vẽ toán học trong PIX2</h4>
+        <h4>4. Mathematical Primitives &amp; Vector Macros in PIX2</h4>
         <ul class="guide-cmd-list">
-          <li><code>p x,y &lt;pal_id|hex&gt;</code> — Chấm pixel (có thể viết nhiều điểm trên 1 dòng: <code>p 5,2 1  p 6,2 2</code>)</li>
-          <li><code>sym_dot x,y axisX &lt;col&gt;</code> — Đối xứng 2 bên trục giữa tự động (ví dụ axisX = ${m.axisXStr})</li>
-          <li><code>rect x,y w,h &lt;col&gt; fill</code> — Tô kín hình chữ nhật đặc (thân, áo, giáp)</li>
-          <li><code>rect x,y w,h &lt;col&gt; outline</code> — Vẽ viền hộp chữ nhật (khiên, khung)</li>
-          <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Đường thẳng Bresenham (kiếm, gậy phép, viền chéo)</li>
-          <li><code>fill x,y &lt;col&gt;</code> — Đổ màu 4 hướng kín vùng biên</li>
+          <li><code>p x,y &lt;pal_id|hex&gt;</code> — Plot single pixel (inline chaining supported: <code>p 5,2 1  p 6,2 2</code>)</li>
+          <li><code>sym_dot x,y axisX &lt;col&gt;</code> — Automatic bilateral mirror reflection (axisX = ${m.axisXStr})</li>
+          <li><code>rect x,y w,h &lt;col&gt; fill</code> — Solid rectangular fill (chest, body, robes)</li>
+          <li><code>rect x,y w,h &lt;col&gt; outline</code> — Rectangular bounding box (shields, borders)</li>
+          <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Bresenham discrete line (swords, staves, diagonal edges)</li>
+          <li><code>fill x,y &lt;col&gt;</code> — 4-way bounded flood fill</li>
         </ul>
 
-        <h4>5. Công thức bước đi 4 khung hình chống trùng lặp (Anti-Lazy Locomotion)</h4>
+        <h4>5. Anti-Lazy 4-Frame Locomotion Formulas</h4>
         <ul class="guide-cmd-list">
-          <li><strong>Frame 0 (Tiếp đất / Bay cao):</strong> Dáng chuẩn ban đầu, chân chạm đất.</li>
-          <li><strong>Frame 1 (Nhún bước trái / Bay nghiêng phải):</strong> Thân nhún xuống 1px (Y+1) hoặc nâng 1px (Y-1). Chân trái bước tới (chân phải lùi). Với bóng ma: đuôi wisps uốn cong sang phải (+1..+2px X).</li>
-          <li><strong>Frame 2 (Bung chân / Điểm rơi):</strong> Chân đi qua trục giữa. Bóng ma kéo dài đuôi, mắt phát sáng rực rỡ hơn.</li>
-          <li><strong>Frame 3 (Nhún bước phải / Bay nghiêng trái):</strong> Thân nhún 1px (Y-1). Chân phải bước tới (chân trái lùi). Với bóng ma: đuôi wisps uốn cong sang trái (-1..-2px X).</li>
-          <li><strong>Chuyển động thứ cấp (Secondary Motion):</strong> Áo choàng, vạt áo, đuôi tóc, wisps ma quái LUÔN trễ 1 khung hình so với chuyển động thân.</li>
+          <li><strong>Frame 0 (Contact / Hover High):</strong> Baseline standing or hovering pose, grounded at Y = ${m.legs.y[1]}.</li>
+          <li><strong>Frame 1 (Step Left / Sway Right Dip):</strong> Torso bobs Y±1, left foot forward. For floating: tail wisps curl right (+1..+2px X).</li>
+          <li><strong>Frame 2 (Passing / Hover Low):</strong> Feet cross center axis. Ghost tail elongates, glowing eyes pulse brighter.</li>
+          <li><strong>Frame 3 (Step Right / Sway Left Dip):</strong> Torso bobs Y±1, right foot forward. For floating: tail wisps curl left (-1..-2px X).</li>
+          <li><strong>Secondary Motion:</strong> Cloaks, hair tails, and ethereal wisps MUST lag 1 frame behind primary body motion.</li>
         </ul>
 
-        <h4>6. Quy chuẩn 4 hướng góc nhìn (Directional Perspectives)</h4>
+        <h4>6. Directional Perspective Standards</h4>
         <div class="guide-formula-box">
-          <p><strong>Down (Đi xuống):</strong> Nhìn trực diện phía trước. Đối xứng trục giữa <code>axisX = ${m.axisXStr}</code>. Hai mắt sáng rõ.</p>
-          <p><strong>Up (Đi lên):</strong> Nhìn từ sau lưng. Đối xứng trục giữa <code>axisX = ${m.axisXStr}</code>. TUYỆT ĐỐI KHÔNG vẽ mắt/mặt, chỉ vẽ lưng, tóc, mũ trùm, áo choàng.</p>
-          <p><strong>Right (Sang phải):</strong> Góc nghiêng 3/4 nhìn sang phải. Mặt và mắt lệch về mép phải, lưng hướng về trái.</p>
-          <p><strong>Left (Sang trái):</strong> Đối xứng lật gương 100% của Right! Lấy mọi điểm (x,y) bên Right chuyển thành <code>(${cw - 1} - x, y)</code>.</p>
+          <p><strong>Down:</strong> Frontal perspective. Perfect bilateral symmetry on <code>axisX = ${m.axisXStr}</code>. Both eyes visible.</p>
+          <p><strong>Up:</strong> Back perspective. Center symmetry on <code>axisX = ${m.axisXStr}</code>. NO eyes, nose, or mouth (hair and cloak only).</p>
+          <p><strong>Right:</strong> 3/4 profile facing right. Face and chest shifted towards right margin.</p>
+          <p><strong>Left:</strong> Exact mathematical mirror of Right: <code>x_left = (${cw - 1}) - x_right</code>.</p>
         </div>
 
         <div class="tip-box">
           <i class="fa-solid fa-palette"></i>
-          <span><strong>Bảng màu 5-6 tone chuẩn:</strong> 1: Viền đen/chàm tối &bull; 2: Bóng đổ tối &bull; 3: Màu da/áo chính &bull; 4: Vệt sáng viền &bull; 5: Mắt/Hiệu ứng phát sáng &bull; 6: Phụ kiện kim loại.</span>
+          <span><strong>Cohesive 5-6 Tone Palette:</strong> 1: Outline Dark Slate &bull; 2: Deep Core Shadow &bull; 3: Midtone Body &bull; 4: Rim Highlight &bull; 5: Glowing Eyes &bull; 6: Accent Trim.</span>
         </div>
       `;
     } else if (mode === 'full-character') {
-      if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (Tạo trọn bộ nhân vật 4 hướng / 8 hướng)';
+      if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)';
       contentEl.innerHTML = `
-        <h4>1. Bảng tra chuẩn hóa tọa độ &amp; Trục giữa (${cw}×${ch})</h4>
+        <h4>1. Coordinate &amp; Symmetry Reference Table (${cw}×${ch})</h4>
         ${canonicalTableHtml}
         ${activeBoundsBoxHtml}
 
-        <h4>2. Bắt buộc: Nhân vật đặc khối (Không vẽ khung rỗng)</h4>
-        <p class="guide-desc">Bên trong đường viền bao quanh PHẢI ĐƯỢC TÔ KÍN 100% bằng pixel màu (da, tóc, giáp, áo choàng). Không được để trống trong suốt bên trong cơ thể!</p>
+        <h4>2. Solid Sprite Mass Mandate</h4>
+        <p class="guide-desc">The interior of the head, torso, clothing, and limbs MUST be 100% packed with solid color pixels. Never output an empty wireframe!</p>
 
-        <h4>3. Bản đồ các góc nhìn 4 hướng</h4>
+        <h4>3. Directional Frame Mapping</h4>
         <ul class="guide-cmd-list">
-          <li><code>down_0..3</code>: Mặt trước (đối xứng tâm <code>axisX = ${m.axisXStr}</code>, 2 mắt rõ ràng)</li>
-          <li><code>up_0..3</code>: Lưng sau (đối xứng tâm <code>axisX = ${m.axisXStr}</code>, tóc/áo choàng, không có mắt/miệng)</li>
-          <li><code>right_0..3</code>: Góc nghiêng 3/4 sang phải (mắt và mũi lệch về phía mép phải)</li>
-          <li><code>left_0..3</code>: Lật gương hoàn hảo của right: <code>x_left = ${cw - 1} - x_right</code></li>
+          <li><code>down_0..3</code>: Front facing (bilateral symmetry, axisX = ${m.axisXStr}, 2 eyes visible)</li>
+          <li><code>up_0..3</code>: Back view (bilateral symmetry, axisX = ${m.axisXStr}, hair/cloak only, 0 eyes)</li>
+          <li><code>right_0..3</code>: Profile facing right (3/4 angle, eyes/nose facing right)</li>
+          <li><code>left_0..3</code>: Exact horizontal mirror of Right: <code>x_left = ${cw - 1} - x_right</code></li>
         </ul>
       `;
     } else if (mode === 'walk-animation') {
-      if (titleEl) titleEl.textContent = '🎬 Walk & Float Animation (Toán học chuyển động)';
+      if (titleEl) titleEl.textContent = '🎬 Walk & Float Animation Engine';
       contentEl.innerHTML = `
-        <h4>1. Công thức 4 khung hình chuyển động (Tuyệt đối không lặp lại ảnh tĩnh)</h4>
+        <h4>1. Mathematical 4-Frame Locomotion Formulas</h4>
         <div class="guide-formula-box">
-          <p><strong>Khung 0 (Neutral):</strong> Dáng đứng hoặc lơ lửng ban đầu chuẩn xác.</p>
-          <p><strong>Khung 1 (Bước trái / Bay nghiêng phải):</strong> Thân nhún Y±1, chân trái tiến tới hoặc vạt đuôi ma quẹt sang phải.</p>
-          <p><strong>Khung 2 (Đi ngang / Điểm trũng):</strong> Thân trở về độ cao chuẩn, hai chân đi ngang nhau hoặc đuôi kéo dài.</p>
-          <p><strong>Khung 3 (Bước phải / Bay nghiêng trái):</strong> Thân nhún Y±1, chân phải tiến tới hoặc vạt đuôi ma quẹt sang trái.</p>
+          <p><strong>Frame 0 (Neutral):</strong> Neutral standing or hovering baseline pose.</p>
+          <p><strong>Frame 1 (Step Left / Sway Right):</strong> Torso bobs Y±1, left foot steps forward or tail wisps sway right.</p>
+          <p><strong>Frame 2 (Passing / Low Dip):</strong> Feet pass center axis or ghost tail elongates vertically.</p>
+          <p><strong>Frame 3 (Step Right / Sway Left):</strong> Torso bobs Y±1, right foot steps forward or tail wisps sway left.</p>
         </div>
 
-        <h4>2. Chuyển động quán tính thứ cấp</h4>
-        <p class="guide-desc">Tà áo choàng, đuôi tóc dài, phụ kiện đeo, vệt sáng lơ lửng của bóng ma bắt buộc trễ 1 khung hình so với thân chính để tạo độ mượt mà.</p>
+        <h4>2. Secondary Motion Physics</h4>
+        <p class="guide-desc">Trailing capes, hair tails, antennae, and magical floating wisps MUST lag 1 frame behind body movement for fluid organic motion.</p>
       `;
     } else if (mode === 'accessory-equipment') {
-      if (titleEl) titleEl.textContent = '🗡️ Accessory & Equipment (Trang bị & Vũ khí đè lớp)';
+      if (titleEl) titleEl.textContent = '🗡️ Equipment & Accessory Overlay';
       contentEl.innerHTML = `
-        <h4>1. Tọa độ lắp ghép trang bị trên canvas ${cw}×${ch}</h4>
+        <h4>1. Equipment Attachment Zones on Canvas (${cw}×${ch})</h4>
         <div class="guide-formula-box">
-          <p><strong>Mũ / Nón / Vương miện:</strong> Đỉnh đầu Y = 0 đến ${m.head.y[0] + 3}</p>
-          <p><strong>Vũ khí (Kiếm / Gậy / Cung):</strong> Ngang tầm tay X = 1..${m.torso.x[0]} hoặc ${m.torso.x[1]}..${cw - 1}, Y = ${m.torso.y[0]}..${m.torso.y[1]}</p>
-          <p><strong>Khiên / Cánh / Áo choàng:</strong> Ốp hai bên sườn X = 0..${m.torso.x[0]} và ${m.torso.x[1]}..${cw - 1}</p>
+          <p><strong>Hats / Helmets / Crowns:</strong> Top crown Y = 0 to ${m.head.y[0] + 3}</p>
+          <p><strong>Weapons (Swords / Staves / Bows):</strong> Hand level X = 1..${m.torso.x[0]} or ${m.torso.x[1]}..${cw - 1}, Y = ${m.torso.y[0]}..${m.torso.y[1]}</p>
+          <p><strong>Cloaks / Wings / Shields:</strong> Flanking sides X = 0..${m.torso.x[0]} and ${m.torso.x[1]}..${cw - 1}</p>
         </div>
-        <h4>2. Lệnh vẽ vũ khí</h4>
-        <p class="guide-desc">Sử dụng <code>line x0,y0 x1,y1 &lt;col&gt;</code> để vung lưỡi kiếm chéo sắc bén hoặc cán thương dài.</p>
+        <h4>2. Weapon Drawing Directives</h4>
+        <p class="guide-desc">Use <code>line x0,y0 x1,y1 &lt;col&gt;</code> for diagonal sword blades and staff shafts.</p>
       `;
     } else if (mode === 'surgical-patch') {
-      if (titleEl) titleEl.textContent = '🩹 Surgical Patch (Chắp vá & Chỉnh sửa chính xác)';
+      if (titleEl) titleEl.textContent = '🩹 Surgical Frame / Color Patch';
       contentEl.innerHTML = `
-        <h4>1. Sửa đổi tập trung theo từng Cell</h4>
-        <p class="guide-desc">Chỉ xuất ra đúng <code>@cell &lt;id&gt;</code> hoặc <code>@palette</code> cần đổi, giữ nguyên 100% các ô khác để tiết kiệm token và tránh làm hỏng chuyển động đã có.</p>
-        <pre><code>; Đổi màu mắt ma sang Xanh Ngọc phát sáng
+        <h4>1. Surgical Frame-Level Addressing</h4>
+        <p class="guide-desc">Output ONLY the specific <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives that need changes, keeping all other frames untouched to save tokens and prevent regressions.</p>
+        <pre><code>; Recolor eyes to Glowing Cyan
 @cell cell_0_0
   p ${m.eyes.leftX},${m.eyes.y[0]} #00ffff  p ${m.eyes.rightX},${m.eyes.y[0]} #00ffff</code></pre>
       `;
     } else {
-      if (titleEl) titleEl.textContent = '📋 Architecture & Programmatic API';
+      if (titleEl) titleEl.textContent = '📋 Studio Architecture & Programmatic API';
       contentEl.innerHTML = `
-        <h4>1. Hệ sinh thái NOIRADIX Studio</h4>
-        <p class="guide-desc">Môi trường thiết kế pixel art định vị tọa độ, hỗ trợ tự động tải lại (hot-reload) khi ghi file trên đĩa, bộ phát chuyển động 4/8 hướng và xuất Unity/TexturePacker.</p>
-        <h4>2. Thư viện JavaScript &amp; API</h4>
+        <h4>1. NOIRADIX Studio Overview</h4>
+        <p class="guide-desc">A coordinate-addressed pixel art editor with live disk hot-reloading, 4-dir/8-dir animation player, and Unity/TexturePacker exporters.</p>
+        <h4>2. JavaScript / Node.js Engine API</h4>
         <pre><code>const doc = PIX2.parse(fileContent);
 doc.cells['cell_0_0'].pixels['${m.eyes.leftX},${m.eyes.y[0]}'] = '#00ffff';
 const outText = PIX2.serialize(doc);</code></pre>
@@ -8245,6 +8461,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     // Code Editor Buttons
     if (dom.btnApplyCode) dom.btnApplyCode.addEventListener('click', applyCodeToDoc);
     if (dom.btnCopyAiPrompt) dom.btnCopyAiPrompt.addEventListener('click', copyAiPrompt);
+    if (dom.btnCopyRawCode) dom.btnCopyRawCode.addEventListener('click', copyRawPix2Code);
+    if (dom.btnToggleEditCode) dom.btnToggleEditCode.addEventListener('click', toggleCodeEditMode);
     if (dom.selectAiPromptMode) {
       dom.selectAiPromptMode.addEventListener('change', (e) => {
         updateAiGuidePane(e.target.value);
