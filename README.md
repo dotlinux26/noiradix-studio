@@ -61,6 +61,33 @@ A common misconception is whether NOIRADIX Studio can import an existing raster 
 
 ---
 
+## 💎 The Strategic Edge: "Sprite as Structured Data" (SaaD)
+
+Traditional tools treat sprites as opaque raster bitmaps (PNGs). NOIRADIX establishes an entirely different paradigm: **Sprite as Structured Data**.  
+We do not attempt to out-compete monolithic 1,000-feature drawing apps on brush plugins. Instead, we solve how 2D game artwork is **represented, programmatically manipulated, versioned, and repurposed**:
+
+```
+[ Human Artists ] ── (Visual Touch & Polish) ──┐
+                                               ▼
+[ AI Models ]    ── (Coordinate Logic)   ──► [ .pix2 DSL ] ──► [ Game Engines (Unity / Godot) ]
+                                            (Structured Data)   (1-Click Native Clips & Atlas)
+```
+
+### The 5 Architectural Pillars of `.pix2`:
+
+1. **Deterministic Rendering:**  
+   The same `.pix2` document and specification version will produce the exact same pixel matrix across every machine and renderer. Regenerating or tweaking code never introduces random pixel mutations, eye shifts, or blurred outlines.
+2. **Data-Level Editability:**  
+   Artwork can be modified programmatically at the coordinate, palette, or cell layer. Instead of repainting 32 individual frames by hand, software agents or scripts can re-index palette IDs, adjust symmetry axes, or swap weapon attachments with mathematical precision.
+3. **Modular Reusability:**  
+   A base character skeleton can effortlessly generate dozens of equipment overlays, armor variations, or directional walk cycles without redrawing the baseline artwork from scratch.
+4. **Ecosystem Interoperability:**  
+   Because `.pix2` is an open, human-readable specification, any toolchain, pipeline script, or game engine in Python, C#, Rust, or JavaScript can easily build custom parsers, validators, procedural generators, and automated CI importers.
+5. **Git-Native Versionability:**  
+   Sprites cease to be opaque binary blobs polluting Git repositories and Git LFS. Every single visual change is a clean text diff that can be reviewed in GitHub Pull Requests, branched, merged, and safely rolled back.
+
+---
+
 ## 📸 Studio Visual Tour
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:

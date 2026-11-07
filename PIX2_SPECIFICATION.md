@@ -15,11 +15,18 @@ Traditional image formats (`.png`, `.webp`, `.jpg`) are binary raster matrices. 
 3. **Loss of transparency** (generating noisy gray/checkered backgrounds).
 4. **Coordinate blindness** (inability to place eyes, weapons, or limbs at exact integer pixel offsets).
 
-**PIX2 solves this** by treating pixel art as a **Domain-Specific Language (DSL)**:
-- **Text-Native:** A sprite sheet is just a structured text file that any LLM can read, reason about, edit, and generate.
-- **Pure Transparency:** Only pixels with explicit color exist. If a coordinate is not listed, it is **100% transparent**. There is never a background.
-- **Deterministic Coordinate System:** Every pixel is anchored to an exact integer grid `(x, y)`.
+**PIX2 solves this** by treating pixel art as **Structured Data (Sprite as Structured Data - SaaD)** rather than an opaque raster matrix:
+- **Text-Native & Git-Diffable:** A sprite sheet is a structured text file that LLMs and developers can read, reason about, edit, and version-control without Git LFS overhead.
+- **Pure Transparency:** Only pixels with explicit color exist. If a coordinate is not listed, it is **100% transparent**. There is never an accidental background.
+- **Deterministic Coordinate System:** Every pixel is anchored to an exact integer grid `(x, y)` with zero float rounding errors.
 - **Hybrid Syntax:** Supports both high-level drawing primitives (`rect`, `line`, `fill`, `sym_dot`) for AI drafting, and dense coordinates (`p x,y id`) for exact editing.
+
+### The 5 Architectural Pillars of PIX2:
+1. **Deterministic Rendering:** Exact coordinates render identically across every platform and renderer with zero drift.
+2. **Data-Level Editability:** Programmatic modifications at the coordinate, cell, or palette layer without manual pixel re-tracing.
+3. **Modular Reusability:** Equipment overlays, skin swaps, and animation variations generated cleanly from base skeleton data.
+4. **Ecosystem Interoperability:** Platform-agnostic text grammar easy to parse in Python, C#, Rust, and JavaScript.
+5. **Git-Native Versionability:** Line-by-line diffs, pull request code review for art assets, and branchable sprite history.
 
 ---
 
