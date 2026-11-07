@@ -83,15 +83,14 @@ PixelRecord        ::= WS* ("pixel" | "p") WS+ Coordinate WS+ ColorRef EOL
 Coordinate         ::= Integer "," Integer
 ColorRef           ::= HexColor | Identifier | Integer
 
-VectorPrimitive    ::= LinePrimitive | RectPrimitive | FillPrimitive | SymmetryPrimitive
+VectorPrimitive    ::= LinePrimitive | RectPrimitive | FillPrimitive | SymDotPrimitive
 
 LinePrimitive      ::= WS* "line" WS+ Coordinate WS+ Coordinate WS+ ColorRef EOL
-RectPrimitive      ::= WS* ("rect" | "r") WS+ Coordinate WS+ Dimension WS+ ColorRef EOL
-                     | WS* ("rect_fill" | "rf") WS+ Coordinate WS+ Dimension WS+ ColorRef EOL
+RectPrimitive      ::= WS* "rect" WS+ Coordinate WS+ Dimension WS+ ColorRef (WS+ RectMode)? EOL
+RectMode           ::= "outline" | "fill"
 FillPrimitive      ::= WS* "fill" WS+ Coordinate WS+ ColorRef EOL
-SymmetryPrimitive  ::= WS* ("sym_dot" | "sdot" | "sym") WS+ Coordinate WS+ ColorRef EOL
-                     | WS* ("sym_line" | "sline") WS+ Coordinate WS+ Coordinate WS+ ColorRef EOL
-                     | WS* ("sym_rect" | "srect") WS+ Coordinate WS+ Dimension WS+ ColorRef EOL
+SymDotPrimitive    ::= WS* "sym_dot" WS+ Coordinate (WS+ Float)? WS+ ColorRef EOL
+Float              ::= [0-9]+ ("." [0-9]+)?
 
 AnimationSection   ::= "@animation" WS+ Identifier EOL (AnimProperty)*
 AnimProperty       ::= WS* "name:" WS* StringLiteral EOL

@@ -209,6 +209,38 @@ test('PIX2.validate flags non-existent animation frame references', () => {
   assert.ok(resStrict.errors.some(e => e.includes('references non-existent cell')));
 });
 
+test('Parser strictly rejects malformed coordinate syntax (e.g. "1abc,3")', () => {
+  const doc = PIX2.parse(`
+@pix2 1.0
+@cell test_c
+  pixel 1abc,3 #ffffff
+  p 2,4xyz #ffffff
+  dot bad,5 #ffffff
+  pixel 5,6 #00ff00
+@end
+`);
+  assert.strictEqual(doc.cells['test_c'].pixels['1,3'], undefined);
+  assert.strictEqual(doc.cells['test_c'].pixels['1abc,3'], undefined);
+  assert.strictEqual(doc.cells['test_c'].pixels['2,4'], undefined);
+  assert.strictEqual(doc.cells['test_c'].pixels['5,6'], '#00ff00');
+});
+
+test('PIX2.validate flags malformed pixel coordinate keys', () => {
+  const doc = PIX2.createDocument();
+  doc.cells['cell_0_0'].pixels['1abc,3'] = '#ffffff';
+  const res = PIX2.validate(doc, { strict: true });
+  assert.strictEqual(res.valid, false);
+  assert.ok(res.errors.some(e => e.includes('malformed pixel coordinate')));
+});
+
+test('Canonical cell_size and legacy cellSize aliases are synchronized in AST', () => {
+  const doc = PIX2.createDocument('Test', 4, 4, 32, 32);
+  assert.strictEqual(doc.meta.cell_size.w, 32);
+  assert.strictEqual(doc.meta.cell_size.h, 32);
+  assert.strictEqual(doc.meta.cellSize.w, 32);
+  assert.strictEqual(doc.meta.cellSize.h, 32);
+});
+
 // ---------------------------------------------------------------------------
 // TEST GROUP 4: Client-Side XSS & Sanitization Defense
 // ---------------------------------------------------------------------------

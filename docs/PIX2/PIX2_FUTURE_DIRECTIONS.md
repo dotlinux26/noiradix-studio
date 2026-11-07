@@ -189,3 +189,4 @@ Preserve the original raster asset, isolate the visual context, express the requ
 This extends the central PIX2 philosophy without changing its current focus:
 
 > **Machines should work with explicit structure. Humans should remain in control of the visual result.**
+

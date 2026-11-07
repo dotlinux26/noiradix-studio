@@ -1,7 +1,7 @@
-# PIX2 In-Memory Data Model & Schema Specification
+# PIX2 In-Memory Data Model & Canonical AST Schema
 
-## 1. Complete Document Schema
-A valid parsed PIX2 document in memory conforms to the following JavaScript structure:
+## 1. Canonical Language-Agnostic Schema (JSON / Rust / Python / Go)
+A valid parsed PIX2 document AST conforms to the following language-agnostic data structure (using canonical `snake_case` properties):
 
 ```typescript
 interface Pix2Document {
@@ -9,21 +9,24 @@ interface Pix2Document {
     title: string;              // e.g. "Hero Wispling Walk"
     author: string;             // e.g. "dotlinux26"
     version: string;            // e.g. "1.0"
-    colorMode: "RGBA" | "RGB";  // Default: RGBA
-    coordinateOrigin: "top-left";
+    color_mode: "RGBA" | "RGB"; // Default: RGBA
+    coordinate_origin: "top-left";
     grid: {
       cols: number;             // Total column frames per row (default: 4)
       rows: number;             // Total directional rows (default: 4)
     };
-    cellSize: {
+    cell_size: {
       w: number;                // Cell width in pixels (16, 24, 32, 64)
       h: number;                // Cell height in pixels
     };
+    cellSize?: { w: number; h: number }; // JavaScript runtime compatibility alias
+    gap?: number;               // Cell padding / gap in pixels
+    margin?: number;            // Outer margin in pixels
     background?: string;        // "none" or hex color
   };
 
   palette: {
-    [colorKey: string | number]: string; // "1": "#292438", "accent": "#ff6b8bcc"
+    [colorKey: string]: string; // "1": "#292438", "accent": "#ff6b8bcc"
   };
 
   cells: {
@@ -42,8 +45,9 @@ interface Pix2Cell {
   col: number;                  // Grid col index (0-based)
   frame?: number;               // Sequential frame index within row
   direction?: string;           // "down" | "up" | "right" | "left" | "none"
+  size?: { w: number; h: number }; // Optional cell-specific dimension override
   pixels: {
-    [coord: string]: string;    // "x,y": "#RRGGBB" or "#RRGGBBAA"
+    [coord: string]: string;    // "x,y": "#RRGGBB" or "#RRGGBBAA" (Strict integers only)
   };
 }
 
@@ -52,6 +56,7 @@ interface Pix2Animation {
   direction?: string;           // "down" | "up" | "right" | "left" | "none"
   fps: number;                  // Playback speed in frames per second (default: 6)
   loop: boolean;                // Continuous looping flag
+  mode?: "loop" | "once" | "pingpong";
   frames: string[];             // Ordered array of stable cell IDs
 }
 ```

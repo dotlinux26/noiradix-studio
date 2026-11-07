@@ -171,6 +171,55 @@ const PIX2 = (function () {
   }
 
   // ===========================================================================
+  // STRICT INTEGER & COORDINATE VALIDATION HELPERS
+  // ===========================================================================
+
+  const STRICT_INT_REGEX = /^-?[0-9]+$/;
+
+  /**
+   * Parse a strict integer string without allowing trailing non-digit characters (e.g. "1abc").
+   * @param {*} val
+   * @returns {number} Integer or NaN
+   */
+  function parseStrictInt(val) {
+    if (typeof val === 'number') return Number.isInteger(val) ? val : Math.trunc(val);
+    if (typeof val !== 'string') return NaN;
+    const trimmed = val.trim();
+    if (!STRICT_INT_REGEX.test(trimmed)) return NaN;
+    return parseInt(trimmed, 10);
+  }
+
+  /**
+   * Parse a strict integer coordinate pair string "x,y".
+   * @param {string} str
+   * @returns {[number, number]|null}
+   */
+  function parseCoordinate(str) {
+    if (typeof str !== 'string') return null;
+    const parts = str.split(',');
+    if (parts.length !== 2) return null;
+    const x = parseStrictInt(parts[0]);
+    const y = parseStrictInt(parts[1]);
+    if (isNaN(x) || isNaN(y)) return null;
+    return [x, y];
+  }
+
+  /**
+   * Parse a strict dimension string "<w>x<h>".
+   * @param {string} str
+   * @returns {[number, number]|null}
+   */
+  function parseDimension(str) {
+    if (typeof str !== 'string') return null;
+    const parts = str.toLowerCase().split('x');
+    if (parts.length !== 2) return null;
+    const w = parseStrictInt(parts[0]);
+    const h = parseStrictInt(parts[1]);
+    if (isNaN(w) || isNaN(h) || w < 0 || h < 0) return null;
+    return [w, h];
+  }
+
+  // ===========================================================================
   // DOCUMENT CREATION & DATA MODEL
   // ===========================================================================
 
@@ -192,6 +241,7 @@ const PIX2 = (function () {
         coordinate_origin: 'top-left',
         grid: { cols, rows },
         cellSize: { w: cellW, h: cellH },
+        cell_size: { w: cellW, h: cellH },
         gap: 0,
         margin: 0
       },
@@ -410,6 +460,7 @@ const PIX2 = (function () {
               w: Math.min(Math.max(MIN_CELL_DIM, dims[0] || 16), MAX_CELL_DIM),
               h: Math.min(Math.max(MIN_CELL_DIM, dims[1] || 16), MAX_CELL_DIM)
             };
+            doc.meta.cell_size = doc.meta.cellSize;
           } else if (key === 'gap') {
             doc.meta.gap = Math.min(Math.max(0, parseInt(val, 10) || 0), 128);
           } else if (key === 'margin') {
@@ -523,10 +574,13 @@ const PIX2 = (function () {
             if ((tok === 'p' || tok === 'pixel') && t + 2 < tokens.length) {
               const coord = tokens[t + 1];
               const colRef = tokens[t + 2];
-              const [x, y] = coord.split(',').map(n => parseInt(n, 10));
-              const color = resolveColor(colRef, doc.palette);
-              if (!isNaN(x) && !isNaN(y) && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
-                currentCell.pixels[`${x},${y}`] = color;
+              const parsed = parseCoordinate(coord);
+              if (parsed) {
+                const [x, y] = parsed;
+                const color = resolveColor(colRef, doc.palette);
+                if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
+                  currentCell.pixels[`${x},${y}`] = color;
+                }
               }
               t += 2;
             }
@@ -539,16 +593,21 @@ const PIX2 = (function () {
         const cmd = parts[0].toLowerCase();
 
         if (cmd === 'dot' || cmd === 'd') {
-          const [x, y] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
-          const color = resolveColor(parts[2], doc.palette);
-          if (!isNaN(x) && !isNaN(y) && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
-            currentCell.pixels[`${x},${y}`] = color;
+          const parsed = parseCoordinate(parts[1] || '');
+          if (parsed) {
+            const [x, y] = parsed;
+            const color = resolveColor(parts[2], doc.palette);
+            if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
+              currentCell.pixels[`${x},${y}`] = color;
+            }
           }
         } else if (cmd === 'line') {
-          const [x1, y1] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
-          const [x2, y2] = (parts[2] || '').split(',').map(n => parseInt(n, 10));
+          const p1 = parseCoordinate(parts[1] || '');
+          const p2 = parseCoordinate(parts[2] || '');
           const color = resolveColor(parts[3], doc.palette);
-          if (color && !isNaN(x1) && !isNaN(y1) && !isNaN(x2) && !isNaN(y2)) {
+          if (p1 && p2 && color) {
+            const [x1, y1] = p1;
+            const [x2, y2] = p2;
             if (Math.abs(x1) <= MAX_COORD_ABS && Math.abs(y1) <= MAX_COORD_ABS &&
                 Math.abs(x2) <= MAX_COORD_ABS && Math.abs(y2) <= MAX_COORD_ABS) {
               drawLineBresenham(x1, y1, x2, y2, (x, y) => {
@@ -559,41 +618,57 @@ const PIX2 = (function () {
             }
           }
         } else if (cmd === 'rect') {
-          const [x, y] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
-          const [w, h] = (parts[2] || '').split(',').map(n => parseInt(n, 10));
+          const origin = parseCoordinate(parts[1] || '');
+          const dims = parseDimension(parts[2] || '');
           const color = resolveColor(parts[3], doc.palette);
           const mode = (parts[4] || 'outline').toLowerCase();
-          const maxBoundW = (currentCell.size ? currentCell.size.w : doc.meta.cellSize.w) * 2;
-          const maxBoundH = (currentCell.size ? currentCell.size.h : doc.meta.cellSize.h) * 2;
-          const clampedW = Math.min(Math.max(0, w), maxBoundW);
-          const clampedH = Math.min(Math.max(0, h), maxBoundH);
-          if (color && !isNaN(x) && !isNaN(y) && !isNaN(clampedW) && !isNaN(clampedH) && (clampedW * clampedH <= 262144)) {
-            for (let dy = 0; dy < clampedH; dy++) {
-              for (let dx = 0; dx < clampedW; dx++) {
-                if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
-                  const px = x + dx, py = y + dy;
-                  if (Math.abs(px) <= MAX_COORD_ABS && Math.abs(py) <= MAX_COORD_ABS) {
-                    currentCell.pixels[`${px},${py}`] = color;
+          if (origin && dims && color) {
+            const [x, y] = origin;
+            const [w, h] = dims;
+            const maxBoundW = (currentCell.size ? currentCell.size.w : doc.meta.cellSize.w) * 2;
+            const maxBoundH = (currentCell.size ? currentCell.size.h : doc.meta.cellSize.h) * 2;
+            const clampedW = Math.min(Math.max(0, w), maxBoundW);
+            const clampedH = Math.min(Math.max(0, h), maxBoundH);
+            if (clampedW * clampedH <= 262144) {
+              for (let dy = 0; dy < clampedH; dy++) {
+                for (let dx = 0; dx < clampedW; dx++) {
+                  if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
+                    const px = x + dx, py = y + dy;
+                    if (Math.abs(px) <= MAX_COORD_ABS && Math.abs(py) <= MAX_COORD_ABS) {
+                      currentCell.pixels[`${px},${py}`] = color;
+                    }
                   }
                 }
               }
             }
           }
         } else if (cmd === 'fill') {
-          const [startX, startY] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
+          const startPt = parseCoordinate(parts[1] || '');
           const color = resolveColor(parts[2], doc.palette);
-          if (color && !isNaN(startX) && !isNaN(startY)) {
+          if (startPt && color) {
+            const [startX, startY] = startPt;
             floodFillCell(currentCell, startX, startY, color, doc.meta.cellSize);
           }
         } else if (cmd === 'sym_dot') {
-          const [x, y] = (parts[1] || '').split(',').map(n => parseInt(n, 10));
-          const axisX = parseFloat(parts[2]) || ((doc.meta.cellSize.w - 1) / 2);
-          const color = resolveColor(parts[3], doc.palette);
-          if (color && !isNaN(x) && !isNaN(y) && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
-            currentCell.pixels[`${x},${y}`] = color;
-            const mx = Math.round(2 * axisX - x);
-            if (Math.abs(mx) <= MAX_COORD_ABS) {
-              currentCell.pixels[`${mx},${y}`] = color;
+          const pt = parseCoordinate(parts[1] || '');
+          if (pt) {
+            const [x, y] = pt;
+            let axisX, colToken;
+            if (parts.length >= 4) {
+              axisX = parseFloat(parts[2]);
+              if (isNaN(axisX)) axisX = ((doc.meta.cellSize.w - 1) / 2);
+              colToken = parts[3];
+            } else {
+              axisX = ((doc.meta.cellSize.w - 1) / 2);
+              colToken = parts[2];
+            }
+            const color = resolveColor(colToken, doc.palette);
+            if (color && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
+              currentCell.pixels[`${x},${y}`] = color;
+              const mx = Math.round(2 * axisX - x);
+              if (Math.abs(mx) <= MAX_COORD_ABS) {
+                currentCell.pixels[`${mx},${y}`] = color;
+              }
             }
           }
         }
@@ -984,15 +1059,18 @@ const PIX2 = (function () {
 
         if (cell.pixels && typeof cell.pixels === 'object') {
           for (const coord in cell.pixels) {
-            const commaIdx = coord.indexOf(',');
-            if (commaIdx > 0) {
-              const x = parseInt(coord.slice(0, commaIdx), 10);
-              const y = parseInt(coord.slice(commaIdx + 1), 10);
-              if (isNaN(x) || isNaN(y) || x < 0 || x >= cellW || y < 0 || y >= cellH) {
-                const msg = `Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
-                if (strict) errors.push(msg);
-                else warnings.push(msg);
-              }
+            const parsed = parseCoordinate(coord);
+            if (!parsed) {
+              const msg = `Cell "${cellId}": malformed pixel coordinate format "${coord}"`;
+              if (strict) errors.push(msg);
+              else warnings.push(msg);
+              continue;
+            }
+            const [x, y] = parsed;
+            if (x < 0 || x >= cellW || y < 0 || y >= cellH) {
+              const msg = `Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
+              if (strict) errors.push(msg);
+              else warnings.push(msg);
             }
           }
         }
