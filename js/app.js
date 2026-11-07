@@ -111,6 +111,7 @@
     initTheme();
     initAnimationPlayers();
     initDraggablePanel();
+    initFloatingAboutBubble();
     initHeaderScroll();
     bindEvents();
     bindKeyboardShortcuts();
@@ -451,6 +452,13 @@
     dom.btnConfirmImportCode = document.getElementById('btn-confirm-import-code');
     dom.btnImportPasteClipboard = document.getElementById('btn-import-paste-clipboard');
     dom.btnImportClearCode = document.getElementById('btn-import-clear-code');
+
+    // Floating About Bubble & About Modal elements
+    dom.btnFloatingAbout = document.getElementById('btn-floating-about');
+    dom.btnBrandAbout = document.getElementById('btn-brand-about');
+    dom.modalAboutStudio = document.getElementById('modal-about-studio');
+    dom.btnCloseAboutModal = document.getElementById('btn-close-about-modal');
+    dom.btnAboutCloseDone = document.getElementById('btn-about-close-done');
   }
 
   // ===========================================================================
@@ -544,6 +552,163 @@
         dom.animPanelMinBtn.innerHTML = isMin ? '<i class="fa-solid fa-plus"></i>' : '<i class="fa-solid fa-minus"></i>';
       });
     }
+  }
+
+  // ===========================================================================
+  // FLOATING ABOUT BUBBLE & ABOUT NOIRADIX STUDIO MODAL
+  // ===========================================================================
+
+  function openAboutModal() {
+    if (!dom.modalAboutStudio) return;
+    if (typeof commitFloatingSelection === 'function') {
+      commitFloatingSelection();
+    }
+    dom.modalAboutStudio.classList.remove('hidden');
+  }
+
+  function closeAboutModal() {
+    if (dom.modalAboutStudio) {
+      dom.modalAboutStudio.classList.add('hidden');
+    }
+  }
+
+  function initFloatingAboutBubble() {
+    const btn = dom.btnFloatingAbout;
+    if (!btn) return;
+
+    // 1. Restore saved position from localStorage if valid
+    try {
+      const savedPos = localStorage.getItem('noiradix_about_bubble_pos');
+      if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (parsed && typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+          const pad = 6;
+          const w = 36;
+          const h = 36;
+          const maxLeft = Math.max(pad, window.innerWidth - w - pad);
+          const maxTop = Math.max(pad, window.innerHeight - h - pad);
+          const clampedLeft = Math.min(Math.max(parsed.left, pad), maxLeft);
+          const clampedTop = Math.min(Math.max(parsed.top, pad), maxTop);
+          btn.style.left = `${clampedLeft}px`;
+          btn.style.top = `${clampedTop}px`;
+          btn.style.bottom = 'auto';
+          btn.style.right = 'auto';
+        }
+      }
+    } catch (_) {}
+
+    // 2. Draggable mechanics with pointer events (Smooth, Touch-Friendly, Free Roam)
+    let isPointerDown = false;
+    let hasMoved = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+    let ignoreNextClick = false;
+
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      isPointerDown = true;
+      hasMoved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = btn.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch (_) {}
+    });
+
+    btn.addEventListener('pointermove', (e) => {
+      if (!isPointerDown) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!hasMoved && Math.hypot(dx, dy) > 4) {
+        hasMoved = true;
+        btn.classList.add('is-dragging');
+        btn.style.bottom = 'auto';
+        btn.style.right = 'auto';
+      }
+
+      if (hasMoved) {
+        const pad = 6;
+        const w = btn.offsetWidth || 36;
+        const h = btn.offsetHeight || 36;
+        const maxLeft = Math.max(pad, window.innerWidth - w - pad);
+        const maxTop = Math.max(pad, window.innerHeight - h - pad);
+        const newLeft = Math.min(Math.max(initialLeft + dx, pad), maxLeft);
+        const newTop = Math.min(Math.max(initialTop + dy, pad), maxTop);
+        btn.style.left = `${newLeft}px`;
+        btn.style.top = `${newTop}px`;
+      }
+    });
+
+    const finishDrag = (e) => {
+      if (!isPointerDown) return;
+      isPointerDown = false;
+
+      try {
+        btn.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+
+      if (hasMoved) {
+        btn.classList.remove('is-dragging');
+        try {
+          localStorage.setItem('noiradix_about_bubble_pos', JSON.stringify({
+            left: btn.offsetLeft,
+            top: btn.offsetTop
+          }));
+        } catch (_) {}
+        // Suppress click event firing immediately after drag
+        ignoreNextClick = true;
+        setTimeout(() => { ignoreNextClick = false; }, 120);
+      }
+    };
+
+    btn.addEventListener('pointerup', finishDrag);
+    btn.addEventListener('pointercancel', finishDrag);
+
+    // Click handler to open About modal
+    btn.addEventListener('click', (e) => {
+      if (ignoreNextClick) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      openAboutModal();
+    });
+
+    // Brand badge click in navbar also opens About modal
+    if (dom.btnBrandAbout) {
+      dom.btnBrandAbout.addEventListener('click', () => {
+        openAboutModal();
+      });
+    }
+
+    // Modal Close Triggers
+    dom.btnCloseAboutModal?.addEventListener('click', closeAboutModal);
+    dom.btnAboutCloseDone?.addEventListener('click', closeAboutModal);
+    dom.modalAboutStudio?.addEventListener('click', (e) => {
+      if (e.target === dom.modalAboutStudio) {
+        closeAboutModal();
+      }
+    });
+
+    // Window resize viewport safety clamping
+    window.addEventListener('resize', () => {
+      if (!btn.style.left) return;
+      const pad = 6;
+      const w = btn.offsetWidth || 36;
+      const h = btn.offsetHeight || 36;
+      const curLeft = parseFloat(btn.style.left) || 0;
+      const curTop = parseFloat(btn.style.top) || 0;
+      const maxLeft = Math.max(pad, window.innerWidth - w - pad);
+      const maxTop = Math.max(pad, window.innerHeight - h - pad);
+      btn.style.left = `${Math.min(Math.max(curLeft, pad), maxLeft)}px`;
+      btn.style.top = `${Math.min(Math.max(curTop, pad), maxTop)}px`;
+    });
   }
 
   // ===========================================================================
@@ -8920,6 +9085,13 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           executeSelectAll();
           return;
         }
+      }
+
+      // Close About Modal on Escape
+      if (e.key === 'Escape' && dom.modalAboutStudio && !dom.modalAboutStudio.classList.contains('hidden')) {
+        e.preventDefault();
+        closeAboutModal();
+        return;
       }
 
       // Deselect (Ctrl + D) or (Escape)

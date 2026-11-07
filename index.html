@@ -18,25 +18,29 @@
   <link rel="manifest" href="site.webmanifest">
   <link rel="icon" type="image/svg+xml" href="noiradix-studio-logo.svg">
 
-  <!-- Open Graph / Facebook / Discord Embed Tags -->
+  <!-- Open Graph / Facebook / Discord / LinkedIn Embed Tags -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://noiradix.me/">
   <meta property="og:title" content="NOIRADIX Studio - Free Online Pixel Art Editor & 1-Click Unity 2D Exporter">
   <meta property="og:description" content="100% Free, zero-install pixel art suite with real-time 4-direction animation preview, bilateral symmetry, and 1-click automated Unity 2D spritesheet & Animator Controller generation.">
   <meta property="og:image" content="https://noiradix.me/docs/noiradix-editor.png">
-  <meta property="og:image:width" content="1280">
-  <meta property="og:image:height" content="800">
-  <meta property="og:image:alt" content="NOIRADIX Studio Interface & Pixel Art Editor">
+  <meta property="og:image:secure_url" content="https://noiradix.me/docs/noiradix-editor.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2551">
+  <meta property="og:image:height" content="1390">
+  <meta property="og:image:alt" content="NOIRADIX Studio - AI-Native Pixel Art Suite & Sprite Editor Interface">
   <meta property="og:site_name" content="NOIRADIX Studio">
   <meta property="og:locale" content="en_US">
 
   <!-- Twitter / X Card Tags -->
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@dotlinux26">
+  <meta name="twitter:creator" content="@dotlinux26">
   <meta name="twitter:url" content="https://noiradix.me/">
   <meta name="twitter:title" content="NOIRADIX Studio - Free Online Pixel Art Editor & 1-Click Unity 2D Exporter">
   <meta name="twitter:description" content="100% Free, zero-install pixel art suite with real-time 4-direction animation preview, bilateral symmetry, and 1-click automated Unity 2D export.">
   <meta name="twitter:image" content="https://noiradix.me/docs/noiradix-editor.png">
-  <meta name="twitter:creator" content="@dotlinux26">
+  <meta name="twitter:image:alt" content="NOIRADIX Studio Interface & Pixel Art Editor">
 
   <!-- Schema.org JSON-LD Structured Data for Google Rich Snippets -->
   <script type="application/ld+json">
@@ -85,10 +89,10 @@
   <!-- ================= TOP NAVIGATION / APP HEADER ================= -->
   <header class="studio-header">
     <div class="header-left">
-      <div class="brand-badge" title="NOIRADIX Studio v1.0 by dotlinux26 (Nguyen Duc Canh)">
+      <div class="brand-badge" id="btn-brand-about" title="About NOIRADIX Studio (v1.1.7) by dotlinux26 - Click for info" style="cursor: pointer;">
         <img src="noiradix-studio-logo.svg" alt="NOIRADIX Logo" class="brand-logo-img">
         <span class="brand-title">NOIRADIX</span>
-        <span class="brand-ver">v1.0</span>
+        <span class="brand-ver">v1.1.7</span>
       </div>
 
       <!-- Professional File Document Header Widget -->
@@ -844,6 +848,11 @@
     </div>
   </footer>
 
+  <!-- ================= FLOATING ABOUT BUBBLE (DRAGGABLE & COMPACT) ================= -->
+  <button id="btn-floating-about" class="floating-about-bubble" type="button" title="About NOIRADIX Studio (Drag to move)" aria-label="About NOIRADIX Studio">
+    <i class="fa-solid fa-magnifying-glass"></i>
+  </button>
+
   <!-- ================= RIGHT-CLICK CONTEXT MENU ================= -->
   <div id="studio-context-menu" class="studio-context-menu hidden">
     <div class="context-menu-item" data-action="cut">
@@ -1359,6 +1368,120 @@
         <button id="btn-confirm-import-code" class="btn btn-accent">
           <i class="fa-solid fa-file-import"></i> Import &amp; Load into Studio
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ABOUT NOIRADIX STUDIO MODAL ================= -->
+  <div id="modal-about-studio" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+    <div class="studio-modal-dialog about-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title" id="about-modal-title">
+          <img src="noiradix-studio-logo.svg" alt="NOIRADIX" class="about-logo-icon">
+          <span>About NOIRADIX Studio</span>
+          <span class="badge-tag">v1.1.7</span>
+        </div>
+        <button id="btn-close-about-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body about-modal-body">
+        <!-- Hero & Philosophy -->
+        <div class="about-hero-section">
+          <h3 class="about-hero-title">Free, Client-Side Pixel Art Editor &amp; 1-Click Unity 2D Pipeline</h3>
+          <p class="about-hero-desc">
+            Built by a solo indie developer to eliminate the repetitive 15-minute bottleneck between drawing a spritesheet and wiring up walking animations in Unity during game jams. Zero install, zero accounts, pure Vanilla JS.
+          </p>
+        </div>
+
+        <!-- 4 Core Pillars Grid -->
+        <div class="about-features-grid">
+          <div class="about-feature-card">
+            <div class="feature-icon-wrapper"><i class="fa-brands fa-unity text-accent"></i></div>
+            <div class="feature-content">
+              <strong>1-Click Unity 2D Export</strong>
+              <p>Generates anti-bleed padded atlas (.png) + C# importer script. Auto-slices sprites &amp; sets up Animator Controllers in seconds.</p>
+            </div>
+          </div>
+
+          <div class="about-feature-card">
+            <div class="feature-icon-wrapper"><i class="fa-solid fa-person-walking text-accent"></i></div>
+            <div class="feature-content">
+              <strong>Real-Time Directional Preview</strong>
+              <p>Instant 4-dir &amp; 8-dir canvas player. Scrub timeline, preview locomotion live, and adjust FPS before exporting.</p>
+            </div>
+          </div>
+
+          <div class="about-feature-card">
+            <div class="feature-icon-wrapper"><i class="fa-solid fa-robot text-accent"></i></div>
+            <div class="feature-content">
+              <strong>Coordinate-Based DSL (.pix2)</strong>
+              <p>Crisp text-coordinate format designed for LLMs (ChatGPT, Claude) with symmetry math, eliminating diffusion blur.</p>
+            </div>
+          </div>
+
+          <div class="about-feature-card">
+            <div class="feature-icon-wrapper"><i class="fa-solid fa-bolt text-accent"></i></div>
+            <div class="feature-content">
+              <strong>100% Client-Side &amp; Offline</strong>
+              <p>Runs locally in your browser. Works offline, respects your privacy, and accesses local files directly via File System API.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Creator & Community Section -->
+        <div class="about-creator-section">
+          <div class="creator-header">
+            <div class="creator-avatar-badge">
+              <i class="fa-solid fa-user-ninja"></i>
+            </div>
+            <div class="creator-info">
+              <div class="creator-name-row">
+                <span class="creator-name">Nguyen Duc Canh</span>
+                <span class="creator-handle">@dotlinux26</span>
+              </div>
+              <span class="creator-bio">Solo Indie Game Developer • Open Source Creator</span>
+            </div>
+          </div>
+
+          <!-- Social Links / Community Pills -->
+          <div class="about-links-grid">
+            <a href="https://github.com/dotlinux26" target="_blank" rel="noopener noreferrer" class="social-pill-btn" title="GitHub Profile">
+              <i class="fa-brands fa-github"></i>
+              <span>GitHub</span>
+            </a>
+            <a href="https://www.linkedin.com/in/canh-nguyen-duc-791503392/" target="_blank" rel="noopener noreferrer" class="social-pill-btn" title="LinkedIn Profile">
+              <i class="fa-brands fa-linkedin text-linkedin"></i>
+              <span>LinkedIn</span>
+            </a>
+            <a href="https://ko-fi.com/dotlinux26" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-kofi" title="Support creator on Ko-fi">
+              <i class="fa-solid fa-mug-hot text-kofi"></i>
+              <span>Support on Ko-fi</span>
+            </a>
+            <a href="https://github.com/dotlinux26/noiradix-studio" target="_blank" rel="noopener noreferrer" class="social-pill-btn" title="View Source Code Repository">
+              <i class="fa-solid fa-code-fork"></i>
+              <span>Source Code</span>
+            </a>
+            <a href="https://dotlinux26.itch.io/noiradix-studio" target="_blank" rel="noopener noreferrer" class="social-pill-btn" title="itch.io Page">
+              <i class="fa-brands fa-itch-io text-itch"></i>
+              <span>itch.io</span>
+            </a>
+            <a href="https://youtu.be/A4V2hxS6elQ" target="_blank" rel="noopener noreferrer" class="social-pill-btn" title="YouTube Showcase Video">
+              <i class="fa-brands fa-youtube text-youtube"></i>
+              <span>Video Demo</span>
+            </a>
+            <a href="https://noiradix.me/" target="_blank" rel="noopener noreferrer" class="social-pill-btn" title="NOIRADIX Studio Official Website">
+              <i class="fa-solid fa-globe"></i>
+              <span>noiradix.me</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer about-modal-footer">
+        <div class="about-footer-license">
+          <i class="fa-regular fa-copyright"></i> Open Source under <strong>MIT License</strong> • Free for commercial &amp; hobby use
+        </div>
+        <button id="btn-about-close-done" class="btn btn-primary btn-sm">Got it</button>
       </div>
     </div>
   </div>
