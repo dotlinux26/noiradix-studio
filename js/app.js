@@ -4796,6 +4796,18 @@
     if (typeof commitFloatingSelection === 'function') {
       commitFloatingSelection();
     }
+
+    // If manual code editing is active, ensure edits are parsed into document before saving
+    if (isCodeEditingUnlocked && dom.codeTextarea) {
+      try {
+        const parsed = PIX2.parse(dom.codeTextarea.value);
+        state.setDocument(parsed, true);
+      } catch (err) {
+        showToast('Cannot save: PIX2 code has syntax errors. Please fix or lock before saving.', 'error');
+        return;
+      }
+    }
+
     const text = PIX2.serialize(state.doc);
 
     // Direct Save to existing handle (Only if filename still matches and not forced to Save As)
@@ -5111,10 +5123,10 @@
 
   function renderCodeEditor() {
     if (!state.doc) return;
-    const serialized = PIX2.serialize(state.doc);
-    if (dom.codeTextarea) dom.codeTextarea.value = serialized;
 
     if (!isCodeEditingUnlocked) {
+      const serialized = PIX2.serialize(state.doc);
+      if (dom.codeTextarea) dom.codeTextarea.value = serialized;
       if (dom.codeViewer) {
         dom.codeViewer.innerHTML = highlightPix2Code(serialized);
         dom.codeViewer.classList.remove('hidden');
@@ -5180,6 +5192,23 @@
 
       showToast('Direct code editing enabled. Click "Apply to Canvas" to commit changes.', 'warning');
     } else {
+      // Check for unapplied code edits before locking
+      if (dom.codeTextarea && state.doc) {
+        const currentDocCode = PIX2.serialize(state.doc);
+        if (dom.codeTextarea.value.trim() !== currentDocCode.trim()) {
+          const wantApply = confirm(
+            '⚠️ UNAPPLIED CODE EDITS DETECTED:\n\n' +
+            'You have modified PIX2 code that has not been applied to the canvas.\n\n' +
+            '• Click OK to apply your edits now and lock safely.\n' +
+            '• Click Cancel to discard edits and revert to canvas state.'
+          );
+          if (wantApply) {
+            applyCodeToDoc();
+            return;
+          }
+        }
+      }
+
       isCodeEditingUnlocked = false;
       if (dom.codeTextarea) {
         dom.codeTextarea.classList.add('hidden');
@@ -5217,11 +5246,31 @@
   function copyRawPix2Code() {
     if (!state.doc) return;
     const code = dom.codeTextarea ? dom.codeTextarea.value : PIX2.serialize(state.doc);
-    navigator.clipboard.writeText(code).then(() => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('Copied raw .PIX2 code to clipboard!', 'success');
+      }).catch(() => {
+        fallbackCopyText(code);
+      });
+    } else {
+      fallbackCopyText(code);
+    }
+  }
+
+  function fallbackCopyText(text) {
+    const tempTa = document.createElement('textarea');
+    tempTa.value = text;
+    tempTa.style.position = 'fixed';
+    tempTa.style.opacity = '0';
+    document.body.appendChild(tempTa);
+    tempTa.select();
+    try {
+      document.execCommand('copy');
       showToast('Copied raw .PIX2 code to clipboard!', 'success');
-    }).catch(() => {
+    } catch (e) {
       alert('Could not copy automatically. You can copy the code manually.');
-    });
+    }
+    document.body.removeChild(tempTa);
   }
 
   function applyCodeToDoc() {
@@ -8476,6 +8525,28 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     if (dom.btnCopyAiPrompt) dom.btnCopyAiPrompt.addEventListener('click', copyAiPrompt);
     if (dom.btnCopyRawCode) dom.btnCopyRawCode.addEventListener('click', copyRawPix2Code);
     if (dom.btnToggleEditCode) dom.btnToggleEditCode.addEventListener('click', toggleCodeEditMode);
+    if (dom.codeTextarea) {
+      dom.codeTextarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = dom.codeTextarea.selectionStart;
+          const end = dom.codeTextarea.selectionEnd;
+          const val = dom.codeTextarea.value;
+          if (e.shiftKey) {
+            if (val.substring(start - 2, start) === '  ') {
+              dom.codeTextarea.value = val.substring(0, start - 2) + val.substring(end);
+              dom.codeTextarea.selectionStart = dom.codeTextarea.selectionEnd = Math.max(0, start - 2);
+            }
+          } else {
+            dom.codeTextarea.value = val.substring(0, start) + '  ' + val.substring(end);
+            dom.codeTextarea.selectionStart = dom.codeTextarea.selectionEnd = start + 2;
+          }
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          applyCodeToDoc();
+        }
+      });
+    }
     if (dom.selectAiPromptMode) {
       dom.selectAiPromptMode.addEventListener('change', (e) => {
         updateAiGuidePane(e.target.value);

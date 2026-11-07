@@ -117,46 +117,67 @@ For each pixel at $(x, y)$, mirror coordinate is $(2 \cdot X_{\text{axis}} - x, 
 
 ---
 
-## 4. Designing Characters from Scratch (AI Step-by-Step Recipe)
+## 4. Canonical Coordinate & Bilateral Symmetry Reference Table
 
-When creating a $16 \times 16$ RPG character:
-1. **Determine Silhouette Boundaries:**
-   - Head top: $Y \approx 1 \dots 3$, Width $\approx 6 \dots 10$ ($X \in [3, 12]$).
-   - Eyes: $Y \approx 6 \dots 7$, spaced 2-3 pixels apart.
-   - Body torso: $Y \approx 8 \dots 11$, Width $\approx 8 \dots 12$.
-   - Feet / Shadow: $Y \approx 13 \dots 14$.
-2. **Assign 4 to 8 Colors in `@palette`:**
-   - `outline`: Dark contour (e.g. `#57546F` or `#2A2B3D`).
-   - `body`: Primary fill (e.g. `#FFFFFF` or `#FF8844`).
-   - `shade`: Secondary shadow fill (e.g. `#DDE8EF`).
-   - `accent`: Eyes, blush, accessories.
-3. **Generate Directional Frames:**
-   - `down_0` (Facing front/camera): Symmetrical face, two eyes visible.
-   - `up_0` (Facing away/back): Back of head/hair, no eyes visible.
-   - `right_0` (Facing right): Profile view, one eye visible at right edge, nose/snout offset.
-   - `left_0` (Facing left): Exact horizontal mirror of `right_0`.
-4. **Create Walking Animation:**
-   - Frame 0: Idle contact pose.
-   - Frame 1: Left foot step forward ($Y_{\text{bob}} - 1$).
-   - Frame 2: Passing pose.
-   - Frame 3: Right foot step forward ($Y_{\text{bob}} - 1$).
+In PIX2, discrete grid indexing starts strictly at `0`. When placing pixels or mirroring symmetrical sprites with `sym_dot`, the center axis is mathematically exact:
+
+$$\text{axisX} = \frac{W - 1}{2}$$
+
+| Cell Resolution | Valid Coordinates | Center Axis (`axisX`) | Bilateral Symmetry Macro | Reflection Math |
+|:---:|:---:|:---:|:---|:---|
+| **$16 \times 16$** | `0` to `15` | `X = 7.5` | `sym_dot x,y 7.5 <color>` | $x' = 15 - x$ |
+| **$24 \times 24$** | `0` to `23` | `X = 11.5` | `sym_dot x,y 11.5 <color>` | $x' = 23 - x$ |
+| **$32 \times 32$** | `0` to `31` | `X = 15.5` | `sym_dot x,y 15.5 <color>` | $x' = 31 - x$ |
+| **$64 \times 64$** | `0` to `63` | `X = 31.5` | `sym_dot x,y 31.5 <color>` | $x' = 63 - x$ |
+| **$W \times H$ (Custom)** | `0..W-1`, `0..H-1` | `axisX = (W-1)/2` | `sym_dot x,y axisX <color>` | $x' = (W - 1) - x$ |
 
 ---
 
-## 5. Anti-Hallucination Guardrails for AI
+## 5. Solid Sprite Mass Mandate (Strictly No Hollow Wireframes)
 
-1. **NEVER output background fill:** Do NOT fill the remaining coordinates $0 \dots 15$ with black, white, or `#000000`. Leaving them out guarantees true transparency.
-2. **NEVER exceed cell boundaries:** For $16 \times 16$, $x \ge 16$ or $y \ge 16$ is an invalid coordinate and will fail validation.
-3. **NEVER discard alpha:** If a semi-transparent blush or shadow is used (e.g. `#FFB0BC80`), preserve the 8-digit hex.
-4. **DO NOT invent non-existent frame references:** In `@animation walk_down`, ensure all frame names in `frames: [ ... ]` exist as defined `@cell` records.
+> [!IMPORTANT]
+> **Mandatory Solid Interior:** Pixel art sprites are solid physical entities with volume, mass, and depth — NOT hollow wireframes or wire outlines!  
+> The interior of the head, face, torso, clothing, and limbs MUST be 100% packed with solid color pixels.  
+> **Forbidden:** Drawing an outline ring with an empty or transparent interior. An empty ring makes the sprite look like an invisible ghost wireframe.
+
+### Speed Strategy for Solid Fills in PIX2:
+1. **Solid Torso & Robe Fills:** Use `rect x,y w,h <color> fill` to lay down a solid body block in 1 single instruction.
+2. **Symmetrical Fills:** Use `sym_dot x,y axisX <color>` for symmetrical eye, cheek, and shoulder highlights.
+3. **Cohesive 5-6 Tone Palette:**
+   - Tone 1: Dark Slate Outline (e.g. `#110e1e` or `#2b1f42`)
+   - Tone 2: Deep Core Shadow (e.g. `#4d3a70`)
+   - Tone 3: Midtone Body Fill (e.g. `#8066b3`)
+   - Tone 4: Rim Highlight (e.g. `#a5f3fc`)
+   - Tone 5: Glowing Eyes / Accent (e.g. `#00f0ff`)
 
 ---
 
-## 6. The 4 Specialized AI Prompt Templates
+## 6. Anti-Lazy 4-Frame Locomotion Formulas
 
-NOIRADIX Studio equips artists and LLMs with 4 context-tailored prompt modes selectable directly from the Studio interface:
+When animating sprites, every single frame in a sequence must exhibit active physical displacement. Never leave duplicate or static frames!
 
-### Mode 1: Full Character (4-Dir / 8-Dir Generation)
+### Walking Locomotion Formula:
+- **Frame 0 (Contact Idle):** Base neutral stance, feet together or touching ground ($Y = H - 2$).
+- **Frame 1 (Step Left):** Torso dips down 1 pixel ($\Delta Y = +1$ or $-1$ bob), left foot extends forward, arms swing.
+- **Frame 2 (Passing Pose):** Body rises to apex ($Y_{\text{base}} - 1$), feet cross center.
+- **Frame 3 (Step Right):** Torso dips down 1 pixel, right foot extends forward, opposite arm swing.
+
+### Ghost / Floating / Flying Sway Formula:
+- **Frame 0 (Hover High):** Apex hover height ($Y - 1$), tail wisps centered.
+- **Frame 1 (Sway Right):** Neutral height ($Y$), wisps trail to the right ($\Delta X = +1$).
+- **Frame 2 (Hover Dip):** Low dip ($Y + 1$), wisps compress and flare outward.
+- **Frame 3 (Sway Left):** Neutral height ($Y$), wisps curl to the left ($\Delta X = -1$).
+
+---
+
+## 7. The 5 Specialized AI Prompt Templates
+
+NOIRADIX Studio equips artists and LLMs with 5 context-tailored prompt modes selectable directly from the Studio interface:
+
+### Mode 0: 🌟 All-in-One Master Prompt (Complete Cognitive Guide + All Recipes)
+* **Goal:** Encyclopedic reference incorporating coordinate bounds, dynamic anatomy landmarks, bilateral symmetry table, solid mass mandates, and all locomotion recipes in a single self-contained prompt.
+
+### Mode 1: 🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)
 * **Goal:** Generate a complete game character from scratch with directional faces and walk animations.
 * **Instructional Focus:**
   - Establishes a harmonious 4 to 8 color `@palette` (Outline, Base, Highlight, Shadow, Accents).
@@ -164,21 +185,21 @@ NOIRADIX Studio equips artists and LLMs with 4 context-tailored prompt modes sel
   - Enforces silhouette consistency across all 4 cardinal directions (`down`, `up`, `right`, `left`).
   - Automatically hooks up walk cycles (`walk_down`, `walk_up`, `walk_right`, `walk_left`) at 6fps loop.
 
-### Mode 2: Walk Cycle & Locomotion Animation
+### Mode 2: 🎬 Walk Cycle & Locomotion Animation
 * **Goal:** Produce smooth, natural locomotion frames from a static reference pose.
 * **Instructional Focus:**
   - Discrete bobbing physics: Frame 1 & Frame 3 apply a 1-pixel torso offset ($\Delta Y = -1$) to simulate step impact.
   - Foot swing dynamics: Leading foot stretches forward, trailing foot pulls back with passing contact.
   - Secondary motion: Cloaks, tails, antennae, and hair trailing motion lagged by 1 frame.
 
-### Mode 3: Accessory & Equipment Overlay
+### Mode 3: 🗡️ Accessory & Equipment Overlay
 * **Goal:** Equip characters with hats, helmets, wings, cloaks, and weapons without breaking base silhouette.
 * **Instructional Focus:**
   - Non-destructive overlays: Preserves existing character anatomy pixels unless intentionally covered.
   - Primitives: Utilizes `line x0,y0 x1,y1 <color>` for weapon handles and blades.
   - Palette integration: Adds distinct material colors (e.g. golden steel, polished silver, ruby gems).
 
-### Mode 4: Surgical Frame / Color Patch
+### Mode 4: 🩹 Surgical Frame / Color Patch
 * **Goal:** Apply targeted fixes to specific cells or color schemes with minimal token consumption.
 * **Instructional Focus:**
   - Output ONLY modified `@cell <id>` or `@palette` directives rather than regenerating the entire document.
