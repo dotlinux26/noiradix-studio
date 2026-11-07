@@ -247,6 +247,13 @@ To guarantee that any compiler (Rust, Go, C++, Python, JavaScript) produces byte
   3. If $x_{\text{mirror}} == x$ (on the symmetry axis), it is plotted exactly once.
   4. Any coordinates outside $[0..W-1, 0..H-1]$ are clipped.
 
+### 4.7 Conformance Resource Limits & Anti-DoS Bounds
+To protect parser memory and prevent execution freezes under adversarial or astronomical input, all conforming implementations MUST enforce the following limits:
+- **Maximum Coordinate Bound (`MAX_COORD_ABS` = 2048):** Any coordinate $(x, y)$ where $|x| > 2048$ or $|y| > 2048$ MUST be rejected from rasterization with a diagnostic error (`PIX2_ERR_RESOURCE_LIMIT`).
+- **Maximum Line Steps (`MAX_BRESENHAM_STEPS` = 4096):** Bresenham line loops must terminate after at most 4096 steps.
+- **Maximum Flood Fill Steps (`MAX_FLOOD_STEPS` = 65536):** Flood fill execution is capped at $\min(65536, 4 \times W \times H)$ iterations.
+- **Rectangle Validation:** Dimensions must satisfy $w \ge 1, h \ge 1$. Rectangles with $w < 1$ or $h < 1$ must trigger `PIX2_ERR_INVALID_COORDINATE`. Mode must strictly be `outline` or `fill`; any other token must trigger `PIX2_ERR_INVALID_RECT_MODE`.
+
 ---
 
 ## 5. Complete Step-by-Step AI Instructions

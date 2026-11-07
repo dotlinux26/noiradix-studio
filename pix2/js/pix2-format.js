@@ -763,7 +763,13 @@ const PIX2 = (function () {
                     line: i + 1,
                     message: `Unresolved or invalid color reference "${colRef}" in cell "${currentCell.id}"`
                   });
-                } else if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
+                } else if (Math.abs(x) > MAX_COORD_ABS || Math.abs(y) > MAX_COORD_ABS) {
+                  diagnostics.push({
+                    code: 'PIX2_ERR_RESOURCE_LIMIT',
+                    line: i + 1,
+                    message: `Coordinate (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
+                  });
+                } else {
                   currentCell.pixels[`${x},${y}`] = color;
                 }
               }
@@ -794,7 +800,13 @@ const PIX2 = (function () {
                 line: i + 1,
                 message: `Unresolved color "${parts[2]}" in dot command`
               });
-            } else if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
+            } else if (Math.abs(x) > MAX_COORD_ABS || Math.abs(y) > MAX_COORD_ABS) {
+              diagnostics.push({
+                code: 'PIX2_ERR_RESOURCE_LIMIT',
+                line: i + 1,
+                message: `Coordinate (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
+              });
+            } else {
               currentCell.pixels[`${x},${y}`] = color;
             }
           }
@@ -819,8 +831,14 @@ const PIX2 = (function () {
             const [x2, y2] = p2;
             const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
             const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
-            if (Math.abs(x1) <= MAX_COORD_ABS && Math.abs(y1) <= MAX_COORD_ABS &&
-                Math.abs(x2) <= MAX_COORD_ABS && Math.abs(y2) <= MAX_COORD_ABS) {
+            if (Math.abs(x1) > MAX_COORD_ABS || Math.abs(y1) > MAX_COORD_ABS ||
+                Math.abs(x2) > MAX_COORD_ABS || Math.abs(y2) > MAX_COORD_ABS) {
+              diagnostics.push({
+                code: 'PIX2_ERR_RESOURCE_LIMIT',
+                line: i + 1,
+                message: `Line coordinates exceed safety limit (${MAX_COORD_ABS})`
+              });
+            } else {
               drawLineBresenham(x1, y1, x2, y2, (x, y) => {
                 if (x >= 0 && x < cellW && y >= 0 && y < cellH) {
                   currentCell.pixels[`${x},${y}`] = color;
@@ -832,12 +850,19 @@ const PIX2 = (function () {
           const origin = parseCoordinate(parts[1] || '');
           const dims = parseDimension(parts[2] || '');
           const color = resolveColor(parts[3], doc.palette);
-          const mode = (parts[4] || 'outline').toLowerCase();
-          if (!origin || !dims) {
+          const rawMode = parts[4];
+          const mode = (rawMode || 'outline').toLowerCase();
+          if (!origin || !dims || dims[0] < 1 || dims[1] < 1) {
             diagnostics.push({
               code: 'PIX2_ERR_INVALID_COORDINATE',
               line: i + 1,
-              message: `Invalid origin or dimension in rect command`
+              message: `Invalid origin or dimension in rect command (dimensions must be at least 1x1)`
+            });
+          } else if (rawMode && mode !== 'outline' && mode !== 'fill') {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_RECT_MODE',
+              line: i + 1,
+              message: `Invalid rect mode "${rawMode}": must be "outline" or "fill"`
             });
           } else if (!color) {
             diagnostics.push({
@@ -850,17 +875,25 @@ const PIX2 = (function () {
             const [w, h] = dims;
             const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
             const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
-            const maxBoundW = cellW * 2;
-            const maxBoundH = cellH * 2;
-            const clampedW = Math.min(Math.max(0, w), maxBoundW);
-            const clampedH = Math.min(Math.max(0, h), maxBoundH);
-            if (clampedW * clampedH <= 262144) {
-              for (let dy = 0; dy < clampedH; dy++) {
-                for (let dx = 0; dx < clampedW; dx++) {
-                  if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
-                    const px = x + dx, py = y + dy;
-                    if (px >= 0 && px < cellW && py >= 0 && py < cellH) {
-                      currentCell.pixels[`${px},${py}`] = color;
+            if (Math.abs(x) > MAX_COORD_ABS || Math.abs(y) > MAX_COORD_ABS) {
+              diagnostics.push({
+                code: 'PIX2_ERR_RESOURCE_LIMIT',
+                line: i + 1,
+                message: `rect origin (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
+              });
+            } else {
+              const maxBoundW = cellW * 2;
+              const maxBoundH = cellH * 2;
+              const clampedW = Math.min(Math.max(0, w), maxBoundW);
+              const clampedH = Math.min(Math.max(0, h), maxBoundH);
+              if (clampedW * clampedH <= 262144) {
+                for (let dy = 0; dy < clampedH; dy++) {
+                  for (let dx = 0; dx < clampedW; dx++) {
+                    if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
+                      const px = x + dx, py = y + dy;
+                      if (px >= 0 && px < cellW && py >= 0 && py < cellH) {
+                        currentCell.pixels[`${px},${py}`] = color;
+                      }
                     }
                   }
                 }
@@ -913,6 +946,12 @@ const PIX2 = (function () {
                 code: 'PIX2_ERR_UNRESOLVED_COLOR',
                 line: i + 1,
                 message: `Unresolved color "${colToken}" in sym_dot command`
+              });
+            } else if (Math.abs(x) > MAX_COORD_ABS || Math.abs(y) > MAX_COORD_ABS) {
+              diagnostics.push({
+                code: 'PIX2_ERR_RESOURCE_LIMIT',
+                line: i + 1,
+                message: `sym_dot coordinate (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
               });
             } else {
               if (x >= 0 && x < cellW && y >= 0 && y < cellH) {
