@@ -67,7 +67,7 @@ GridEntry          ::= WS* ("columns" | "cols") ":" WS* Integer
 PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
 PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?
 
-CellSection        ::= "@cell" WS+ Identifier EOL (CellProperty | PixelRecord | VectorPrimitive)*
+CellSection        ::= ("@cell" | "@frame") WS+ Identifier EOL (CellProperty | PixelLine | VectorPrimitive)*
 CellProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
                      | WS* "frame:" WS* Integer EOL
@@ -78,8 +78,9 @@ DirectionEnum      ::= "down" | "up" | "right" | "left"
                      | "down_right" | "down_left" | "up_right" | "up_left"
                      | "none" | "any"
 
-PixelRecord        ::= WS* ("pixel" | "p") WS+ Coordinate WS+ ColorRef EOL
-                     | WS* ("dot" | "d") WS+ Coordinate WS+ ColorRef EOL
+PixelLine          ::= WS* PixelRecord (WS+ PixelRecord)* (WS* Comment)? EOL
+PixelRecord        ::= ("pixel" | "p") WS+ Coordinate WS+ ColorRef
+                     | ("dot" | "d") WS+ Coordinate WS+ ColorRef
 Coordinate         ::= Integer "," Integer
 ColorRef           ::= HexColor | Identifier | Integer
 
@@ -93,6 +94,8 @@ SymDotPrimitive    ::= WS* "sym_dot" WS+ Coordinate (WS+ Float)? WS+ ColorRef EO
 Float              ::= [0-9]+ ("." [0-9]+)?
 
 AnimationSection   ::= "@animation" WS+ Identifier EOL (AnimProperty)*
+                     | LegacyAnimationBlock
+LegacyAnimationBlock ::= "@animations" EOL (WS* Identifier ":" WS* FrameList (WS* "@" WS* Integer "fps")? (WS* "loop" | "once")? EOL)*
 AnimProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
                      | WS* "frames:" WS* FrameList EOL

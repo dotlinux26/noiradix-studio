@@ -1,17 +1,36 @@
 NOIRADIX Studio
-Copyright 2026 Nguyen Duc Canh (@dotlinux26)
+Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26)
 
 This product includes software developed by Nguyen Duc Canh (@dotlinux26)
 (https://github.com/dotlinux26/noiradix-studio).
 
 =======================================================================
-STANDALONE PIX2 SPECIFICATION & REFERENCE ENGINE NOTICE
+PIX2 SPECIFICATION & REFERENCE ENGINE NOTICE
 =======================================================================
-The PIX2 standard distribution located in the 'pix2/' directory is
-governed independently:
-- PIX2 Specifications and Documentation:
-  Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
-  Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26).
-- PIX2 Reference Engine & Compiler:
-  Licensed under the Apache License, Version 2.0 (Apache-2.0).
-  Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26).
+The PIX2 standard distribution and normative documentation are governed
+independently under dual licensing:
+
+1. PIX2 Specifications and Documentation:
+   Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+   Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26).
+   Applicable files:
+   - pix2/SPECIFICATION.md
+   - PIX2_SPECIFICATION.md
+   - docs/PIX2/PIX2_SPEC.md
+   - docs/PIX2/PIX2_GRAMMAR.md
+   - docs/PIX2/PIX2_DATA_MODEL.md
+   - docs/PIX2/PIX2_VALIDATION_RULES.md
+   - docs/PIX2/PIX2_COMPATIBILITY.md
+   - docs/PIX2/PIX2_AI_AUTHORING_GUIDE.md
+   - docs/PIX2/PIX2_FUTURE_DIRECTIONS.md
+   - docs/PIX2/PIX2_EXAMPLES.md
+
+2. PIX2 Reference Engine & Compiler:
+   Licensed under the Apache License, Version 2.0 (Apache-2.0).
+   Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26).
+   Applicable files:
+   - js/pix2-format.js
+   - pix2/js/pix2-format.js
+   - tests/test-roundtrip.js
+   - tests/test-security.js
+   - tests/test-vectors-conformance.js

@@ -62,7 +62,7 @@
     },
     "colors": {
       "name": "constant.other.color.hex.pix2",
-      "match": "#[0-9a-fA-F]{3,8}\\b"
+      "match": "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\\b"
     },
     "properties": {
       "patterns": [

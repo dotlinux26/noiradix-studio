@@ -17,9 +17,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1. CI Test Suite: Syntax integrity & 110 automated unit tests
+  # 1. CI Test Suite: Syntax integrity & 125 automated unit tests across 4 suites
   test:
-    name: Run Test Suites (110 Tests)
+    name: Run Automated Test Suites (125 Tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -37,12 +37,19 @@ jobs:
           node --check js/editor-state.js
           node --check js/animation-player.js
           node --check js/tools.js
+          node --check pix2/js/pix2-format.js
 
       - name: Run Semantic Roundtrip & Feature Tests (96 Tests)
         run: node tests/test-roundtrip.js
 
-      - name: Run Security & Anti-DoS Defense Tests (14 Tests)
+      - name: Run Security & Anti-DoS Defense Tests (20 Tests)
         run: node tests/test-security.js
+
+      - name: Run TextMate Grammar & Syntax Validation Tests (2 Tests)
+        run: node tests/test-tmLanguage.js
+
+      - name: Run Normative Test Vector Conformance Tests (7 Tests)
+        run: node tests/test-vectors-conformance.js
 
   # 2. CD Deployment: Deploy static web application to GitHub Pages
   deploy:

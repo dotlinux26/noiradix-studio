@@ -283,3 +283,90 @@ CURRENT .PIX2 FILE:
 USER TASK:
 [Insert request, e.g. "Add a wizard hat to row 0 frames", "Create 8-direction frames"]
 ```
+
+---
+
+## Appendix A: Formal EBNF Grammar & Directive Categorization
+
+### Directive Categorization
+* **Canonical Directives (v1.0 Standard):**
+  - `@pix2 <version>` — Mandatory file header directive.
+  - `@meta` — Document metadata section.
+  - `@grid` — Layout atlas dimensions.
+  - `@palette` — Indexed color palette.
+  - `@cell <id>` — Frame pixel and primitive container.
+  - `@animation <id>` — Multi-line directional animation clip.
+  - `@end` — Explicit document termination marker.
+* **Accepted Legacy Directives (Supported for backwards compatibility by readers):**
+  - `@frame <id>` — Alias for `@cell <id>`.
+  - `@animations` — Single-line legacy animations block (`name: [f1, f2] @ 6fps loop`).
+* **Deprecated Directives:**
+  - Emitting `@animations` blocks on serialize is deprecated; conforming serializers must emit canonical multi-line `@animation <id>` blocks.
+
+### Formal EBNF Definition
+```ebnf
+PIX2Document       ::= HeaderSection MetaSection GridSection PaletteSection CellSection* AnimationSection* EndMarker?
+
+HeaderSection      ::= "@pix2" WS+ Version EOL
+Version            ::= "1.0"
+
+MetaSection        ::= "@meta" EOL (MetaProperty EOL)+
+MetaProperty       ::= WS* "title:" WS* StringLiteral
+                     | WS* "author:" WS* StringLiteral
+                     | WS* "version:" WS* StringLiteral
+                     | WS* "color_mode:" WS* ("RGBA" | "RGB")
+                     | WS* "coordinate_origin:" WS* "top-left"
+
+GridSection        ::= "@grid" EOL (GridProperty EOL)+
+GridProperty       ::= WS* ("columns" | "cols") ":" WS* Integer
+                     | WS* "rows:" WS* Integer
+                     | WS* "grid:" WS* Dimension
+                     | WS* ("default_cell" | "cell_size") ":" WS* Dimension
+                     | WS* "gap:" WS* Integer
+                     | WS* "margin:" WS* Integer
+                     | WS* "background:" WS* ("none" | "transparent")
+
+PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
+PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?
+
+CellSection        ::= ("@cell" | "@frame") WS+ Identifier EOL (CellProperty | PixelLine | VectorPrimitive)*
+CellProperty       ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "direction:" WS* DirectionEnum EOL
+                     | WS* "frame:" WS* Integer EOL
+                     | WS* "size:" WS* Dimension EOL
+                     | WS* "grid_pos:" WS* Integer "," Integer EOL
+
+DirectionEnum      ::= "down" | "up" | "right" | "left"
+                     | "down_right" | "down_left" | "up_right" | "up_left"
+                     | "none" | "any"
+
+PixelLine          ::= WS* PixelRecord (WS+ PixelRecord)* (WS* Comment)? EOL
+PixelRecord        ::= ("pixel" | "p") WS+ Coordinate WS+ ColorRef
+                     | ("dot" | "d") WS+ Coordinate WS+ ColorRef
+Coordinate         ::= Integer "," Integer
+ColorRef           ::= HexColor | Identifier | Integer
+
+VectorPrimitive    ::= LinePrimitive | RectPrimitive | FillPrimitive | SymDotPrimitive
+
+LinePrimitive      ::= WS* "line" WS+ Coordinate WS+ Coordinate WS+ ColorRef EOL
+RectPrimitive      ::= WS* "rect" WS+ Coordinate WS+ Dimension WS+ ColorRef (WS+ RectMode)? EOL
+RectMode           ::= "outline" | "fill"
+FillPrimitive      ::= WS* "fill" WS+ Coordinate WS+ ColorRef EOL
+SymDotPrimitive    ::= WS* "sym_dot" WS+ Coordinate (WS+ Float)? WS+ ColorRef EOL
+Float              ::= [0-9]+ ("." [0-9]+)?
+
+AnimationSection   ::= "@animation" WS+ Identifier EOL (AnimProperty)*
+                     | LegacyAnimationBlock
+LegacyAnimationBlock ::= "@animations" EOL (WS* Identifier ":" WS* FrameList (WS* "@" WS* Integer "fps")? (WS* "loop" | "once")? EOL)*
+AnimProperty       ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "direction:" WS* DirectionEnum EOL
+                     | WS* "frames:" WS* FrameList EOL
+                     | WS* "fps:" WS* Integer EOL
+                     | WS* "loop:" WS* Boolean EOL
+                     | WS* "mode:" WS* ("loop" | "once" | "pingpong") EOL
+
+FrameList          ::= "[" WS* (Identifier (WS* "," WS* Identifier)*)? WS* "]"
+Boolean            ::= "true" | "false"
+Dimension          ::= Integer "x" Integer
+EndMarker          ::= "@end" EOL?
+```

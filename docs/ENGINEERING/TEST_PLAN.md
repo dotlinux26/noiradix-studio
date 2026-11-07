@@ -8,15 +8,22 @@ The test suite operates standalone using Node.js without third-party test framew
   # 1. Semantic roundtrip determinism & feature verification suite (96 tests)
   node tests/test-roundtrip.js
 
-  # 2. Security, prototype-pollution & anti-DoS defense suite (14 tests)
+  # 2. Security, prototype-pollution & anti-DoS defense suite (20 tests)
   node tests/test-security.js
 
-  # 3. Syntax validation across all engine modules
+  # 3. TextMate grammar & syntax validation suite (2 tests)
+  node tests/test-tmLanguage.js
+
+  # 4. Normative test vector conformance suite (7 tests)
+  node tests/test-vectors-conformance.js
+
+  # 5. Syntax validation across all engine modules
   node --check js/app.js
   node --check js/pix2-format.js
   node --check js/editor-state.js
   node --check js/animation-player.js
   node --check js/tools.js
+  node --check pix2/js/pix2-format.js
   ```
 
 ---
@@ -33,9 +40,9 @@ The test suite operates standalone using Node.js without third-party test framew
 * **Group 2: Semantic Roundtrip Determinism (7 tests)**
   * `Parse -> Serialize -> Parse` produces identical metadata, grid dimensions, sparse cell pixel maps, and animations.
 * **Group 3: Official Reference Mascot Verification (3 tests)**
-  * Verification of the official template `samples/Noiradix_Ghost.pix2` (16 cells, 4-direction animations, 7-color palette) **authored and synthesized by Gemini 3.8 Flash**.
+  * Verification of the official template `samples/Noiradix_Ghost.pix2` (16 cells, 4-direction animations, 7-color palette).
 * **Group 4: Custom Cell IDs & Grid Mapping (4 tests)**
-  * Verification of decoupled cell identifiers (e.g., LLM-generated `reaper_down_0`).
+  * Verification of decoupled cell identifiers (e.g., `reaper_down_0`).
   * Mapping `grid_pos: r,c` into decoupled row/column indices.
 * **Group 5: Row-Only Flip & Duplication (6 tests)**
   * Row-only horizontal and vertical flip (verifies row 0 flips while other rows remain strictly identical).
@@ -66,7 +73,7 @@ The test suite operates standalone using Node.js without third-party test framew
 
 ---
 
-### Test Suite 2: Security & Malicious Payload Defenses (`test-security.js` — 14 Tests)
+### Test Suite 2: Security & Anti-DoS Defenses (`test-security.js` — 20 Tests)
 
 * **Group 1: Prototype Pollution Defenses (4 tests)**
   * Rejects `@cell __proto__`, `@animation __proto__`, and `@palette __proto__` from polluting `Object.prototype`.
@@ -77,10 +84,34 @@ The test suite operates standalone using Node.js without third-party test framew
   * Limits massive rect fill and flood fill stack/heap execution.
   * Bresenham line step guards to prevent infinite loops.
   * Clamps out-of-bound coordinates ($|\text{coord}| > 2048$).
-* **Group 3: Document Validation API (2 tests)**
+* **Group 3: Document Validation & Strict Integer API (8 tests)**
   * Validates healthy `.pix2` documents and flags illegal keys.
+  * Strict mode out-of-bounds coordinate detection.
+  * Non-existent animation frame references (`phantom_cell`).
+  * Strict integer validation strictly rejecting malformed coordinates (`1abc,3`), floats (`1.5`), and unsafe integer overflow.
+  * Canonical `cell_size` synchronization with non-enumerable `cellSize` alias.
 * **Group 4: Client-Side XSS & Sanitization Defense (2 tests)**
+  * Preserves raw markup in document graph while shielding against DOM injection.
   * Sanitizes identifier keys, eliminating prototype pollution and path traversal tokens.
+
+---
+
+### Test Suite 3: TextMate Grammar Validation (`test-tmLanguage.js` — 2 Tests)
+
+* JSON structure and schema conformance.
+* Strict compilation of all regular expression patterns.
+
+---
+
+### Test Suite 4: Normative Test Vector Conformance (`test-vectors-conformance.js` — 7 Tests)
+
+* Synchronization verification: byte-for-byte SHA-256 equivalence between standalone `pix2/js/pix2-format.js` and root `js/pix2-format.js`.
+* Deep semantic structural equality against `canonical_valid_hero.json`.
+* Canonical AST JSON serialization emitting only `cell_size` without duplicate keys.
+* Diagnostic emission for malformed coordinates (`invalid_syntax_coordinate.pix2`).
+* Strict validation error for missing animation frames (`invalid_missing_frame.pix2`).
+* Strict validation error for out-of-bounds coordinates (`invalid_out_of_bounds.pix2`).
+* Roundtrip preservation of unused palette entries and string quotes.
 
 ---
 
@@ -89,7 +120,9 @@ The test suite operates standalone using Node.js without third-party test framew
 ```text
 ====================================================
 TEST RESULTS: 96 / 96 PASSED (Roundtrip & Features)
-SECURITY TEST RESULTS: 14 / 14 PASSED (Defenses & Anti-DoS)
-TOTAL ACCEPTANCE: 110 / 110 PASSED (100%)
+SECURITY TEST RESULTS: 20 / 20 PASSED (Defenses & Anti-DoS)
+GRAMMAR TEST RESULTS: 2 / 2 PASSED (TextMate Grammar)
+CONFORMANCE TEST RESULTS: 7 / 7 PASSED (Normative Vectors)
+TOTAL ACCEPTANCE: 125 / 125 PASSED (100%)
 ====================================================
 ```

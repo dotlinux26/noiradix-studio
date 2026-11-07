@@ -104,7 +104,7 @@ Player.cell_id.pixel(x, y) = Color
 
 - **Web Static Hosting:** Hostable on any static server or CDN (GitHub Pages, Cloudflare Pages, Netlify) with zero backend.
 - **Desktop / Portable Edition:** Single zip folder containing `index.html`, `css/`, `js/`, `engine/`, and `samples/`. Double-click `index.html` or `start-pix2-studio.bat` to launch immediately without installing runtimes.
-- **Open Format Ecosystem:** The `.pix2` format specification and core parser are released under permissive open-source licenses (MIT / CC0) so external developers, game engines, and AI agents can build native tools around PIX2.
+- **Open Format Ecosystem:** The `.pix2` format specification is released under Creative Commons Attribution 4.0 International (CC BY 4.0) and the reference parser/compiler under the Apache License 2.0 (Apache-2.0) so external developers, game engines, and AI agents can build native tools around PIX2.
 
 ---
 

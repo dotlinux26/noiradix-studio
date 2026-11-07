@@ -11,8 +11,10 @@ console.log('====================================================');
 console.log('RUNNING PIX2 SECURITY & MALICIOUS PAYLOAD SUITE');
 console.log('====================================================\n');
 
+let totalTests = 0;
 let passCount = 0;
 function test(name, fn) {
+  totalTests++;
   try {
     fn();
     console.log(`  [PASS] ${name}`);
@@ -76,12 +78,15 @@ test('resolveColor is immune to prototype properties (toString, valueOf, constru
   const doc = PIX2.parse(p1);
   const cell = doc.cells['cell_0_0'];
   assert.ok(cell);
-  // Must return string hexes, NEVER a function reference
-  assert.strictEqual(typeof cell.pixels['0,0'], 'string');
-  assert.strictEqual(typeof cell.pixels['1,0'], 'string');
-  assert.strictEqual(typeof cell.pixels['2,0'], 'string');
+  // Prototype property tokens must NEVER be evaluated as functions or converted into fake valid hex strings
   assert.notStrictEqual(cell.pixels['0,0'], Object.prototype.toString);
   assert.notStrictEqual(cell.pixels['1,0'], Object.prototype.valueOf);
+  assert.notStrictEqual(typeof cell.pixels['0,0'], 'function');
+  assert.notStrictEqual(typeof cell.pixels['1,0'], 'function');
+  assert.notStrictEqual(typeof cell.pixels['2,0'], 'function');
+  assert.strictEqual(cell.pixels['0,0'], undefined, 'Invalid color token "toString" must be safely rejected');
+  assert.strictEqual(cell.pixels['1,0'], undefined, 'Invalid color token "valueOf" must be safely rejected');
+  assert.strictEqual(cell.pixels['2,0'], undefined, 'Invalid color token "constructor" must be safely rejected');
   // Serializing must not throw TypeError
   const serialized = PIX2.serialize(doc);
   assert.ok(serialized.includes('@cell cell_0_0'));
@@ -291,5 +296,5 @@ test('Identifier & key sanitizer eliminates prototype keys and traversal tokens'
 });
 
 console.log('\n====================================================');
-console.log(`SECURITY TEST RESULTS: ${passCount} / ${passCount} PASSED`);
+console.log(`SECURITY TEST RESULTS: ${passCount} / ${totalTests} PASSED`);
 console.log('====================================================\n');

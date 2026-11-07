@@ -9,16 +9,12 @@
       "cols": 2,
       "rows": 1
     },
-    "cellSize": {
+    "cell_size": {
       "w": 16,
       "h": 16
     },
     "gap": 0,
-    "margin": 0,
-    "cell_size": {
-      "w": 16,
-      "h": 16
-    }
+    "margin": 0
   },
   "palette": {
     "1": "#57546f",
@@ -124,5 +120,6 @@
         "10,7": "#ffb0bc"
       }
     }
-  }
+  },
+  "_diagnostics": []
 }

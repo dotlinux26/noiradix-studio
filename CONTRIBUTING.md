@@ -46,9 +46,19 @@ npx serve .
 ```
 
 ### 3. Run Automated Tests
-Before committing, always run the roundtrip test suite:
+Before committing, always run all test suites:
 ```bash
+# 1. Semantic roundtrip & feature tests
 node tests/test-roundtrip.js
+
+# 2. Security & Anti-DoS tests
+node tests/test-security.js
+
+# 3. TextMate grammar validation
+node tests/test-tmLanguage.js
+
+# 4. Normative test vector conformance
+node tests/test-vectors-conformance.js
 ```
 And check JavaScript syntax:
 ```bash
@@ -56,6 +66,7 @@ node --check js/app.js
 node --check js/pix2-format.js
 node --check js/tools.js
 node --check js/editor-state.js
+node --check pix2/js/pix2-format.js
 ```
 
 ---

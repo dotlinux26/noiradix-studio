@@ -29,7 +29,7 @@
 
 ### Licensing Separation
 - **NOIRADIX Studio (Editor Application):** **Apache 2.0 License** (permits indie & commercial game development without friction).
-- **PIX2 Language Specification:** **CC0 / CC-BY 4.0** (Open standard for any tool, AI agent, or engine to implement).
+- **PIX2 Language Specification:** **CC BY 4.0** (Open standard for any tool, AI agent, or engine to implement).
 - **Core Engine & Parsers:** **Apache 2.0 License** (encourages SDK integration in Python, Rust, Godot, Unity).
 - **Wisplings Art Assets:** Proprietary / Custom game license.
 

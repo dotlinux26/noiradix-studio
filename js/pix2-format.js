@@ -1,11 +1,11 @@
 /**
- * PIX2 Format Engine & Parser / Serializer
+ * PIX2 Format Engine & Reference Compiler
  * Specification v1.0
  * AI-Native Structured Pixel Art Language
  * 
- * Author: Nguyen Duc Canh (dotlinux26)
- * Copyright: (c) 2026 dotlinux26 (Nguyen Duc Canh). All rights reserved.
- * License: Apache-2.0
+ * Author: Nguyen Duc Canh (@dotlinux26)
+ * Copyright: (c) 2026 Nguyen Duc Canh (@dotlinux26)
+ * SPDX-License-Identifier: Apache-2.0
  * 
  * Core Invariant: Pure Transparency (Zero background, only explicitly drawn pixels are saved).
  * Supports: #RGB, #RGBA, #RRGGBB, #RRGGBBAA, decoupled Cell IDs, user-defined animations.
@@ -56,7 +56,8 @@ const PIX2 = (function () {
   /**
    * Strips comments from a line while strictly preserving HEX colors.
    * - Semicolon ';' is always a comment.
-   * - Hash '#' is a comment ONLY if preceded by whitespace and not part of a valid hex color.
+   * - Hash '#' is a comment ONLY if at line start or preceded by whitespace,
+   *   and not part of a valid hex color code.
    */
   function stripComment(rawLine) {
     if (!rawLine) return '';
@@ -76,6 +77,7 @@ const PIX2 = (function () {
       }
 
       if (!inQuote && ch === '#') {
+        const isPrecededByWhitespace = (i === 0 || /\s/.test(text[i - 1]));
         const rest = text.slice(i);
         // Valid hex colors: #RGB, #RGBA, #RRGGBB, #RRGGBBAA followed by delimiter or end
         const hexMatch = rest.match(/^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"']|$)/);
@@ -84,8 +86,8 @@ const PIX2 = (function () {
           result += hexMatch[0];
           i += hexMatch[0].length - 1;
           continue;
-        } else {
-          // This is a comment token! Discard rest of line
+        } else if (isPrecededByWhitespace) {
+          // Comment token at line start or preceded by whitespace! Discard rest of line
           break;
         }
       }
@@ -100,16 +102,37 @@ const PIX2 = (function () {
   // COLOR HANDLING & RGBA PRESERVATION
   // ===========================================================================
 
+  const HEX_CHARS_REGEX = /^[0-9a-fA-F]+$/;
+
+  /**
+   * Strict validation of hex color codes (must be 3, 4, 6, or 8 hex digits).
+   * @param {string} hex
+   * @returns {boolean}
+   */
+  function isValidHex(hex) {
+    if (!hex || typeof hex !== 'string') return false;
+    const trimmed = hex.trim();
+    if (!trimmed.startsWith('#')) return false;
+    const raw = trimmed.slice(1);
+    if (raw.length !== 3 && raw.length !== 4 && raw.length !== 6 && raw.length !== 8) return false;
+    return HEX_CHARS_REGEX.test(raw);
+  }
+
   /**
    * Normalize hex color string.
    * Preserves full alpha for 4-digit and 8-digit RGBA codes.
+   * Returns null if input is not a valid hex representation.
+   * @param {string} hex
+   * @returns {string|null}
    */
   function normalizeHex(hex) {
-    if (!hex) return '#000000';
+    if (!hex || typeof hex !== 'string') return null;
     hex = hex.trim().toLowerCase();
     if (!hex.startsWith('#')) hex = '#' + hex;
 
     const raw = hex.slice(1);
+    if (!HEX_CHARS_REGEX.test(raw)) return null;
+
     // 3-digit RGB: #rgb -> #rrggbb
     if (raw.length === 3) {
       return '#' + raw[0] + raw[0] + raw[1] + raw[1] + raw[2] + raw[2];
@@ -130,7 +153,7 @@ const PIX2 = (function () {
       return hex; // Preserve non-opaque alpha!
     }
 
-    return hex.slice(0, 7);
+    return null;
   }
 
   /**
@@ -177,8 +200,8 @@ const PIX2 = (function () {
   const STRICT_INT_REGEX = /^-?[0-9]+$/;
 
   /**
-   * Parse a strict integer string without allowing trailing non-digit characters (e.g. "1abc")
-   * and ensuring value is within Number.isSafeInteger bounds.
+   * Parse a strict integer string without allowing trailing non-digit characters (e.g. "1abc"),
+   * floats (e.g. "1.5"), or unsafe integer overflow.
    * @param {*} val
    * @returns {number} Integer or NaN
    */
@@ -187,7 +210,7 @@ const PIX2 = (function () {
     if (typeof val !== 'string') return NaN;
     const trimmed = val.trim();
     if (!STRICT_INT_REGEX.test(trimmed)) return NaN;
-    const num = parseInt(trimmed, 10);
+    const num = Number(trimmed);
     return Number.isSafeInteger(num) ? num : NaN;
   }
 
@@ -201,6 +224,7 @@ const PIX2 = (function () {
     if (!meta.cell_size) {
       meta.cell_size = meta.cellSize || { w: 16, h: 16 };
     }
+    delete meta.cellSize;
     try {
       Object.defineProperty(meta, 'cellSize', {
         get() { return this.cell_size; },
@@ -243,6 +267,35 @@ const PIX2 = (function () {
     return [w, h];
   }
 
+  /**
+   * Escape double quotes and control characters for PIX2 string literals.
+   * @param {string} str
+   * @returns {string}
+   */
+  function escapePix2String(str) {
+    if (typeof str !== 'string') return '';
+    return str
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n');
+  }
+
+  /**
+   * Unescape PIX2 string literals.
+   * @param {string} str
+   * @returns {string}
+   */
+  function unescapePix2String(str) {
+    if (typeof str !== 'string') return '';
+    return str
+      .replace(/^["']|["']$/g, '')
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\\\/g, '\\');
+  }
+
   // ===========================================================================
   // DOCUMENT CREATION & DATA MODEL
   // ===========================================================================
@@ -251,24 +304,26 @@ const PIX2 = (function () {
    * Create a new PIX2 document
    */
   function createDocument(title = 'New Sprite', cols = 4, rows = 4, cellW = 16, cellH = 16) {
-    cols = Math.min(Math.max(1, parseInt(cols, 10) || 4), MAX_GRID_COLS);
-    rows = Math.min(Math.max(1, parseInt(rows, 10) || 4), MAX_GRID_ROWS);
-    cellW = Math.min(Math.max(MIN_CELL_DIM, parseInt(cellW, 10) || 16), MAX_CELL_DIM);
-    cellH = Math.min(Math.max(MIN_CELL_DIM, parseInt(cellH, 10) || 16), MAX_CELL_DIM);
+    cols = Math.min(Math.max(1, parseStrictInt(cols) || 4), MAX_GRID_COLS);
+    rows = Math.min(Math.max(1, parseStrictInt(rows) || 4), MAX_GRID_ROWS);
+    cellW = Math.min(Math.max(MIN_CELL_DIM, parseStrictInt(cellW) || 16), MAX_CELL_DIM);
+    cellH = Math.min(Math.max(MIN_CELL_DIM, parseStrictInt(cellH) || 16), MAX_CELL_DIM);
+
+    const meta = {
+      title: String(title || 'New Sprite').normalize('NFC').slice(0, 256),
+      author: 'User',
+      version: '1.0',
+      color_mode: 'RGBA',
+      coordinate_origin: 'top-left',
+      grid: { cols, rows },
+      cell_size: { w: cellW, h: cellH },
+      gap: 0,
+      margin: 0
+    };
+    attachCellSizeAlias(meta);
 
     const doc = {
-      meta: {
-        title: String(title || 'New Sprite').normalize('NFC').slice(0, 256),
-        author: 'User',
-        version: '1.0',
-        color_mode: 'RGBA',
-        coordinate_origin: 'top-left',
-        grid: { cols, rows },
-        cellSize: { w: cellW, h: cellH },
-        cell_size: { w: cellW, h: cellH },
-        gap: 0,
-        margin: 0
-      },
+      meta,
       palette: {
         1: '#1a1a24',
         2: '#ffffff',
@@ -280,7 +335,6 @@ const PIX2 = (function () {
       cells: {}
     };
 
-    // Initialize all grid cells with explicit ID and coordinates
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const id = `cell_${r}_${c}`;
@@ -291,85 +345,34 @@ const PIX2 = (function () {
           col: c,
           direction: 'none',
           frame: c,
-          pixels: {} // key "x,y" => hexColor
+          pixels: {}
         };
       }
-    }
-
-    // Default animation setup (only if 4x4, user can edit/delete freely)
-    if (cols >= 4 && rows >= 4) {
-      doc.animations['walk_down'] = {
-        name: 'Walk Down',
-        direction: 'down',
-        frames: ['cell_0_0', 'cell_0_1', 'cell_0_2', 'cell_0_3'],
-        fps: 6,
-        loop: true,
-        mode: 'loop'
-      };
-      doc.animations['walk_up'] = {
-        name: 'Walk Up',
-        direction: 'up',
-        frames: ['cell_1_0', 'cell_1_1', 'cell_1_2', 'cell_1_3'],
-        fps: 6,
-        loop: true,
-        mode: 'loop'
-      };
-      doc.animations['walk_right'] = {
-        name: 'Walk Right',
-        direction: 'right',
-        frames: ['cell_2_0', 'cell_2_1', 'cell_2_2', 'cell_2_3'],
-        fps: 6,
-        loop: true,
-        mode: 'loop'
-      };
-      doc.animations['walk_left'] = {
-        name: 'Walk Left',
-        direction: 'left',
-        frames: ['cell_3_0', 'cell_3_1', 'cell_3_2', 'cell_3_3'],
-        fps: 6,
-        loop: true,
-        mode: 'loop'
-      };
     }
 
     return doc;
   }
 
   // ===========================================================================
-  // PARSER (PIX2 Text -> Document Object)
+  // PARSER (Text -> AST)
   // ===========================================================================
 
-  /**
-   * Parse .pix2 text into internal document model
-   */
   function parse(text) {
-    if (!text || typeof text !== 'string') return createDocument();
-
-    // Defense-in-depth: limit payload size to prevent memory exhaustion
+    if (typeof text !== 'string') return createDocument();
     if (text.length > MAX_FILE_SIZE) {
-      console.warn(`[PIX2 Security] Document payload exceeds 20MB limit (${text.length} bytes). Safely truncating.`);
-      text = text.slice(0, MAX_FILE_SIZE);
+      throw new Error(`PIX2 security violation: file size exceeds maximum limit (${MAX_FILE_SIZE} bytes).`);
     }
 
-    // Universal cross-platform EOL normalization (\r\n Windows, \n Linux, \r Classic Mac) + Unicode NFC
     const lines = (text || '').normalize('NFC').split(/\r\n|\r|\n/);
-    const doc = {
-      meta: {
-        title: 'Untitled',
-        author: 'Unknown',
-        version: '1.0',
-        color_mode: 'RGBA',
-        coordinate_origin: 'top-left',
-        grid: { cols: 4, rows: 4 },
-        cellSize: { w: 16, h: 16 },
-        gap: 0,
-        margin: 0
-      },
-      palette: {},
-      animations: {},
-      cells: {}
-    };
+    const doc = createDocument('Untitled', 4, 4, 16, 16);
+    doc.palette = {};
+    doc.cells = {};
+    doc.animations = {};
 
+    const diagnostics = [];
+    doc._diagnostics = diagnostics;
+
+    let hasPix2Header = false;
     let currentSection = null;
     let currentCell = null;
     let currentAnim = null;
@@ -384,6 +387,7 @@ const PIX2 = (function () {
         const secName = parts[0].toLowerCase();
 
         if (secName === 'pix2') {
+          hasPix2Header = true;
           doc.meta.version = sanitizeKey(parts[1] || '1.0', '1.0');
           continue;
         } else if (secName === 'meta') {
@@ -411,6 +415,13 @@ const PIX2 = (function () {
           currentCell = null;
           const rawAnimId = parts[1] || `anim_${Object.keys(doc.animations).length}`;
           const animId = sanitizeKey(rawAnimId, `anim_${Object.keys(doc.animations).length}`);
+          if (doc.animations[animId]) {
+            diagnostics.push({
+              code: 'PIX2_WARN_DUPLICATE_ANIMATION',
+              line: i + 1,
+              message: `Duplicate animation identifier "${animId}" detected. Overwriting previous animation.`
+            });
+          }
           currentAnim = {
             id: animId,
             name: animId,
@@ -427,6 +438,14 @@ const PIX2 = (function () {
           currentAnim = null;
           const rawCellId = parts[1] || `cell_${Object.keys(doc.cells).length}`;
           const cellId = sanitizeKey(rawCellId, `cell_${Object.keys(doc.cells).length}`);
+
+          if (doc.cells[cellId]) {
+            diagnostics.push({
+              code: 'PIX2_WARN_DUPLICATE_CELL',
+              line: i + 1,
+              message: `Duplicate cell identifier "${cellId}" detected. Overwriting previous cell.`
+            });
+          }
 
           // Memory DoS protection: cap maximum cells per document
           if (Object.keys(doc.cells).length >= MAX_TOTAL_CELLS && !doc.cells[cellId]) {
@@ -463,32 +482,86 @@ const PIX2 = (function () {
         const colonIdx = line.indexOf(':');
         if (colonIdx > 0) {
           const key = line.slice(0, colonIdx).trim().toLowerCase();
-          const val = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
+          const val = unescapePix2String(line.slice(colonIdx + 1).trim());
 
           if (key === 'title' || key === 'name') doc.meta.title = val.normalize('NFC').slice(0, 256);
           else if (key === 'author') doc.meta.author = val.normalize('NFC').slice(0, 128);
           else if (key === 'version') doc.meta.version = val.slice(0, 32);
           else if (key === 'color_mode') doc.meta.color_mode = val.slice(0, 32);
           else if (key === 'coordinate_origin') doc.meta.coordinate_origin = val.slice(0, 32);
-          else if (key === 'columns' || key === 'cols') doc.meta.grid.cols = Math.min(Math.max(1, parseInt(val, 10) || 4), MAX_GRID_COLS);
-          else if (key === 'rows') doc.meta.grid.rows = Math.min(Math.max(1, parseInt(val, 10) || 4), MAX_GRID_ROWS);
-          else if (key === 'grid') {
-            const dims = val.split('x').map(n => parseInt(n.trim(), 10));
-            doc.meta.grid = {
-              cols: Math.min(Math.max(1, dims[0] || 4), MAX_GRID_COLS),
-              rows: Math.min(Math.max(1, dims[1] || 4), MAX_GRID_ROWS)
-            };
+          else if (key === 'columns' || key === 'cols') {
+            const num = parseStrictInt(val);
+            if (!isNaN(num)) {
+              doc.meta.grid.cols = Math.min(Math.max(1, num), MAX_GRID_COLS);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_INTEGER',
+                line: i + 1,
+                message: `Invalid integer for columns: "${val}"`
+              });
+            }
+          } else if (key === 'rows') {
+            const num = parseStrictInt(val);
+            if (!isNaN(num)) {
+              doc.meta.grid.rows = Math.min(Math.max(1, num), MAX_GRID_ROWS);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_INTEGER',
+                line: i + 1,
+                message: `Invalid integer for rows: "${val}"`
+              });
+            }
+          } else if (key === 'grid') {
+            const dims = parseDimension(val);
+            if (dims) {
+              doc.meta.grid = {
+                cols: Math.min(Math.max(1, dims[0]), MAX_GRID_COLS),
+                rows: Math.min(Math.max(1, dims[1]), MAX_GRID_ROWS)
+              };
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_DIMENSION',
+                line: i + 1,
+                message: `Invalid grid dimension format: "${val}" (expected <cols>x<rows>)`
+              });
+            }
           } else if (key === 'default_cell' || key === 'cell_size') {
-            const dims = val.split('x').map(n => parseInt(n.trim(), 10));
-            doc.meta.cellSize = {
-              w: Math.min(Math.max(MIN_CELL_DIM, dims[0] || 16), MAX_CELL_DIM),
-              h: Math.min(Math.max(MIN_CELL_DIM, dims[1] || 16), MAX_CELL_DIM)
-            };
-            doc.meta.cell_size = doc.meta.cellSize;
+            const dims = parseDimension(val);
+            if (dims) {
+              doc.meta.cell_size = {
+                w: Math.min(Math.max(MIN_CELL_DIM, dims[0]), MAX_CELL_DIM),
+                h: Math.min(Math.max(MIN_CELL_DIM, dims[1]), MAX_CELL_DIM)
+              };
+              attachCellSizeAlias(doc.meta);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_DIMENSION',
+                line: i + 1,
+                message: `Invalid cell_size dimension format: "${val}" (expected <w>x<h>)`
+              });
+            }
           } else if (key === 'gap') {
-            doc.meta.gap = Math.min(Math.max(0, parseInt(val, 10) || 0), 128);
+            const num = parseStrictInt(val);
+            if (!isNaN(num)) {
+              doc.meta.gap = Math.min(Math.max(0, num), 128);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_INTEGER',
+                line: i + 1,
+                message: `Invalid integer for gap: "${val}"`
+              });
+            }
           } else if (key === 'margin') {
-            doc.meta.margin = Math.min(Math.max(0, parseInt(val, 10) || 0), 128);
+            const num = parseStrictInt(val);
+            if (!isNaN(num)) {
+              doc.meta.margin = Math.min(Math.max(0, num), 128);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_INTEGER',
+                line: i + 1,
+                message: `Invalid integer for margin: "${val}"`
+              });
+            }
           }
         }
       }
@@ -500,7 +573,16 @@ const PIX2 = (function () {
           const rawId = line.slice(0, colonIdx).trim();
           if (isSafeIdentifier(rawId)) {
             const colorToken = line.slice(colonIdx + 1).trim().split(/\s+/)[0];
-            doc.palette[rawId] = normalizeHex(colorToken);
+            const normalized = normalizeHex(colorToken);
+            if (normalized) {
+              doc.palette[rawId] = normalized;
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_HEX',
+                line: i + 1,
+                message: `Invalid hex color code in palette: "${colorToken}"`
+              });
+            }
           }
         }
       }
@@ -524,7 +606,10 @@ const PIX2 = (function () {
           }
           let fps = 6;
           const fpsMatch = rest.match(/@\s*(\d+)\s*fps/i);
-          if (fpsMatch) fps = Math.min(Math.max(1, parseInt(fpsMatch[1], 10) || 6), MAX_ANIM_FPS);
+          if (fpsMatch) {
+            const parsedFps = parseStrictInt(fpsMatch[1]);
+            if (!isNaN(parsedFps)) fps = Math.min(Math.max(1, parsedFps), MAX_ANIM_FPS);
+          }
           const loop = !/once/i.test(rest);
           doc.animations[animName] = {
             id: animName,
@@ -543,11 +628,22 @@ const PIX2 = (function () {
         const colonIdx = line.indexOf(':');
         if (colonIdx > 0) {
           const key = line.slice(0, colonIdx).trim().toLowerCase();
-          const val = line.slice(colonIdx + 1).trim();
+          const val = unescapePix2String(line.slice(colonIdx + 1).trim());
 
-          if (key === 'name') currentAnim.name = val.replace(/^["']|["']$/g, '').slice(0, 256);
+          if (key === 'name') currentAnim.name = val.slice(0, 256);
           else if (key === 'direction') currentAnim.direction = val.toLowerCase().slice(0, 32);
-          else if (key === 'fps') currentAnim.fps = Math.min(Math.max(1, parseInt(val, 10) || 6), MAX_ANIM_FPS);
+          else if (key === 'fps') {
+            const num = parseStrictInt(val);
+            if (!isNaN(num)) {
+              currentAnim.fps = Math.min(Math.max(1, num), MAX_ANIM_FPS);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_INTEGER',
+                line: i + 1,
+                message: `Invalid integer for fps: "${val}"`
+              });
+            }
+          }
           else if (key === 'loop') currentAnim.loop = (val.toLowerCase() === 'true');
           else if (key === 'mode') currentAnim.mode = val.toLowerCase().slice(0, 32);
           else if (key === 'frames') {
@@ -568,25 +664,50 @@ const PIX2 = (function () {
       else if (currentSection === 'cell' && currentCell) {
         // Properties
         if (line.startsWith('name:')) {
-          currentCell.name = line.slice(5).trim().replace(/^["']|["']$/g, '').slice(0, 256);
+          currentCell.name = unescapePix2String(line.slice(5).trim()).slice(0, 256);
           continue;
         } else if (line.startsWith('direction:') || line.startsWith('dir:')) {
           currentCell.direction = line.split(':')[1].trim().toLowerCase().slice(0, 32);
           continue;
         } else if (line.startsWith('frame:')) {
-          currentCell.frame = Math.min(Math.max(0, parseInt(line.split(':')[1].trim(), 10) || 0), 2048);
+          const num = parseStrictInt(line.split(':')[1].trim());
+          if (!isNaN(num)) {
+            currentCell.frame = Math.min(Math.max(0, num), 2048);
+          } else {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_INTEGER',
+              line: i + 1,
+              message: `Invalid integer for frame: "${line.split(':')[1].trim()}"`
+            });
+          }
           continue;
         } else if (line.startsWith('grid_pos:') || line.startsWith('pos:')) {
-          const [r, c] = line.split(':')[1].split(',').map(n => parseInt(n.trim(), 10));
-          currentCell.row = isNaN(r) ? null : Math.min(Math.max(0, r), MAX_GRID_ROWS);
-          currentCell.col = isNaN(c) ? null : Math.min(Math.max(0, c), MAX_GRID_COLS);
+          const coord = parseCoordinate(line.split(':')[1].trim());
+          if (coord) {
+            currentCell.row = Math.min(Math.max(0, coord[0]), MAX_GRID_ROWS);
+            currentCell.col = Math.min(Math.max(0, coord[1]), MAX_GRID_COLS);
+          } else {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_COORDINATE',
+              line: i + 1,
+              message: `Invalid grid_pos coordinate format: "${line.split(':')[1].trim()}"`
+            });
+          }
           continue;
         } else if (line.startsWith('size:')) {
-          const dims = line.split(':')[1].split('x').map(n => parseInt(n.trim(), 10));
-          currentCell.size = {
-            w: Math.min(Math.max(MIN_CELL_DIM, dims[0] || doc.meta.cellSize.w), MAX_CELL_DIM),
-            h: Math.min(Math.max(MIN_CELL_DIM, dims[1] || doc.meta.cellSize.h), MAX_CELL_DIM)
-          };
+          const dims = parseDimension(line.split(':')[1].trim());
+          if (dims) {
+            currentCell.size = {
+              w: Math.min(Math.max(MIN_CELL_DIM, dims[0]), MAX_CELL_DIM),
+              h: Math.min(Math.max(MIN_CELL_DIM, dims[1]), MAX_CELL_DIM)
+            };
+          } else {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_DIMENSION',
+              line: i + 1,
+              message: `Invalid cell size format: "${line.split(':')[1].trim()}"`
+            });
+          }
           continue;
         }
 
@@ -599,10 +720,22 @@ const PIX2 = (function () {
               const coord = tokens[t + 1];
               const colRef = tokens[t + 2];
               const parsed = parseCoordinate(coord);
-              if (parsed) {
+              if (!parsed) {
+                diagnostics.push({
+                  code: 'PIX2_ERR_INVALID_COORDINATE',
+                  line: i + 1,
+                  message: `Invalid coordinate syntax "${coord}" in cell "${currentCell.id}"`
+                });
+              } else {
                 const [x, y] = parsed;
                 const color = resolveColor(colRef, doc.palette);
-                if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
+                if (!color) {
+                  diagnostics.push({
+                    code: 'PIX2_ERR_UNRESOLVED_COLOR',
+                    line: i + 1,
+                    message: `Unresolved or invalid color reference "${colRef}" in cell "${currentCell.id}"`
+                  });
+                } else if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
                   currentCell.pixels[`${x},${y}`] = color;
                 }
               }
@@ -618,10 +751,22 @@ const PIX2 = (function () {
 
         if (cmd === 'dot' || cmd === 'd') {
           const parsed = parseCoordinate(parts[1] || '');
-          if (parsed) {
+          if (!parsed) {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_COORDINATE',
+              line: i + 1,
+              message: `Invalid coordinate syntax "${parts[1]}" in dot command`
+            });
+          } else {
             const [x, y] = parsed;
             const color = resolveColor(parts[2], doc.palette);
-            if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS && color) {
+            if (!color) {
+              diagnostics.push({
+                code: 'PIX2_ERR_UNRESOLVED_COLOR',
+                line: i + 1,
+                message: `Unresolved color "${parts[2]}" in dot command`
+              });
+            } else if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
               currentCell.pixels[`${x},${y}`] = color;
             }
           }
@@ -629,7 +774,19 @@ const PIX2 = (function () {
           const p1 = parseCoordinate(parts[1] || '');
           const p2 = parseCoordinate(parts[2] || '');
           const color = resolveColor(parts[3], doc.palette);
-          if (p1 && p2 && color) {
+          if (!p1 || !p2) {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_COORDINATE',
+              line: i + 1,
+              message: `Invalid coordinates in line command`
+            });
+          } else if (!color) {
+            diagnostics.push({
+              code: 'PIX2_ERR_UNRESOLVED_COLOR',
+              line: i + 1,
+              message: `Unresolved color "${parts[3]}" in line command`
+            });
+          } else {
             const [x1, y1] = p1;
             const [x2, y2] = p2;
             if (Math.abs(x1) <= MAX_COORD_ABS && Math.abs(y1) <= MAX_COORD_ABS &&
@@ -646,11 +803,23 @@ const PIX2 = (function () {
           const dims = parseDimension(parts[2] || '');
           const color = resolveColor(parts[3], doc.palette);
           const mode = (parts[4] || 'outline').toLowerCase();
-          if (origin && dims && color) {
+          if (!origin || !dims) {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_COORDINATE',
+              line: i + 1,
+              message: `Invalid origin or dimension in rect command`
+            });
+          } else if (!color) {
+            diagnostics.push({
+              code: 'PIX2_ERR_UNRESOLVED_COLOR',
+              line: i + 1,
+              message: `Unresolved color "${parts[3]}" in rect command`
+            });
+          } else {
             const [x, y] = origin;
             const [w, h] = dims;
-            const maxBoundW = (currentCell.size ? currentCell.size.w : doc.meta.cellSize.w) * 2;
-            const maxBoundH = (currentCell.size ? currentCell.size.h : doc.meta.cellSize.h) * 2;
+            const maxBoundW = (currentCell.size ? currentCell.size.w : doc.meta.cell_size.w) * 2;
+            const maxBoundH = (currentCell.size ? currentCell.size.h : doc.meta.cell_size.h) * 2;
             const clampedW = Math.min(Math.max(0, w), maxBoundW);
             const clampedH = Math.min(Math.max(0, h), maxBoundH);
             if (clampedW * clampedH <= 262144) {
@@ -669,25 +838,49 @@ const PIX2 = (function () {
         } else if (cmd === 'fill') {
           const startPt = parseCoordinate(parts[1] || '');
           const color = resolveColor(parts[2], doc.palette);
-          if (startPt && color) {
+          if (!startPt) {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_COORDINATE',
+              line: i + 1,
+              message: `Invalid start point in fill command`
+            });
+          } else if (!color) {
+            diagnostics.push({
+              code: 'PIX2_ERR_UNRESOLVED_COLOR',
+              line: i + 1,
+              message: `Unresolved color "${parts[2]}" in fill command`
+            });
+          } else {
             const [startX, startY] = startPt;
-            floodFillCell(currentCell, startX, startY, color, doc.meta.cellSize);
+            floodFillCell(currentCell, startX, startY, color, doc.meta.cell_size);
           }
         } else if (cmd === 'sym_dot') {
           const pt = parseCoordinate(parts[1] || '');
-          if (pt) {
+          if (!pt) {
+            diagnostics.push({
+              code: 'PIX2_ERR_INVALID_COORDINATE',
+              line: i + 1,
+              message: `Invalid coordinate in sym_dot command`
+            });
+          } else {
             const [x, y] = pt;
             let axisX, colToken;
             if (parts.length >= 4) {
               axisX = parseFloat(parts[2]);
-              if (isNaN(axisX)) axisX = ((doc.meta.cellSize.w - 1) / 2);
+              if (isNaN(axisX)) axisX = ((doc.meta.cell_size.w - 1) / 2);
               colToken = parts[3];
             } else {
-              axisX = ((doc.meta.cellSize.w - 1) / 2);
+              axisX = ((doc.meta.cell_size.w - 1) / 2);
               colToken = parts[2];
             }
             const color = resolveColor(colToken, doc.palette);
-            if (color && Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
+            if (!color) {
+              diagnostics.push({
+                code: 'PIX2_ERR_UNRESOLVED_COLOR',
+                line: i + 1,
+                message: `Unresolved color "${colToken}" in sym_dot command`
+              });
+            } else if (Math.abs(x) <= MAX_COORD_ABS && Math.abs(y) <= MAX_COORD_ABS) {
               currentCell.pixels[`${x},${y}`] = color;
               const mx = Math.round(2 * axisX - x);
               if (Math.abs(mx) <= MAX_COORD_ABS) {
@@ -697,6 +890,14 @@ const PIX2 = (function () {
           }
         }
       }
+    }
+
+    if (!hasPix2Header) {
+      diagnostics.push({
+        code: 'PIX2_WARN_MISSING_HEADER',
+        line: 1,
+        message: 'Missing standard @pix2 header directive (expected "@pix2 1.0")'
+      });
     }
 
     // Post-check: ensure cells without explicit grid position are placed logically
@@ -718,15 +919,12 @@ const PIX2 = (function () {
     return doc;
   }
 
-  /**
-   * Resolve a color token to valid Hex.
-   * Hardened against Object.prototype properties (e.g. 'toString', 'valueOf').
-   */
   function resolveColor(token, palette) {
     if (!token || typeof token !== 'string') return null;
     token = token.trim();
     if (palette && Object.prototype.hasOwnProperty.call(palette, token) && typeof palette[token] === 'string') {
-      return palette[token];
+      const palVal = palette[token];
+      return isValidHex(palVal) ? normalizeHex(palVal) : null;
     }
     return normalizeHex(token);
   }
@@ -748,54 +946,65 @@ const PIX2 = (function () {
       plot(x0, y0);
       if (x0 === x1 && y0 === y1) break;
       let e2 = 2 * err;
-      if (e2 > -dy) { err -= dy; x0 += sx; }
-      if (e2 < dx) { err += dx; y0 += sy; }
+      if (e2 > -dy) {
+        err -= dy;
+        x0 += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y0 += sy;
+      }
     }
   }
 
-  function floodFillCell(cell, startX, startY, newColor, cellSize) {
-    if (!cellSize || !cellSize.w || !cellSize.h) return;
-    if (isNaN(startX) || isNaN(startY)) return;
+  function floodFillCell(cell, startX, startY, fillColor, defaultCellSize) {
+    if (!cell || isNaN(startX) || isNaN(startY) || !fillColor) return;
+    const rawW = (cell.size && cell.size.w) || (defaultCellSize && defaultCellSize.w) || 16;
+    const rawH = (cell.size && cell.size.h) || (defaultCellSize && defaultCellSize.h) || 16;
+    const cellW = Math.min(Math.max(1, rawW), MAX_CELL_DIM);
+    const cellH = Math.min(Math.max(1, rawH), MAX_CELL_DIM);
+
+    if (startX < 0 || startX >= cellW || startY < 0 || startY >= cellH) return;
+
     const targetColor = cell.pixels[`${startX},${startY}`] || null;
-    if (targetColor === newColor) return;
+    if (targetColor === fillColor) return;
 
     const queue = [[startX, startY]];
     const visited = new Set();
-    const w = Math.min(cellSize.w, MAX_CELL_DIM);
-    const h = Math.min(cellSize.h, MAX_CELL_DIM);
-    const maxSteps = Math.min(65536, w * h * 4);
+    const maxSteps = Math.min(65536, cellW * cellH * 4);
     let steps = 0;
 
     while (queue.length > 0 && steps++ < maxSteps) {
       const [x, y] = queue.pop();
-      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+      if (x < 0 || x >= cellW || y < 0 || y >= cellH) continue;
       const key = `${x},${y}`;
       if (visited.has(key)) continue;
       visited.add(key);
 
-      const cur = cell.pixels[key] || null;
-      if (cur === targetColor) {
-        cell.pixels[key] = newColor;
-        queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+      const currentColor = cell.pixels[key] || null;
+      if (currentColor === targetColor) {
+        cell.pixels[key] = fillColor;
+
+        if (x > 0) queue.push([x - 1, y]);
+        if (x < cellW - 1) queue.push([x + 1, y]);
+        if (y > 0) queue.push([x, y - 1]);
+        if (y < cellH - 1) queue.push([x, y + 1]);
       }
     }
   }
 
   // ===========================================================================
-  // SERIALIZER (Document Object -> PIX2 Text)
+  // SERIALIZER (AST -> Text)
   // ===========================================================================
 
-  /**
-   * Serialize document object to canonical .pix2 string
-   */
   function serialize(doc) {
-    // 1. Gather all unique colors used across cells (Prototype-pollution free dictionary)
+    // 1. Gather all unique colors used across cells
     const colorUsage = Object.create(null);
     for (const cellId in doc.cells) {
       const cell = doc.cells[cellId];
       for (const k in cell.pixels) {
         const c = normalizeHex(cell.pixels[k]);
-        colorUsage[c] = (colorUsage[c] || 0) + 1;
+        if (c) colorUsage[c] = (colorUsage[c] || 0) + 1;
       }
     }
 
@@ -805,23 +1014,25 @@ const PIX2 = (function () {
     const paletteOut = Object.create(null);
     let palId = 1;
 
-    // Preserve existing palette entries safely
+    // Preserve ALL existing palette entries safely (even unused ones to maintain roundtrip)
     for (const id in doc.palette) {
-      if (Object.prototype.hasOwnProperty.call(doc.palette, id)) {
+      if (Object.prototype.hasOwnProperty.call(doc.palette, id) && isSafeIdentifier(id)) {
         const c = normalizeHex(doc.palette[id]);
-        if (colorUsage[c] && !paletteMap[c]) {
-          paletteMap[c] = id;
+        if (c) {
           paletteOut[id] = c;
+          if (!paletteMap[c]) {
+            paletteMap[c] = id;
+          }
         }
       }
     }
 
-    // Assign indexed IDs for any new colors
+    // Assign indexed IDs for any new colors in cells that aren't yet in palette
     for (const [c] of sortedColors) {
       if (!paletteMap[c]) {
-        while (paletteOut[palId]) palId++;
+        while (paletteOut[String(palId)]) palId++;
         paletteMap[c] = String(palId);
-        paletteOut[palId] = c;
+        paletteOut[String(palId)] = c;
         palId++;
       }
     }
@@ -830,17 +1041,22 @@ const PIX2 = (function () {
     lines.push('@pix2 1.0');
     lines.push('');
     lines.push('@meta');
-    lines.push(`  title: "${doc.meta.title || 'Untitled'}"`);
-    lines.push(`  author: "${doc.meta.author || 'User'}"`);
-    lines.push(`  version: "${doc.meta.version || '1.0'}"`);
-    lines.push(`  color_mode: "${doc.meta.color_mode || 'RGBA'}"`);
-    lines.push(`  coordinate_origin: "${doc.meta.coordinate_origin || 'top-left'}"`);
+    lines.push(`  title: "${escapePix2String(doc.meta.title || 'Untitled')}"`);
+    lines.push(`  author: "${escapePix2String(doc.meta.author || 'User')}"`);
+    lines.push(`  version: "${escapePix2String(doc.meta.version || '1.0')}"`);
+    lines.push(`  color_mode: "${escapePix2String(doc.meta.color_mode || 'RGBA')}"`);
+    lines.push(`  coordinate_origin: "${escapePix2String(doc.meta.coordinate_origin || 'top-left')}"`);
     lines.push('');
 
+    const gridCols = (doc.meta.grid && doc.meta.grid.cols) || 4;
+    const gridRows = (doc.meta.grid && doc.meta.grid.rows) || 4;
+    const cellW = (doc.meta.cell_size || doc.meta.cellSize || { w: 16 }).w;
+    const cellH = (doc.meta.cell_size || doc.meta.cellSize || { h: 16 }).h;
+
     lines.push('@grid');
-    lines.push(`  columns: ${doc.meta.grid.cols}`);
-    lines.push(`  rows: ${doc.meta.grid.rows}`);
-    lines.push(`  default_cell: ${doc.meta.cellSize.w}x${doc.meta.cellSize.h}`);
+    lines.push(`  columns: ${gridCols}`);
+    lines.push(`  rows: ${gridRows}`);
+    lines.push(`  default_cell: ${cellW}x${cellH}`);
     if (doc.meta.gap) lines.push(`  gap: ${doc.meta.gap}`);
     if (doc.meta.margin) lines.push(`  margin: ${doc.meta.margin}`);
     lines.push('  background: none');
@@ -866,7 +1082,7 @@ const PIX2 = (function () {
     for (const cid of cellIds) {
       const cell = doc.cells[cid];
       lines.push(`@cell ${cid}`);
-      if (cell.name) lines.push(`  name: "${cell.name}"`);
+      if (cell.name) lines.push(`  name: "${escapePix2String(cell.name)}"`);
       if (cell.direction && cell.direction !== 'none') lines.push(`  direction: ${cell.direction}`);
       if (cell.frame !== undefined) lines.push(`  frame: ${cell.frame}`);
       if (cell.row !== null && cell.col !== null && !isNaN(cell.row) && !isNaN(cell.col)) {
@@ -877,7 +1093,9 @@ const PIX2 = (function () {
       // Group pixels by Y coordinate for clean human/AI reading
       const pixelsByY = {};
       for (const coord in cell.pixels) {
-        const [x, y] = coord.split(',').map(n => parseInt(n, 10));
+        const parsed = parseCoordinate(coord);
+        if (!parsed) continue;
+        const [x, y] = parsed;
         if (!pixelsByY[y]) pixelsByY[y] = [];
         const color = normalizeHex(cell.pixels[coord]);
         const pId = paletteMap[color] || color;
@@ -897,7 +1115,7 @@ const PIX2 = (function () {
     for (const animId in doc.animations) {
       const anim = doc.animations[animId];
       lines.push(`@animation ${animId}`);
-      if (anim.name) lines.push(`  name: "${anim.name}"`);
+      if (anim.name) lines.push(`  name: "${escapePix2String(anim.name)}"`);
       if (anim.direction && anim.direction !== 'none') lines.push(`  direction: ${anim.direction}`);
       const framesStr = (anim.frames || []).join(', ');
       lines.push(`  frames: [${framesStr}]`);
@@ -916,8 +1134,9 @@ const PIX2 = (function () {
   // ===========================================================================
 
   function resizeCells(doc, newW, newH, mode = 'scale') {
-    const oldW = doc.meta.cellSize.w;
-    const oldH = doc.meta.cellSize.h;
+    const curDims = doc.meta.cell_size || doc.meta.cellSize || { w: 16, h: 16 };
+    const oldW = curDims.w;
+    const oldH = curDims.h;
     if (oldW === newW && oldH === newH) return doc;
 
     const scaleX = newW / oldW;
@@ -939,94 +1158,101 @@ const PIX2 = (function () {
           }
         }
       } else {
-        const offsetX = Math.floor((newW - oldW) / 2);
-        const offsetY = Math.floor((newH - oldH) / 2);
+        // Crop / Canvas Expand Anchor Top-Left
         for (const coord in cell.pixels) {
-          const [x, y] = coord.split(',').map(Number);
-          const nx = x + offsetX;
-          const ny = y + offsetY;
-          if (nx >= 0 && nx < newW && ny >= 0 && ny < newH) {
-            newPixels[`${nx},${ny}`] = cell.pixels[coord];
+          const parsed = parseCoordinate(coord);
+          if (!parsed) continue;
+          const [x, y] = parsed;
+          if (x < newW && y < newH) {
+            newPixels[coord] = cell.pixels[coord];
           }
         }
       }
 
       cell.pixels = newPixels;
-    }
-
-    doc.meta.cellSize = { w: newW, h: newH };
-    return doc;
-  }
-
-  /**
-   * Slices an RGBA ImageData buffer into a structured PIX2 document with exact alpha preservation.
-   */
-  function sliceImageIntoDoc(imgData, options = {}) {
-    const {
-      width = imgData.width,
-      height = imgData.height,
-      cols = 4,
-      rows = 4,
-      cellW = 16,
-      cellH = 16,
-      gapX = 0,
-      gapY = 0,
-      marginX = 0,
-      marginY = 0,
-      title = 'Imported Sprite'
-    } = options;
-
-    const doc = createDocument(title, cols, rows, cellW, cellH);
-    doc.meta.gap = gapX;
-    doc.meta.margin = marginX;
-    doc.palette = {};
-
-    const data = imgData.data;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cellId = `cell_${r}_${c}`;
-        const cell = doc.cells[cellId] || {
-          id: cellId,
-          name: `Frame ${r},${c}`,
-          row: r,
-          col: c,
-          direction: 'none',
-          frame: c,
-          pixels: {}
-        };
-        doc.cells[cellId] = cell;
-
-        const startX = marginX + c * (cellW + gapX);
-        const startY = marginY + r * (cellH + gapY);
-
-        for (let py = 0; py < cellH; py++) {
-          for (let px = 0; px < cellW; px++) {
-            const sx = startX + px;
-            const sy = startY + py;
-            if (sx >= width || sy >= height) continue;
-
-            const idx = (sy * width + sx) * 4;
-            const a = data[idx + 3];
-
-            // Only store pixels with visible alpha!
-            if (a > 0) {
-              const r = data[idx];
-              const g = data[idx + 1];
-              const b = data[idx + 2];
-              const hex = rgbaToHex(r, g, b, a);
-              cell.pixels[`${px},${py}`] = hex;
-            }
-          }
-        }
+      if (cell.size) {
+        cell.size = { w: newW, h: newH };
       }
     }
 
+    doc.meta.cell_size = { w: newW, h: newH };
+    attachCellSizeAlias(doc.meta);
     return doc;
   }
 
+  // ===========================================================================
+  // RASTERIZATION (Cell -> HTML5 Canvas)
+  // ===========================================================================
+
+  function renderCellToCanvas(cell, defaultCellSize, targetCanvas = null) {
+    const w = (cell.size && cell.size.w) || defaultCellSize.w;
+    const h = (cell.size && cell.size.h) || defaultCellSize.h;
+
+    const canvas = targetCanvas || document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, w, h);
+
+    const imgData = ctx.createImageData(w, h);
+    const d = imgData.data;
+
+    for (const coord in cell.pixels) {
+      const parsed = parseCoordinate(coord);
+      if (!parsed) continue;
+      const [x, y] = parsed;
+      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+
+      const rgba = hexToRgba(cell.pixels[coord]);
+      const idx = (y * w + x) * 4;
+      d[idx] = rgba.r;
+      d[idx + 1] = rgba.g;
+      d[idx + 2] = rgba.b;
+      d[idx + 3] = rgba.a;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+  }
+
+  function renderAtlasToCanvas(doc, targetCanvas = null) {
+    const cols = doc.meta.grid.cols;
+    const rows = doc.meta.grid.rows;
+    const cellDim = doc.meta.cell_size || doc.meta.cellSize;
+    const cw = cellDim.w;
+    const ch = cellDim.h;
+    const gap = doc.meta.gap || 0;
+    const margin = doc.meta.margin || 0;
+
+    const totalW = margin * 2 + cols * cw + (cols - 1) * gap;
+    const totalH = margin * 2 + rows * ch + (rows - 1) * gap;
+
+    const canvas = targetCanvas || document.createElement('canvas');
+    canvas.width = totalW;
+    canvas.height = totalH;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, totalW, totalH);
+
+    for (const cid in doc.cells) {
+      const cell = doc.cells[cid];
+      if (cell.row === null || cell.col === null) continue;
+      if (cell.row >= rows || cell.col >= cols) continue;
+
+      const destX = margin + cell.col * (cw + gap);
+      const destY = margin + cell.row * (ch + gap);
+      const cellCanvas = renderCellToCanvas(cell, cellDim);
+      ctx.drawImage(cellCanvas, destX, destY);
+    }
+
+    return canvas;
+  }
+
+  // ===========================================================================
+  // DOCUMENT VALIDATION & DIAGNOSTICS API
+  // ===========================================================================
+
   /**
-   * Validates a document structure and flags prototype pollution, out-of-bounds coordinates, or missing references.
+   * Validate a PIX2 document structure, coordinates, palette, and frame integrity.
    * @param {Object} doc - Parsed PIX2 document object.
    * @param {Object} [options] - Optional settings ({ strict: boolean }).
    * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
@@ -1044,6 +1270,9 @@ const PIX2 = (function () {
     if (!doc.meta || typeof doc.meta !== 'object') {
       errors.push('Missing or invalid @meta object');
     } else {
+      if (strict && (!doc.meta.version || doc.meta.version !== '1.0')) {
+        errors.push(`Unsupported or missing @pix2 version header: "${doc.meta.version || 'none'}" (expected "1.0")`);
+      }
       if (!doc.meta.grid || typeof doc.meta.grid.cols !== 'number' || typeof doc.meta.grid.rows !== 'number') {
         errors.push('Invalid grid definition');
       } else {
@@ -1054,8 +1283,32 @@ const PIX2 = (function () {
           warnings.push(`Grid rows clamped to max ${MAX_GRID_ROWS}`);
         }
       }
-      if (!doc.meta.cellSize || typeof doc.meta.cellSize.w !== 'number' || typeof doc.meta.cellSize.h !== 'number') {
-        errors.push('Invalid cellSize definition');
+      const cellDim = doc.meta.cell_size || doc.meta.cellSize;
+      if (!cellDim || typeof cellDim.w !== 'number' || typeof cellDim.h !== 'number') {
+        errors.push('Invalid cell_size definition');
+      }
+    }
+
+    // Include parser diagnostics if attached
+    if (doc._diagnostics && Array.isArray(doc._diagnostics)) {
+      for (const diag of doc._diagnostics) {
+        const msg = `[${diag.code}] Line ${diag.line}: ${diag.message}`;
+        if (diag.code.startsWith('PIX2_ERR_') || strict) {
+          errors.push(msg);
+        } else {
+          warnings.push(msg);
+        }
+      }
+    }
+
+    // Palette validation
+    if (doc.palette && typeof doc.palette === 'object') {
+      for (const palId in doc.palette) {
+        if (!isSafeIdentifier(palId)) continue;
+        const hex = doc.palette[palId];
+        if (!isValidHex(hex)) {
+          errors.push(`Palette entry "${palId}" has invalid hex color "${hex}"`);
+        }
       }
     }
 
@@ -1071,8 +1324,9 @@ const PIX2 = (function () {
     }
 
     // Semantic checks: Cell coordinate bounds & pixel integrity
-    const defaultW = (doc.meta && doc.meta.cellSize && doc.meta.cellSize.w) || 16;
-    const defaultH = (doc.meta && doc.meta.cellSize && doc.meta.cellSize.h) || 16;
+    const cellDim = doc.meta && (doc.meta.cell_size || doc.meta.cellSize);
+    const defaultW = (cellDim && cellDim.w) || 16;
+    const defaultH = (cellDim && cellDim.h) || 16;
 
     if (doc.cells && typeof doc.cells === 'object') {
       for (const cellId in doc.cells) {
@@ -1095,6 +1349,10 @@ const PIX2 = (function () {
               const msg = `Cell "${cellId}": pixel at (${x}, ${y}) is outside bounds [0..${cellW - 1}, 0..${cellH - 1}]`;
               if (strict) errors.push(msg);
               else warnings.push(msg);
+            }
+            const col = cell.pixels[coord];
+            if (!isValidHex(col)) {
+              errors.push(`Cell "${cellId}": pixel at (${x}, ${y}) has invalid color value "${col}"`);
             }
           }
         }
@@ -1125,21 +1383,33 @@ const PIX2 = (function () {
     };
   }
 
+  // ===========================================================================
+  // PUBLIC EXPORTS
+  // ===========================================================================
+
   return {
-    createDocument,
     parse,
     serialize,
+    createDocument,
     validate,
-    resizeCells,
-    sliceImageIntoDoc,
     normalizeHex,
+    isValidHex,
     hexToRgba,
     rgbaToHex,
     stripComment,
     drawLineBresenham,
     floodFillCell,
     isSafeIdentifier,
-    sanitizeKey
+    sanitizeKey,
+    parseStrictInt,
+    parseCoordinate,
+    parseDimension,
+    escapePix2String,
+    unescapePix2String,
+    attachCellSizeAlias,
+    renderCellToCanvas,
+    renderAtlasToCanvas,
+    resizeCells
   };
 })();
 
