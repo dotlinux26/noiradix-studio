@@ -555,6 +555,7 @@
       document.querySelector('.studio-header'),
       document.getElementById('tabs-container'),
       document.querySelector('.studio-statusbar'),
+      document.querySelector('.code-pane-header'),
       ...document.querySelectorAll('.view-sub-toolbar')
     ];
 
@@ -5061,31 +5062,43 @@
       let html = escapeHtml(codePart);
 
       // 1. Strings (mask to avoid token collision)
-      html = html.replace(/(&quot;.*?&quot;|"[^"]*"|'[^']*')/g, '___PIXSTR_$1___');
+      const strMap = [];
+      html = html.replace(/(&quot;.*?&quot;|"[^"]*"|'[^']*')/g, (m) => {
+        strMap.push('<span class="syn-str">' + m + '</span>');
+        return '___PIXSTR_' + (strMap.length - 1) + '___';
+      });
 
-      // 2. Section directives (@meta, @grid, @palette, @cell, etc.)
+      // 2. Hex colors with color preview dot swatch (mask before number detection to prevent numeric hex like #080610 corruption)
+      const colMap = [];
+      html = html.replace(/(#[0-9a-fA-F]{3,8})\b/g, (m) => {
+        colMap.push('<span class="syn-color"><span class="syn-swatch" style="background-color:' + m + '"></span>' + m + '</span>');
+        return '___PIXCOL_' + (colMap.length - 1) + '___';
+      });
+
+      // 3. Section directives (@meta, @grid, @palette, @cell, etc.)
       html = html.replace(/(@[a-zA-Z0-9_]+)/g, '<span class="syn-dir">$1</span>');
 
-      // 3. Keys followed by colon (key:)
-      html = html.replace(/\b([a-zA-Z0-9_]+):/g, '<span class="syn-key">$1</span>:');
+      // 4. Keys followed by colon (key:) - mask to protect key names and colon
+      const keyMap = [];
+      html = html.replace(/\b([a-zA-Z0-9_]+):/g, (_, k) => {
+        keyMap.push('<span class="syn-key">' + k + ':</span>');
+        return '___PIXKEY_' + (keyMap.length - 1) + '___';
+      });
 
-      // 4. Drawing commands & vector macros
+      // 5. Drawing commands & vector macros
       html = html.replace(/\b(sym_dot|line|rect|fill|pixel|dot)\b/g, '<span class="syn-cmd">$1</span>');
       html = html.replace(/(^|\s)(p)(?=\s|$)/g, '$1<span class="syn-cmd">$2</span>');
-
-      // 5. Hex colors with color preview dot swatch
-      html = html.replace(/(#[0-9a-fA-F]{3,8})\b/g, (m) => {
-        return '<span class="syn-color"><span class="syn-swatch" style="background-color:' + m + '"></span>' + m + '</span>';
-      });
 
       // 6. Keywords
       html = html.replace(/\b(true|false|loop|once|outline|none|down|up|right|left|down_right|down_left|up_right|up_left)\b/g, '<span class="syn-kw">$1</span>');
 
-      // 7. Numbers, dimensions, coordinates (outside tags)
+      // 7. Numbers, dimensions, coordinates (outside tags & tokens)
       html = html.replace(/\b(\d+(?:,\d+|\.\d+|x\d+)?)\b(?![^<]*>)/g, '<span class="syn-num">$1</span>');
 
-      // 8. Restore strings
-      html = html.replace(/___PIXSTR_(.*?)___/g, '<span class="syn-str">$1</span>');
+      // 8. Restore tokens safely in reverse order
+      html = html.replace(/___PIXKEY_(\d+)___/g, (_, i) => keyMap[i]);
+      html = html.replace(/___PIXCOL_(\d+)___/g, (_, i) => colMap[i]);
+      html = html.replace(/___PIXSTR_(\d+)___/g, (_, i) => strMap[i]);
 
       if (commentPart) {
         html += '<span class="syn-cmt">' + escapeHtml(commentPart) + '</span>';

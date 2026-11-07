@@ -1463,34 +1463,61 @@ body {
    ========================================================================== */
 #view-code-editor {
   flex-direction: row;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .code-editor-layout {
   width: 100%;
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 380px;
+  grid-template-rows: 100%;
+  overflow: hidden;
 }
 
 .code-pane {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   border-right: 1px solid var(--border-subtle);
   background-color: var(--code-bg);
 }
 
 .code-pane-header {
+  height: 48px;
   min-height: 48px;
-  height: auto;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 0 16px;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.code-pane-header::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.code-pane-header.is-dragging {
+  cursor: grabbing !important;
 }
 
 .code-title {
@@ -1501,6 +1528,7 @@ body {
   font-size: 13px;
   color: var(--text-main);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .code-title .badge {
@@ -1529,11 +1557,14 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .code-textarea {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   background-color: var(--code-bg);
   color: var(--code-text);
   font-family: var(--font-mono);
@@ -1544,9 +1575,11 @@ body {
   outline: none;
   resize: none;
   white-space: pre;
-  overflow-x: auto;
+  overflow: auto;
   tab-size: 2;
   transition: background-color 0.2s, box-shadow 0.2s;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 }
 
 .code-textarea[readonly] {
@@ -1566,6 +1599,8 @@ body {
    ========================================================================== */
 .code-viewer-container {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
   background-color: var(--code-bg, #0f172a);
   font-family: var(--font-mono, monospace);
@@ -1576,12 +1611,16 @@ body {
   white-space: pre;
   user-select: text;
   cursor: text;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 }
 
 .code-line {
   display: flex;
   min-height: 20px;
   padding: 0 16px 0 0;
+  min-width: max-content;
+  width: fit-content;
 }
 
 .code-line:hover {
@@ -1602,6 +1641,9 @@ body {
 .line-content {
   flex: 1;
   color: var(--code-text, #e2e8f0);
+  white-space: pre;
+  min-width: max-content;
+  flex-shrink: 0;
 }
 
 /* Syntax Color Tokens */
@@ -1626,6 +1668,7 @@ body {
   border-radius: 2px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* Light Theme Syntax Adjustments */
@@ -1651,13 +1694,47 @@ body {
 [data-theme="light"] .syn-color { color: #047857; }
 [data-theme="light"] .syn-swatch { border: 1px solid rgba(0, 0, 0, 0.3); }
 
+/* Custom Scrollbars for Code Pane & AI Guide */
+.code-viewer-container::-webkit-scrollbar,
+.code-textarea::-webkit-scrollbar,
+.ai-guide-pane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  display: block !important;
+}
+
+.code-viewer-container::-webkit-scrollbar-track,
+.code-textarea::-webkit-scrollbar-track,
+.ai-guide-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-viewer-container::-webkit-scrollbar-thumb,
+.code-textarea::-webkit-scrollbar-thumb,
+.ai-guide-pane::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 4px;
+}
+
+.code-viewer-container::-webkit-scrollbar-thumb:hover,
+.code-textarea::-webkit-scrollbar-thumb:hover,
+.ai-guide-pane::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent-primary);
+}
+
 .ai-guide-pane {
   background-color: var(--bg-secondary);
   padding: 16px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 }
 
 .ai-guide-content h4 {
