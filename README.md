@@ -461,7 +461,7 @@ noiradix-studio/
 
 ## 🧪 Testing & Quality Assurance
 
-Run the automated test suites using Node.js (133 tests, zero external npm dependencies):
+Run the automated test suites using Node.js (134 tests, zero external npm dependencies):
 ```bash
 # 1. Semantic roundtrip & feature tests (96/96)
 node tests/test-roundtrip.js

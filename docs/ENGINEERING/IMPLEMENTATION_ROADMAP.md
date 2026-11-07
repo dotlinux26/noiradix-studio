@@ -98,4 +98,4 @@
 - **NOIRADIX Studio Application:** Soft Feature Freeze. No new UI features or breaking architecture changes. Focus exclusively on performance, precision, and regression prevention.
 - **PIX2 Reference Engine:** Feature Freeze. Stable parser, serializer, and data model.
 - **PIX2 v1.0 Standard:** Stabilization Candidate & Formal Specification Freeze. EBNF, lexical grammar, drawing primitives semantics, and test vector baselines are fully decoupled, normative, and synchronized.
-- **Acceptance Status:** 133/133 tests passing cleanly in continuous integration.
+- **Acceptance Status:** 134/134 tests passing cleanly in continuous integration.

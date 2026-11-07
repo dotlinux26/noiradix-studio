@@ -73,7 +73,7 @@ The test suite operates standalone using Node.js without third-party test framew
 
 ---
 
-### Test Suite 2: Security & Anti-DoS Defenses (`test-security.js` — 20 Tests)
+### Test Suite 2: Security & Anti-DoS Defenses (`test-security.js` — 21 Tests)
 
 * **Group 1: Prototype Pollution Defenses (4 tests)**
   * Rejects `@cell __proto__`, `@animation __proto__`, and `@palette __proto__` from polluting `Object.prototype`.
@@ -83,12 +83,13 @@ The test suite operates standalone using Node.js without third-party test framew
   * Clamps astronomical cell dimensions.
   * Limits massive rect fill and flood fill stack/heap execution.
   * Bresenham line step guards to prevent infinite loops.
-  * Clamps out-of-bound coordinates ($|\text{coord}| > 2048$).
-* **Group 3: Document Validation & Strict Integer API (8 tests)**
+  * Clamps out-of-bound coordinates ($|\text{coord}| > 2048$) and emits `PIX2_ERR_RESOURCE_LIMIT`.
+* **Group 3: Document Validation & Strict Integer API (9 tests)**
   * Validates healthy `.pix2` documents and flags illegal keys.
   * Strict mode out-of-bounds coordinate detection.
   * Non-existent animation frame references (`phantom_cell`).
   * Strict integer validation strictly rejecting malformed coordinates (`1abc,3`), floats (`1.5`), and unsafe integer overflow.
+  * Strict rectangle validation enforcing dimensions $\ge 1\times 1$ and valid modes (`outline` | `fill`).
   * Canonical `cell_size` synchronization with non-enumerable `cellSize` alias.
 * **Group 4: Client-Side XSS & Sanitization Defense (2 tests)**
   * Preserves raw markup in document graph while shielding against DOM injection.
@@ -128,9 +129,9 @@ The test suite operates standalone using Node.js without third-party test framew
 ```text
 ====================================================
 TEST RESULTS: 96 / 96 PASSED (Roundtrip & Features)
-SECURITY TEST RESULTS: 20 / 20 PASSED (Defenses & Anti-DoS)
+SECURITY TEST RESULTS: 21 / 21 PASSED (Defenses & Anti-DoS)
 REGEX PATTERN RESULTS: 6 / 6 PASSED (TextMate Regex Patterns)
 CONFORMANCE TEST RESULTS: 11 / 11 PASSED (Normative Vectors)
-TOTAL ACCEPTANCE: 133 / 133 PASSED (100%)
+TOTAL ACCEPTANCE: 134 / 134 PASSED (100%)
 ====================================================
 ```

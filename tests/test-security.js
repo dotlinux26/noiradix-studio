@@ -159,12 +159,20 @@ test('Rejects coordinates outside safety bounds (|coord| > 2048)', () => {
 @pix2 1.0
 @cell cell_0_0
   p 999999,999999 #ffffff
+  dot 888888,888888 #ffffff
+  line 5000,5000 6000,6000 #ffffff
+  rect 7000,7000 4x4 #ffffff fill
+  sym_dot 4000,4000 #ffffff
+  fill 999999,999999 #ffffff
   p 10,10 #ff0000
 @end
 `;
   const doc = PIX2.parse(payload);
   assert.strictEqual(doc.cells.cell_0_0.pixels['999999,999999'], undefined);
   assert.strictEqual(doc.cells.cell_0_0.pixels['10,10'], '#ff0000');
+  assert.ok(doc._diagnostics, 'Diagnostics array must be attached to document');
+  const resLimitDiags = doc._diagnostics.filter(d => d.code === 'PIX2_ERR_RESOURCE_LIMIT');
+  assert.strictEqual(resLimitDiags.length, 6, 'All 6 out-of-bound primitives must emit PIX2_ERR_RESOURCE_LIMIT');
 });
 
 // ---------------------------------------------------------------------------
@@ -261,6 +269,22 @@ test('Strict integer validation strictly rejects floats (1.5) and unsafe integer
   assert.strictEqual(doc.cells['test_floats'].pixels['4,5.8'], undefined);
   assert.strictEqual(doc.cells['test_floats'].pixels['4,5'], undefined);
   assert.strictEqual(doc.cells['test_floats'].pixels['7,8'], '#ff0000');
+});
+
+test('Validates rectangle dimensions (>= 1x1) and modes (outline|fill)', () => {
+  const payload = `
+@pix2 1.0
+@cell cell_0_0
+  rect 2,2 0x4 #ffffff fill
+  rect 2,2 4x0 #ffffff fill
+  rect 2,2 4x4 #ffffff non_existent_mode
+@end
+`;
+  const doc = PIX2.parse(payload);
+  const val = PIX2.validate(doc, { strict: true });
+  assert.strictEqual(val.valid, false, 'Document with invalid rect dimensions and mode must fail validation');
+  assert.ok(val.diagnostics.some(d => d.code === 'PIX2_ERR_INVALID_COORDINATE'), 'Zero dimension must emit PIX2_ERR_INVALID_COORDINATE');
+  assert.ok(val.diagnostics.some(d => d.code === 'PIX2_ERR_INVALID_RECT_MODE'), 'Invalid mode must emit PIX2_ERR_INVALID_RECT_MODE');
 });
 
 // ---------------------------------------------------------------------------

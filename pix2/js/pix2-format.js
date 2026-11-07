@@ -917,7 +917,15 @@ const PIX2 = (function () {
             });
           } else {
             const [startX, startY] = startPt;
-            floodFillCell(currentCell, startX, startY, color, doc.meta.cell_size);
+            if (Math.abs(startX) > MAX_COORD_ABS || Math.abs(startY) > MAX_COORD_ABS) {
+              diagnostics.push({
+                code: 'PIX2_ERR_RESOURCE_LIMIT',
+                line: i + 1,
+                message: `fill seed point (${startX}, ${startY}) exceeds safety limit (${MAX_COORD_ABS})`
+              });
+            } else {
+              floodFillCell(currentCell, startX, startY, color, doc.meta.cell_size);
+            }
           }
         } else if (cmd === 'sym_dot') {
           const pt = parseCoordinate(parts[1] || '');
