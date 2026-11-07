@@ -34,6 +34,7 @@ PIX2 adopts strict comment parsing to eliminate conflicts with HEX color syntax 
 - **Identifiers** (`cell_id`, `anim_id`, `palette_name`): ASCII alphanumeric characters plus underscores: `[a-zA-Z_][a-zA-Z0-9_-]*`.
 - **Strings**: Characters enclosed in double quotes: `"Player Walk Down"`. Escaped quotes `\"` are supported.
 - **Integers**: Non-negative decimal numbers: `[0-9]+`.
+- **Signed Integers**: Optional leading minus sign followed by non-negative integer: `-?[0-9]+`.
 - **Dimensions**: `<width>x<height>` where width and height are integers: e.g. `16x16`, `32x32`.
 - **Hex Colors**:
   - 3-digit RGB: `#RGB` (e.g. `#FFF` $\rightarrow$ `#FFFFFF`)
@@ -81,7 +82,8 @@ DirectionEnum      ::= "down" | "up" | "right" | "left"
 PixelLine          ::= WS* PixelRecord (WS+ PixelRecord)* (WS* Comment)? EOL
 PixelRecord        ::= ("pixel" | "p") WS+ Coordinate WS+ ColorRef
                      | ("dot" | "d") WS+ Coordinate WS+ ColorRef
-Coordinate         ::= Integer "," Integer
+Coordinate         ::= SignedInteger "," SignedInteger
+SignedInteger      ::= "-"? Integer
 ColorRef           ::= HexColor | Identifier | Integer
 
 VectorPrimitive    ::= LinePrimitive | RectPrimitive | FillPrimitive | SymDotPrimitive
@@ -115,9 +117,9 @@ EndMarker          ::= "@end" EOL?
 ## 3. Semantic Validation Rules
 
 1. **Unique Cell Identifiers**: Every `@cell <id>` must be globally unique within the document.
-2. **Valid Coordinate Bounds**: For a cell with dimensions $W \times H$, every pixel coordinate $(x, y)$ must strictly satisfy:
+2. **Valid Coordinate Bounds**: Coordinates are parsed lexically as signed integers (`SignedInteger "," SignedInteger`). Semantically, for a cell with dimensions $W \times H$, every pixel coordinate $(x, y)$ must strictly satisfy:
    $$0 \le x < W \quad \text{and} \quad 0 \le y < H$$
-   Any pixel outside this range must trigger a validation warning or error.
+   Any pixel outside this range (including negative offsets) must trigger a validation warning or diagnostic error (`PIX2_WARN_OUT_OF_BOUNDS`).
 3. **Reference Integrity in Animations**: Every cell ID referenced in `@animation <id>` `frames: [...]` must exist in the `@cell` definitions of the document.
 4. **Color Reference Resolution**: If a pixel references an identifier or integer (e.g. `pixel 5,8 outline`), that identifier must exist in the `@palette` section. If undefined, it falls back to parsing as direct hex or logs a semantic warning.
 5. **Pure Transparency Guarantee**: A cell with zero pixel records is completely transparent. No pixel records may represent alpha zero (`#00000000`). If a pixel's alpha is zero, the record must be erased.

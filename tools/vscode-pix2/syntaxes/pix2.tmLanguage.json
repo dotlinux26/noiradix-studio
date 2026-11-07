@@ -67,14 +67,24 @@
     "properties": {
       "patterns": [
         {
-          "name": "support.type.property-name.pix2",
-          "match": "\\b(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode):"
+          "match": "(?<=^|\\s)(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode)(\\s*:)",
+          "captures": {
+            "1": {
+              "name": "support.type.property-name.pix2"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.pix2"
+            }
+          }
         },
         {
-          "match": "(?<=^|\\s)([a-zA-Z0-9_-]+):",
+          "match": "(?<=^|\\s)([a-zA-Z0-9_-]+)(\\s*:)",
           "captures": {
             "1": {
               "name": "variable.other.property.pix2"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.pix2"
             }
           }
         }

@@ -36,7 +36,7 @@ Traditional image formats (`.png`, `.webp`, `.jpg`) are binary raster matrices. 
 - **Origin `(0, 0)`** is located at the **TOP-LEFT** corner of each cell.
 - **`X` axis** points horizontally to the **RIGHT** (`0` to `W - 1`).
 - **`Y` axis** points vertically **DOWN** (`0` to `H - 1`).
-- All coordinates must be non-negative integers.
+- Lexically, coordinates accept signed integers (`SignedInteger "," SignedInteger`). Semantically, all rendered pixel coordinates must be non-negative integers satisfying $0 \le X < W$ and $0 \le Y < H$. Any coordinate outside this range triggers an out-of-bounds warning.
 
 ```
        X = 0      X = 1      ...      X = W-1
@@ -343,7 +343,8 @@ DirectionEnum      ::= "down" | "up" | "right" | "left"
 PixelLine          ::= WS* PixelRecord (WS+ PixelRecord)* (WS* Comment)? EOL
 PixelRecord        ::= ("pixel" | "p") WS+ Coordinate WS+ ColorRef
                      | ("dot" | "d") WS+ Coordinate WS+ ColorRef
-Coordinate         ::= Integer "," Integer
+Coordinate         ::= SignedInteger "," SignedInteger
+SignedInteger      ::= "-"? Integer
 ColorRef           ::= HexColor | Identifier | Integer
 
 VectorPrimitive    ::= LinePrimitive | RectPrimitive | FillPrimitive | SymDotPrimitive
