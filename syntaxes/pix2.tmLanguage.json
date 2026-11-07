@@ -27,6 +27,9 @@
     },
     {
       "include": "#numbers"
+    },
+    {
+      "include": "#identifiers"
     }
   ],
   "repository": {
@@ -43,16 +46,39 @@
       ]
     },
     "directives": {
-      "name": "keyword.control.directive.pix2",
-      "match": "@(pix2|meta|grid|palette|cell|animation|animations|end)\\b"
+      "patterns": [
+        {
+          "match": "(@(pix2|meta|grid|palette|cell|frame|animation|animations|end))(\\s+([a-zA-Z0-9_.-]+))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.pix2"
+            },
+            "4": {
+              "name": "entity.name.section.pix2"
+            }
+          }
+        }
+      ]
     },
     "colors": {
       "name": "constant.other.color.hex.pix2",
       "match": "#[0-9a-fA-F]{3,8}\\b"
     },
     "properties": {
-      "name": "support.type.property-name.pix2",
-      "match": "\\b(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode):"
+      "patterns": [
+        {
+          "name": "support.type.property-name.pix2",
+          "match": "\\b(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode):"
+        },
+        {
+          "match": "(?<=^|\\s)([a-zA-Z0-9_-]+):",
+          "captures": {
+            "1": {
+              "name": "variable.other.property.pix2"
+            }
+          }
+        }
+      ]
     },
     "commands": {
       "patterns": [
@@ -78,7 +104,7 @@
         },
         {
           "name": "constant.language.special.pix2",
-          "match": "\\b(transparent)\\b"
+          "match": "\\b(transparent|none)\\b"
         }
       ]
     },
@@ -101,11 +127,19 @@
         },
         {
           "name": "constant.numeric.coordinate.pix2",
-          "match": "\\b-?[0-9]+,-?[0-9]+\\b"
+          "match": "(?<!\\w)-?[0-9]+,-?[0-9]+\\b"
         },
         {
           "name": "constant.numeric.integer.pix2",
-          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+          "match": "(?<!\\w)-?[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.parameter.pix2",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b"
         }
       ]
     }

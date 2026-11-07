@@ -241,6 +241,23 @@ test('Canonical cell_size and legacy cellSize aliases are synchronized in AST', 
   assert.strictEqual(doc.meta.cellSize.h, 32);
 });
 
+test('Strict integer validation strictly rejects floats (1.5) and unsafe integers', () => {
+  const doc = PIX2.parse(`
+@pix2 1.0
+@cell test_floats
+  pixel 1.5,3 #ffffff
+  pixel 4,5.8 #ffffff
+  pixel 9007199254740992,2 #ffffff
+  pixel 7,8 #ff0000
+@end
+`);
+  assert.strictEqual(doc.cells['test_floats'].pixels['1.5,3'], undefined);
+  assert.strictEqual(doc.cells['test_floats'].pixels['1,3'], undefined);
+  assert.strictEqual(doc.cells['test_floats'].pixels['4,5.8'], undefined);
+  assert.strictEqual(doc.cells['test_floats'].pixels['4,5'], undefined);
+  assert.strictEqual(doc.cells['test_floats'].pixels['7,8'], '#ff0000');
+});
+
 // ---------------------------------------------------------------------------
 // TEST GROUP 4: Client-Side XSS & Sanitization Defense
 // ---------------------------------------------------------------------------

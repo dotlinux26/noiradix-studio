@@ -1,0 +1,11 @@
+@pix2 1.0
+
+@meta
+  title: "Invalid Out Of Bounds Coordinate Test"
+  cell_size: 16x16
+
+@cell hero_cell
+  # Coordinate (99, 99) exceeds the cell dimension 16x16.
+  # Conforming validators must flag this in strict mode.
+  pixel 99,99 #ffffff
+@end

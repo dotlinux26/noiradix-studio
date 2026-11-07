@@ -5774,9 +5774,14 @@ const outText = PIX2.serialize(doc);</code></pre>
     let paletteSummary = '';
     if (state.doc.palette && Object.keys(state.doc.palette).length > 0) {
       paletteSummary = Object.entries(state.doc.palette)
+        .filter(([id, col]) => {
+          const raw = typeof col === 'string' ? col : (col && typeof col.hex === 'string' ? col.hex : '');
+          return /^#?[0-9a-fA-F]{3,8}$/.test(raw.trim());
+        })
         .map(([id, col]) => {
-          const hex = typeof col === 'string' ? col : (col && col.hex ? col.hex : '#ffffff');
-          const name = typeof col === 'object' && col && col.name ? col.name : `Color ${id}`;
+          const raw = typeof col === 'string' ? col : col.hex;
+          const hex = PIX2.normalizeHex(raw);
+          const name = (typeof col === 'object' && col && col.name) ? col.name : `Color ${id}`;
           return `  ${id}: ${hex}  # ${name}`;
         })
         .join('\n');

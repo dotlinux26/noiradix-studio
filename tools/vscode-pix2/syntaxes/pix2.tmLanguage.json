@@ -1,0 +1,147 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "PIX2",
+  "scopeName": "source.pix2",
+  "fileTypes": ["pix2"],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#colors"
+    },
+    {
+      "include": "#properties"
+    },
+    {
+      "include": "#commands"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.pix2",
+          "match": ";.*$"
+        },
+        {
+          "name": "comment.line.number-sign.pix2",
+          "match": "(?<=^|\\s)#(?!([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b).*$"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "match": "(@(pix2|meta|grid|palette|cell|frame|animation|animations|end))(\\s+([a-zA-Z0-9_.-]+))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.pix2"
+            },
+            "4": {
+              "name": "entity.name.section.pix2"
+            }
+          }
+        }
+      ]
+    },
+    "colors": {
+      "name": "constant.other.color.hex.pix2",
+      "match": "#[0-9a-fA-F]{3,8}\\b"
+    },
+    "properties": {
+      "patterns": [
+        {
+          "name": "support.type.property-name.pix2",
+          "match": "\\b(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode):"
+        },
+        {
+          "match": "(?<=^|\\s)([a-zA-Z0-9_-]+):",
+          "captures": {
+            "1": {
+              "name": "variable.other.property.pix2"
+            }
+          }
+        }
+      ]
+    },
+    "commands": {
+      "patterns": [
+        {
+          "name": "keyword.operator.macro.pix2",
+          "match": "\\b(sym_dot|line|rect|fill|pixel|dot|p|d)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.direction.pix2",
+          "match": "\\b(down|up|right|left|down_left|down_right|up_left|up_right|none|any)\\b"
+        },
+        {
+          "name": "constant.language.boolean.pix2",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.mode.pix2",
+          "match": "\\b(outline|fill|loop|once|pingpong)\\b"
+        },
+        {
+          "name": "constant.language.special.pix2",
+          "match": "\\b(transparent|none)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.pix2",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.pix2",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.dimension.pix2",
+          "match": "\\b[0-9]+x[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.coordinate.pix2",
+          "match": "(?<!\\w)-?[0-9]+,-?[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.pix2",
+          "match": "(?<!\\w)-?[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.parameter.pix2",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b"
+        }
+      ]
+    }
+  }
+}

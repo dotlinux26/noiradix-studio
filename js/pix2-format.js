@@ -183,7 +183,7 @@ const PIX2 = (function () {
    * @returns {number} Integer or NaN
    */
   function parseStrictInt(val) {
-    if (typeof val === 'number') return Number.isSafeInteger(val) ? val : Math.trunc(val);
+    if (typeof val === 'number') return Number.isSafeInteger(val) ? val : NaN;
     if (typeof val !== 'string') return NaN;
     const trimmed = val.trim();
     if (!STRICT_INT_REGEX.test(trimmed)) return NaN;

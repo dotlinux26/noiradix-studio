@@ -442,6 +442,14 @@ noiradix-studio/
 │   ├── FEATURES/                # Deep dives into grid, animation, palette, and zoom
 │   └── ENGINEERING/             # System architecture, test plan, & roadmaps
 │
+├── pix2/                        # Standalone PIX2 standard distribution
+│   ├── README.md                # Language specification overview & creator credits
+│   ├── SPECIFICATION.md         # Canonical language specification v1.0
+│   ├── LICENSE-CODE             # Apache-2.0 license for reference engine
+│   ├── LICENSE-SPEC             # CC BY 4.0 license for standard specifications
+│   ├── js/                      # Canonical reference JavaScript implementation
+│   └── test-vectors/            # Normative conformance test vectors for 3rd-party ports
+│
 └── tests/
     ├── test-roundtrip.js        # Deterministic parse-serialize roundtrip test suite
     └── test-security.js         # Malicious payload & prototype pollution test suite
@@ -503,10 +511,12 @@ If you find NOIRADIX Studio useful in your game development pipeline, please con
 
 ## 📄 License & Copyright
 
-NOIRADIX Studio is open-source software created by **dotlinux26 (Nguyen Duc Canh)** and licensed under the [Apache License, Version 2.0](LICENSE).
+- **NOIRADIX Studio Application & Visual Editor:** Licensed under the [Apache License, Version 2.0](LICENSE).
+- **PIX2 Language Specification (`pix2/SPECIFICATION.md`):** Governed as an open standard and licensed under [Creative Commons Attribution 4.0 International (CC BY 4.0)](pix2/LICENSE-SPEC).
+- **PIX2 Reference Engine (`pix2/js/pix2-format.js`):** Licensed under the [Apache License, Version 2.0](pix2/LICENSE-CODE).
 
 ```text
-Copyright (c) 2026 dotlinux26 (Nguyen Duc Canh)
+Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26)
 ```
 
-See [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions and third-party notices.
+See [NOTICE](NOTICE), [pix2/README.md](pix2/README.md), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions and third-party notices.

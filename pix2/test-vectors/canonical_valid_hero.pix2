@@ -1,0 +1,47 @@
+@pix2 1.0
+
+@meta
+  title: "Canonical Hero"
+  author: "Nguyen Duc Canh (@dotlinux26)"
+  version: "1.0"
+  color_mode: "RGBA"
+  coordinate_origin: "top-left"
+
+@grid
+  columns: 2
+  rows: 1
+  default_cell: 16x16
+  background: none
+
+@palette
+  1: #57546f  # Slate Outline
+  2: #f8f7fb  # Ghost Body White
+  3: #ffb0bc  # Blush Pink
+
+@cell hero_idle_0
+  name: "Hero Idle 0"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  rect 4,4 8x8 1 outline
+  pixel 6,6 1 pixel 9,6 1
+  pixel 5,8 3 pixel 10,8 3
+
+@cell hero_idle_1
+  name: "Hero Idle 1"
+  direction: down
+  frame: 1
+  grid_pos: 0,1
+  rect 4,3 8x8 1 outline
+  pixel 6,5 1 pixel 9,5 1
+  pixel 5,7 3 pixel 10,7 3
+
+@animation idle_down
+  name: "Idle Down"
+  direction: down
+  frames: [hero_idle_0, hero_idle_1]
+  fps: 4
+  loop: true
+  mode: loop
+
+@end

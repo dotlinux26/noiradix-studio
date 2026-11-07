@@ -1,0 +1,13 @@
+@pix2 1.0
+
+@meta
+  title: "Invalid Missing Frame Test"
+  cell_size: 16x16
+
+@cell hero_idle_0
+  pixel 0,0 #ffffff
+
+# Conforming validators must flag that 'phantom_cell_404' does not exist in @cell records.
+@animation walk
+  frames: [hero_idle_0, phantom_cell_404]
+@end

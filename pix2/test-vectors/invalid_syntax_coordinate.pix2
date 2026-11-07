@@ -1,0 +1,11 @@
+@pix2 1.0
+
+@meta
+  title: "Invalid Syntax Coordinate Test"
+  cell_size: 16x16
+
+@cell test_invalid_coord
+  # The coordinate '1abc,3' contains illegal non-numeric characters
+  # Conforming parsers must reject this pixel coordinate and NOT truncate to (1, 3).
+  pixel 1abc,3 #ffffff
+@end

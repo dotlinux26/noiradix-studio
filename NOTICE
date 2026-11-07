@@ -1,6 +1,17 @@
 NOIRADIX Studio
-Copyright 2026 dotlinux26 (Nguyen Duc Canh)
+Copyright 2026 Nguyen Duc Canh (@dotlinux26)
 
-This product includes software developed by dotlinux26 (Nguyen Duc Canh)
+This product includes software developed by Nguyen Duc Canh (@dotlinux26)
 (https://github.com/dotlinux26/noiradix-studio).
 
+=======================================================================
+STANDALONE PIX2 SPECIFICATION & REFERENCE ENGINE NOTICE
+=======================================================================
+The PIX2 standard distribution located in the 'pix2/' directory is
+governed independently:
+- PIX2 Specifications and Documentation:
+  Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+  Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26).
+- PIX2 Reference Engine & Compiler:
+  Licensed under the Apache License, Version 2.0 (Apache-2.0).
+  Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26).
