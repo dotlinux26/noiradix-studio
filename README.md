@@ -21,6 +21,28 @@
 
 ---
 
+## 💡 The Core Philosophy: Why NOIRADIX & `.pix2` Exist
+
+> **"Let machines write the coordinate math. Let humans enjoy the visual canvas."**
+
+### 1. Nobody Wants to Manually Code Pixels by Hand
+Let’s be honest: no human artist or game developer is going to sit down and type thousands of coordinate lines like `pixel 4,5 #ffffff` by hand. That would be tedious and impractical.
+* **The `.pix2` text format is designed for Machines & AI (LLMs):** It gives language models (Claude, ChatGPT, Gemini) a clean, symbolic grammar to express sprites with symmetry math and geometry algorithms in seconds.
+* **NOIRADIX Studio is designed for Humans:** A visual, tactile workbench where you draw with a mouse or tablet, scrub timelines, test walk cycles, and tweak pixels effortlessly.
+* **`.pix2` is the Transparent Bridge:** A human-readable and machine-readable intermediate representation that replaces mysterious, proprietary binary blobs with clean, Git-diffable code.
+
+### 2. Logic-Driven Code Over Blurry Diffusion Models
+Most generative AI tools rely on heavy diffusion models that hallucinate anti-aliased, blurry pixels, mismatched eye heights, and distorted palettes that cannot be used in real pixel art games.
+* With `.pix2`, an LLM doesn't "hallucinate" pixels; it **computes exact discrete coordinates**:
+  $$\text{x\_sym} = \text{width} - 1 - x$$
+* The result is **100% deterministic, crisp, integer-grid pixel art** without expensive GPUs or blurry diffusion artifacts.
+
+### 3. Exclusively Focused on 2D Pixel Art
+NOIRADIX Studio does not attempt to be a bloated 1,000-menu painting suite like Photoshop or Aseprite, nor does it dabble in 3D meshes or vector graphics. It is razor-focused on one painful bottleneck:  
+👉 **Taking you from an idea or sprite sheet to a fully working, directional walking character inside Unity 2D in 1 click — saving 15 to 20 minutes of tedious manual slicing and animator wiring per character.**
+
+---
+
 ## 📸 Studio Visual Tour
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
