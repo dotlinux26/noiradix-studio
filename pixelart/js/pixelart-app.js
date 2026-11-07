@@ -10,7 +10,7 @@
 (function () {
   'use strict';
 
-  // Ensure PIX2 engine is loaded
+  // Ensure PIX2 engine and Tools library are loaded
   const _PIX2 = typeof PIX2 !== 'undefined' ? PIX2 : (typeof window !== 'undefined' ? window.PIX2 : null);
   const _Tools = typeof Tools !== 'undefined' ? Tools : (typeof window !== 'undefined' ? window.Tools : null);
 
@@ -54,11 +54,15 @@
     h: 64,
     title: 'Pixel Artwork',
 
-    // Tools
-    currentTool: 'pen', // 'pen' | 'eraser' | 'bucket' | 'line' | 'rect' | 'picker'
-    rectFill: false,
+    // Tools: 'pen' | 'eraser' | 'bucket' | 'line' | 'rect' | 'rect-fill' | 'select' | 'picker' | 'pan'
+    currentTool: 'pen',
     symH: false,
     symV: false,
+
+    // Selection Marquee State
+    selection: null, // { x, y, w, h }
+    isSelecting: false,
+    clipboard: null, // { w, h, pixels }
 
     // Colors
     primaryColor: '#4f46e5',
@@ -69,7 +73,7 @@
     paletteKey: 'noiradix',
     activeSwatches: [...PRESET_PALETTES.noiradix],
 
-    // Viewport
+    // Viewport & Pan
     zoom: 12,
     panX: 0,
     panY: 0,
@@ -77,6 +81,10 @@
     isPanning: false,
     panStartX: 0,
     panStartY: 0,
+
+    // Split Pane Resizing
+    isDraggingSplitter: false,
+    codePaneWidth: 440,
 
     // Drawing drag
     isDrawing: false,
@@ -108,16 +116,39 @@
   function init() {
     cacheDom();
     initTheme();
+    initPanelWidth();
     bindEvents();
 
-    // Create Initial Document
-    createNewDocument(64, 64, 'Pixel Artwork');
+    // Check for crash recovery / autosave
+    const saved = localStorage.getItem('pix2_pixelart_autosave');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.w && parsed.h && parsed.pixels) {
+          createNewDocument(parsed.w, parsed.h, parsed.title || 'Recovered Artwork');
+          const cell = getArtworkCell();
+          cell.pixels = { ...parsed.pixels };
+          repaintCanvas();
+          syncCanvasToSource();
+        } else {
+          createNewDocument(64, 64, 'Pixel Artwork');
+        }
+      } catch (e) {
+        createNewDocument(64, 64, 'Pixel Artwork');
+      }
+    } else {
+      createNewDocument(64, 64, 'Pixel Artwork');
+    }
+
     renderPaletteSwatches();
     updateUi();
     updateAiPromptView();
 
     // Fit canvas to viewport
     setTimeout(fitCanvasToViewport, 50);
+
+    // Periodic Autosave every 20 seconds
+    setInterval(triggerAutosave, 20000);
   }
 
   function cacheDom() {
@@ -140,7 +171,9 @@
     dom.zoomLabel = document.getElementById('pa-zoom-label');
     dom.btnToggleGrid = document.getElementById('btn-toggle-grid');
 
-    // Source Code Pane
+    // Splitter & Source Code Pane
+    dom.splitResizer = document.getElementById('pa-split-resizer');
+    dom.codePane = document.getElementById('pa-code-pane');
     dom.codeEditor = document.getElementById('pa-code-editor');
     dom.codeGutter = document.getElementById('pa-code-gutter');
     dom.syncBadge = document.getElementById('pa-sync-badge');
@@ -172,13 +205,25 @@
     dom.fileInput = document.getElementById('pa-hidden-file-input');
   }
 
+  function initPanelWidth() {
+    const savedWidth = localStorage.getItem('pix2_pixelart_panel_width');
+    if (savedWidth) {
+      const parsed = parseInt(savedWidth, 10);
+      if (parsed >= 200 && parsed <= window.innerWidth - 300) {
+        state.codePaneWidth = parsed;
+        dom.codePane.style.width = `${parsed}px`;
+      }
+    }
+  }
+
   // ===========================================================================
   // DOCUMENT MODEL MANAGEMENT
   // ===========================================================================
   function createNewDocument(w = 64, h = 64, title = 'Pixel Artwork') {
-    state.w = Math.max(1, Math.min(512, w));
-    state.h = Math.max(1, Math.min(512, h));
+    state.w = Math.max(1, Math.min(1024, w));
+    state.h = Math.max(1, Math.min(1024, h));
     state.title = title || 'Pixel Artwork';
+    state.selection = null;
 
     // Construct canonical PIX2 document
     const doc = _PIX2.createDocument(state.title, 1, 1, state.w, state.h);
@@ -208,17 +253,13 @@
     state.historyIndex = -1;
     pushHistory();
 
-    // Resize Canvases
-    dom.canvasMain.width = state.w;
-    dom.canvasMain.height = state.h;
-    dom.canvasPreview.width = state.w;
-    dom.canvasPreview.height = state.h;
-
     dom.dimBadge.textContent = `${state.w}×${state.h}`;
     dom.docTitle.value = state.title;
 
+    resizeCanvasesToZoom();
     repaintCanvas();
     syncCanvasToSource();
+    triggerAutosave();
   }
 
   function getArtworkCell() {
@@ -229,56 +270,122 @@
   }
 
   // ===========================================================================
-  // CANVAS RENDERING
+  // CANVAS RENDERING & HIGH PRECISION GRID
   // ===========================================================================
+  function resizeCanvasesToZoom() {
+    const totalW = state.w * state.zoom;
+    const totalH = state.h * state.zoom;
+
+    dom.canvasMain.width = totalW;
+    dom.canvasMain.height = totalH;
+    dom.canvasPreview.width = totalW;
+    dom.canvasPreview.height = totalH;
+
+    dom.container.style.width = `${totalW}px`;
+    dom.container.style.height = `${totalH}px`;
+    dom.canvasMain.style.width = `${totalW}px`;
+    dom.canvasMain.style.height = `${totalH}px`;
+    dom.canvasPreview.style.width = `${totalW}px`;
+    dom.canvasPreview.style.height = `${totalH}px`;
+  }
+
   function repaintCanvas() {
     const ctx = dom.ctxMain;
-    const w = state.w;
-    const h = state.h;
+    const zoom = state.zoom;
+    const totalW = state.w * zoom;
+    const totalH = state.h * zoom;
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, totalW, totalH);
 
     const cell = getArtworkCell();
     if (!cell || !cell.pixels) return;
 
-    // Render all pixels
+    // 1. Render all non-transparent pixels (Integer zoom * zoom block)
     for (const key in cell.pixels) {
       const parts = key.split(',');
       const px = parseInt(parts[0], 10);
       const py = parseInt(parts[1], 10);
       const color = cell.pixels[key];
 
-      if (px >= 0 && px < w && py >= 0 && py < h) {
+      if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
         ctx.fillStyle = color;
-        ctx.fillRect(px, py, 1, 1);
+        ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
       }
     }
 
+    // 2. Razor-Sharp Normative Pixel Grid Overlay (Active at zoom >= 8)
+    if (state.showGrid && zoom >= 8) {
+      const isDark = document.body.classList.contains('dark-theme');
+      ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
+      // Vertical grid lines with +0.5 pixel-crisp alignment
+      for (let x = 0; x <= state.w; x++) {
+        const posX = Math.floor(x * zoom) + 0.5;
+        ctx.moveTo(posX, 0);
+        ctx.lineTo(posX, totalH);
+      }
+
+      // Horizontal grid lines
+      for (let y = 0; y <= state.h; y++) {
+        const posY = Math.floor(y * zoom) + 0.5;
+        ctx.moveTo(0, posY);
+        ctx.lineTo(totalW, posY);
+      }
+      ctx.stroke();
+    }
+
+    // 3. Bilateral Symmetry Axis Guidelines
+    if (state.symH) {
+      const axisX = Math.floor((state.w / 2) * zoom) + 0.5;
+      ctx.strokeStyle = '#a855f7';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(axisX, 0);
+      ctx.lineTo(axisX, totalH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (state.symV) {
+      const axisY = Math.floor((state.h / 2) * zoom) + 0.5;
+      ctx.strokeStyle = '#a855f7';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(0, axisY);
+      ctx.lineTo(totalW, axisY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    renderSelectionMarquee();
     updateContainerTransform();
   }
 
+  function renderSelectionMarquee() {
+    dom.ctxPreview.clearRect(0, 0, state.w * state.zoom, state.h * state.zoom);
+    if (!state.selection) return;
+
+    const { x, y, w, h } = state.selection;
+    const zoom = state.zoom;
+    const ctx = dom.ctxPreview;
+
+    ctx.save();
+    ctx.strokeStyle = '#4f46e5';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, w * zoom - 1, h * zoom - 1);
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineDashOffset = 3;
+    ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, w * zoom - 1, h * zoom - 1);
+    ctx.restore();
+  }
+
   function updateContainerTransform() {
-    dom.container.style.width = `${state.w * state.zoom}px`;
-    dom.container.style.height = `${state.h * state.zoom}px`;
     dom.container.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-
-    // Main canvas stretched to container
-    dom.canvasMain.style.width = '100%';
-    dom.canvasMain.style.height = '100%';
-    dom.canvasPreview.style.width = '100%';
-    dom.canvasPreview.style.height = '100%';
-
-    // Grid styling
-    if (state.showGrid && state.zoom >= 4) {
-      dom.container.style.backgroundImage = `
-        linear-gradient(to right, rgba(128,128,128,0.2) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(128,128,128,0.2) 1px, transparent 1px)
-      `;
-      dom.container.style.backgroundSize = `${state.zoom}px ${state.zoom}px`;
-    } else {
-      dom.container.style.backgroundImage = 'none';
-    }
-
     dom.zoomLabel.textContent = `${state.zoom}×`;
   }
 
@@ -293,14 +400,15 @@
     state.zoom = Math.max(1, Math.min(64, bestScale || 1));
     state.panX = 0;
     state.panY = 0;
-    updateContainerTransform();
+    resizeCanvasesToZoom();
+    repaintCanvas();
   }
 
   // ===========================================================================
   // BI-DIRECTIONAL SYNCHRONIZATION ENGINE
   // ===========================================================================
 
-  // 1. Canvas -> Source
+  // 1. Canvas -> Source (Strictly On Pointer Up for 60fps performance)
   function syncCanvasToSource() {
     if (state.isSyncingFromSource) return;
     state.isSyncingFromCanvas = true;
@@ -371,13 +479,10 @@
       const cell = getArtworkCell();
       if (cell && cell.size) {
         if (cell.size.w !== state.w || cell.size.h !== state.h) {
-          state.w = Math.max(1, Math.min(512, cell.size.w));
-          state.h = Math.max(1, Math.min(512, cell.size.h));
-          dom.canvasMain.width = state.w;
-          dom.canvasMain.height = state.h;
-          dom.canvasPreview.width = state.w;
-          dom.canvasPreview.height = state.h;
+          state.w = Math.max(1, Math.min(1024, cell.size.w));
+          state.h = Math.max(1, Math.min(1024, cell.size.h));
           dom.dimBadge.textContent = `${state.w}×${state.h}`;
+          resizeCanvasesToZoom();
         }
       }
 
@@ -389,6 +494,7 @@
 
       repaintCanvas();
       pushHistory();
+      triggerAutosave();
 
       dom.syncBadge.className = 'pa-sync-badge synced';
       dom.syncBadge.innerHTML = '<i class="fa-solid fa-circle"></i> Synced';
@@ -431,7 +537,10 @@
     const rect = dom.canvasMain.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / state.zoom);
     const y = Math.floor((e.clientY - rect.top) / state.zoom);
-    return { x, y };
+    return {
+      x: Math.max(0, Math.min(state.w - 1, x)),
+      y: Math.max(0, Math.min(state.h - 1, y))
+    };
   }
 
   function plotPixelWithSymmetry(cell, x, y, color) {
@@ -453,8 +562,8 @@
   }
 
   function onPointerDown(e) {
-    // Pan via middle click or Space key
-    if (e.button === 1 || e.spaceKey || state.isPanning) {
+    // Pan via Hand tool, middle click or Space key
+    if (e.button === 1 || e.spaceKey || state.currentTool === 'pan') {
       state.isPanning = true;
       state.panStartX = e.clientX - state.panX;
       state.panStartY = e.clientY - state.panY;
@@ -475,22 +584,33 @@
     const isRightClick = e.button === 2;
     const activeColor = isRightClick ? state.secondaryColor : state.primaryColor;
 
+    // Selection Tool Handling
+    if (state.currentTool === 'select') {
+      state.isSelecting = true;
+      state.selection = { x, y, w: 1, h: 1 };
+      renderSelectionMarquee();
+      return;
+    }
+
+    // Picker
     if (state.currentTool === 'picker') {
       pickColorAt(x, y);
       state.isDrawing = false;
       return;
     }
 
+    // Bucket
     if (state.currentTool === 'bucket') {
-      const colorToFill = activeColor;
-      _Tools.floodFill(cell, x, y, colorToFill, { w: state.w, h: state.h });
+      _Tools.floodFill(cell, x, y, activeColor, { w: state.w, h: state.h });
       repaintCanvas();
       pushHistory();
       syncCanvasToSource();
+      triggerAutosave();
       state.isDrawing = false;
       return;
     }
 
+    // Pen / Eraser
     if (state.currentTool === 'pen') {
       plotPixelWithSymmetry(cell, x, y, activeColor);
       repaintCanvas();
@@ -523,9 +643,25 @@
     const isRightClick = e.buttons === 2;
     const activeColor = isRightClick ? state.secondaryColor : state.primaryColor;
 
+    // Selection Marquee Drag
+    if (state.currentTool === 'select' && state.isSelecting) {
+      const minX = Math.min(state.dragStartX, x);
+      const maxX = Math.max(state.dragStartX, x);
+      const minY = Math.min(state.dragStartY, y);
+      const maxY = Math.max(state.dragStartY, y);
+      state.selection = {
+        x: Math.max(0, minX),
+        y: Math.max(0, minY),
+        w: Math.min(state.w - minX, maxX - minX + 1),
+        h: Math.min(state.h - minY, maxY - minY + 1)
+      };
+      renderSelectionMarquee();
+      return;
+    }
+
+    // Pen & Eraser Continuous Bresenham Stroke
     if (state.currentTool === 'pen' || state.currentTool === 'eraser') {
       const col = state.currentTool === 'pen' ? activeColor : null;
-      // Continuous line drawing between last and current point
       _Tools.line(state.lastX, state.lastY, x, y, (px, py) => {
         plotPixelWithSymmetry(cell, px, py, col);
       });
@@ -535,19 +671,22 @@
     } else if (state.currentTool === 'line') {
       drawPreviewLine(state.dragStartX, state.dragStartY, x, y, activeColor);
     } else if (state.currentTool === 'rect') {
-      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, state.rectFill);
+      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, false);
+    } else if (state.currentTool === 'rect-fill') {
+      drawPreviewRect(state.dragStartX, state.dragStartY, x, y, activeColor, true);
     }
   }
 
   function onPointerUp(e) {
     if (state.isPanning) {
       state.isPanning = false;
-      dom.viewport.style.cursor = 'crosshair';
+      dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
       return;
     }
 
     if (!state.isDrawing) return;
     state.isDrawing = false;
+    state.isSelecting = false;
 
     const cell = getArtworkCell();
     if (!cell) return;
@@ -556,14 +695,15 @@
     const isRightClick = e.button === 2;
     const activeColor = isRightClick ? state.secondaryColor : state.primaryColor;
 
-    dom.ctxPreview.clearRect(0, 0, state.w, state.h);
+    dom.ctxPreview.clearRect(0, 0, state.w * state.zoom, state.h * state.zoom);
 
     if (state.currentTool === 'line') {
       _Tools.line(state.dragStartX, state.dragStartY, x, y, (px, py) => {
         plotPixelWithSymmetry(cell, px, py, activeColor);
       });
       repaintCanvas();
-    } else if (state.currentTool === 'rect') {
+    } else if (state.currentTool === 'rect' || state.currentTool === 'rect-fill') {
+      const fillMode = state.currentTool === 'rect-fill';
       const minX = Math.min(state.dragStartX, x);
       const maxX = Math.max(state.dragStartX, x);
       const minY = Math.min(state.dragStartY, y);
@@ -571,28 +711,34 @@
       const rw = maxX - minX + 1;
       const rh = maxY - minY + 1;
 
-      _Tools.rect(minX, minY, rw, rh, state.rectFill, (px, py) => {
+      _Tools.rect(minX, minY, rw, rh, fillMode, (px, py) => {
         plotPixelWithSymmetry(cell, px, py, activeColor);
       });
       repaintCanvas();
     }
 
+    renderSelectionMarquee();
     pushHistory();
+
+    // Canvas -> Code sync strictly on Pointer Up for 60fps performance!
     syncCanvasToSource();
+    triggerAutosave();
   }
 
   function drawPreviewLine(x0, y0, x1, y1, color) {
-    dom.ctxPreview.clearRect(0, 0, state.w, state.h);
+    const zoom = state.zoom;
+    dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
     dom.ctxPreview.fillStyle = color;
     _Tools.line(x0, y0, x1, y1, (px, py) => {
-      dom.ctxPreview.fillRect(px, py, 1, 1);
-      if (state.symH) dom.ctxPreview.fillRect(state.w - 1 - px, py, 1, 1);
-      if (state.symV) dom.ctxPreview.fillRect(px, state.h - 1 - py, 1, 1);
+      dom.ctxPreview.fillRect(px * zoom, py * zoom, zoom, zoom);
+      if (state.symH) dom.ctxPreview.fillRect((state.w - 1 - px) * zoom, py * zoom, zoom, zoom);
+      if (state.symV) dom.ctxPreview.fillRect(px * zoom, (state.h - 1 - py) * zoom, zoom, zoom);
     });
   }
 
   function drawPreviewRect(x0, y0, x1, y1, color, fill) {
-    dom.ctxPreview.clearRect(0, 0, state.w, state.h);
+    const zoom = state.zoom;
+    dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
     dom.ctxPreview.fillStyle = color;
     const minX = Math.min(x0, x1);
     const maxX = Math.max(x0, x1);
@@ -602,9 +748,9 @@
     const rh = maxY - minY + 1;
 
     _Tools.rect(minX, minY, rw, rh, fill, (px, py) => {
-      dom.ctxPreview.fillRect(px, py, 1, 1);
-      if (state.symH) dom.ctxPreview.fillRect(state.w - 1 - px, py, 1, 1);
-      if (state.symV) dom.ctxPreview.fillRect(px, state.h - 1 - py, 1, 1);
+      dom.ctxPreview.fillRect(px * zoom, py * zoom, zoom, zoom);
+      if (state.symH) dom.ctxPreview.fillRect((state.w - 1 - px) * zoom, py * zoom, zoom, zoom);
+      if (state.symV) dom.ctxPreview.fillRect(px * zoom, (state.h - 1 - py) * zoom, zoom, zoom);
     });
   }
 
@@ -627,6 +773,142 @@
       dom.hoverColorDot.style.backgroundColor = 'transparent';
       dom.hoverColorLabel.textContent = 'Transparent';
     }
+  }
+
+  // ===========================================================================
+  // SELECTION & TRANSFORM HELPERS
+  // ===========================================================================
+  function copySelection() {
+    if (!state.selection) return;
+    const cell = getArtworkCell();
+    if (!cell || !cell.pixels) return;
+
+    const { x, y, w, h } = state.selection;
+    const copiedPixels = {};
+
+    for (let py = y; py < y + h; py++) {
+      for (let px = x; px < x + w; px++) {
+        const key = `${px},${py}`;
+        if (cell.pixels[key]) {
+          copiedPixels[`${px - x},${py - y}`] = cell.pixels[key];
+        }
+      }
+    }
+
+    state.clipboard = { w, h, pixels: copiedPixels };
+  }
+
+  function cutSelection() {
+    if (!state.selection) return;
+    copySelection();
+    deleteSelection();
+  }
+
+  function deleteSelection() {
+    if (!state.selection) return;
+    const cell = getArtworkCell();
+    if (!cell || !cell.pixels) return;
+
+    const { x, y, w, h } = state.selection;
+    for (let py = y; py < y + h; py++) {
+      for (let px = x; px < x + w; px++) {
+        delete cell.pixels[`${px},${py}`];
+      }
+    }
+
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  function pasteSelection() {
+    if (!state.clipboard || !state.clipboard.pixels) return;
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    const startX = state.selection ? state.selection.x : 0;
+    const startY = state.selection ? state.selection.y : 0;
+
+    for (const relKey in state.clipboard.pixels) {
+      const [rx, ry] = relKey.split(',').map(Number);
+      const nx = startX + rx;
+      const ny = startY + ry;
+      if (nx >= 0 && nx < state.w && ny >= 0 && ny < state.h) {
+        cell.pixels[`${nx},${ny}`] = state.clipboard.pixels[relKey];
+      }
+    }
+
+    state.selection = {
+      x: startX,
+      y: startY,
+      w: state.clipboard.w,
+      h: state.clipboard.h
+    };
+
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  function fillSelection() {
+    if (!state.selection) return;
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    const { x, y, w, h } = state.selection;
+    for (let py = y; py < y + h; py++) {
+      for (let px = x; px < x + w; px++) {
+        cell.pixels[`${px},${py}`] = state.primaryColor;
+      }
+    }
+
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  // Transform Actions
+  function rotateArtwork() {
+    const cell = getArtworkCell();
+    if (!cell) return;
+    _Tools.rotate90Clockwise(cell, state.w, state.h);
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  function flipArtworkH() {
+    const cell = getArtworkCell();
+    if (!cell) return;
+    _Tools.flipHorizontal(cell, state.w);
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  function alignArtworkCenter() {
+    const cell = getArtworkCell();
+    if (!cell) return;
+    _Tools.alignCenter(cell, state.w, state.h, 'both');
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  function nudgeArtwork(dx, dy) {
+    const cell = getArtworkCell();
+    if (!cell) return;
+    _Tools.nudge(cell, dx, dy, state.w, state.h);
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
   }
 
   // ===========================================================================
@@ -681,14 +963,33 @@
       cell.pixels = { ...snapshot.pixels };
     }
 
-    dom.canvasMain.width = state.w;
-    dom.canvasMain.height = state.h;
-    dom.canvasPreview.width = state.w;
-    dom.canvasPreview.height = state.h;
     dom.dimBadge.textContent = `${state.w}×${state.h}`;
-
+    resizeCanvasesToZoom();
     repaintCanvas();
     syncCanvasToSource();
+    triggerAutosave();
+  }
+
+  // ===========================================================================
+  // AUTOSAVE & CRASH RECOVERY
+  // ===========================================================================
+  function triggerAutosave() {
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    const payload = {
+      w: state.w,
+      h: state.h,
+      title: state.title,
+      pixels: cell.pixels,
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem('pix2_pixelart_autosave', JSON.stringify(payload));
+    } catch (e) {
+      // Storage quota exceeded or disabled
+    }
   }
 
   // ===========================================================================
@@ -792,8 +1093,15 @@
     const ctx = offscreen.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    // Draw scaled nearest-neighbor
-    ctx.drawImage(dom.canvasMain, 0, 0, state.w * scale, state.h * scale);
+    // Draw scaled nearest-neighbor from pixel matrix
+    const cell = getArtworkCell();
+    if (cell && cell.pixels) {
+      for (const k in cell.pixels) {
+        const [px, py] = k.split(',').map(Number);
+        ctx.fillStyle = cell.pixels[k];
+        ctx.fillRect(px * scale, py * scale, scale, scale);
+      }
+    }
 
     offscreen.toBlob((blob) => {
       if (!blob) return;
@@ -902,9 +1210,9 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     reader.onload = (evt) => {
       const img = new Image();
       img.onload = () => {
-        // Create canvas sized to image (capped at 512)
-        const targetW = Math.min(512, img.width);
-        const targetH = Math.min(512, img.height);
+        // Create canvas sized to image (capped at 1024)
+        const targetW = Math.min(1024, img.width);
+        const targetH = Math.min(1024, img.height);
         createNewDocument(targetW, targetH, file.name.replace(/\.[^/.]+$/, ''));
 
         const tempCanvas = document.createElement('canvas');
@@ -935,6 +1243,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
         repaintCanvas();
         pushHistory();
         syncCanvasToSource();
+        triggerAutosave();
       };
       img.src = evt.target.result;
     };
@@ -961,6 +1270,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       document.getElementById('btn-theme-toggle').querySelector('i').className = 'fa-solid fa-moon';
       localStorage.setItem('pix2_theme', 'light');
     }
+    repaintCanvas();
   }
 
   function toggleTheme() {
@@ -972,6 +1282,31 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
   // EVENT BINDINGS
   // ===========================================================================
   function bindEvents() {
+    // Draggable Split Resizer
+    dom.splitResizer.addEventListener('mousedown', () => {
+      state.isDraggingSplitter = true;
+      dom.splitResizer.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!state.isDraggingSplitter) return;
+      const newWidth = Math.max(200, Math.min(window.innerWidth - 300, window.innerWidth - e.clientX));
+      state.codePaneWidth = newWidth;
+      dom.codePane.style.width = `${newWidth}px`;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (state.isDraggingSplitter) {
+        state.isDraggingSplitter = false;
+        dom.splitResizer.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem('pix2_pixelart_panel_width', String(state.codePaneWidth));
+      }
+    });
+
     // Canvas Viewport Events
     dom.viewport.addEventListener('mousedown', onPointerDown);
     dom.viewport.addEventListener('mousemove', onPointerMove);
@@ -985,7 +1320,8 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       const newZoom = Math.max(1, Math.min(64, state.zoom + delta));
       if (newZoom !== state.zoom) {
         state.zoom = newZoom;
-        updateContainerTransform();
+        resizeCanvasesToZoom();
+        repaintCanvas();
       }
     }, { passive: false });
 
@@ -1001,15 +1337,13 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
         document.querySelectorAll('.pa-tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         state.currentTool = btn.dataset.tool;
-      });
-    });
 
-    // Rect Mode Toggle (Outline vs Fill)
-    const btnRectFill = document.getElementById('btn-toggle-rect-fill');
-    btnRectFill.addEventListener('click', () => {
-      state.rectFill = !state.rectFill;
-      btnRectFill.classList.toggle('active', state.rectFill);
-      btnRectFill.title = `Rectangle Mode: ${state.rectFill ? 'Fill' : 'Outline'} (Click to toggle)`;
+        // Reset selection if changing tool away from select
+        if (state.currentTool !== 'select' && state.selection) {
+          state.selection = null;
+          renderSelectionMarquee();
+        }
+      });
     });
 
     // Symmetry Toggles
@@ -1017,13 +1351,20 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     btnSymH.addEventListener('click', () => {
       state.symH = !state.symH;
       btnSymH.classList.toggle('active', state.symH);
+      repaintCanvas();
     });
 
     const btnSymV = document.getElementById('btn-toggle-sym-v');
     btnSymV.addEventListener('click', () => {
       state.symV = !state.symV;
       btnSymV.classList.toggle('active', state.symV);
+      repaintCanvas();
     });
+
+    // Transform Action Buttons
+    document.getElementById('btn-rotate-90').addEventListener('click', rotateArtwork);
+    document.getElementById('btn-flip-h').addEventListener('click', flipArtworkH);
+    document.getElementById('btn-align-center').addEventListener('click', alignArtworkCenter);
 
     // Undo / Redo / Clear
     document.getElementById('btn-undo').addEventListener('click', undo);
@@ -1036,6 +1377,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
           repaintCanvas();
           pushHistory();
           syncCanvasToSource();
+          triggerAutosave();
         }
       }
     });
@@ -1118,21 +1460,24 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     dom.btnToggleGrid.addEventListener('click', () => {
       state.showGrid = !state.showGrid;
       dom.btnToggleGrid.classList.toggle('active', state.showGrid);
-      updateContainerTransform();
+      repaintCanvas();
     });
 
     document.getElementById('btn-zoom-in').addEventListener('click', () => {
       state.zoom = Math.min(64, state.zoom + 2);
-      updateContainerTransform();
+      resizeCanvasesToZoom();
+      repaintCanvas();
     });
     document.getElementById('btn-zoom-out').addEventListener('click', () => {
       state.zoom = Math.max(1, state.zoom - 2);
-      updateContainerTransform();
+      resizeCanvasesToZoom();
+      repaintCanvas();
     });
     document.getElementById('btn-zoom-fit').addEventListener('click', fitCanvasToViewport);
     document.getElementById('btn-zoom-100').addEventListener('click', () => {
       state.zoom = 1;
-      updateContainerTransform();
+      resizeCanvasesToZoom();
+      repaintCanvas();
     });
 
     // Code Header Actions
@@ -1156,9 +1501,10 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       chip.addEventListener('click', () => {
         document.querySelectorAll('.pa-preset-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
-        const sz = parseInt(chip.dataset.size, 10);
-        document.getElementById('input-custom-w').value = sz;
-        document.getElementById('input-custom-h').value = sz;
+        const pw = parseInt(chip.dataset.w, 10);
+        const ph = parseInt(chip.dataset.h, 10);
+        document.getElementById('input-custom-w').value = pw;
+        document.getElementById('input-custom-h').value = ph;
       });
     });
 
@@ -1215,6 +1561,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
         const cell = getArtworkCell();
         if (cell) cell.name = state.title;
         syncCanvasToSource();
+        triggerAutosave();
       }
     });
 
@@ -1244,6 +1591,24 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       } else if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
         dom.modalNew.classList.remove('hidden');
+      } else if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+        copySelection();
+      } else if (e.ctrlKey && (e.key === 'x' || e.key === 'X')) {
+        cutSelection();
+      } else if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) {
+        pasteSelection();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        deleteSelection();
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (state.selection) fillSelection();
+      } else if (e.key === 'ArrowUp') {
+        nudgeArtwork(0, -1);
+      } else if (e.key === 'ArrowDown') {
+        nudgeArtwork(0, 1);
+      } else if (e.key === 'ArrowLeft') {
+        nudgeArtwork(-1, 0);
+      } else if (e.key === 'ArrowRight') {
+        nudgeArtwork(1, 0);
       } else if (e.key === 'b' || e.key === 'B') {
         selectTool('pen');
       } else if (e.key === 'e' || e.key === 'E') {
@@ -1253,17 +1618,24 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       } else if (e.key === 'l' || e.key === 'L') {
         selectTool('line');
       } else if (e.key === 'u' || e.key === 'U') {
-        selectTool('rect');
+        if (e.shiftKey) selectTool('rect-fill');
+        else selectTool('rect');
+      } else if (e.key === 'm' || e.key === 'M') {
+        selectTool('select');
       } else if (e.key === 'i' || e.key === 'I') {
         selectTool('picker');
+      } else if (e.key === 'p' || e.key === 'P') {
+        selectTool('pan');
       } else if (e.key === 'x' || e.key === 'X') {
         swapColors();
       } else if (e.key === 'h' || e.key === 'H') {
         state.symH = !state.symH;
         document.getElementById('btn-toggle-sym-h').classList.toggle('active', state.symH);
+        repaintCanvas();
       } else if (e.key === 'v' || e.key === 'V') {
         state.symV = !state.symV;
         document.getElementById('btn-toggle-sym-v').classList.toggle('active', state.symV);
+        repaintCanvas();
       }
     });
   }
@@ -1273,6 +1645,11 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((b) => {
       b.classList.toggle('active', b.dataset.tool === toolName);
     });
+
+    if (toolName !== 'select' && state.selection) {
+      state.selection = null;
+      renderSelectionMarquee();
+    }
   }
 
   function updateUi() {

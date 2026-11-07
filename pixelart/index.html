@@ -83,30 +83,37 @@
     
     <!-- LEFT TOOLBAR -->
     <aside class="pa-toolbar" id="pa-toolbar">
-      <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B)">
+      <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B) - Draw pixels">
         <i class="fa-solid fa-pencil"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="eraser" title="Eraser (E)">
+      <button class="pa-tool-btn" data-tool="eraser" title="Eraser (E) - Erase pixels">
         <i class="fa-solid fa-eraser"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="bucket" title="Paint Bucket / Fill (G)">
+      <button class="pa-tool-btn" data-tool="bucket" title="Paint Bucket (G) - 4-way flood fill">
         <i class="fa-solid fa-fill-drip"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="line" title="Line Tool (L)">
+      <button class="pa-tool-btn" data-tool="line" title="Line Tool (L) - Bresenham straight line">
         <i class="fa-solid fa-slash"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="rect" title="Rectangle Tool (U)">
+      <button class="pa-tool-btn" data-tool="rect" title="Rectangle Outline Tool (U)">
         <i class="fa-regular fa-square"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I)">
+      <button class="pa-tool-btn" data-tool="rect-fill" title="Filled Rectangle Tool (Shift+U)">
+        <i class="fa-solid fa-square"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (M / V)">
+        <i class="fa-solid fa-crop-simple"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I) - Sample color">
         <i class="fa-solid fa-eye-dropper"></i>
+      </button>
+      <button class="pa-tool-btn" data-tool="pan" title="Hand / Pan Tool (Space+Drag)">
+        <i class="fa-solid fa-hand"></i>
       </button>
 
       <div class="pa-tool-sep"></div>
 
-      <button id="btn-toggle-rect-fill" class="pa-tool-btn" title="Rectangle Mode: Outline (Click to toggle Fill)">
-        <i class="fa-solid fa-vector-square"></i>
-      </button>
+      <!-- Symmetry Toggles -->
       <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Mirror Symmetry (H)">
         <i class="fa-solid fa-arrows-left-right"></i>
       </button>
@@ -116,6 +123,20 @@
 
       <div class="pa-tool-sep"></div>
 
+      <!-- Transform Tools -->
+      <button id="btn-rotate-90" class="pa-tool-btn" title="Rotate 90° Clockwise">
+        <i class="fa-solid fa-arrow-rotate-right"></i>
+      </button>
+      <button id="btn-flip-h" class="pa-tool-btn" title="Flip Canvas Horizontally">
+        <i class="fa-solid fa-arrows-split-up-and-left"></i>
+      </button>
+      <button id="btn-align-center" class="pa-tool-btn" title="Align / Center Artwork to Canvas">
+        <i class="fa-solid fa-compress"></i>
+      </button>
+
+      <div class="pa-tool-sep"></div>
+
+      <!-- History & Clear -->
       <button id="btn-undo" class="pa-tool-btn" title="Undo (Ctrl+Z)">
         <i class="fa-solid fa-rotate-left"></i>
       </button>
@@ -164,6 +185,9 @@
         </div>
       </footer>
     </section>
+
+    <!-- DRAGGABLE SPLIT RESIZER (HORIZONTAL RESIZE) -->
+    <div class="pa-split-resizer" id="pa-split-resizer" title="Drag horizontally to resize panel width" role="separator" aria-orientation="vertical"></div>
 
     <!-- RIGHT PIX2 SOURCE CODE PANE -->
     <section class="pa-code-pane" id="pa-code-pane">
@@ -265,28 +289,31 @@
         <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="pa-modal-body">
-        <p class="pa-modal-hint">Select a standard pixel art dimension or specify a custom size up to 512×512.</p>
+        <p class="pa-modal-hint">Select a standard pixel art dimension or specify a custom size up to 1024×1024.</p>
         
         <div class="pa-presets-grid">
-          <button class="pa-preset-chip" data-size="16">16 × 16</button>
-          <button class="pa-preset-chip" data-size="24">24 × 24</button>
-          <button class="pa-preset-chip" data-size="32">32 × 32</button>
-          <button class="pa-preset-chip" data-size="48">48 × 48</button>
-          <button class="pa-preset-chip active" data-size="64">64 × 64</button>
-          <button class="pa-preset-chip" data-size="96">96 × 96</button>
-          <button class="pa-preset-chip" data-size="128">128 × 128</button>
-          <button class="pa-preset-chip" data-size="256">256 × 256</button>
+          <button class="pa-preset-chip" data-w="16" data-h="16">16 × 16</button>
+          <button class="pa-preset-chip" data-w="24" data-h="24">24 × 24</button>
+          <button class="pa-preset-chip" data-w="32" data-h="32">32 × 32</button>
+          <button class="pa-preset-chip" data-w="48" data-h="48">48 × 48</button>
+          <button class="pa-preset-chip active" data-w="64" data-h="64">64 × 64</button>
+          <button class="pa-preset-chip" data-w="128" data-h="128">128 × 128</button>
+          <button class="pa-preset-chip" data-w="192" data-h="108">192 × 108 (16:9)</button>
+          <button class="pa-preset-chip" data-w="256" data-h="256">256 × 256</button>
+          <button class="pa-preset-chip" data-w="320" data-h="180">320 × 180 (16:9)</button>
+          <button class="pa-preset-chip" data-w="512" data-h="512">512 × 512</button>
+          <button class="pa-preset-chip" data-w="1024" data-h="1024">1024 × 1024</button>
         </div>
 
         <div class="pa-custom-size-row">
           <div class="pa-input-group">
             <label for="input-custom-w">Width (px)</label>
-            <input type="number" id="input-custom-w" min="1" max="512" value="64">
+            <input type="number" id="input-custom-w" min="1" max="1024" value="64">
           </div>
           <span class="pa-times">×</span>
           <div class="pa-input-group">
             <label for="input-custom-h">Height (px)</label>
-            <input type="number" id="input-custom-h" min="1" max="512" value="64">
+            <input type="number" id="input-custom-h" min="1" max="1024" value="64">
           </div>
         </div>
       </div>
@@ -394,12 +421,18 @@
             <tr><td><kbd>E</kbd></td><td>Eraser</td></tr>
             <tr><td><kbd>G</kbd></td><td>Paint Bucket (Flood Fill)</td></tr>
             <tr><td><kbd>L</kbd></td><td>Line Tool (Bresenham)</td></tr>
-            <tr><td><kbd>U</kbd></td><td>Rectangle Tool (Outline / Fill)</td></tr>
+            <tr><td><kbd>U</kbd></td><td>Rectangle Outline Tool</td></tr>
+            <tr><td><kbd>Shift+U</kbd></td><td>Filled Rectangle Tool</td></tr>
+            <tr><td><kbd>M</kbd></td><td>Selection Marquee (Move, Copy, Paste)</td></tr>
             <tr><td><kbd>I</kbd></td><td>Eyedropper / Color Picker</td></tr>
+            <tr><td><kbd>P</kbd></td><td>Pan / Hand Tool</td></tr>
             <tr><td><kbd>X</kbd></td><td>Swap Primary &amp; Secondary Colors</td></tr>
             <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>Horizontal / Vertical Symmetry Mirror</td></tr>
-            <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo</td></tr>
-            <tr><td><kbd>Ctrl+Y</kbd></td><td>Redo</td></tr>
+            <tr><td><kbd>Arrows</kbd></td><td>Nudge Pixels (1px Offset)</td></tr>
+            <tr><td><kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd></td><td>Copy / Paste Selection</td></tr>
+            <tr><td><kbd>Ctrl+X</kbd></td><td>Cut Selection</td></tr>
+            <tr><td><kbd>Delete</kbd></td><td>Clear Selection</td></tr>
+            <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>Undo / Redo</td></tr>
             <tr><td><kbd>Ctrl+S</kbd></td><td>Save / Download .pix2 File</td></tr>
             <tr><td><kbd>Ctrl+O</kbd></td><td>Open File</td></tr>
             <tr><td><kbd>Ctrl+N</kbd></td><td>New Canvas Modal</td></tr>
@@ -427,3 +460,4 @@
   <script src="js/pixelart-app.js"></script>
 </body>
 </html>
+

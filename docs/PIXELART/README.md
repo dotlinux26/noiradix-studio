@@ -30,3 +30,4 @@ While [NOIRADIX Studio](../../README.md) is specialized for spritesheet animatio
 3. Draw freely with the Pencil, Line, Rectangle, Fill bucket, or Symmetry mirror.
 4. Watch the PIX2 source code update live on the right pane!
 5. Export as a crisp `.png` (at 1x to 32x integer scale) or save as `.pix2`.
+
