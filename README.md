@@ -25,7 +25,15 @@
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
-### 🌟 End-to-End Live Workflow: Browser to Unity 2D in 1 Click
+### 🌟 60-Second Full Walkthrough (From AI Prompt to Unity 2D)
+
+https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
+
+*Comprehensive 60-second video walkthrough: Authoring sprites in NOIRADIX Studio, dynamic AI prompt generation, real-time directional animation playback, and 1-click Unity 2D package export.*
+
+---
+
+### 🚀 Live Workflow Preview: Browser to Unity 2D in 1 Click
 ![Full-Stack Web to Unity Workflow](docs/noiradix-export-unity-9-gif-fullstack-preview-web.gif)
 *Real-time demonstration of authoring sprite animations in NOIRADIX Studio, exporting the game package, and 1-click importing directly into Unity 6.*
 
