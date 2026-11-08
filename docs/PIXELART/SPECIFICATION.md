@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — Functional & UI/UX Specification
 
 **Document ID:** `docs/PIXELART/SPECIFICATION.md`  
-**Version:** 1.2.0  
+**Version:** 1.3.0  
 **Date:** 2026-11-08  
 **Route:** `/pixelart/`  
 **License:** Apache-2.0  
@@ -177,3 +177,25 @@ The workspace follows a responsive split-view architecture:
 * $320 \times 180$ — Full 16:9 indie start screen
 * $512 \times 512$ — Hi-bit master artwork
 * $1024 \times 1024$ — Epic grand landscape / maximum hardware sweet spot
+
+---
+
+## 5. User-Configurable Canvas Background Modes
+
+To ensure optimal contrast and eye comfort across different art styles (e.g. bright characters, dark silhouettes, game assets), the canvas background style is fully configurable via the Statusbar selector:
+
+| Mode | Visual Presentation | Grid Line Adaptation | PIX2 Source Directives | Persistence Key |
+| :--- | :--- | :--- | :--- | :--- |
+| **`transparent`** (Default) | 1:1 Pixel-Aligned Checkerboard | Theme adaptive (`rgba(0,0,0,0.12)` or `rgba(255,255,255,0.12)`) | `@grid` $\to$ `background: none` | `pix2_canvas_bg_mode = "transparent"` |
+| **`white`** | Solid Pure White (`#ffffff`) | High-contrast subtle dark grid (`rgba(0,0,0,0.12)`) | `@grid` $\to$ `background: #ffffff` | `pix2_canvas_bg_mode = "white"` |
+| **`black`** | Solid Pure Black (`#000000`) | High-contrast subtle light grid (`rgba(255,255,255,0.15)`) | `@grid` $\to$ `background: #000000` | `pix2_canvas_bg_mode = "black"` |
+| **`custom`** | User-selected Custom Hex Color | Dynamic YIQ luminance adaptive grid | `@grid` $\to$ `background: #<hex>` | `pix2_canvas_bg_mode = "custom"`, `pix2_canvas_bg_color = "#hex"` |
+
+### 5.1 Bi-Directional Source Code Synchronization
+* Setting a background mode automatically synchronizes the `@grid background:` property in the `.pix2` source editor.
+* Editing or typing `background: none | #ffffff | #000000 | #hex` in the code editor immediately updates the visual canvas background mode and activates the matching UI button.
+
+### 5.2 PNG Exporter Integration
+* **Pure Alpha Export (Default):** Generates transparent RGBA `.png` files suitable for game engines and sprite workflows.
+* **Canvas Background Option:** A dedicated checkbox in the PNG Export modal allows baking the chosen solid white, solid black, or custom background color directly into the final raster image.
+

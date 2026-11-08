@@ -113,7 +113,12 @@
     sourceDebounceTimer: null,
 
     // PNG Export
-    exportScale: 8
+    exportScale: 8,
+
+    // Canvas Background Configuration
+    canvasBgMode: localStorage.getItem('pix2_canvas_bg_mode') || 'transparent', // 'transparent' | 'white' | 'black' | 'custom'
+    canvasBgColor: localStorage.getItem('pix2_canvas_bg_color') || '#2a2e3f',
+    exportIncludeBg: false
   };
 
   // DOM Elements Cache
@@ -151,6 +156,7 @@
 
     renderPaletteSwatches();
     updateUi();
+    updateCanvasBgUi();
     updateAiPromptView();
 
     // Responsive Drag & Mouse-Wheel Horizontal Scroll
@@ -265,6 +271,14 @@
     dom.hoverColorLabel = document.getElementById('pa-hover-color-label');
     dom.zoomLabel = document.getElementById('pa-zoom-label');
     dom.btnToggleGrid = document.getElementById('btn-toggle-grid');
+    dom.btnBgTransparent = document.getElementById('btn-bg-transparent');
+    dom.btnBgWhite = document.getElementById('btn-bg-white');
+    dom.btnBgBlack = document.getElementById('btn-bg-black');
+    dom.btnBgCustom = document.getElementById('btn-bg-custom');
+    dom.bgCustomInput = document.getElementById('pa-bg-custom-input');
+    dom.bgCustomChip = document.getElementById('pa-bg-custom-chip');
+    dom.bgCustomLabel = document.getElementById('pa-bg-custom-label');
+    dom.exportIncludeBg = document.getElementById('pa-export-include-bg');
 
     // Splitter & Source Code Pane
     dom.splitResizer = document.getElementById('pa-split-resizer');
@@ -392,24 +406,36 @@
 
     ctx.clearRect(0, 0, totalW, totalH);
 
-    // 1. Pixel-Aligned Checkerboard Background (1:1 with art pixels)
-    const isDark = document.body.classList.contains('dark-theme');
-    const c1 = isDark ? '#1a1d29' : '#ffffff';
-    const c2 = isDark ? '#121520' : '#e2e8f0';
+    // 1. Canvas Background (Transparent Checkerboard, Solid White, Solid Black, or Custom Color)
+    if (state.canvasBgMode === 'white') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, totalW, totalH);
+    } else if (state.canvasBgMode === 'black') {
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, totalW, totalH);
+    } else if (state.canvasBgMode === 'custom') {
+      ctx.fillStyle = state.canvasBgColor || '#2a2e3f';
+      ctx.fillRect(0, 0, totalW, totalH);
+    } else {
+      // 'transparent' default: Pixel-Aligned Checkerboard (1:1 with art pixels)
+      const isDark = document.body.classList.contains('dark-theme');
+      const c1 = isDark ? '#1a1d29' : '#ffffff';
+      const c2 = isDark ? '#121520' : '#e2e8f0';
 
-    // When zoom >= 4, each checker tile is EXACTLY 1 artwork pixel (zoom x zoom screen px)
-    // When zoom < 4, checker tile is an integer multiple of zoom so it never splits an art pixel
-    const tileArtPixels = zoom >= 4 ? 1 : (zoom === 1 ? 16 : 8);
-    const tileCanvasSize = tileArtPixels * zoom;
+      // When zoom >= 4, each checker tile is EXACTLY 1 artwork pixel (zoom x zoom screen px)
+      // When zoom < 4, checker tile is an integer multiple of zoom so it never splits an art pixel
+      const tileArtPixels = zoom >= 4 ? 1 : (zoom === 1 ? 16 : 8);
+      const tileCanvasSize = tileArtPixels * zoom;
 
-    for (let cy = 0; cy < totalH; cy += tileCanvasSize) {
-      for (let cx = 0; cx < totalW; cx += tileCanvasSize) {
-        const col = Math.floor(cx / tileCanvasSize);
-        const row = Math.floor(cy / tileCanvasSize);
-        ctx.fillStyle = ((col + row) % 2 === 0) ? c1 : c2;
-        const curW = Math.min(tileCanvasSize, totalW - cx);
-        const curH = Math.min(tileCanvasSize, totalH - cy);
-        ctx.fillRect(cx, cy, curW, curH);
+      for (let cy = 0; cy < totalH; cy += tileCanvasSize) {
+        for (let cx = 0; cx < totalW; cx += tileCanvasSize) {
+          const col = Math.floor(cx / tileCanvasSize);
+          const row = Math.floor(cy / tileCanvasSize);
+          ctx.fillStyle = ((col + row) % 2 === 0) ? c1 : c2;
+          const curW = Math.min(tileCanvasSize, totalW - cx);
+          const curH = Math.min(tileCanvasSize, totalH - cy);
+          ctx.fillRect(cx, cy, curW, curH);
+        }
       }
     }
 
@@ -431,7 +457,15 @@
 
     // 3. Razor-Sharp Pixel Grid Overlay (Active at zoom >= 4)
     if (state.showGrid && zoom >= 4) {
-      ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)';
+      let isDarkBg = document.body.classList.contains('dark-theme');
+      if (state.canvasBgMode === 'black') {
+        isDarkBg = true;
+      } else if (state.canvasBgMode === 'white') {
+        isDarkBg = false;
+      } else if (state.canvasBgMode === 'custom') {
+        isDarkBg = isColorDark(state.canvasBgColor);
+      }
+      ctx.strokeStyle = isDarkBg ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)';
       ctx.lineWidth = 1;
       ctx.beginPath();
 
@@ -552,7 +586,11 @@
       state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${state.w}x${state.h}` };
 
       // Serialize canonical PIX2
-      const serialized = _PIX2.serialize(state.doc);
+      let serialized = _PIX2.serialize(state.doc);
+      if (state.canvasBgMode && state.canvasBgMode !== 'transparent') {
+        const bgVal = state.canvasBgMode === 'white' ? '#ffffff' : (state.canvasBgMode === 'black' ? '#000000' : state.canvasBgColor);
+        serialized = serialized.replace(/background:\s*none/, `background: ${bgVal}`);
+      }
       dom.codeEditor.value = serialized;
 
       updateCodeGutter();
@@ -619,6 +657,21 @@
       if (parsedDoc.palette && Object.keys(parsedDoc.palette).length > 0) {
         state.activeSwatches = Object.values(parsedDoc.palette);
         renderPaletteSwatches();
+      }
+
+      // Sync background directive if present
+      const bgMatch = source.match(/background:\s*([^\s;]+)/i);
+      if (bgMatch) {
+        const bgVal = bgMatch[1].trim().toLowerCase();
+        if (bgVal === 'none') {
+          setCanvasBgMode('transparent', null, true);
+        } else if (bgVal === '#ffffff' || bgVal === '#fff') {
+          setCanvasBgMode('white', null, true);
+        } else if (bgVal === '#000000' || bgVal === '#000') {
+          setCanvasBgMode('black', null, true);
+        } else if (bgVal.startsWith('#')) {
+          setCanvasBgMode('custom', bgVal, true);
+        }
       }
 
       repaintCanvas();
@@ -1547,9 +1600,58 @@
   }
 
   // ===========================================================================
+  // CANVAS BACKGROUND & THEME ADAPTATION
+  // ===========================================================================
+  function isColorDark(hex) {
+    if (!hex) return false;
+    const clean = hex.replace('#', '');
+    const r = parseInt(clean.substring(0, 2), 16) || 0;
+    const g = parseInt(clean.substring(2, 4), 16) || 0;
+    const b = parseInt(clean.substring(4, 6), 16) || 0;
+    // Standard relative luminance (YIQ)
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return yiq < 128;
+  }
+
+  function setCanvasBgMode(mode, customColor, skipSync = false) {
+    state.canvasBgMode = mode;
+    if (customColor) {
+      state.canvasBgColor = customColor;
+      if (dom.bgCustomInput) dom.bgCustomInput.value = customColor.slice(0, 7);
+      if (dom.bgCustomChip) dom.bgCustomChip.style.backgroundColor = customColor;
+    }
+    try {
+      localStorage.setItem('pix2_canvas_bg_mode', state.canvasBgMode);
+      if (state.canvasBgColor) {
+        localStorage.setItem('pix2_canvas_bg_color', state.canvasBgColor);
+      }
+    } catch (e) {}
+
+    updateCanvasBgUi();
+    repaintCanvas();
+    if (!skipSync) {
+      syncCanvasToSource();
+    }
+  }
+
+  function updateCanvasBgUi() {
+    if (!dom.btnBgTransparent) return;
+    dom.btnBgTransparent.classList.toggle('active', state.canvasBgMode === 'transparent');
+    dom.btnBgWhite.classList.toggle('active', state.canvasBgMode === 'white');
+    dom.btnBgBlack.classList.toggle('active', state.canvasBgMode === 'black');
+    dom.btnBgCustom.classList.toggle('active', state.canvasBgMode === 'custom');
+    if (dom.bgCustomChip) {
+      dom.bgCustomChip.style.backgroundColor = state.canvasBgColor || '#2a2e3f';
+    }
+  }
+
+  // ===========================================================================
   // PNG EXPORT ENGINE
   // ===========================================================================
   function openExportModal() {
+    if (dom.exportIncludeBg) {
+      dom.exportIncludeBg.checked = state.exportIncludeBg;
+    }
     updateExportPreview();
     dom.modalExport.classList.remove('hidden');
   }
@@ -1568,6 +1670,12 @@
     const pctx = previewCanvas.getContext('2d');
     pctx.clearRect(0, 0, state.w, state.h);
 
+    if (state.exportIncludeBg && state.canvasBgMode !== 'transparent') {
+      const bg = state.canvasBgMode === 'white' ? '#ffffff' : (state.canvasBgMode === 'black' ? '#000000' : state.canvasBgColor);
+      pctx.fillStyle = bg;
+      pctx.fillRect(0, 0, state.w, state.h);
+    }
+
     const cell = getArtworkCell();
     if (cell && cell.pixels) {
       for (const k in cell.pixels) {
@@ -1585,6 +1693,12 @@
     offscreen.height = state.h * scale;
     const ctx = offscreen.getContext('2d');
     ctx.imageSmoothingEnabled = false;
+
+    if (state.exportIncludeBg && state.canvasBgMode !== 'transparent') {
+      const bg = state.canvasBgMode === 'white' ? '#ffffff' : (state.canvasBgMode === 'black' ? '#000000' : state.canvasBgColor);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+    }
 
     // Draw scaled nearest-neighbor from pixel matrix
     const cell = getArtworkCell();
@@ -1973,6 +2087,38 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       dom.btnToggleGrid.classList.toggle('active', state.showGrid);
       repaintCanvas();
     });
+
+    // Canvas Background Selector Controls
+    if (dom.btnBgTransparent) {
+      dom.btnBgTransparent.addEventListener('click', () => setCanvasBgMode('transparent'));
+    }
+    if (dom.btnBgWhite) {
+      dom.btnBgWhite.addEventListener('click', () => setCanvasBgMode('white'));
+    }
+    if (dom.btnBgBlack) {
+      dom.btnBgBlack.addEventListener('click', () => setCanvasBgMode('black'));
+    }
+    if (dom.btnBgCustom) {
+      dom.btnBgCustom.addEventListener('click', () => {
+        if (state.canvasBgMode === 'custom') {
+          if (dom.bgCustomInput) dom.bgCustomInput.click();
+        } else {
+          setCanvasBgMode('custom');
+          if (dom.bgCustomInput) dom.bgCustomInput.click();
+        }
+      });
+    }
+    if (dom.bgCustomInput) {
+      dom.bgCustomInput.addEventListener('input', (e) => {
+        setCanvasBgMode('custom', e.target.value);
+      });
+    }
+    if (dom.exportIncludeBg) {
+      dom.exportIncludeBg.addEventListener('change', (e) => {
+        state.exportIncludeBg = e.target.checked;
+        updateExportPreview();
+      });
+    }
 
     document.getElementById('btn-zoom-in').addEventListener('click', () => {
       state.zoom = Math.min(64, state.zoom + 2);

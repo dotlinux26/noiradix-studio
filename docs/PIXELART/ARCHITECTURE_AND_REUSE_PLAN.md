@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — System Architecture & Code Reuse Plan
 
 **Document ID:** `docs/PIXELART/ARCHITECTURE_AND_REUSE_PLAN.md`  
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Author:** Nguyen Duc Canh (@dotlinux26) & Pair Assistant  
 **Date:** 2026-11-08  
 **Target URL:** `https://noiradix.me/pixelart/`  
@@ -324,3 +324,35 @@ Implements Alois Zingl's normative integer Bresenham ellipse algorithm:
    * Flip H & V: `<i class="fa-solid fa-arrows-left-right"></i>` and `<i class="fa-solid fa-arrows-up-down"></i>`.
 3. **Twin Responsive Drag-Scroll Pattern:** Universal horizontal & vertical drag-scroll applied across all toolbars and statusbars.
 4. **No Breaking Changes:** The PIX2 v1.0 Standard and NOIRADIX Studio remain frozen and verified by 134 automated unit and security tests.
+
+---
+
+## 15. Canvas Background Architecture & Dual Persistence Engine
+
+### 15.1 Architectural Invariant: 60 FPS Render Pipeline
+The background layer sits on Step 1 of `repaintCanvas()` before drawing artwork pixels:
+1. **Mode `'transparent'` (Checkerboard):** Emits a pixel-crisp 1:1 checkerboard where each tile aligns to exactly 1 artwork pixel (`zoom x zoom` screen px) when $\text{zoom} \ge 4$, or integer multiples of zoom ($8 \times \text{zoom}$ or $16 \times \text{zoom}$) when $\text{zoom} < 4$. Zero fractional splits; eliminates moiré artifacts.
+2. **Solid Modes (`'white'`, `'black'`, `'custom'`):** Single `fillRect(0, 0, totalW, totalH)` call. Executes in under $0.05\text{ ms}$, ensuring 60fps responsiveness.
+
+### 15.2 Contrast-Adaptive Grid System
+To ensure grid readability regardless of the chosen background color:
+* If background is dark (solid black or custom hex with $YIQ < 128$): grid strokes are rendered as subtle semi-transparent white (`rgba(255, 255, 255, 0.15)`).
+* If background is light (solid white or custom hex with $YIQ \ge 128$): grid strokes are rendered as subtle semi-transparent black (`rgba(0, 0, 0, 0.12)`).
+
+```javascript
+function isColorDark(hex) {
+  if (!hex) return false;
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) || 0;
+  const g = parseInt(clean.substring(2, 4), 16) || 0;
+  const b = parseInt(clean.substring(4, 6), 16) || 0;
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return yiq < 128;
+}
+```
+
+### 15.3 Persistence Hierarchy
+Background settings persist across two complementary vectors:
+1. **Local Preferences (`localStorage`):** Keys `pix2_canvas_bg_mode` and `pix2_canvas_bg_color` store artist preference across sessions.
+2. **PIX2 Document Serialization:** When serialized to text, `@grid background: none | #ffffff | #000000 | #hex` embeds the chosen style directly into the file. Upon loading or live-editing PIX2 code, the background directive dynamically configures the canvas without losing stroke data.
+

@@ -204,6 +204,28 @@
         </div>
 
         <div class="pa-status-right">
+          <!-- Canvas Background Style Selector -->
+          <div class="pa-bg-mode-group" role="group" aria-label="Canvas Background Style">
+            <span class="pa-bg-group-label" title="Canvas Background Style"><i class="fa-solid fa-layer-group"></i> Bg:</span>
+            <button id="btn-bg-transparent" class="pa-status-btn pa-bg-btn active" title="Checkerboard (Transparent)">
+              <i class="fa-solid fa-chess-board"></i>
+              <span>Checker</span>
+            </button>
+            <button id="btn-bg-white" class="pa-status-btn pa-bg-btn" title="Solid White (#FFFFFF)">
+              <span class="pa-bg-color-chip white"></span>
+              <span>White</span>
+            </button>
+            <button id="btn-bg-black" class="pa-status-btn pa-bg-btn" title="Solid Black (#000000)">
+              <span class="pa-bg-color-chip black"></span>
+              <span>Black</span>
+            </button>
+            <button id="btn-bg-custom" class="pa-status-btn pa-bg-btn" title="Custom Background Color (Click to pick color)">
+              <span class="pa-bg-color-chip custom" id="pa-bg-custom-chip" style="background-color: #2a2e3f;"></span>
+              <span id="pa-bg-custom-label">Custom</span>
+            </button>
+            <input type="color" id="pa-bg-custom-input" class="pa-visually-hidden" value="#2a2e3f" title="Choose Custom Canvas Color">
+          </div>
+
           <button id="btn-toggle-grid" class="pa-status-btn active" title="Toggle Pixel Grid">
             <i class="fa-solid fa-border-all"></i>
             <span>Grid</span>
@@ -382,6 +404,13 @@
           <div class="pa-scale-info">
             Output Size: <strong id="pa-export-dim-label">512 × 512 px</strong>
           </div>
+        </div>
+
+        <div class="pa-export-bg-option">
+          <label class="pa-checkbox-label">
+            <input type="checkbox" id="pa-export-include-bg">
+            <span>Include canvas background in exported PNG</span>
+          </label>
         </div>
       </div>
       <div class="pa-modal-footer">
