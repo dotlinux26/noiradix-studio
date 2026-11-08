@@ -1904,6 +1904,7 @@
     state.lastX = x;
     state.lastY = y;
     state.cachedCanvasRect = dom.canvasMain.getBoundingClientRect();
+    updateRulerHighlight(x, y);
 
     const activeColor = state.primaryColor;
 
@@ -2033,11 +2034,11 @@
       const coords = getPixelCoord(e);
       x = coords.x;
       y = coords.y;
+      dom.coordLabel.textContent = `${x}, ${y}`;
       if (!state.isDrawing) {
-        dom.coordLabel.textContent = `${x}, ${y}`;
         updateHoverColor(x, y);
-        updateRulerHighlight(x, y);
       }
+      updateRulerHighlight(x, y);
     } else {
       if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection && !state.isSelecting) {
         dom.coordLabel.textContent = '-, -';
@@ -2047,6 +2048,7 @@
         const coords = getPixelCoord(e);
         x = coords.x;
         y = coords.y;
+        updateRulerHighlight(x, y);
       }
     }
 
@@ -2159,6 +2161,7 @@
     if (state.isRotatingSelection) {
       const theta = state.rotationCurrentAngle;
       state.isRotatingSelection = false;
+      state.isDrawing = false;
       state.rotationCurrentAngle = 0;
       dom.viewport.style.cursor = 'crosshair';
 
@@ -2271,7 +2274,14 @@
 
     if (state.isMovingSelection) {
       state.isMovingSelection = false;
+      state.isDrawing = false;
       renderSelectionMarquee();
+      if (isEventOverCanvas(e)) {
+        const coords = getPixelCoord(e);
+        dom.coordLabel.textContent = `${coords.x}, ${coords.y}`;
+        updateHoverColor(coords.x, coords.y);
+        updateRulerHighlight(coords.x, coords.y);
+      }
       return;
     }
 
