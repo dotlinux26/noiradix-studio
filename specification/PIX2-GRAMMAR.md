@@ -1,4 +1,4 @@
-# PIX2 Formal Grammar Specification v1.0
+# PIX2 Formal Grammar Specification v1.1
 
 This document defines the formal lexical and syntactic grammar of the **PIX2 Sprite Description Language (`.pix2`)**.
 Any conforming parser, serializer, or AI model MUST adhere to these rules.
@@ -31,9 +31,10 @@ PIX2 adopts strict comment parsing to eliminate conflicts with HEX color syntax 
    ```
 
 ### 1.3 Identifiers & Literals
-- **Identifiers** (`cell_id`, `anim_id`, `palette_name`): ASCII alphanumeric characters plus underscores: `[a-zA-Z_][a-zA-Z0-9_-]*`.
+- **Identifiers** (`cell_id`, `anim_id`, `layer_id`, `group_id`, `region_id`, `palette_name`): ASCII alphanumeric characters plus underscores: `[a-zA-Z_][a-zA-Z0-9_-]*`.
 - **Strings**: Characters enclosed in double quotes: `"Player Walk Down"`. Escaped quotes `\"` are supported.
 - **Integers**: Non-negative decimal numbers: `[0-9]+`.
+- **Floats**: Decimal floating point numbers: `[0-9]+(\.[0-9]+)?`.
 - **Dimensions**: `<width>x<height>` where width and height are integers: e.g. `16x16`, `32x32`.
 - **Hex Colors**:
   - 3-digit RGB: `#RGB` (e.g. `#FFF` $\rightarrow$ `#FFFFFF`)
@@ -67,12 +68,32 @@ GridEntry          ::= WS* ("columns" | "cols") ":" WS* Integer
 PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
 PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?
 
-CellSection        ::= "@cell" WS+ Identifier EOL (CellProperty | PixelRecord)*
+CellSection        ::= "@cell" WS+ Identifier EOL (CellProperty | PixelRecord | LayerSection)*
 CellProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
                      | WS* "frame:" WS* Integer EOL
                      | WS* "size:" WS* Dimension EOL
                      | WS* "grid_pos:" WS* Integer "," Integer EOL
+
+LayerSection       ::= "@layer" WS+ Identifier EOL (LayerProperty | GroupSection | RegionSection)*
+LayerProperty      ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "visible:" WS* Boolean EOL
+                     | WS* "opacity:" WS* Float EOL
+                     | WS* "blend:" WS* ("normal") EOL
+                     | WS* "z_index:" WS* Integer EOL
+
+GroupSection       ::= "@group" WS+ Identifier EOL (GroupProperty | GroupSection | RegionSection)*
+GroupProperty      ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "visible:" WS* Boolean EOL
+                     | WS* "opacity:" WS* Float EOL
+                     | WS* "collapsed:" WS* Boolean EOL
+
+RegionSection      ::= "@region" WS+ Identifier EOL (RegionProperty | PixelRecord)*
+RegionProperty     ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "visible:" WS* Boolean EOL
+                     | WS* "opacity:" WS* Float EOL
+                     | WS* "color:" WS* HexColor EOL
+                     | WS* "tags:" WS* StringList EOL
 
 DirectionEnum      ::= "down" | "up" | "right" | "left"
                      | "down_right" | "down_left" | "up_right" | "up_left"
@@ -85,12 +106,14 @@ ColorRef           ::= HexColor | Identifier | Integer
 AnimationSection   ::= "@animation" WS+ Identifier EOL (AnimProperty)*
 AnimProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
+                     | WS* "action:" WS* ("idle" | "run" | "walk" | "jump" | "fall" | "land" | Identifier) EOL
                      | WS* "frames:" WS* FrameList EOL
                      | WS* "fps:" WS* Integer EOL
                      | WS* "loop:" WS* Boolean EOL
                      | WS* "mode:" WS* ("loop" | "once" | "pingpong") EOL
 
 FrameList          ::= "[" WS* (Identifier (WS* "," WS* Identifier)*)? WS* "]"
+StringList         ::= "[" WS* (StringLiteral (WS* "," WS* StringLiteral)*)? WS* "]"
 Boolean            ::= "true" | "false"
 Dimension          ::= Integer "x" Integer
 
@@ -101,10 +124,12 @@ EndMarker          ::= "@end" EOL?
 
 ## 3. Semantic Validation Rules
 
-1. **Unique Cell Identifiers**: Every `@cell <id>` must be globally unique within the document.
+1. **Unique Node Identifiers**: Every `@cell <id>`, `@layer <id>`, `@group <id>`, and `@region <id>` must be globally unique within the document.
 2. **Valid Coordinate Bounds**: For a cell with dimensions $W \times H$, every pixel coordinate $(x, y)$ must strictly satisfy:
    $$0 \le x < W \quad \text{and} \quad 0 \le y < H$$
    Any pixel outside this range must trigger a validation warning or error.
 3. **Reference Integrity in Animations**: Every cell ID referenced in `@animation <id>` `frames: [...]` must exist in the `@cell` definitions of the document.
 4. **Color Reference Resolution**: If a pixel references an identifier or integer (e.g. `pixel 5,8 outline`), that identifier must exist in the `@palette` section. If undefined, it falls back to parsing as direct hex or logs a semantic warning.
 5. **Pure Transparency Guarantee**: A cell with zero pixel records is completely transparent. No pixel records may represent alpha zero (`#00000000`). If a pixel's alpha is zero, the record must be erased.
+6. **Zero Cross-Region Mutation Invariant**: In a multi-layer document, drawing or erasing pixels inside an active `@region` strictly mutates that region's local pixel map. Sibling regions and ancestor layers are never overwritten.
+7. **Alpha-Over Compositing Order**: Layers are evaluated in document pre-order. Sibling nodes composite under standard Porter-Duff normal alpha blending over the transparent background.

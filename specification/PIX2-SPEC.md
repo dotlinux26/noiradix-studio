@@ -204,3 +204,20 @@ Where $\equiv_{\text{semantic}}$ requires:
 3. Identical cell names, dimensions, and direction tags.
 4. Identical animation frame orderings, FPS, and loop modes.
 5. Zero accidental background generation.
+
+---
+
+## 6. PIX2 1.1 Structural Graphics & Layer Model
+
+PIX2 1.1 extends the format with a hierarchical object model enabling semantic region isolation and multi-layer compositing:
+
+### 6.1 Structural Primitives
+- **`@layer <id>`**: Top-level compositing stratum within a cell. Owns `name`, `visible`, `opacity` (0.0–1.0), `blend` (`normal`), and `z_index`.
+- **`@group <id>`**: Logical hierarchy folder inside a layer or parent group. Owns `name`, `visible`, `opacity`, and `collapsed`.
+- **`@region <id>`**: Semantic pixel owner. Owns `name`, `visible`, `opacity`, `color`, `tags`, and cell-local coordinate records (`p <x,y> <color>`).
+
+### 6.2 Zero Cross-Region Mutation Invariant
+Drawing operations routed to an isolated region modify strictly that region's local pixel map. Sibling regions and parent layers remain completely immutable.
+
+### 6.3 Platformer 2-Direction Locomotion Template
+Adds horizontal directional tracks (`right`, `left`) with explicit action clips (`idle_right`, `run_right`, `jump_right`, `fall_right`, etc.).

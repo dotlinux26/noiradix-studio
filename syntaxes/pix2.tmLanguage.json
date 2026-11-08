@@ -48,7 +48,7 @@
     "directives": {
       "patterns": [
         {
-          "match": "(@(pix2|meta|grid|palette|cell|frame|animation|animations|end))(\\s+([a-zA-Z0-9_.-]+))?",
+          "match": "(@(pix2|meta|grid|palette|cell|frame|animation|animations|layer|group|region|end))(\\s+([a-zA-Z0-9_.-]+))?",
           "captures": {
             "1": {
               "name": "keyword.control.directive.pix2"
@@ -67,7 +67,7 @@
     "properties": {
       "patterns": [
         {
-          "match": "(?<=^|\\s)(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode)\\s*(:)",
+          "match": "(?<=^|\\s)(title|author|version|color_mode|coordinate_origin|type|grid|cols|columns|rows|cell_size|default_cell|gap|margin|background|name|direction|dir|frame|frames|size|grid_pos|pos|fps|loop|mode|opacity|visible|locked|blend|z_index|action|tags|parent)\\s*(:)",
           "captures": {
             "1": {
               "name": "support.type.property-name.pix2"

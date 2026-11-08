@@ -87,7 +87,24 @@ assert.strictEqual(pix2Match[4], '1.0', 'Group 4 must capture version "1.0"');
 const endMatch = '@end'.match(directivePattern);
 assert.ok(endMatch, '@end directive must match');
 assert.strictEqual(endMatch[1], '@end');
-console.log('  [PASS] Directives and Section Identifier capture groups verified');
+
+// PIX2 1.1 Structural Directives
+const layerMatch = '@layer layer_character'.match(directivePattern);
+assert.ok(layerMatch, '@layer directive must match');
+assert.strictEqual(layerMatch[1], '@layer');
+assert.strictEqual(layerMatch[4], 'layer_character');
+
+const groupMatch = '@group group_head'.match(directivePattern);
+assert.ok(groupMatch, '@group directive must match');
+assert.strictEqual(groupMatch[1], '@group');
+assert.strictEqual(groupMatch[4], 'group_head');
+
+const regionMatch = '@region region_left_eye'.match(directivePattern);
+assert.ok(regionMatch, '@region directive must match');
+assert.strictEqual(regionMatch[1], '@region');
+assert.strictEqual(regionMatch[4], 'region_left_eye');
+
+console.log('  [PASS] Directives and Section Identifier capture groups (including v1.1 layer/group/region) verified');
 
 // 3.3. Negative Coordinates
 const coordPattern = new RegExp(repo.numbers.patterns.find(p => p.name === 'constant.numeric.coordinate.pix2').match);

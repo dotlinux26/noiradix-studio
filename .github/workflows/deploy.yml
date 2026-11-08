@@ -82,6 +82,9 @@ jobs:
       - name: Run Audit Data Integrity & Regression Tests
         run: node tests/test-audit-integrity.js
 
+      - name: Run Performance & Latency Benchmark Suite
+        run: node tests/benchmark-performance.js
+
   # 2. CD Deployment: Deploy static web application to GitHub Pages
   deploy:
     name: Deploy to GitHub Pages
