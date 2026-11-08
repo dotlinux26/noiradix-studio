@@ -4125,8 +4125,11 @@ Do not include conversational greetings or postscripts.`;
     } catch (_) {}
   }
 
+  let _lastInMemoryBackup = null;
+
   async function savePreReloadBackup(payload) {
     let saved = false;
+    _lastInMemoryBackup = payload;
     try {
       const db = await getDb();
       saved = await new Promise((resolve) => {
@@ -4137,10 +4140,13 @@ Do not include conversational greetings or postscripts.`;
       });
     } catch (_) {}
     try {
-      _storage.setItem('pix2_backup_before_reload', JSON.stringify(payload));
+      // LocalStorage JSON cannot serialize FileSystemHandle; clone without fileHandle
+      const jsonSafe = { ...payload };
+      delete jsonSafe.fileHandle;
+      _storage.setItem('pix2_backup_before_reload', JSON.stringify(jsonSafe));
       saved = true;
     } catch (_) {}
-    return saved;
+    return saved || Boolean(_lastInMemoryBackup);
   }
 
   async function getPreReloadBackup() {
@@ -4154,6 +4160,7 @@ Do not include conversational greetings or postscripts.`;
       });
       if (res) return res;
     } catch (_) {}
+    if (_lastInMemoryBackup) return _lastInMemoryBackup;
     try {
       const raw = _storage.getItem('pix2_backup_before_reload');
       return raw ? JSON.parse(raw) : null;
@@ -4163,6 +4170,7 @@ Do not include conversational greetings or postscripts.`;
   }
 
   async function clearPreReloadBackup() {
+    _lastInMemoryBackup = null;
     try {
       const db = await getDb();
       const tx = db.transaction(STORE_BACKUPS, 'readwrite');
@@ -4185,17 +4193,28 @@ Do not include conversational greetings or postscripts.`;
     state.title = backup.title || state.title;
     if (dom.docTitle) dom.docTitle.value = state.title;
 
-    // Robust Document Identity Validation:
-    // Even if basenames match (e.g. Hero.pix2 in Folder A vs Folder B),
-    // verify the disk baseline hash to guarantee document identity.
+    // Robust Document Identity Validation via W3C FileSystemHandle isSameEntry:
+    // 1. If fileHandle is present in backup and currentFileHandle is present,
+    //    and isSameEntry is available: use native W3C isSameEntry() to verify true file identity.
+    //    This authoritatively distinguishes identical filenames across different folders,
+    //    even if both files currently share identical baseline content!
+    // 2. If isSameEntry() confirms it is the exact same physical file:
+    //    Verify the disk baseline hash to guarantee content hasn't diverged.
+    // 3. If fileHandle is absent (e.g. from fallback storage), handles are different, or
+    //    isSameEntry cannot definitively confirm identity:
+    //    SAFELY DETACH the file handle and restore as an independent draft ("Restored - [title]").
+    //    This eliminates any possibility of cross-file overwrites.
     let isSameDocument = false;
-    if (currentFileHandle && currentFileName === backup.fileName) {
+    if (currentFileHandle && backup.fileHandle && typeof currentFileHandle.isSameEntry === 'function') {
       try {
-        const curFile = await currentFileHandle.getFile();
-        const curText = await curFile.text();
-        const curHash = hashString(normalizeForCompare(curText));
-        if (backup.baseContentHash && curHash === backup.baseContentHash) {
-          isSameDocument = true;
+        const isSame = await currentFileHandle.isSameEntry(backup.fileHandle);
+        if (isSame && currentFileName === backup.fileName) {
+          const curFile = await currentFileHandle.getFile();
+          const curText = await curFile.text();
+          const curHash = hashString(normalizeForCompare(curText));
+          if (!backup.baseContentHash || curHash === backup.baseContentHash) {
+            isSameDocument = true;
+          }
         }
       } catch (_) {
         isSameDocument = false;
@@ -4252,7 +4271,18 @@ Do not include conversational greetings or postscripts.`;
     document.title = state.isDirty ? `● ${name} — NOIRADIX PixelArt` : `${name} — NOIRADIX PixelArt`;
     const pathText = document.getElementById('pa-file-path-text');
     if (pathText) {
-      pathText.textContent = name;
+      if (currentFileName) {
+        if (lastKnownFileModified === 0 && state.isDirty && !lastSavedContent) {
+          pathText.textContent = `${currentFileName} (Unverified draft)`;
+          pathText.title = 'Unverified session draft — not yet reconciled with disk file. Press Ctrl+S to save or Ctrl+Shift+R to reload disk version.';
+        } else {
+          pathText.textContent = name;
+          pathText.title = `Linked to ${currentFileName}`;
+        }
+      } else {
+        pathText.textContent = state.title ? `${state.title} (Draft)` : 'Unsaved Draft';
+        pathText.title = 'In-memory draft';
+      }
     }
   }
 
@@ -4650,6 +4680,15 @@ Do not include conversational greetings or postscripts.`;
         const curText = await file.text();
         lastSavedContent = curText;
         try { _storage.setItem('pix2_last_saved_content', curText); } catch (_) {}
+
+        // If the document is currently dirty (e.g. unverified session recovery), alert user if canvas diverges from disk
+        if (state.isDirty) {
+          const currentCanvasText = flushSourceCode();
+          if (normalizeForCompare(currentCanvasText) !== normalizeForCompare(curText)) {
+            showToast('Loaded session draft differs from disk version. Review canvas or press Ctrl+Shift+R to reload from disk.', 'warning');
+          }
+        }
+        updateDocumentTitle();
         isExternalReloading = false;
         return;
       }
@@ -4758,6 +4797,7 @@ Do not include conversational greetings or postscripts.`;
           schemaVersion: 2,
           docId: state.title,
           fileName: currentFileName || '',
+          fileHandle: currentFileHandle || null,
           revision: documentRevision,
           lastSavedRevision: lastSavedRevision,
           w: state.w,
@@ -5757,7 +5797,14 @@ Do not include conversational greetings or postscripts.`;
       getCurrentFileHandle: () => currentFileHandle,
       setCurrentFileHandle: (h) => { currentFileHandle = h; },
       getCurrentFileName: () => currentFileName,
-      setCurrentFileName: (n) => { currentFileName = n; }
+      setCurrentFileName: (n) => { currentFileName = n; },
+      getRulerStaticTop: () => rulerStaticTop,
+      getRulerStaticLeft: () => rulerStaticLeft,
+      setRulerStaticTop: (v) => { rulerStaticTop = v; },
+      setRulerStaticLeft: (v) => { rulerStaticLeft = v; },
+      getLastSavedContent: () => lastSavedContent,
+      getLastKnownFileModified: () => lastKnownFileModified,
+      setLastKnownFileModified: (t) => { lastKnownFileModified = t; }
     };
   }
 })();

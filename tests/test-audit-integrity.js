@@ -529,8 +529,15 @@ async function runSuite() {
     assert.strictEqual(PixelArtApp.state._hoverX, 10);
     assert.strictEqual(PixelArtApp.state._hoverY, 15);
 
-    // Verify invalidateRulerCache() is callable and invalidates static ruler caches
+    // Verify invalidateRulerCache() behaviorally clears active static ruler cache bitmaps
+    PixelArtApp.setRulerStaticTop({ cached: true });
+    PixelArtApp.setRulerStaticLeft({ cached: true });
+    assert(PixelArtApp.getRulerStaticTop(), 'Ruler top cache must exist before invalidation');
+    assert(PixelArtApp.getRulerStaticLeft(), 'Ruler left cache must exist before invalidation');
+
     PixelArtApp.invalidateRulerCache();
+    assert.strictEqual(PixelArtApp.getRulerStaticTop(), null, 'invalidateRulerCache must reset rulerStaticTop to null');
+    assert.strictEqual(PixelArtApp.getRulerStaticLeft(), null, 'invalidateRulerCache must reset rulerStaticLeft to null');
     console.log('  [PASS] Ruler updateRulerHighlight and pan cache invalidation verified');
   }
 
@@ -615,32 +622,41 @@ async function runSuite() {
   }
 
   // -----------------------------------------------------------------------------
-  // Test 22: Pre-Reload Backup Identity Validation & Same-Basename Handle Detachment
   // -----------------------------------------------------------------------------
-  console.log('\nTest 22: Pre-Reload Backup Identity Validation & Same-Basename Handle Detachment');
+  // Test 22: Pre-Reload Backup Identity Validation via W3C FileSystemHandle isSameEntry
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 22: Pre-Reload Backup Identity Validation via W3C FileSystemHandle isSameEntry');
   {
-    // Simulate real-world browser lifecycle:
-    // User had Hero.pix2 in Folder A (baseContentHash: hashA).
-    // In current session, user opened a different Hero.pix2 from Folder B (content: textB).
-    const contentFolderA = '@pix2 1.0\n@meta\n  title: "Hero Folder A"\n';
-    const contentFolderB = '@pix2 1.0\n@meta\n  title: "Hero Folder B"\n';
-    const hashFolderA = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(contentFolderA));
+    // Part A: Same Basename AND Identical Baseline Content across different directories
+    // User had Hero.pix2 in Folder A. Active session opened Hero.pix2 in Folder B.
+    // Both files have 100% identical contents.
+    const identicalContent = '@pix2 1.0\n@meta\n  title: "Hero"\n';
+    const identicalHash = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(identicalContent));
 
-    // Mock active file handle representing Hero.pix2 from Folder B
-    let handleDetached = false;
-    const mockFileHandleB = {
+    const mockFileHandleA = {
       name: 'Hero.pix2',
+      isSameEntry: async (other) => other === mockFileHandleA,
       getFile: async () => ({
         lastModified: 1731110000000,
-        text: async () => contentFolderB
+        text: async () => identicalContent
       })
     };
 
-    // Backup payload originating from Folder A
+    const mockFileHandleB = {
+      name: 'Hero.pix2', // Identical basename!
+      isSameEntry: async (other) => other === mockFileHandleB,
+      getFile: async () => ({
+        lastModified: 1731110000000,
+        text: async () => identicalContent // Identical content & identical hash!
+      })
+    };
+
+    // Backup saved from Folder A session
     const backupFromFolderA = {
       schemaVersion: 2,
       docId: 'Hero',
-      fileName: 'Hero.pix2', // Identical basename!
+      fileName: 'Hero.pix2',
+      fileHandle: mockFileHandleA,
       revision: 5,
       lastSavedRevision: 4,
       w: 32,
@@ -648,32 +664,66 @@ async function runSuite() {
       title: 'Hero',
       pixels: { '0,0': '#ff0000' },
       time: Date.now(),
-      baseContentHash: hashFolderA // Hash of Folder A
+      baseContentHash: identicalHash
     };
 
-    // Save backup to test harness
     await PixelArtApp.savePreReloadBackup(backupFromFolderA);
 
-    // Set state simulating active document linked to Folder B
+    // Active workspace is currently on Folder B
     PixelArtApp.setCurrentFileHandle(mockFileHandleB);
     PixelArtApp.setCurrentFileName('Hero.pix2');
     PixelArtApp.state.title = 'Hero';
 
-    assert.strictEqual(PixelArtApp.getCurrentFileHandle(), mockFileHandleB, 'Initial handle must be Folder B');
-    assert.strictEqual(PixelArtApp.getCurrentFileName(), 'Hero.pix2', 'Initial filename must be Hero.pix2');
+    assert.strictEqual(PixelArtApp.getCurrentFileHandle(), mockFileHandleB);
+    assert.strictEqual(PixelArtApp.getCurrentFileName(), 'Hero.pix2');
 
-    // Perform backup restore
-    const restoreOk = await PixelArtApp.restorePreReloadBackup();
-    assert.strictEqual(restoreOk, true, 'restorePreReloadBackup must succeed');
+    // Restore backup
+    const restoreOkA = await PixelArtApp.restorePreReloadBackup();
+    assert.strictEqual(restoreOkA, true, 'restorePreReloadBackup must succeed');
 
-    // Verify handle detachment when contents differ despite sharing the same basename
-    const cell = PixelArtApp.getArtworkCell();
-    assert.strictEqual(cell.pixels['0,0'], '#ff0000', 'Restored backup must populate canvas pixels');
-    assert.strictEqual(PixelArtApp.getCurrentFileHandle(), null, 'Cross-file restore with same basename must detach handle to prevent destructive overwrite');
-    assert.strictEqual(PixelArtApp.getCurrentFileName(), null, 'Cross-file restore with same basename must clear filename');
+    // Despite IDENTICAL basename and IDENTICAL content hash, handle must detach because
+    // isSameEntry(mockFileHandleA) on mockFileHandleB returns false!
+    assert.strictEqual(
+      PixelArtApp.getCurrentFileHandle(),
+      null,
+      'Handle MUST be detached when isSameEntry returns false despite identical name and identical content'
+    );
+    assert.strictEqual(PixelArtApp.getCurrentFileName(), null, 'Filename must be cleared on detached restore');
     assert.strictEqual(PixelArtApp.state.title, 'Restored - Hero', 'Title must reflect detached restored draft');
 
-    console.log('  [PASS] Backup restore validates content hash identity and detaches file handles on same-basename collisions');
+    // Part B: Genuine Same-File Restore (Same Handle, Same Basename, Same Content)
+    // User restores backup created within the same active file
+    const sameFileBackup = {
+      schemaVersion: 2,
+      docId: 'Hero',
+      fileName: 'Hero.pix2',
+      fileHandle: mockFileHandleA,
+      revision: 3,
+      lastSavedRevision: 2,
+      w: 32,
+      h: 32,
+      title: 'Hero',
+      pixels: { '1,1': '#00ff00' },
+      time: Date.now(),
+      baseContentHash: identicalHash
+    };
+
+    await PixelArtApp.savePreReloadBackup(sameFileBackup);
+    PixelArtApp.setCurrentFileHandle(mockFileHandleA);
+    PixelArtApp.setCurrentFileName('Hero.pix2');
+    PixelArtApp.state.title = 'Hero';
+
+    const restoreOkB = await PixelArtApp.restorePreReloadBackup();
+    assert.strictEqual(restoreOkB, true, 'restorePreReloadBackup must succeed');
+    assert.strictEqual(
+      PixelArtApp.getCurrentFileHandle(),
+      mockFileHandleA,
+      'Handle MUST remain attached when isSameEntry confirms true file identity'
+    );
+    assert.strictEqual(PixelArtApp.getCurrentFileName(), 'Hero.pix2');
+    assert.strictEqual(PixelArtApp.state.title, 'Hero');
+
+    console.log('  [PASS] Backup restore validates W3C FileSystemHandle isSameEntry, detaching cross-folder handles with identical content');
   }
 
   // -----------------------------------------------------------------------------
@@ -686,6 +736,13 @@ async function runSuite() {
     const saveNativePattern = /setDirty\(documentRevision !== lastSavedRevision\);\s*triggerAutosave\(true\);/g;
     const matches = code.match(saveNativePattern);
     assert(matches && matches.length >= 2, 'saveFileNative must update lastSavedRevision and setDirty BEFORE triggerAutosave(true)');
+
+    // Behavioral state test:
+    PixelArtApp.markDocumentMutation('test-edit');
+    assert.strictEqual(PixelArtApp.state.isDirty, true, 'Document must be dirty before save');
+    PixelArtApp.markDocumentSaved();
+    assert.strictEqual(PixelArtApp.state.isDirty, false, 'Document must be clean after markDocumentSaved');
+
     console.log('  [PASS] Save sequence commits clean state before writing autosave to storage');
   }
 
@@ -712,7 +769,36 @@ async function runSuite() {
       unverifiedFallbackSlice.includes('setDirty(true)'),
       'Unverified localStorage fallback in init() must mark document dirty as an unverified recovery session'
     );
-    console.log('  [PASS] Startup localStorage cache isolated from authoritative disk baseline');
+
+    // Behavioral test of first-check divergence detection on unverified recovery:
+    PixelArtApp.createNewDocument(16, 16, 'UnverifiedSession');
+    const cell = PixelArtApp.getArtworkCell();
+    cell.pixels['0,0'] = '#ff0000'; // Canvas has unverified edit
+    PixelArtApp.setDirty(true);
+    PixelArtApp.setCurrentFileName('Hero.pix2');
+    PixelArtApp.setLastKnownFileModified(0); // Simulates unverified baseline
+
+    let diskReadHappened = false;
+    const mockFileOnDisk = {
+      name: 'Hero.pix2',
+      getFile: async () => {
+        diskReadHappened = true;
+        return {
+          lastModified: 1731120000000,
+          text: async () => '@pix2 1.0\n@meta\n  title: "Hero"\n@cell cell_0_0 16 16\n  0,0: #0000ff\n@end\n'
+        };
+      }
+    };
+    PixelArtApp.setCurrentFileHandle(mockFileOnDisk);
+
+    // File watcher first-run check on focus
+    await PixelArtApp.checkAndReloadExternalFileChanges(false, false);
+    assert.strictEqual(diskReadHappened, true, 'First watcher check must read physical file from disk');
+    assert.strictEqual(PixelArtApp.getLastKnownFileModified(), 1731120000000, 'Baseline mtime must now be recorded from disk');
+    assert(PixelArtApp.getLastSavedContent().includes('#0000ff'), 'Baseline content must be initialized to disk content');
+    assert.strictEqual(PixelArtApp.state.isDirty, true, 'Canvas must remain dirty with user edits preserved');
+
+    console.log('  [PASS] Startup localStorage cache isolated from authoritative disk baseline and verified on disk check');
   }
 
   console.log('\n====================================================');
