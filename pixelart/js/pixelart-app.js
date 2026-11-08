@@ -13,10 +13,12 @@
   // Safe environment detection for hybrid browser/node test runtime
   const _hasWindow = typeof window !== 'undefined';
   const _hasDocument = typeof document !== 'undefined';
+  const _inMemoryStorage = new Map();
   const _storage = (typeof localStorage !== 'undefined') ? localStorage : {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {}
+    getItem: (k) => _inMemoryStorage.has(k) ? _inMemoryStorage.get(k) : null,
+    setItem: (k, v) => { _inMemoryStorage.set(k, String(v)); },
+    removeItem: (k) => { _inMemoryStorage.delete(k); },
+    clear: () => { _inMemoryStorage.clear(); }
   };
 
   // Ensure PIX2 engine and Tools library are loaded
@@ -321,6 +323,7 @@
   // Toast Notification System
   let toastTimer = null;
   function showToast(msg, type = 'info') {
+    if (typeof document === 'undefined') return;
     let toast = document.getElementById('pa-toast');
     if (!toast) {
       toast = document.createElement('div');
@@ -548,9 +551,11 @@
           const ok = applySourceCodeToCanvas();
           if (ok) {
             documentRestored = true;
-            lastSavedContent = lastSavedText;
-            lastKnownFileModified = Number(_storage.getItem('pix2_last_saved_time') || 0);
-            setDirty(false);
+            // Unverified localStorage cache must NOT be set as authoritative disk baseline.
+            // Baseline remains uninitialized (0 / '') until the physical file handle is verified.
+            lastSavedContent = '';
+            lastKnownFileModified = 0;
+            setDirty(true);
           }
         } catch (_) {}
       }
@@ -4180,9 +4185,24 @@ Do not include conversational greetings or postscripts.`;
     state.title = backup.title || state.title;
     if (dom.docTitle) dom.docTitle.value = state.title;
 
-    const currentFileId = currentFileName || (currentFileHandle ? currentFileHandle.name : null);
-    const backupFileId = backup.fileName || backup.docId || null;
-    if (currentFileId && backupFileId && currentFileId !== backupFileId) {
+    // Robust Document Identity Validation:
+    // Even if basenames match (e.g. Hero.pix2 in Folder A vs Folder B),
+    // verify the disk baseline hash to guarantee document identity.
+    let isSameDocument = false;
+    if (currentFileHandle && currentFileName === backup.fileName) {
+      try {
+        const curFile = await currentFileHandle.getFile();
+        const curText = await curFile.text();
+        const curHash = hashString(normalizeForCompare(curText));
+        if (backup.baseContentHash && curHash === backup.baseContentHash) {
+          isSameDocument = true;
+        }
+      } catch (_) {
+        isSameDocument = false;
+      }
+    }
+
+    if (!isSameDocument) {
       currentFileHandle = null;
       currentFileName = null;
       clearPersistedFileHandle();
@@ -4227,6 +4247,7 @@ Do not include conversational greetings or postscripts.`;
   let fileWatcherHeartbeatTimer = null;
 
   function updateDocumentTitle() {
+    if (typeof document === 'undefined') return;
     const name = currentFileName || `${sanitizeFilename(state.title || 'Untitled')}.pix2`;
     document.title = state.isDirty ? `● ${name} — NOIRADIX PixelArt` : `${name} — NOIRADIX PixelArt`;
     const pathText = document.getElementById('pa-file-path-text');
@@ -4318,14 +4339,14 @@ Do not include conversational greetings or postscripts.`;
   let activeSavePromise = Promise.resolve();
   let saveSequenceCounter = 0;
   let lastCompletedSaveSeq = 0;
-  let isNativeSaving = false;
+  let activeSaveOperations = 0;
 
   function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
     const snapshotRevision = documentRevision;
     const saveSeq = ++saveSequenceCounter;
     const text = flushSourceCode();
-    isNativeSaving = true;
+    activeSaveOperations++;
 
     const doSave = async () => {
       try {
@@ -4436,7 +4457,7 @@ Do not include conversational greetings or postscripts.`;
         setDirty(documentRevision !== lastSavedRevision);
         triggerAutosave(true);
       } finally {
-        isNativeSaving = false;
+        activeSaveOperations = Math.max(0, activeSaveOperations - 1);
       }
     };
 
@@ -4614,8 +4635,8 @@ Do not include conversational greetings or postscripts.`;
     return (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
   }
 
-  async function checkAndReloadExternalFileChanges(force = false) {
-    if (!currentFileHandle || isExternalReloading || isNativeSaving) return;
+  async function checkAndReloadExternalFileChanges(force = false, isHeartbeat = false) {
+    if (!currentFileHandle || isExternalReloading || activeSaveOperations > 0) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
     try {
@@ -4633,8 +4654,10 @@ Do not include conversational greetings or postscripts.`;
         return;
       }
 
-      // If filesystem timestamp has not changed, and baseline is recorded, no external change occurred
-      if (currentModified === lastKnownFileModified && !force && !pendingExternalConflict && lastSavedContent) {
+      // Quick timestamp optimization for periodic heartbeat polling only:
+      // Periodic heartbeat skips reading file text if filesystem mtime is identical.
+      // Focus, visibilitychange, and forced reloads ALWAYS verify content.
+      if (isHeartbeat && currentModified === lastKnownFileModified && !force && !pendingExternalConflict && lastSavedContent) {
         isExternalReloading = false;
         return;
       }
@@ -4772,13 +4795,13 @@ Do not include conversational greetings or postscripts.`;
   function initFileWatcher() {
     // 1. Focus listener: window gets active focus when switching from external editor/AI
     window.addEventListener('focus', () => {
-      checkAndReloadExternalFileChanges(false);
+      checkAndReloadExternalFileChanges(false, false);
     });
 
     // 2. Visibility change listener (tab becomes visible)
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
-        checkAndReloadExternalFileChanges(false);
+        checkAndReloadExternalFileChanges(false, false);
       }
     });
 
@@ -4786,7 +4809,7 @@ Do not include conversational greetings or postscripts.`;
     if (fileWatcherHeartbeatTimer) clearInterval(fileWatcherHeartbeatTimer);
     fileWatcherHeartbeatTimer = setInterval(() => {
       if (!document.hidden && currentFileHandle && !state.isDirty) {
-        checkAndReloadExternalFileChanges(false);
+        checkAndReloadExternalFileChanges(false, true);
       }
     }, 1500);
   }
@@ -5730,7 +5753,11 @@ Do not include conversational greetings or postscripts.`;
       createNewDocument,
       getArtworkCell,
       checkAndReloadExternalFileChanges,
-      handleManualFileReload
+      handleManualFileReload,
+      getCurrentFileHandle: () => currentFileHandle,
+      setCurrentFileHandle: (h) => { currentFileHandle = h; },
+      getCurrentFileName: () => currentFileName,
+      setCurrentFileName: (n) => { currentFileName = n; }
     };
   }
 })();

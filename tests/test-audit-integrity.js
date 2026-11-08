@@ -604,27 +604,76 @@ async function runSuite() {
       'checkAndReloadExternalFileChanges must enforce strict string comparison normDisk === normSaved'
     );
     assert(
-      code.includes('isNativeSaving'),
-      'checkAndReloadExternalFileChanges must guard against concurrent save operations with isNativeSaving'
+      code.includes('activeSaveOperations'),
+      'checkAndReloadExternalFileChanges must guard against concurrent save operations with activeSaveOperations counter'
     );
-    console.log('  [PASS] Watcher enforces strict string comparison and prevents false positives during saves');
+    assert(
+      code.includes('isHeartbeat && currentModified === lastKnownFileModified'),
+      'Heartbeat optimization must only skip disk reads during periodic heartbeat, never on focus or visibility change'
+    );
+    console.log('  [PASS] Watcher enforces strict string comparison, queue-level save locks, and focus content verification');
   }
 
   // -----------------------------------------------------------------------------
-  // Test 22: Pre-Reload Backup Identity Validation & Handle Detachment
+  // Test 22: Pre-Reload Backup Identity Validation & Same-Basename Handle Detachment
   // -----------------------------------------------------------------------------
-  console.log('\nTest 22: Pre-Reload Backup Identity Validation & Handle Detachment');
+  console.log('\nTest 22: Pre-Reload Backup Identity Validation & Same-Basename Handle Detachment');
   {
-    const code = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
-    assert(
-      code.includes('backupFileId && currentFileId !== backupFileId'),
-      'restorePreReloadBackup must validate document identity on restore'
-    );
-    assert(
-      code.includes('clearPersistedFileHandle()'),
-      'restorePreReloadBackup must detach file handle on cross-file restore to prevent accidental overwrite'
-    );
-    console.log('  [PASS] Pre-reload backup cross-file protection prevents accidental handle overwrites');
+    // Simulate real-world browser lifecycle:
+    // User had Hero.pix2 in Folder A (baseContentHash: hashA).
+    // In current session, user opened a different Hero.pix2 from Folder B (content: textB).
+    const contentFolderA = '@pix2 1.0\n@meta\n  title: "Hero Folder A"\n';
+    const contentFolderB = '@pix2 1.0\n@meta\n  title: "Hero Folder B"\n';
+    const hashFolderA = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(contentFolderA));
+
+    // Mock active file handle representing Hero.pix2 from Folder B
+    let handleDetached = false;
+    const mockFileHandleB = {
+      name: 'Hero.pix2',
+      getFile: async () => ({
+        lastModified: 1731110000000,
+        text: async () => contentFolderB
+      })
+    };
+
+    // Backup payload originating from Folder A
+    const backupFromFolderA = {
+      schemaVersion: 2,
+      docId: 'Hero',
+      fileName: 'Hero.pix2', // Identical basename!
+      revision: 5,
+      lastSavedRevision: 4,
+      w: 32,
+      h: 32,
+      title: 'Hero',
+      pixels: { '0,0': '#ff0000' },
+      time: Date.now(),
+      baseContentHash: hashFolderA // Hash of Folder A
+    };
+
+    // Save backup to test harness
+    await PixelArtApp.savePreReloadBackup(backupFromFolderA);
+
+    // Set state simulating active document linked to Folder B
+    PixelArtApp.setCurrentFileHandle(mockFileHandleB);
+    PixelArtApp.setCurrentFileName('Hero.pix2');
+    PixelArtApp.state.title = 'Hero';
+
+    assert.strictEqual(PixelArtApp.getCurrentFileHandle(), mockFileHandleB, 'Initial handle must be Folder B');
+    assert.strictEqual(PixelArtApp.getCurrentFileName(), 'Hero.pix2', 'Initial filename must be Hero.pix2');
+
+    // Perform backup restore
+    const restoreOk = await PixelArtApp.restorePreReloadBackup();
+    assert.strictEqual(restoreOk, true, 'restorePreReloadBackup must succeed');
+
+    // Verify handle detachment when contents differ despite sharing the same basename
+    const cell = PixelArtApp.getArtworkCell();
+    assert.strictEqual(cell.pixels['0,0'], '#ff0000', 'Restored backup must populate canvas pixels');
+    assert.strictEqual(PixelArtApp.getCurrentFileHandle(), null, 'Cross-file restore with same basename must detach handle to prevent destructive overwrite');
+    assert.strictEqual(PixelArtApp.getCurrentFileName(), null, 'Cross-file restore with same basename must clear filename');
+    assert.strictEqual(PixelArtApp.state.title, 'Restored - Hero', 'Title must reflect detached restored draft');
+
+    console.log('  [PASS] Backup restore validates content hash identity and detaches file handles on same-basename collisions');
   }
 
   // -----------------------------------------------------------------------------
@@ -640,8 +689,34 @@ async function runSuite() {
     console.log('  [PASS] Save sequence commits clean state before writing autosave to storage');
   }
 
+  // -----------------------------------------------------------------------------
+  // Test 24: Unverified LocalStorage Fallback Isolation from Disk Baseline
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 24: Unverified LocalStorage Fallback Isolation from Disk Baseline');
+  {
+    const code = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+    // Ensure init() fallback does NOT assign unverified localStorage text to lastSavedContent
+    const unverifiedFallbackSlice = code.substring(
+      code.indexOf('// 2. Fallback: If handle could not be read directly'),
+      code.indexOf('// 3. Fallback: Check for crash recovery')
+    );
+    assert(
+      unverifiedFallbackSlice.includes("lastSavedContent = ''"),
+      'Unverified localStorage fallback in init() must NOT set lastSavedContent as authoritative baseline'
+    );
+    assert(
+      unverifiedFallbackSlice.includes('lastKnownFileModified = 0'),
+      'Unverified localStorage fallback in init() must keep lastKnownFileModified = 0 until verified on disk'
+    );
+    assert(
+      unverifiedFallbackSlice.includes('setDirty(true)'),
+      'Unverified localStorage fallback in init() must mark document dirty as an unverified recovery session'
+    );
+    console.log('  [PASS] Startup localStorage cache isolated from authoritative disk baseline');
+  }
+
   console.log('\n====================================================');
-  console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (23/23)');
+  console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (24/24)');
   console.log('====================================================\n');
 }
 

@@ -17,9 +17,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1. CI Test Suite: Syntax integrity & 134 automated unit tests across 4 suites
+  # 1. CI Test Suite: Syntax integrity & 158 automated unit tests across 5 suites
   test:
-    name: Run Automated Test Suites (134 Tests)
+    name: Run Automated Test Suites (158 Tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
