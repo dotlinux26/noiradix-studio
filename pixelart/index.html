@@ -207,6 +207,16 @@
 
     <!-- CENTER CANVAS PANE -->
     <section class="pa-canvas-pane" id="pa-canvas-pane">
+      <!-- Pre-Reload Backup Recovery Banner -->
+      <div id="pa-recovery-banner" class="pa-recovery-banner hidden">
+        <div class="pa-recovery-inner">
+          <i class="fa-solid fa-clock-rotate-left text-accent"></i>
+          <span id="pa-recovery-msg">Pre-reload backup found from previous session.</span>
+          <button id="btn-restore-backup" class="pa-btn-xs pa-btn-accent"><i class="fa-solid fa-rotate-left"></i> Restore</button>
+          <button id="btn-dismiss-backup" class="pa-btn-xs pa-btn-subtle"><i class="fa-solid fa-xmark"></i> Dismiss</button>
+        </div>
+      </div>
+
       <div class="pa-canvas-viewport" id="pa-canvas-viewport">
         <div class="pa-canvas-container" id="pa-canvas-container">
           <div class="pa-ruler-corner" id="pa-ruler-corner">px</div>

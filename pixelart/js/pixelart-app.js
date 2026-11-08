@@ -10,12 +10,23 @@
 (function () {
   'use strict';
 
+  // Safe environment detection for hybrid browser/node test runtime
+  const _hasWindow = typeof window !== 'undefined';
+  const _hasDocument = typeof document !== 'undefined';
+  const _storage = (typeof localStorage !== 'undefined') ? localStorage : {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {}
+  };
+
   // Ensure PIX2 engine and Tools library are loaded
-  const _PIX2 = typeof PIX2 !== 'undefined' ? PIX2 : (typeof window !== 'undefined' ? window.PIX2 : null);
-  const _Tools = typeof Tools !== 'undefined' ? Tools : (typeof window !== 'undefined' ? window.Tools : null);
+  const _PIX2 = typeof PIX2 !== 'undefined' ? PIX2 : (_hasWindow && window.PIX2 ? window.PIX2 : (typeof require !== 'undefined' ? require('../../js/pix2-format.js') : null));
+  const _Tools = typeof Tools !== 'undefined' ? Tools : (_hasWindow && window.Tools ? window.Tools : (typeof require !== 'undefined' ? require('../../js/tools.js') : null));
 
   if (!_PIX2) {
-    console.error('CRITICAL: PIX2 Reference Engine not found. Please verify js/pix2-format.js is loaded.');
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('CRITICAL: PIX2 Reference Engine not found. Please verify js/pix2-format.js is loaded.');
+    }
     return;
   }
 
@@ -74,7 +85,7 @@
 
   function loadCustomPalettes() {
     try {
-      const raw = localStorage.getItem(CUSTOM_PALETTES_STORAGE_KEY);
+      const raw = _storage.getItem(CUSTOM_PALETTES_STORAGE_KEY);
       if (!raw) return {};
       const parsed = JSON.parse(raw);
       return (parsed && typeof parsed === 'object') ? parsed : {};
@@ -85,7 +96,7 @@
 
   function saveCustomPalettes(palettesObj) {
     try {
-      localStorage.setItem(CUSTOM_PALETTES_STORAGE_KEY, JSON.stringify(palettesObj));
+      _storage.setItem(CUSTOM_PALETTES_STORAGE_KEY, JSON.stringify(palettesObj));
     } catch (err) {
       console.warn('Failed to save custom palettes to storage:', err);
     }
@@ -239,12 +250,17 @@
     panX: 0,
     panY: 0,
     showGrid: true,
-    showRulers: localStorage.getItem('pix2_pixelart_rulers') !== 'false',
+    showRulers: _storage.getItem('pix2_pixelart_rulers') !== 'false',
     _hoverX: null,
     _hoverY: null,
     isPanning: false,
     panStartX: 0,
     panStartY: 0,
+
+    // Space Key Navigation State
+    isSpaceDown: false,
+    didPanWithSpace: false,
+    spaceDownTime: 0,
 
     // Split Pane Resizing
     isDraggingSplitter: false,
@@ -257,10 +273,11 @@
     dragStartX: null,
     dragStartY: null,
 
-    // History (Undo / Redo)
+    // History (Delta-Based & Snapshot Hybrid Undo / Redo)
     history: [],
     historyIndex: -1,
     maxHistory: 50,
+    lastHistoryPixels: null,
 
     // Synchronization Locks
     isSyncingFromCanvas: false,
@@ -271,8 +288,8 @@
     exportScale: 8,
 
     // Canvas Background Configuration
-    canvasBgMode: localStorage.getItem('pix2_canvas_bg_mode') || 'transparent', // 'transparent' | 'white' | 'black' | 'custom'
-    canvasBgColor: localStorage.getItem('pix2_canvas_bg_color') || '#2a2e3f',
+    canvasBgMode: _storage.getItem('pix2_canvas_bg_mode') || 'transparent', // 'transparent' | 'white' | 'black' | 'custom'
+    canvasBgColor: _storage.getItem('pix2_canvas_bg_color') || '#2a2e3f',
     exportIncludeBg: false,
 
     // Alignment Guidelines
@@ -349,6 +366,8 @@
     } else if (documentRevision === lastSavedRevision) {
       documentRevision++;
     }
+    if (typeof document === 'undefined') return;
+
     const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || `${sanitizeFilename(state.title)}.pix2`;
     const isLinked = Boolean(currentFileHandle);
 
@@ -441,17 +460,25 @@
     }
 
     let documentRestored = false;
-    const lastSavedTime = parseInt(localStorage.getItem('pix2_last_saved_time') || '0', 10);
-    const savedAutosave = localStorage.getItem('pix2_pixelart_autosave');
-    let autosavePayload = null;
-    if (savedAutosave) {
-      try {
-        const parsed = JSON.parse(savedAutosave);
-        if (parsed && parsed.w && parsed.h && parsed.pixels && Object.keys(parsed.pixels).length > 0) {
-          autosavePayload = parsed;
-        }
-      } catch (_) {}
+    let autosavePayload = await retrieveAutosaveFromStorage();
+    if (!autosavePayload || !autosavePayload.pixels || Object.keys(autosavePayload.pixels).length === 0) {
+      autosavePayload = null;
     }
+
+    // 0. Check for restorable pre-reload backup from previous session
+    try {
+      const preBackup = await getPreReloadBackup();
+      if (preBackup && preBackup.pixels && Object.keys(preBackup.pixels).length > 0) {
+        if (dom.recoveryBanner) {
+          if (dom.recoveryMsg) {
+            const timeStr = preBackup.time ? new Date(preBackup.time).toLocaleTimeString() : 'previous session';
+            const count = Object.keys(preBackup.pixels).length;
+            dom.recoveryMsg.textContent = `Pre-reload backup found from ${timeStr} (${count} pixels).`;
+          }
+          dom.recoveryBanner.classList.remove('hidden');
+        }
+      }
+    } catch (_) {}
 
     // 1. Check for persisted physical file handle in IndexedDB
     try {
@@ -476,8 +503,12 @@
           console.warn('Could not read persisted file handle directly:', handleErr);
         }
 
-        // If autosave has newer unsaved edits than what's on disk, prioritize recovering those edits:
-        if (autosavePayload && (autosavePayload.updatedAt || 0) > (lastSavedTime + 1000) && (!diskText || (autosavePayload.updatedAt || 0) > diskModified)) {
+        const diskHash = hashString(diskText);
+        const autosaveHasUnsavedEdits = autosavePayload && ((autosavePayload.revision || 0) > (autosavePayload.lastSavedRevision || 0));
+        const autosaveMatchesDiskBaseline = autosavePayload && (!autosavePayload.baseContentHash || autosavePayload.baseContentHash === diskHash);
+
+        // If autosave has newer unsaved edits and disk has not drifted, recover autosave:
+        if (autosaveHasUnsavedEdits && autosaveMatchesDiskBaseline) {
           createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || state.title || 'Recovered Artwork');
           const cell = getArtworkCell();
           cell.pixels = { ...autosavePayload.pixels };
@@ -488,7 +519,10 @@
           state.title = persisted.name.replace(/\.[^/.]+$/, '');
           if (dom.docTitle) dom.docTitle.value = state.title;
           updateDocumentTitle();
+          documentRevision = autosavePayload.revision || 1;
+          lastSavedRevision = autosavePayload.lastSavedRevision || 0;
           setDirty(true);
+          showToast(`Restored unsaved session changes (${Object.keys(cell.pixels).length} pixels)`, 'info');
         } else if (diskText && diskText.trim()) {
           // Read directly from disk handle
           dom.codeEditor.value = diskText;
@@ -504,7 +538,7 @@
 
     // 2. Fallback: If handle could not be read directly, check last saved disk content in localStorage
     if (!documentRestored && currentFileName) {
-      const lastSavedText = localStorage.getItem('pix2_last_saved_content');
+      const lastSavedText = _storage.getItem('pix2_last_saved_content');
       if (lastSavedText && lastSavedText.trim()) {
         try {
           dom.codeEditor.value = lastSavedText;
@@ -526,7 +560,10 @@
       repaintCanvas();
       syncCanvasToSource();
       documentRestored = true;
-      setDirty(false);
+      documentRevision = autosavePayload.revision || 1;
+      lastSavedRevision = autosavePayload.lastSavedRevision || 0;
+      setDirty(documentRevision !== lastSavedRevision);
+      showToast(`Recovered artwork from autosave (${Object.keys(cell.pixels).length} pixels)`, 'info');
     }
 
     // 4. Default: Blank canvas if nothing was restored
@@ -665,6 +702,12 @@
     dom.docTitle = document.getElementById('pa-doc-title');
     dom.dimBadge = document.getElementById('pa-dim-badge');
 
+    // Pre-Reload Backup Recovery Banner
+    dom.recoveryBanner = document.getElementById('pa-recovery-banner');
+    dom.recoveryMsg = document.getElementById('pa-recovery-msg');
+    dom.btnRestoreBackup = document.getElementById('btn-restore-backup');
+    dom.btnDismissBackup = document.getElementById('btn-dismiss-backup');
+
     // Canvas
     dom.viewport = document.getElementById('pa-canvas-viewport');
     dom.container = document.getElementById('pa-canvas-container');
@@ -787,8 +830,8 @@
     state.historyIndex = -1;
     pushHistory();
 
-    dom.dimBadge.textContent = `${state.w}×${state.h}`;
-    dom.docTitle.value = state.title;
+    if (dom && dom.dimBadge) dom.dimBadge.textContent = `${state.w}×${state.h}`;
+    if (dom && dom.docTitle) dom.docTitle.value = state.title;
 
     resizeCanvasesToZoom();
     rebuildArtworkBuffer();
@@ -809,6 +852,7 @@
   // HARDWARE-ACCELERATED 1:1 OFFSCREEN TEXTURE BUFFERS
   // ===========================================================================
   function rebuildArtworkBuffer() {
+    if (typeof document === 'undefined') return;
     if (!state.artworkCanvas) {
       state.artworkCanvas = document.createElement('canvas');
       state.artworkCtx = state.artworkCanvas.getContext('2d');
@@ -879,6 +923,10 @@
 
   let repaintRafId = null;
   function requestCanvasRepaint() {
+    if (typeof requestAnimationFrame === 'undefined') {
+      repaintCanvas();
+      return;
+    }
     if (repaintRafId !== null) return;
     repaintRafId = requestAnimationFrame(() => {
       repaintRafId = null;
@@ -890,13 +938,32 @@
   // CANVAS RENDERING & HIGH PRECISION GRID
   // ===========================================================================
   function resizeCanvasesToZoom() {
+    // Phase 1 Finding A: Defensive Adaptive Zoom Clamping Guard
+    const maxAllowedZoom = getMaxAllowedZoom();
+    if (state.zoom > maxAllowedZoom) {
+      state.zoom = maxAllowedZoom;
+    }
+    if (!dom || !dom.canvasMain) return;
+
     const totalW = Math.max(1, Math.round(state.w * state.zoom));
     const totalH = Math.max(1, Math.round(state.h * state.zoom));
 
-    if (dom.canvasMain.width !== totalW) dom.canvasMain.width = totalW;
-    if (dom.canvasMain.height !== totalH) dom.canvasMain.height = totalH;
-    if (dom.canvasPreview.width !== totalW) dom.canvasPreview.width = totalW;
-    if (dom.canvasPreview.height !== totalH) dom.canvasPreview.height = totalH;
+    // Defensive canvas backing buffer allocation with safe fallback
+    try {
+      if (dom.canvasMain.width !== totalW) dom.canvasMain.width = totalW;
+      if (dom.canvasMain.height !== totalH) dom.canvasMain.height = totalH;
+      if (dom.canvasPreview.width !== totalW) dom.canvasPreview.width = totalW;
+      if (dom.canvasPreview.height !== totalH) dom.canvasPreview.height = totalH;
+    } catch (e) {
+      console.warn('Canvas allocation failed, falling back to safe zoom:', e);
+      state.zoom = Math.max(1, Math.floor(4096 / Math.max(state.w, state.h)));
+      const safeW = Math.max(1, Math.round(state.w * state.zoom));
+      const safeH = Math.max(1, Math.round(state.h * state.zoom));
+      dom.canvasMain.width = safeW;
+      dom.canvasMain.height = safeH;
+      dom.canvasPreview.width = safeW;
+      dom.canvasPreview.height = safeH;
+    }
 
     const rulerOffset = state.showRulers ? 24 : 0;
     if (dom.container) {
@@ -913,7 +980,7 @@
     dom.canvasPreview.style.width = `${totalW}px`;
     dom.canvasPreview.style.height = `${totalH}px`;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
     if (dom.rulerTop) {
       const rw = Math.min(16384, Math.round(totalW * dpr));
       const rh = Math.round(24 * dpr);
@@ -973,6 +1040,7 @@
   }
 
   function repaintCanvas() {
+    if (!dom || !dom.ctxMain) return;
     const ctx = dom.ctxMain;
     const zoom = state.zoom;
     const totalW = Math.max(1, Math.round(state.w * zoom));
@@ -1561,8 +1629,34 @@
   }
 
   function updateContainerTransform() {
-    dom.container.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-    dom.zoomLabel.textContent = formatZoom(state.zoom);
+    if (dom && dom.container) {
+      dom.container.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+    }
+    if (dom && dom.zoomLabel) {
+      dom.zoomLabel.textContent = formatZoom(state.zoom);
+    }
+  }
+
+  // Phase 1 Finding B: Smooth Auto-Centering (preserves current zoom level with 150ms animation)
+  function centerCanvasInViewport(animate = true) {
+    if (state.panX === 0 && state.panY === 0) return;
+    if (animate && dom && dom.container) {
+      dom.container.style.transition = 'transform 150ms cubic-bezier(0.2, 0, 0, 1)';
+      state.panX = 0;
+      state.panY = 0;
+      updateContainerTransform();
+      setTimeout(() => {
+        if (dom && dom.container) dom.container.style.transition = '';
+        requestCanvasRepaint();
+        renderRulers();
+      }, 160);
+    } else {
+      state.panX = 0;
+      state.panY = 0;
+      updateContainerTransform();
+      requestCanvasRepaint();
+      renderRulers();
+    }
   }
 
   function fitCanvasToViewport() {
@@ -1595,6 +1689,7 @@
 
   // 1. Canvas -> Source (Strictly On Pointer Up for 60fps performance)
   function syncCanvasToSource(force = false) {
+    if (!dom || !dom.codeEditor) return;
     if (state.isSyncingFromSource) return;
     if (state.viewMode === 'canvas' && !force) {
       state.isSourceDirty = true;
@@ -1651,7 +1746,7 @@
 
   function flushSourceCode() {
     // If the user is actively editing code in unlocked editor (and not in summary mode), return editor text
-    if (state.isCodeEditingUnlocked && dom.codeEditor.value && state.sourcePaneMode !== 'summary') {
+    if (state.isCodeEditingUnlocked && dom && dom.codeEditor && dom.codeEditor.value && state.sourcePaneMode !== 'summary') {
       return dom.codeEditor.value;
     }
 
@@ -1917,11 +2012,11 @@
     }
 
     // Pan via Hand tool, middle click or Space key
-    if (e.button === 1 || e.spaceKey || state.currentTool === 'pan') {
+    if (e.button === 1 || e.spaceKey || state.isSpaceDown || state.currentTool === 'pan') {
       state.isPanning = true;
       state.panStartX = e.clientX - state.panX;
       state.panStartY = e.clientY - state.panY;
-      dom.viewport.style.cursor = 'grab';
+      dom.viewport.style.cursor = 'grabbing';
       return;
     }
 
@@ -2098,6 +2193,9 @@
     if (state.isPanning) {
       state.panX = e.clientX - state.panStartX;
       state.panY = e.clientY - state.panStartY;
+      if (state.isSpaceDown) {
+        state.didPanWithSpace = true;
+      }
       updateContainerTransform();
       requestCanvasRepaint();
       return;
@@ -2196,7 +2294,7 @@
     state.cachedCanvasRect = null;
     if (state.isPanning) {
       state.isPanning = false;
-      dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+      dom.viewport.style.cursor = state.isSpaceDown ? 'grab' : (state.currentTool === 'pan' ? 'grab' : 'crosshair');
       return;
     }
 
@@ -2958,54 +3056,256 @@
   }
 
   // ===========================================================================
-  // HISTORY (UNDO / REDO)
+  // HISTORY (DELTA-BASED & SNAPSHOT HYBRID ENGINE)
   // ===========================================================================
+  function calculatePixelDiff(prevPixels = {}, currPixels = {}) {
+    const diff = {};
+    for (const k in currPixels) {
+      if (currPixels[k] !== prevPixels[k]) {
+        diff[k] = [prevPixels[k] !== undefined ? prevPixels[k] : null, currPixels[k]];
+      }
+    }
+    for (const k in prevPixels) {
+      if (currPixels[k] === undefined) {
+        diff[k] = [prevPixels[k], null];
+      }
+    }
+    return diff;
+  }
+
+  function applyPixelDiff(pixels, diff, direction = 'forward') {
+    if (!pixels || !diff) return pixels;
+    const isForward = direction === 'forward';
+    for (const k in diff) {
+      const val = isForward ? diff[k][1] : diff[k][0];
+      if (val === null || val === undefined) {
+        delete pixels[k];
+      } else {
+        pixels[k] = val;
+      }
+    }
+    return pixels;
+  }
+
+  function estimateHistoryMemory() {
+    let bytes = 0;
+    for (const item of state.history) {
+      if (item.type === 'snapshot' && item.pixels) {
+        bytes += Object.keys(item.pixels).length * 48 + 512;
+      } else if (item.type === 'diff' && item.diff) {
+        bytes += Object.keys(item.diff).length * 64 + 256;
+      }
+    }
+    return bytes;
+  }
+
+  function rebaseOldestHistoryEntry() {
+    if (state.history.length < 2) return;
+    const oldest = state.history[0];
+    const next = state.history[1];
+    if (next.type === 'diff' && oldest.type === 'snapshot') {
+      const combinedPixels = { ...(oldest.pixels || {}) };
+      for (const k in next.diff) {
+        const newVal = next.diff[k][1];
+        if (newVal === null || newVal === undefined) delete combinedPixels[k];
+        else combinedPixels[k] = newVal;
+      }
+      next.type = 'snapshot';
+      next.pixels = combinedPixels;
+      delete next.diff;
+    }
+    state.history.shift();
+    if (state.historyIndex > 0) state.historyIndex--;
+  }
+
+  function pruneHistoryBudget() {
+    const MAX_BYTES = 50 * 1024 * 1024; // 50MB
+    while (state.history.length > 1 && (state.history.length > state.maxHistory || estimateHistoryMemory() > MAX_BYTES)) {
+      rebaseOldestHistoryEntry();
+    }
+  }
+
   function pushHistory() {
     const cell = getArtworkCell();
     if (!cell) return;
 
     markDocumentMutation('history-step');
 
-    // Snapshot of pixels
-    const snapshot = {
-      w: state.w,
-      h: state.h,
-      title: state.title,
-      revision: documentRevision,
-      pixels: { ...cell.pixels }
-    };
-
     if (state.historyIndex < state.history.length - 1) {
       state.history = state.history.slice(0, state.historyIndex + 1);
     }
 
-    state.history.push(snapshot);
-    if (state.history.length > state.maxHistory) {
-      state.history.shift();
+    const prevPixels = state.lastHistoryPixels || {};
+    const currPixels = cell.pixels || {};
+
+    if (state.history.length === 0) {
+      // Base history entry is always a full snapshot
+      const snapshot = {
+        type: 'snapshot',
+        w: state.w,
+        h: state.h,
+        title: state.title,
+        revision: documentRevision,
+        pixels: { ...currPixels }
+      };
+      state.history.push(snapshot);
+      state.historyIndex = 0;
+      state.lastHistoryPixels = { ...currPixels };
+      return;
     }
+
+    const lastEntry = state.history[state.historyIndex];
+    const dimChanged = !lastEntry || (lastEntry.w !== state.w || lastEntry.h !== state.h);
+
+    if (dimChanged) {
+      const snapshot = {
+        type: 'snapshot',
+        w: state.w,
+        h: state.h,
+        title: state.title,
+        revision: documentRevision,
+        pixels: { ...currPixels }
+      };
+      state.history.push(snapshot);
+    } else {
+      const diff = calculatePixelDiff(prevPixels, currPixels);
+      const diffKeys = Object.keys(diff);
+      if (diffKeys.length === 0 && lastEntry.title === state.title) {
+        return;
+      }
+
+      if (diffKeys.length <= 25000) {
+        state.history.push({
+          type: 'diff',
+          w: state.w,
+          h: state.h,
+          title: state.title,
+          revision: documentRevision,
+          diff: diff
+        });
+      } else {
+        state.history.push({
+          type: 'snapshot',
+          w: state.w,
+          h: state.h,
+          title: state.title,
+          revision: documentRevision,
+          pixels: { ...currPixels }
+        });
+      }
+    }
+
     state.historyIndex = state.history.length - 1;
+    state.lastHistoryPixels = { ...currPixels };
+    pruneHistoryBudget();
   }
 
   function undo() {
-    if (state.historyIndex > 0) {
-      state.historyIndex--;
-      restoreHistorySnapshot(state.history[state.historyIndex]);
+    if (state.historyIndex <= 0) return;
+    const currentEntry = state.history[state.historyIndex];
+    state.historyIndex--;
+    const targetEntry = state.history[state.historyIndex];
+
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    if (currentEntry.type === 'diff' && currentEntry.diff && targetEntry.w === state.w && targetEntry.h === state.h) {
+      // Reverse diff in O(M) time directly onto cell.pixels
+      applyPixelDiff(cell.pixels, currentEntry.diff, 'backward');
+    } else {
+      // Reconstruct target state from snapshots
+      restoreHistorySnapshot(targetEntry);
+      return;
     }
+
+    state.w = targetEntry.w;
+    state.h = targetEntry.h;
+    state.title = targetEntry.title;
+    if (cell.size) cell.size = { w: state.w, h: state.h };
+    if (targetEntry.revision !== undefined) {
+      documentRevision = targetEntry.revision;
+      setDirty(documentRevision !== lastSavedRevision);
+    } else {
+      markDocumentMutation('undo-redo');
+    }
+
+    state.lastHistoryPixels = { ...(cell.pixels || {}) };
+    if (dom && dom.dimBadge) dom.dimBadge.textContent = `${state.w}×${state.h}`;
+    resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderRulers();
+    syncCanvasToSource(true);
+    triggerAutosave();
   }
 
   function redo() {
-    if (state.historyIndex < state.history.length - 1) {
-      state.historyIndex++;
-      restoreHistorySnapshot(state.history[state.historyIndex]);
+    if (state.historyIndex >= state.history.length - 1) return;
+    state.historyIndex++;
+    const targetEntry = state.history[state.historyIndex];
+
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    if (targetEntry.type === 'diff' && targetEntry.diff && targetEntry.w === state.w && targetEntry.h === state.h) {
+      // Apply diff forwards in O(M) time directly onto cell.pixels
+      applyPixelDiff(cell.pixels, targetEntry.diff, 'forward');
+    } else {
+      restoreHistorySnapshot(targetEntry);
+      return;
     }
+
+    state.w = targetEntry.w;
+    state.h = targetEntry.h;
+    state.title = targetEntry.title;
+    if (cell.size) cell.size = { w: state.w, h: state.h };
+    if (targetEntry.revision !== undefined) {
+      documentRevision = targetEntry.revision;
+      setDirty(documentRevision !== lastSavedRevision);
+    } else {
+      markDocumentMutation('undo-redo');
+    }
+
+    state.lastHistoryPixels = { ...(cell.pixels || {}) };
+    if (dom && dom.dimBadge) dom.dimBadge.textContent = `${state.w}×${state.h}`;
+    resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderRulers();
+    syncCanvasToSource(true);
+    triggerAutosave();
   }
 
   function restoreHistorySnapshot(snapshot) {
     if (!snapshot) return;
+    const cell = getArtworkCell();
+    if (!cell) return;
+
     state.w = snapshot.w;
     state.h = snapshot.h;
     state.title = snapshot.title;
 
+    if (snapshot.type === 'diff') {
+      let basePixels = {};
+      const targetIdx = state.history.indexOf(snapshot);
+      if (targetIdx !== -1) {
+        let snapIdx = targetIdx;
+        while (snapIdx >= 0 && state.history[snapIdx].type !== 'snapshot') {
+          snapIdx--;
+        }
+        if (snapIdx >= 0) {
+          basePixels = { ...(state.history[snapIdx].pixels || {}) };
+          for (let i = snapIdx + 1; i <= targetIdx; i++) {
+            if (state.history[i].diff) applyPixelDiff(basePixels, state.history[i].diff, 'forward');
+          }
+        }
+      }
+      cell.pixels = basePixels;
+    } else {
+      cell.pixels = { ...(snapshot.pixels || {}) };
+    }
+
+    cell.size = { w: state.w, h: state.h };
     if (snapshot.revision !== undefined) {
       documentRevision = snapshot.revision;
       setDirty(documentRevision !== lastSavedRevision);
@@ -3013,23 +3313,18 @@
       markDocumentMutation('undo-redo');
     }
 
-    const cell = getArtworkCell();
-    if (cell) {
-      cell.size = { w: state.w, h: state.h };
-      cell.pixels = { ...snapshot.pixels };
-    }
-
-    dom.dimBadge.textContent = `${state.w}×${state.h}`;
+    state.lastHistoryPixels = { ...(cell.pixels || {}) };
+    if (dom && dom.dimBadge) dom.dimBadge.textContent = `${state.w}×${state.h}`;
     resizeCanvasesToZoom();
     rebuildArtworkBuffer();
     repaintCanvas();
     renderRulers();
-    syncCanvasToSource();
+    syncCanvasToSource(true);
     triggerAutosave();
   }
 
   // ===========================================================================
-  // AUTOSAVE & CRASH RECOVERY
+  // AUTOSAVE & CRASH RECOVERY (IndexedDB v2 + Safe Fallback)
   // ===========================================================================
   let autosaveTimer = null;
   function triggerAutosave(immediate = false) {
@@ -3042,15 +3337,14 @@
         w: state.w,
         h: state.h,
         title: state.title,
+        revision: documentRevision,
+        lastSavedRevision: lastSavedRevision,
+        baseContentHash: hashString(lastSavedContent),
         pixels: cell.pixels,
         updatedAt: Date.now()
       };
 
-      try {
-        localStorage.setItem('pix2_pixelart_autosave', JSON.stringify(payload));
-      } catch (e) {
-        // Storage quota exceeded or disabled
-      }
+      saveAutosaveToStorage(payload);
     };
 
     if (immediate) {
@@ -3564,18 +3858,30 @@ Do not include conversational greetings or postscripts.`;
   }
 
   // ===========================================================================
-  // PERSISTENT FILE HANDLE & SESSION STORAGE (IndexedDB + File System Access API)
+  // PERSISTENT STORAGE (IndexedDB v2 + File System Access API)
   // ===========================================================================
   const DB_NAME = 'noiradix_pixelart_db';
-  const STORE_NAME = 'file_handles';
+  const DB_VERSION = 2;
+  const STORE_FILE_HANDLES = 'file_handles';
+  const STORE_AUTOSAVES = 'autosaves';
+  const STORE_BACKUPS = 'backups';
 
   function getDb() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+      if (typeof indexedDB === 'undefined') {
+        return reject(new Error('IndexedDB not supported in current environment'));
+      }
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
+        if (!db.objectStoreNames.contains(STORE_FILE_HANDLES)) {
+          db.createObjectStore(STORE_FILE_HANDLES);
+        }
+        if (!db.objectStoreNames.contains(STORE_AUTOSAVES)) {
+          db.createObjectStore(STORE_AUTOSAVES);
+        }
+        if (!db.objectStoreNames.contains(STORE_BACKUPS)) {
+          db.createObjectStore(STORE_BACKUPS);
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -3587,8 +3893,8 @@ Do not include conversational greetings or postscripts.`;
     if (!handle) return;
     try {
       const db = await getDb();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(handle, 'current_file');
+      const tx = db.transaction(STORE_FILE_HANDLES, 'readwrite');
+      tx.objectStore(STORE_FILE_HANDLES).put(handle, 'current_file');
     } catch (err) {
       console.warn('Failed storing handle in IndexedDB:', err);
     }
@@ -3598,8 +3904,8 @@ Do not include conversational greetings or postscripts.`;
     try {
       const db = await getDb();
       return new Promise((resolve) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const req = tx.objectStore(STORE_NAME).get('current_file');
+        const tx = db.transaction(STORE_FILE_HANDLES, 'readonly');
+        const req = tx.objectStore(STORE_FILE_HANDLES).get('current_file');
         req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => resolve(null);
       });
@@ -3611,9 +3917,142 @@ Do not include conversational greetings or postscripts.`;
   async function clearPersistedFileHandle() {
     try {
       const db = await getDb();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).delete('current_file');
+      const tx = db.transaction(STORE_FILE_HANDLES, 'readwrite');
+      tx.objectStore(STORE_FILE_HANDLES).delete('current_file');
     } catch (_) {}
+  }
+
+  async function saveAutosaveToStorage(payload) {
+    try {
+      const db = await getDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_AUTOSAVES, 'readwrite');
+        tx.objectStore(STORE_AUTOSAVES).put(payload, 'latest_autosave');
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      try {
+        _storage.setItem('pix2_pixelart_autosave', JSON.stringify(payload));
+        return true;
+      } catch (e) {
+        console.warn('Autosave localStorage fallback failed:', e);
+        return false;
+      }
+    }
+  }
+
+  async function retrieveAutosaveFromStorage() {
+    try {
+      const db = await getDb();
+      const res = await new Promise((resolve) => {
+        const tx = db.transaction(STORE_AUTOSAVES, 'readonly');
+        const req = tx.objectStore(STORE_AUTOSAVES).get('latest_autosave');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+      if (res) return res;
+    } catch (_) {}
+    try {
+      const raw = _storage.getItem('pix2_pixelart_autosave');
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function clearAutosave() {
+    try {
+      const db = await getDb();
+      const tx = db.transaction(STORE_AUTOSAVES, 'readwrite');
+      tx.objectStore(STORE_AUTOSAVES).delete('latest_autosave');
+    } catch (_) {}
+    try {
+      _storage.removeItem('pix2_pixelart_autosave');
+    } catch (_) {}
+  }
+
+  async function savePreReloadBackup(payload) {
+    try {
+      const db = await getDb();
+      await new Promise((resolve) => {
+        const tx = db.transaction(STORE_BACKUPS, 'readwrite');
+        tx.objectStore(STORE_BACKUPS).put(payload, 'pre_reload_backup');
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {}
+    try {
+      _storage.setItem('pix2_backup_before_reload', JSON.stringify(payload));
+    } catch (_) {}
+  }
+
+  async function getPreReloadBackup() {
+    try {
+      const db = await getDb();
+      const res = await new Promise((resolve) => {
+        const tx = db.transaction(STORE_BACKUPS, 'readonly');
+        const req = tx.objectStore(STORE_BACKUPS).get('pre_reload_backup');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+      if (res) return res;
+    } catch (_) {}
+    try {
+      const raw = _storage.getItem('pix2_backup_before_reload');
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function clearPreReloadBackup() {
+    try {
+      const db = await getDb();
+      const tx = db.transaction(STORE_BACKUPS, 'readwrite');
+      tx.objectStore(STORE_BACKUPS).delete('pre_reload_backup');
+    } catch (_) {}
+    try {
+      _storage.removeItem('pix2_backup_before_reload');
+    } catch (_) {}
+  }
+
+  async function restorePreReloadBackup() {
+    const backup = await getPreReloadBackup();
+    if (!backup || !backup.pixels) {
+      showToast('No pre-reload backup found to restore.', 'warning');
+      return false;
+    }
+    pushHistory();
+    state.w = backup.w || state.w;
+    state.h = backup.h || state.h;
+    state.title = backup.title || state.title;
+    if (dom.docTitle) dom.docTitle.value = state.title;
+    const cell = getArtworkCell();
+    if (cell) {
+      cell.size = { w: state.w, h: state.h };
+      cell.pixels = { ...backup.pixels };
+    }
+    resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderRulers();
+    syncCanvasToSource(true);
+    markDocumentMutation('restore-backup');
+    if (dom.recoveryBanner) dom.recoveryBanner.classList.add('hidden');
+    await clearPreReloadBackup();
+    showToast(`Restored backup from ${new Date(backup.time || Date.now()).toLocaleTimeString()}!`, 'success');
+    return true;
+  }
+
+  function hashString(str) {
+    if (!str) return '0';
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash) + str.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return (hash >>> 0).toString(16);
   }
 
   let currentFileHandle = null;
@@ -3713,108 +4152,124 @@ Do not include conversational greetings or postscripts.`;
     dom.fileInput.click();
   }
 
-  async function saveFileNative(forceSaveAs = false) {
+  let activeSavePromise = Promise.resolve();
+  let lastCommittedSaveRevision = 0;
+
+  function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
-    const revisionAtSaveStart = documentRevision;
+    const snapshotRevision = documentRevision;
     const text = flushSourceCode();
 
-    // Direct overwrite to existing handle
-    if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
-      try {
-        if (currentFileHandle.queryPermission) {
-          const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
-          if (perm !== 'granted') {
-            const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
-            if (req !== 'granted') {
-              showToast('Write permission to file was denied.', 'error');
-              return;
+    const doSave = async () => {
+      // Phase 3: Prevent stale out-of-order writes from clobbering newer revisions
+      if (snapshotRevision < lastCommittedSaveRevision && lastCommittedSaveRevision > 0 && !forceSaveAs) {
+        return;
+      }
+
+      // Direct overwrite to existing handle
+      if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
+        try {
+          if (currentFileHandle.queryPermission) {
+            const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+            if (perm !== 'granted') {
+              const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
+              if (req !== 'granted') {
+                showToast('Write permission to file was denied.', 'error');
+                return;
+              }
             }
           }
+          const writable = await currentFileHandle.createWritable();
+          await writable.write(text);
+          await writable.close();
+          try {
+            const fresh = await currentFileHandle.getFile();
+            lastKnownFileModified = fresh.lastModified;
+          } catch (_) {
+            lastKnownFileModified = Date.now();
+          }
+          lastSavedContent = text;
+          pendingExternalConflict = null;
+          const btnReload = document.getElementById('btn-reload-file');
+          if (btnReload) {
+            btnReload.classList.remove('pulse-warning');
+            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+          }
+          await persistFileHandle(currentFileHandle);
+          try {
+            _storage.setItem('noiradix_pixelart_file_name', currentFileName);
+            _storage.setItem('pix2_last_saved_content', text);
+            _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+          } catch (_) {}
+          triggerAutosave(true);
+          lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, snapshotRevision);
+          lastSavedRevision = Math.max(lastSavedRevision, snapshotRevision);
+          setDirty(documentRevision !== lastSavedRevision);
+          showToast(`Saved to ${currentFileHandle.name}!`);
+          return;
+        } catch (err) {
+          console.warn('Direct overwrite failed, prompting Save As:', err);
         }
-        const writable = await currentFileHandle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        try {
-          const fresh = await currentFileHandle.getFile();
-          lastKnownFileModified = fresh.lastModified;
-        } catch (_) {
-          lastKnownFileModified = Date.now();
-        }
-        lastSavedContent = text;
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) {
-          btnReload.classList.remove('pulse-warning');
-          btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-        }
-        await persistFileHandle(currentFileHandle);
-        try {
-          localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
-          localStorage.setItem('pix2_last_saved_content', text);
-          localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-        } catch (_) {}
-        triggerAutosave(true);
-        lastSavedRevision = Math.max(lastSavedRevision, revisionAtSaveStart);
-        setDirty(documentRevision !== lastSavedRevision);
-        showToast(`Saved to ${currentFileHandle.name}!`);
-        return;
-      } catch (err) {
-        console.warn('Direct overwrite failed, prompting Save As:', err);
       }
-    }
 
-    // Save As via File System Access API
-    if ('showSaveFilePicker' in window) {
-      try {
-        const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
-        const handle = await window.showSaveFilePicker({
-          suggestedName: suggested,
-          types: [{
-            description: 'PIX2 Sprite File (*.pix2)',
-            accept: { 'text/plain': ['.pix2'] }
-          }]
-        });
-        const writable = await handle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        currentFileHandle = handle;
-        currentFileName = handle.name;
-        state.title = handle.name.replace(/\.[^/.]+$/, '');
-        dom.docTitle.value = state.title;
+      // Save As via File System Access API
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
         try {
-          const fresh = await handle.getFile();
-          lastKnownFileModified = fresh.lastModified;
-        } catch (_) {
-          lastKnownFileModified = Date.now();
+          const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
+          const handle = await window.showSaveFilePicker({
+            suggestedName: suggested,
+            types: [{
+              description: 'PIX2 Sprite File (*.pix2)',
+              accept: { 'text/plain': ['.pix2'] }
+            }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(text);
+          await writable.close();
+          currentFileHandle = handle;
+          currentFileName = handle.name;
+          state.title = handle.name.replace(/\.[^/.]+$/, '');
+          if (dom.docTitle) dom.docTitle.value = state.title;
+          try {
+            const fresh = await handle.getFile();
+            lastKnownFileModified = fresh.lastModified;
+          } catch (_) {
+            lastKnownFileModified = Date.now();
+          }
+          lastSavedContent = text;
+          pendingExternalConflict = null;
+          const btnReload = document.getElementById('btn-reload-file');
+          if (btnReload) {
+            btnReload.classList.remove('pulse-warning');
+            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+          }
+          await persistFileHandle(handle);
+          try {
+            _storage.setItem('noiradix_pixelart_file_name', currentFileName);
+            _storage.setItem('pix2_last_saved_content', text);
+            _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+          } catch (_) {}
+          triggerAutosave(true);
+          lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, snapshotRevision);
+          lastSavedRevision = Math.max(lastSavedRevision, snapshotRevision);
+          setDirty(documentRevision !== lastSavedRevision);
+          showToast(`Saved as ${handle.name}!`);
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+          console.warn('Save file picker failed, falling back to download:', err);
         }
-        lastSavedContent = text;
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) {
-          btnReload.classList.remove('pulse-warning');
-          btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-        }
-        await persistFileHandle(handle);
-        try {
-          localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
-          localStorage.setItem('pix2_last_saved_content', text);
-          localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-        } catch (_) {}
-        triggerAutosave(true);
-        lastSavedRevision = Math.max(lastSavedRevision, revisionAtSaveStart);
-        setDirty(documentRevision !== lastSavedRevision);
-        showToast(`Saved as ${handle.name}!`);
-        return;
-        showToast(`Saved as ${handle.name}!`);
-        return;
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        console.warn('Save file picker failed, falling back to download:', err);
       }
-    }
 
-    // Fallback: Blob download
-    savePix2File();
+      // Fallback: Blob download
+      savePix2File();
+      lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, snapshotRevision);
+      lastSavedRevision = Math.max(lastSavedRevision, snapshotRevision);
+      setDirty(documentRevision !== lastSavedRevision);
+    };
+
+    activeSavePromise = activeSavePromise.then(doSave, doSave);
+    return activeSavePromise;
   }
 
   function savePix2File() {
@@ -3833,7 +4288,7 @@ Do not include conversational greetings or postscripts.`;
   // ===========================================================================
   // DESKTOP CONTEXT MENU (RIGHT-CLICK)
   // ===========================================================================
-  const contextMenu = document.getElementById('pa-context-menu');
+  const contextMenu = typeof document !== 'undefined' ? document.getElementById('pa-context-menu') : null;
 
   function openContextMenu(x, y) {
     if (!contextMenu) return;
@@ -3978,6 +4433,158 @@ Do not include conversational greetings or postscripts.`;
   function toggleTheme() {
     const current = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
     setTheme(current === 'dark' ? 'light' : 'dark');
+  }
+
+  // ===========================================================================
+  // REAL-TIME FILE WATCHER & LIVE HOT-RELOAD (External AI & Disk Collaboration)
+  // ===========================================================================
+  function normalizeForCompare(str) {
+    return (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  }
+
+  async function checkAndReloadExternalFileChanges(force = false) {
+    if (!currentFileHandle || isExternalReloading) return;
+    if (typeof currentFileHandle.getFile !== 'function') return;
+
+    try {
+      isExternalReloading = true;
+      const file = await currentFileHandle.getFile();
+      const currentModified = file.lastModified;
+
+      // If baseline is not yet recorded, record it now and return
+      if (lastKnownFileModified === 0) {
+        lastKnownFileModified = currentModified;
+        const curText = await file.text();
+        if (!lastSavedContent) lastSavedContent = curText;
+        isExternalReloading = false;
+        return;
+      }
+
+      // Sub-second modification check: skip only if file timestamp is identical and not forced
+      if (!force && currentModified === lastKnownFileModified) {
+        isExternalReloading = false;
+        return;
+      }
+
+      const text = await file.text();
+      if (!text || !text.trim()) {
+        isExternalReloading = false;
+        return;
+      }
+
+      // If content is identical to our last saved version (ignoring CRLF/LF line endings), sync timestamp cleanly
+      if (normalizeForCompare(text) === normalizeForCompare(lastSavedContent)) {
+        lastKnownFileModified = currentModified;
+        isExternalReloading = false;
+        return;
+      }
+
+      // External change detected!
+      if (state.isDirty && !force) {
+        // PixelArt has unsaved edits: do NOT overwrite silently!
+        showExternalConflictNotification(file, text, currentModified);
+        isExternalReloading = false;
+        return;
+      }
+
+      // Safe reload
+      pushHistory(); // Critical! Save undo state so user can Ctrl+Z immediately if unwanted
+      state.sourcePaneMode = 'full';
+      dom.codeEditor.value = text;
+      const ok = applySourceCodeToCanvas();
+      if (ok) {
+        lastKnownFileModified = currentModified;
+        lastSavedContent = text;
+        try {
+          _storage.setItem('pix2_last_saved_content', text);
+        } catch (_) {}
+        pendingExternalConflict = null;
+        markDocumentSaved();
+        const btnReload = document.getElementById('btn-reload-file');
+        if (btnReload) {
+          btnReload.classList.remove('pulse-warning');
+          btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+        }
+        showToast(`⚡ Reloaded ${file.name} from disk (external update detected)!`, 'info');
+      }
+    } catch (err) {
+      console.debug('External file check deferred:', err);
+    } finally {
+      isExternalReloading = false;
+    }
+  }
+
+  function showExternalConflictNotification(file, newText, newModified) {
+    if (pendingExternalConflict && pendingExternalConflict.modified === newModified) return;
+    pendingExternalConflict = { file, text: newText, modified: newModified };
+
+    showToast(
+      `⚠️ "${file.name}" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`,
+      'warning',
+      6000
+    );
+
+    const btnReload = document.getElementById('btn-reload-file');
+    if (btnReload) {
+      btnReload.classList.add('pulse-warning');
+      btnReload.title = `External changes detected on ${file.name}! Click to reload from disk (Ctrl+Shift+R).`;
+    }
+  }
+
+  async function handleManualFileReload() {
+    if (!currentFileHandle) {
+      showToast('Artwork is an unsaved in-memory draft. Press Ctrl+S to save to disk first.', 'info');
+      return;
+    }
+    if (state.isDirty) {
+      // Emergency snapshot to pre-reload backup before discarding canvas edits
+      const cell = getArtworkCell();
+      if (cell && cell.pixels) {
+        await savePreReloadBackup({
+          w: state.w,
+          h: state.h,
+          title: state.title,
+          pixels: { ...cell.pixels },
+          time: Date.now()
+        });
+      }
+
+      const confirmDiscard = confirm(
+        `"${currentFileHandle.name}" has unsaved changes in NOIRADIX PixelArt.\n\nReloading from disk will discard your current editor edits and load the external disk version.\n\n(Tip: You can press Ctrl+Z immediately after reload to undo and recover your edits).\n\nDo you want to discard PixelArt edits and reload from disk?`
+      );
+      if (!confirmDiscard) return;
+    }
+    // Single history push on reload occurs inside checkAndReloadExternalFileChanges
+    await checkAndReloadExternalFileChanges(true);
+    const btnReload = document.getElementById('btn-reload-file');
+    if (btnReload) {
+      btnReload.classList.remove('pulse-warning');
+      btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+    }
+    pendingExternalConflict = null;
+    showToast(`Reloaded ${currentFileHandle.name} from disk. (Press Ctrl+Z to undo if needed)`, 'info');
+  }
+
+  function initFileWatcher() {
+    // 1. Focus listener: window gets active focus when switching from external editor/AI
+    window.addEventListener('focus', () => {
+      checkAndReloadExternalFileChanges(false);
+    });
+
+    // 2. Visibility change listener (tab becomes visible)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        checkAndReloadExternalFileChanges(false);
+      }
+    });
+
+    // 3. Heartbeat polling (every 1500ms when document is active and no unsaved edits)
+    if (fileWatcherHeartbeatTimer) clearInterval(fileWatcherHeartbeatTimer);
+    fileWatcherHeartbeatTimer = setInterval(() => {
+      if (!document.hidden && currentFileHandle && !state.isDirty) {
+        checkAndReloadExternalFileChanges(false);
+      }
+    }, 1500);
   }
 
   // ===========================================================================
@@ -4479,10 +5086,10 @@ Do not include conversational greetings or postscripts.`;
       lastSavedContent = '';
       pendingExternalConflict = null;
       clearPersistedFileHandle();
-      localStorage.removeItem('noiradix_pixelart_file_name');
-      localStorage.removeItem('pix2_last_saved_content');
-      localStorage.removeItem('pix2_last_saved_time');
-      localStorage.removeItem('pix2_pixelart_autosave');
+      clearAutosave();
+      _storage.removeItem('noiradix_pixelart_file_name');
+      _storage.removeItem('pix2_last_saved_content');
+      _storage.removeItem('pix2_last_saved_time');
       const btnReload = document.getElementById('btn-reload-file');
       if (btnReload) {
         btnReload.classList.remove('pulse-warning');
@@ -4649,159 +5256,7 @@ Do not include conversational greetings or postscripts.`;
       });
     }
 
-    // ===========================================================================
-    // REAL-TIME FILE WATCHER & LIVE HOT-RELOAD (External AI & Disk Collaboration)
-    // ===========================================================================
-    function normalizeForCompare(str) {
-      return (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-    }
-
-    async function checkAndReloadExternalFileChanges(force = false) {
-      if (!currentFileHandle || isExternalReloading) return;
-      if (typeof currentFileHandle.getFile !== 'function') return;
-
-      try {
-        isExternalReloading = true;
-        const file = await currentFileHandle.getFile();
-        const currentModified = file.lastModified;
-
-        // If baseline is not yet recorded, record it now and return
-        if (lastKnownFileModified === 0) {
-          lastKnownFileModified = currentModified;
-          const curText = await file.text();
-          if (!lastSavedContent) lastSavedContent = curText;
-          isExternalReloading = false;
-          return;
-        }
-
-        // Check if file modified time is newer than our recorded timestamp (with 2s NTFS jitter tolerance)
-        if (!force && currentModified <= lastKnownFileModified + 2000) {
-          isExternalReloading = false;
-          return;
-        }
-
-        const text = await file.text();
-        if (!text || !text.trim()) {
-          isExternalReloading = false;
-          return;
-        }
-
-        // If content is identical to our last saved version, just sync timestamp
-        if (normalizeForCompare(text) === normalizeForCompare(lastSavedContent)) {
-          lastKnownFileModified = currentModified;
-          isExternalReloading = false;
-          return;
-        }
-
-        // External change detected!
-        if (state.isDirty && !force) {
-          // PixelArt has unsaved edits: do NOT overwrite silently!
-          showExternalConflictNotification(file, text, currentModified);
-          isExternalReloading = false;
-          return;
-        }
-
-        // Safe reload
-        pushHistory(); // Critical! Save undo state so user can Ctrl+Z immediately if unwanted
-        state.sourcePaneMode = 'full';
-        dom.codeEditor.value = text;
-        const ok = applySourceCodeToCanvas();
-        if (ok) {
-          lastKnownFileModified = currentModified;
-          lastSavedContent = text;
-          try {
-            localStorage.setItem('pix2_last_saved_content', text);
-          } catch (_) {}
-          pendingExternalConflict = null;
-          markDocumentSaved();
-          const btnReload = document.getElementById('btn-reload-file');
-          if (btnReload) {
-            btnReload.classList.remove('pulse-warning');
-            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-          }
-          showToast(`⚡ Reloaded ${file.name} from disk (external update detected)!`, 'info');
-        }
-      } catch (err) {
-        console.debug('External file check deferred:', err);
-      } finally {
-        isExternalReloading = false;
-      }
-    }
-
-    function showExternalConflictNotification(file, newText, newModified) {
-      if (pendingExternalConflict && pendingExternalConflict.modified === newModified) return;
-      pendingExternalConflict = { file, text: newText, modified: newModified };
-
-      showToast(
-        `⚠️ "${file.name}" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`,
-        'warning',
-        6000
-      );
-
-      const btnReload = document.getElementById('btn-reload-file');
-      if (btnReload) {
-        btnReload.classList.add('pulse-warning');
-        btnReload.title = `External changes detected on ${file.name}! Click to reload from disk (Ctrl+Shift+R).`;
-      }
-    }
-
-    async function handleManualFileReload() {
-      if (!currentFileHandle) {
-        showToast('Artwork is an unsaved in-memory draft. Press Ctrl+S to save to disk first.', 'info');
-        return;
-      }
-      if (state.isDirty) {
-        // Emergency snapshot before discarding canvas edits so user never loses their work
-        const cell = getArtworkCell();
-        if (cell && cell.pixels) {
-          try {
-            localStorage.setItem('pix2_backup_before_reload', JSON.stringify({
-              w: state.w,
-              h: state.h,
-              title: state.title,
-              pixels: cell.pixels,
-              time: Date.now()
-            }));
-          } catch (_) {}
-        }
-
-        const confirmDiscard = confirm(
-          `"${currentFileHandle.name}" has unsaved changes in NOIRADIX PixelArt.\n\nReloading from disk will discard your current editor edits and load the external disk version.\n\n(Tip: You can press Ctrl+Z immediately after reload to undo and recover your edits).\n\nDo you want to discard PixelArt edits and reload from disk?`
-        );
-        if (!confirmDiscard) return;
-      }
-      pushHistory(); // Allow instant Ctrl+Z recovery of current canvas!
-      await checkAndReloadExternalFileChanges(true);
-      const btnReload = document.getElementById('btn-reload-file');
-      if (btnReload) {
-        btnReload.classList.remove('pulse-warning');
-        btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-      }
-      pendingExternalConflict = null;
-      showToast(`Reloaded ${currentFileHandle.name} from disk. (Press Ctrl+Z to undo if needed)`, 'info');
-    }
-
-    function initFileWatcher() {
-      // 1. Focus listener: window gets active focus when switching from external editor/AI
-      window.addEventListener('focus', () => {
-        checkAndReloadExternalFileChanges(false);
-      });
-
-      // 2. Visibility change listener (tab becomes visible)
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          checkAndReloadExternalFileChanges(false);
-        }
-      });
-
-      // 3. Heartbeat polling (every 1500ms when document is active and no unsaved edits)
-      if (fileWatcherHeartbeatTimer) clearInterval(fileWatcherHeartbeatTimer);
-      fileWatcherHeartbeatTimer = setInterval(() => {
-        if (!document.hidden && currentFileHandle && !state.isDirty) {
-          checkAndReloadExternalFileChanges(false);
-        }
-      }, 1500);
-    }
+    initFileWatcher();
 
     const btnReloadFile = document.getElementById('btn-reload-file');
     if (btnReloadFile) {
@@ -4817,6 +5272,17 @@ Do not include conversational greetings or postscripts.`;
       }
     });
 
+    // Pre-Reload Backup Banner Actions
+    if (dom.btnRestoreBackup) {
+      dom.btnRestoreBackup.addEventListener('click', restorePreReloadBackup);
+    }
+    if (dom.btnDismissBackup) {
+      dom.btnDismissBackup.addEventListener('click', () => {
+        if (dom.recoveryBanner) dom.recoveryBanner.classList.add('hidden');
+        clearPreReloadBackup();
+      });
+    }
+
     initFileWatcher();
 
     // Keyboard Shortcuts
@@ -4829,6 +5295,25 @@ Do not include conversational greetings or postscripts.`;
         } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
           e.preventDefault();
           saveFileNative(false);
+        }
+        return;
+      }
+
+      // Space Navigation (Tap auto-center, Space+drag pan, Shift+Space fit)
+      if (e.code === 'Space' || e.key === ' ') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        if (e.shiftKey) {
+          fitCanvasToViewport();
+          return;
+        }
+        if (!state.isSpaceDown && !e.repeat) {
+          state.isSpaceDown = true;
+          state.didPanWithSpace = false;
+          state.spaceDownTime = performance.now();
+          if (dom.viewport && !state.isPanning) {
+            dom.viewport.style.cursor = 'grab';
+          }
         }
         return;
       }
@@ -4932,6 +5417,31 @@ Do not include conversational greetings or postscripts.`;
         swapColors();
       }
     });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' || e.key === ' ') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (state.isSpaceDown) {
+          const duration = performance.now() - (state.spaceDownTime || 0);
+          state.isSpaceDown = false;
+          if (dom.viewport && !state.isPanning) {
+            dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+          }
+          // Space tap (< 200ms without dragging): auto-center canvas in viewport, preserving zoom level
+          if (duration < 200 && !state.didPanWithSpace && !e.shiftKey) {
+            centerCanvasInViewport(true);
+          }
+        }
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      state.isSpaceDown = false;
+      if (state.isPanning) {
+        state.isPanning = false;
+        if (dom.viewport) dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+      }
+    });
   }
 
   function selectTool(toolName) {
@@ -4969,9 +5479,52 @@ Do not include conversational greetings or postscripts.`;
   }
 
   // Run on DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  if (_hasDocument) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  }
+
+  // Export production functions for Node.js / automated audit test suites
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      state,
+      dom,
+      PRESET_PALETTES,
+      getMaxAllowedZoom,
+      resizeCanvasesToZoom,
+      centerCanvasInViewport,
+      fitCanvasToViewport,
+      calculatePixelDiff,
+      applyPixelDiff,
+      pushHistory,
+      undo,
+      redo,
+      restoreHistorySnapshot,
+      pruneHistoryBudget,
+      rebaseOldestHistoryEntry,
+      estimateHistoryMemory,
+      normalizeForCompare,
+      saveFileNative,
+      saveAutosaveToStorage,
+      retrieveAutosaveFromStorage,
+      clearAutosave,
+      savePreReloadBackup,
+      getPreReloadBackup,
+      restorePreReloadBackup,
+      clearPreReloadBackup,
+      flushSourceCode,
+      setDirty,
+      markDocumentMutation,
+      markDocumentSaved,
+      confirmDiscardUnsavedChanges,
+      hashString,
+      createNewDocument,
+      getArtworkCell,
+      checkAndReloadExternalFileChanges,
+      handleManualFileReload
+    };
   }
 })();
