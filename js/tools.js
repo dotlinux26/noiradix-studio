@@ -110,18 +110,24 @@ const Tools = (function () {
     if (startX < 0 || startX >= w || startY < 0 || startY >= h) return;
     if (targetColor === replacementColor) return;
 
-    const queue = [[startX, startY]];
-    const visited = new Set();
-    const maxSteps = Math.min(Math.max(65536, w * h * 4), 4194304);
+    const total = w * h;
+    const visited = new Uint8Array(total);
+    const queue = new Int32Array(total);
+    let head = 0;
+    let tail = 0;
+
+    const startIdx = startY * w + startX;
+    queue[tail++] = startIdx;
+    visited[startIdx] = 1;
+
+    const maxSteps = Math.min(total * 4, 4194304);
     let steps = 0;
 
-    while (queue.length > 0 && steps++ < maxSteps) {
-      const [cx, cy] = queue.pop();
-      if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-
+    while (head < tail && steps++ < maxSteps) {
+      const idx = queue[head++];
+      const cx = idx % w;
+      const cy = (idx / w) | 0;
       const key = `${cx},${cy}`;
-      if (visited.has(key)) continue;
-      visited.add(key);
 
       const curColor = cell.pixels[key] || null;
       if (curColor === targetColor) {
@@ -131,10 +137,22 @@ const Tools = (function () {
           cell.pixels[key] = replacementColor;
         }
 
-        queue.push([cx + 1, cy]);
-        queue.push([cx - 1, cy]);
-        queue.push([cx, cy + 1]);
-        queue.push([cx, cy - 1]);
+        if (cx > 0 && !visited[idx - 1]) {
+          visited[idx - 1] = 1;
+          queue[tail++] = idx - 1;
+        }
+        if (cx < w - 1 && !visited[idx + 1]) {
+          visited[idx + 1] = 1;
+          queue[tail++] = idx + 1;
+        }
+        if (cy > 0 && !visited[idx - w]) {
+          visited[idx - w] = 1;
+          queue[tail++] = idx - w;
+        }
+        if (cy < h - 1 && !visited[idx + w]) {
+          visited[idx + w] = 1;
+          queue[tail++] = idx + w;
+        }
       }
     }
   }

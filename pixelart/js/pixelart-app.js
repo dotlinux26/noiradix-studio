@@ -240,6 +240,8 @@
     panY: 0,
     showGrid: true,
     showRulers: localStorage.getItem('pix2_pixelart_rulers') !== 'false',
+    _hoverX: null,
+    _hoverY: null,
     isPanning: false,
     panStartX: 0,
     panStartY: 0,
@@ -877,10 +879,101 @@
     dom.canvasPreview.style.width = `${totalW}px`;
     dom.canvasPreview.style.height = `${totalH}px`;
 
-    if (dom.rulerTop) dom.rulerTop.style.width = `${totalW}px`;
-    if (dom.rulerLeft) dom.rulerLeft.style.height = `${totalH}px`;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (dom.rulerTop) {
+      const rw = Math.round(totalW * dpr);
+      const rh = Math.round(24 * dpr);
+      if (dom.rulerTop.width !== rw) dom.rulerTop.width = rw;
+      if (dom.rulerTop.height !== rh) dom.rulerTop.height = rh;
+      dom.rulerTop.style.width = `${totalW}px`;
+      dom.rulerTop.style.height = '24px';
+    }
+    if (dom.rulerLeft) {
+      const rw = Math.round(24 * dpr);
+      const rh = Math.round(totalH * dpr);
+      if (dom.rulerLeft.width !== rw) dom.rulerLeft.width = rw;
+      if (dom.rulerLeft.height !== rh) dom.rulerLeft.height = rh;
+      dom.rulerLeft.style.width = '24px';
+      dom.rulerLeft.style.height = `${totalH}px`;
+    }
     if (dom.btnToggleRulers) dom.btnToggleRulers.classList.toggle('active', state.showRulers);
     updateContainerTransform();
+  }
+
+  function getVisibleCanvasBounds() {
+    const zoom = state.zoom;
+    if (!dom.canvasMain || !dom.viewport) {
+      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
+    }
+
+    // At low zoom (<= 2x), always render the full canvas for 100% complete overview without culling
+    if (zoom <= 2) {
+      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
+    }
+
+    const cRect = dom.canvasMain.getBoundingClientRect();
+    const vRect = dom.viewport.getBoundingClientRect();
+
+    if (cRect.width <= 0 || cRect.height <= 0 || vRect.width <= 0 || vRect.height <= 0) {
+      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
+    }
+
+    // Canvas position relative to viewport (in screen pixels)
+    const canvasLeftInVp = cRect.left - vRect.left;
+    const canvasTopInVp = cRect.top - vRect.top;
+
+    // Viewport window mapped into canvas coordinates
+    // Generous pad margin (300px) ensures rapid panning / wheel zooming never shows blank edges
+    const pad = 300;
+    const vpLeftOnCanvas = -canvasLeftInVp - pad;
+    const vpTopOnCanvas = -canvasTopInVp - pad;
+    const vpRightOnCanvas = -canvasLeftInVp + vRect.width + pad;
+    const vpBottomOnCanvas = -canvasTopInVp + vRect.height + pad;
+
+    const minX = Math.max(0, Math.floor(vpLeftOnCanvas / zoom));
+    const maxX = Math.min(state.w, Math.ceil(vpRightOnCanvas / zoom));
+    const minY = Math.max(0, Math.floor(vpTopOnCanvas / zoom));
+    const maxY = Math.min(state.h, Math.ceil(vpBottomOnCanvas / zoom));
+
+    return { minX, maxX, minY, maxY };
+  }
+
+  function getVisibleCanvasBounds() {
+    const zoom = state.zoom;
+    if (!dom.canvasMain || !dom.viewport) {
+      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
+    }
+
+    // At low zoom (<= 2x), always render the full canvas for 100% complete overview without culling
+    if (zoom <= 2) {
+      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
+    }
+
+    const cRect = dom.canvasMain.getBoundingClientRect();
+    const vRect = dom.viewport.getBoundingClientRect();
+
+    if (cRect.width <= 0 || cRect.height <= 0 || vRect.width <= 0 || vRect.height <= 0) {
+      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
+    }
+
+    // Canvas position relative to viewport (in screen pixels)
+    const canvasLeftInVp = cRect.left - vRect.left;
+    const canvasTopInVp = cRect.top - vRect.top;
+
+    // Viewport window mapped into canvas coordinates
+    // Generous pad margin (300px) ensures rapid panning / wheel zooming never shows blank edges
+    const pad = 300;
+    const vpLeftOnCanvas = -canvasLeftInVp - pad;
+    const vpTopOnCanvas = -canvasTopInVp - pad;
+    const vpRightOnCanvas = -canvasLeftInVp + vRect.width + pad;
+    const vpBottomOnCanvas = -canvasTopInVp + vRect.height + pad;
+
+    const minX = Math.max(0, Math.floor(vpLeftOnCanvas / zoom));
+    const maxX = Math.min(state.w, Math.ceil(vpRightOnCanvas / zoom));
+    const minY = Math.max(0, Math.floor(vpTopOnCanvas / zoom));
+    const maxY = Math.min(state.h, Math.ceil(vpBottomOnCanvas / zoom));
+
+    return { minX, maxX, minY, maxY };
   }
 
   function repaintCanvas() {
@@ -889,38 +982,56 @@
     const totalW = Math.max(1, Math.round(state.w * zoom));
     const totalH = Math.max(1, Math.round(state.h * zoom));
 
-    ctx.clearRect(0, 0, totalW, totalH);
+    // Frustum Culling: Calculate visible bounds to skip 95%+ of off-screen work
+    const { minX, maxX, minY, maxY } = getVisibleCanvasBounds();
 
-    // 1. Canvas Background (Transparent Checkerboard, Solid White, Solid Black, or Custom Color)
+    const renderX = Math.max(0, Math.floor(minX * zoom));
+    const renderY = Math.max(0, Math.floor(minY * zoom));
+    const renderW = Math.min(totalW - renderX, Math.ceil((maxX - minX + 1) * zoom));
+    const renderH = Math.min(totalH - renderY, Math.ceil((maxY - minY + 1) * zoom));
+
+    if (renderW <= 0 || renderH <= 0) return;
+
+    ctx.clearRect(renderX, renderY, renderW, renderH);
+
+    // 1. Canvas Background (Visible region only)
     if (state.canvasBgMode === 'white') {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, totalW, totalH);
+      ctx.fillRect(renderX, renderY, renderW, renderH);
     } else if (state.canvasBgMode === 'black') {
       ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, totalW, totalH);
+      ctx.fillRect(renderX, renderY, renderW, renderH);
     } else if (state.canvasBgMode === 'custom') {
       ctx.fillStyle = state.canvasBgColor || '#2a2e3f';
-      ctx.fillRect(0, 0, totalW, totalH);
+      ctx.fillRect(renderX, renderY, renderW, renderH);
     } else {
-      // 'transparent' default: Cached 1:1 Pixel-Aligned Checkerboard Pattern (Zero lag even at 1024x1024)
+      // 'transparent' default: Cached 1:1 Pixel-Aligned Checkerboard Pattern
       const isDark = document.body.classList.contains('dark-theme');
-      const tileArtPixels = zoom >= 4 ? 1 : (zoom <= 1 ? 16 : 8);
-      const tileCanvasSize = Math.max(8, Math.round(tileArtPixels * zoom));
+      const tileCanvasSize = zoom >= 4 ? Math.max(1, Math.round(zoom)) : (zoom <= 1 ? 16 : Math.round(8 * zoom));
       const pattern = getCheckerPattern(ctx, tileCanvasSize, isDark);
       ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, totalW, totalH);
+      ctx.fillRect(renderX, renderY, renderW, renderH);
     }
 
-    // 2. Render all artwork pixels via GPU-accelerated 1:1 texture blit (Nearest-Neighbor)
+    // 2. Render visible artwork slice via GPU nearest-neighbor blit
     if (!state.artworkCanvas) {
       rebuildArtworkBuffer();
     }
     if (state.artworkCanvas) {
+      const sX = minX;
+      const sY = minY;
+      const sW = Math.min(state.w - sX, maxX - minX + 1);
+      const sH = Math.min(state.h - sY, maxY - minY + 1);
+      const dX = Math.floor(sX * zoom);
+      const dY = Math.floor(sY * zoom);
+      const dW = Math.round(sW * zoom);
+      const dH = Math.round(sH * zoom);
+
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(state.artworkCanvas, 0, 0, totalW, totalH);
+      ctx.drawImage(state.artworkCanvas, sX, sY, sW, sH, dX, dY, dW, dH);
     }
 
-    // 3. Razor-Sharp Pixel Grid Overlay (Active at zoom >= 4)
+    // 3. Razor-Sharp Pixel Grid Overlay (Active at zoom >= 4, strictly visible lines)
     if (state.showGrid && zoom >= 4) {
       let isDarkBg = document.body.classList.contains('dark-theme');
       if (state.canvasBgMode === 'black') {
@@ -934,18 +1045,23 @@
       ctx.lineWidth = 1;
       ctx.beginPath();
 
-      // Vertical grid lines with +0.5 pixel-crisp alignment
-      for (let x = 0; x <= state.w; x++) {
+      const startY = renderY;
+      const endY = renderY + renderH;
+      const startX = renderX;
+      const endX = renderX + renderW;
+
+      // Vertical visible lines with +0.5 pixel-crisp alignment
+      for (let x = minX; x <= maxX; x++) {
         const posX = Math.floor(x * zoom) + 0.5;
-        ctx.moveTo(posX, 0);
-        ctx.lineTo(posX, totalH);
+        ctx.moveTo(posX, startY);
+        ctx.lineTo(posX, endY);
       }
 
-      // Horizontal grid lines
-      for (let y = 0; y <= state.h; y++) {
+      // Horizontal visible lines
+      for (let y = minY; y <= maxY; y++) {
         const posY = Math.floor(y * zoom) + 0.5;
-        ctx.moveTo(0, posY);
-        ctx.lineTo(totalW, posY);
+        ctx.moveTo(startX, posY);
+        ctx.lineTo(endX, posY);
       }
       ctx.stroke();
     }
@@ -953,58 +1069,68 @@
     // 4. Bilateral Symmetry Axis Guidelines
     if (state.symH) {
       const axisX = Math.floor((state.w / 2) * zoom) + 0.5;
-      ctx.strokeStyle = '#a855f7';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(axisX, 0);
-      ctx.lineTo(axisX, totalH);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      if (axisX >= renderX && axisX <= renderX + renderW) {
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(axisX, renderY);
+        ctx.lineTo(axisX, renderY + renderH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     if (state.symV) {
       const axisY = Math.floor((state.h / 2) * zoom) + 0.5;
-      ctx.strokeStyle = '#a855f7';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(0, axisY);
-      ctx.lineTo(totalW, axisY);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      if (axisY >= renderY && axisY <= renderY + renderH) {
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(renderX, axisY);
+        ctx.lineTo(renderX + renderW, axisY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     // 5. Alignment Guidelines (Trục dóng dọc, dóng ngang, tâm giữa)
     if (state.guideCenter || state.guideV) {
       const gX = Math.floor((state.w / 2) * zoom) + 0.5;
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(gX, 0);
-      ctx.lineTo(gX, totalH);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      if (gX >= renderX && gX <= renderX + renderW) {
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(gX, renderY);
+        ctx.lineTo(gX, renderY + renderH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     if (state.guideCenter || state.guideH) {
       const gY = Math.floor((state.h / 2) * zoom) + 0.5;
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(0, gY);
-      ctx.lineTo(totalW, gY);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      if (gY >= renderY && gY <= renderY + renderH) {
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(renderX, gY);
+        ctx.lineTo(renderX + renderW, gY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     if (state.guideCenter) {
       const cX = Math.floor((state.w / 2) * zoom);
       const cY = Math.floor((state.h / 2) * zoom);
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(cX + 0.5, cY + 0.5, Math.min(8, Math.max(3, zoom / 2)), 0, Math.PI * 2);
-      ctx.stroke();
+      if (cX >= renderX - 20 && cX <= renderX + renderW + 20 && cY >= renderY - 20 && cY <= renderY + renderH + 20) {
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cX + 0.5, cY + 0.5, Math.min(8, Math.max(3, zoom / 2)), 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     renderSelectionMarquee();
@@ -1012,11 +1138,8 @@
   }
 
   // ===========================================================================
-  // CANVAS RULERS & ADAPTIVE PIXEL TICKS
+  // CANVAS RULERS & ADAPTIVE PIXEL TICKS (Canvas 2D Accelerated)
   // ===========================================================================
-  let lastActiveTickX = null;
-  let lastActiveTickY = null;
-
   function renderRulers() {
     if (!dom.rulerTop || !dom.rulerLeft) return;
 
@@ -1029,16 +1152,33 @@
     if (dom.container) dom.container.classList.remove('hide-rulers');
     if (dom.btnToggleRulers) dom.btnToggleRulers.classList.add('active');
 
+    const ctxT = dom.rulerTop.getContext('2d');
+    const ctxL = dom.rulerLeft.getContext('2d');
+    if (!ctxT || !ctxL) return;
+
+    const zoom = state.zoom;
     const cw = state.w;
     const ch = state.h;
-    const zoom = state.zoom;
+    const totalW = Math.max(1, Math.round(cw * zoom));
+    const totalH = Math.max(1, Math.round(ch * zoom));
 
-    // Adaptive step so each numbered tick is >= 32px
-    const minTickPx = 32;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    ctxT.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctxL.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const isDark = document.body.classList.contains('dark-theme');
+    const bgColor = isDark ? '#141722' : '#f8fafc';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+    const tickColor = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.45)';
+    const subTickColor = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(100, 116, 139, 0.18)';
+
+    // Choose adaptive interval: 1, 2, 4, 8, 16, 32, 64, 128, 256, 512
+    // Minimum text spacing is 40px so numbers like "1023" never overlap
+    const minTextPx = 40;
     let interval = 1;
     const allowedSteps = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
     for (const s of allowedSteps) {
-      if (s * zoom >= minTickPx) {
+      if (s * zoom >= minTextPx) {
         interval = s;
         break;
       }
@@ -1046,66 +1186,146 @@
     }
     state._rulerInterval = interval;
 
-    // Top ruler ticks
-    dom.rulerTop.innerHTML = '';
-    const fragTop = document.createDocumentFragment();
+    const { minX, maxX, minY, maxY } = getVisibleCanvasBounds();
+
+    // 1. RENDER TOP RULER
+    ctxT.fillStyle = bgColor;
+    ctxT.fillRect(0, 0, totalW, 24);
+
+    // Active cursor highlight
+    if (state._hoverX !== null && state._hoverX >= 0 && state._hoverX < cw) {
+      const hx = Math.floor(state._hoverX * zoom);
+      const hw = Math.max(1, Math.round(zoom));
+      ctxT.fillStyle = 'rgba(99, 102, 241, 0.35)';
+      ctxT.fillRect(hx, 0, hw, 24);
+      ctxT.fillStyle = '#6366f1';
+      ctxT.fillRect(hx, 21, hw, 3);
+    }
+
+    ctxT.font = '9px "JetBrains Mono", monospace';
+    ctxT.textBaseline = 'top';
+
+    // Sub-pixel tick marks when zoom >= 6
+    if (zoom >= 6) {
+      ctxT.strokeStyle = subTickColor;
+      ctxT.lineWidth = 1;
+      ctxT.beginPath();
+      for (let x = 0; x < cw; x++) {
+        if (x % interval !== 0) {
+          const posX = Math.floor(x * zoom) + 0.5;
+          ctxT.moveTo(posX, 16);
+          ctxT.lineTo(posX, 24);
+        }
+      }
+      ctxT.stroke();
+    }
+
+    // Main interval tick marks
+    ctxT.strokeStyle = tickColor;
+    ctxT.lineWidth = 1;
+    ctxT.beginPath();
+    for (let x = 0; x <= cw; x += interval) {
+      const posX = Math.floor(x * zoom) + 0.5;
+      ctxT.moveTo(posX, 10);
+      ctxT.lineTo(posX, 24);
+    }
+    const endX = Math.floor(cw * zoom) + 0.5;
+    ctxT.moveTo(endX, 6);
+    ctxT.lineTo(endX, 24);
+    ctxT.stroke();
+
+    // Numbers (placed precisely at start of pixel index)
     for (let x = 0; x < cw; x += interval) {
-      const span = Math.min(interval, cw - x);
-      const tick = document.createElement('div');
-      tick.className = 'pa-ruler-tick';
-      tick.style.width = `${Math.round(span * zoom)}px`;
-      tick.textContent = String(x);
-      fragTop.appendChild(tick);
+      const posX = Math.floor(x * zoom);
+      const isHighlighted = (state._hoverX !== null && state._hoverX >= x && state._hoverX < x + interval);
+      ctxT.fillStyle = isHighlighted ? '#6366f1' : textColor;
+      ctxT.fillText(String(x), posX + 2, 2);
     }
-    dom.rulerTop.appendChild(fragTop);
 
-    // Left ruler ticks
-    dom.rulerLeft.innerHTML = '';
-    const fragLeft = document.createDocumentFragment();
+    // 2. RENDER LEFT RULER
+    ctxL.fillStyle = bgColor;
+    ctxL.fillRect(0, 0, 24, totalH);
+
+    // Active cursor highlight
+    if (state._hoverY !== null && state._hoverY >= 0 && state._hoverY < ch) {
+      const hy = Math.floor(state._hoverY * zoom);
+      const hh = Math.max(1, Math.round(zoom));
+      ctxL.fillStyle = 'rgba(99, 102, 241, 0.35)';
+      ctxL.fillRect(0, hy, 24, hh);
+      ctxL.fillStyle = '#6366f1';
+      ctxL.fillRect(21, hy, 3, hh);
+    }
+
+    ctxL.font = '9px "JetBrains Mono", monospace';
+    ctxL.textBaseline = 'top';
+
+    // Sub-pixel tick marks when zoom >= 6
+    if (zoom >= 6) {
+      ctxL.strokeStyle = subTickColor;
+      ctxL.lineWidth = 1;
+      ctxL.beginPath();
+      for (let y = 0; y < ch; y++) {
+        if (y % interval !== 0) {
+          const posY = Math.floor(y * zoom) + 0.5;
+          ctxL.moveTo(16, posY);
+          ctxL.lineTo(24, posY);
+        }
+      }
+      ctxL.stroke();
+    }
+
+    // Main interval tick marks
+    ctxL.strokeStyle = tickColor;
+    ctxL.lineWidth = 1;
+    ctxL.beginPath();
+    for (let y = 0; y <= ch; y += interval) {
+      const posY = Math.floor(y * zoom) + 0.5;
+      ctxL.moveTo(10, posY);
+      ctxL.lineTo(24, posY);
+    }
+    const endY = Math.floor(ch * zoom) + 0.5;
+    ctxL.moveTo(6, endY);
+    ctxL.lineTo(24, endY);
+    ctxL.stroke();
+
+    // Numbers
     for (let y = 0; y < ch; y += interval) {
-      const span = Math.min(interval, ch - y);
-      const tick = document.createElement('div');
-      tick.className = 'pa-ruler-tick-v';
-      tick.style.height = `${Math.round(span * zoom)}px`;
-      tick.textContent = String(y);
-      fragLeft.appendChild(tick);
+      const posY = Math.floor(y * zoom);
+      const isHighlighted = (state._hoverY !== null && state._hoverY >= y && state._hoverY < y + interval);
+      ctxL.fillStyle = isHighlighted ? '#6366f1' : textColor;
+      ctxL.fillText(String(y), 2, posY + 2);
     }
-    dom.rulerLeft.appendChild(fragLeft);
-
-    lastActiveTickX = null;
-    lastActiveTickY = null;
   }
 
   function updateRulerHighlight(px, py) {
-    if (!state.showRulers || !dom.rulerTop || !dom.rulerLeft) return;
+    if (!state.showRulers) return;
+    if (state._hoverX === px && state._hoverY === py) return;
+    state._hoverX = px;
+    state._hoverY = py;
+    renderRulers();
+  }
 
-    const interval = state._rulerInterval || 1;
-    const tickIdxX = px !== null ? Math.floor(px / interval) : null;
-    const tickIdxY = py !== null ? Math.floor(py / interval) : null;
+  function clearPreviewCanvas() {
+    if (!dom.ctxPreview) return;
+    const { minX, maxX, minY, maxY } = getVisibleCanvasBounds();
+    const zoom = state.zoom;
+    const totalW = Math.max(1, Math.round(state.w * zoom));
+    const totalH = Math.max(1, Math.round(state.h * zoom));
 
-    if (lastActiveTickX !== tickIdxX) {
-      if (lastActiveTickX !== null && dom.rulerTop.children[lastActiveTickX]) {
-        dom.rulerTop.children[lastActiveTickX].classList.remove('active-ruler-tick');
-      }
-      if (tickIdxX !== null && dom.rulerTop.children[tickIdxX]) {
-        dom.rulerTop.children[tickIdxX].classList.add('active-ruler-tick');
-      }
-      lastActiveTickX = tickIdxX;
+    if (minX === 0 && minY === 0 && maxX === state.w && maxY === state.h) {
+      dom.ctxPreview.clearRect(0, 0, totalW, totalH);
+      return;
     }
 
-    if (lastActiveTickY !== tickIdxY) {
-      if (lastActiveTickY !== null && dom.rulerLeft.children[lastActiveTickY]) {
-        dom.rulerLeft.children[lastActiveTickY].classList.remove('active-ruler-tick');
-      }
-      if (tickIdxY !== null && dom.rulerLeft.children[tickIdxY]) {
-        dom.rulerLeft.children[tickIdxY].classList.add('active-ruler-tick');
-      }
-      lastActiveTickY = tickIdxY;
-    }
+    const rx = Math.max(0, Math.floor(minX * zoom));
+    const ry = Math.max(0, Math.floor(minY * zoom));
+    const rw = Math.min(totalW - rx, Math.ceil((maxX - minX + 1) * zoom));
+    const rh = Math.min(totalH - ry, Math.ceil((maxY - minY + 1) * zoom));
+    dom.ctxPreview.clearRect(rx, ry, rw, rh);
   }
 
   function renderSelectionMarquee() {
-    dom.ctxPreview.clearRect(0, 0, state.w * state.zoom, state.h * state.zoom);
+    clearPreviewCanvas();
     if (!state.selection) return;
 
     const { x, y, w, h } = state.selection;
@@ -1274,7 +1494,7 @@
 
   function isOverRotationHandle(e) {
     if (!state.selection || (state.selection.w <= 1 && state.selection.h <= 1)) return false;
-    const rect = dom.canvasMain.getBoundingClientRect();
+    const rect = state.cachedCanvasRect || dom.canvasMain.getBoundingClientRect();
     const sx = Math.floor(state.selection.x * state.zoom);
     const sy = Math.floor(state.selection.y * state.zoom);
     const sw = Math.floor(state.selection.w * state.zoom);
@@ -1370,6 +1590,19 @@
       cell.size = { w: state.w, h: state.h };
       state.doc.meta.cell_size = { w: state.w, h: state.h };
       state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${state.w}x${state.h}` };
+
+      // If cell has large pixel count (> 30,000), prevent 1,000,000 line textarea DOM layout freezes
+      const numPixels = cell.pixels ? Object.keys(cell.pixels).length : 0;
+      if (numPixels > 30000 && !force) {
+        dom.codeEditor.value = `@pix2 1.0\n@meta\n  title: "${state.doc.meta.title || 'Artwork'}"\n  size: ${state.w}x${state.h}\n\n@cell artwork\n  size: ${state.w}x${state.h}\n  ; [Trạng thái: ${numPixels.toLocaleString()} pixels - Tạm ẩn mã nguồn để giao diện mượt mà tuyệt đối]\n  ; [Mọi dữ liệu vẽ, lưu file và xuất PNG vẫn nguyên vẹn 100%]\n`;
+        updateCodeGutter();
+        updatePixelCount();
+        dom.syncBadge.className = 'pa-sync-badge synced';
+        dom.syncBadge.innerHTML = '<i class="fa-solid fa-circle"></i> Synced';
+        dom.diagnosticPill.className = 'pa-diagnostic-pill clean';
+        dom.diagnosticPill.innerHTML = '<i class="fa-solid fa-check"></i> Standard v1.0';
+        return;
+      }
 
       // Serialize canonical PIX2
       let serialized = _PIX2.serialize(state.doc);
@@ -1535,8 +1768,12 @@
     lastGutterLineCount = lineCount;
 
     let gutterText = '';
-    for (let i = 1; i <= lineCount; i++) {
+    const maxGutter = Math.min(lineCount, 5000);
+    for (let i = 1; i <= maxGutter; i++) {
       gutterText += i + '\n';
+    }
+    if (lineCount > 5000) {
+      gutterText += '...\n';
     }
     dom.codeGutter.textContent = gutterText;
   }
@@ -1552,13 +1789,13 @@
   // ===========================================================================
   function isEventOverCanvas(e) {
     if (!dom.canvasMain) return false;
-    const rect = dom.canvasMain.getBoundingClientRect();
+    const rect = state.cachedCanvasRect || dom.canvasMain.getBoundingClientRect();
     return e.clientX >= rect.left && e.clientX < rect.right &&
            e.clientY >= rect.top && e.clientY < rect.bottom;
   }
 
   function getPixelCoord(e) {
-    const rect = dom.canvasMain.getBoundingClientRect();
+    const rect = state.cachedCanvasRect || dom.canvasMain.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / state.zoom);
     const y = Math.floor((e.clientY - rect.top) / state.zoom);
     return {
@@ -1586,8 +1823,7 @@
         dom.ctxMain.fillRect(x, y, sz, sz);
       } else {
         const isDark = document.body.classList.contains('dark-theme');
-        const tileArtPixels = zoom >= 4 ? 1 : (zoom <= 1 ? 16 : 8);
-        const tileCanvasSize = Math.max(8, Math.round(tileArtPixels * zoom));
+        const tileCanvasSize = zoom >= 4 ? Math.max(1, Math.round(zoom)) : (zoom <= 1 ? 16 : Math.round(8 * zoom));
         dom.ctxMain.fillStyle = getCheckerPattern(dom.ctxMain, tileCanvasSize, isDark);
         dom.ctxMain.fillRect(x, y, sz, sz);
       }
@@ -1667,6 +1903,7 @@
     state.dragStartY = y;
     state.lastX = x;
     state.lastY = y;
+    state.cachedCanvasRect = dom.canvasMain.getBoundingClientRect();
 
     const activeColor = state.primaryColor;
 
@@ -1760,12 +1997,23 @@
 
     // Bucket
     if (state.currentTool === 'bucket') {
-      _Tools.floodFill(cell, x, y, activeColor, { w: state.w, h: state.h });
-      rebuildArtworkBuffer();
-      repaintCanvas();
-      pushHistory();
-      syncCanvasToSource();
-      triggerAutosave();
+      const isHuge = (state.w * state.h >= 262144);
+      if (isHuge) {
+        showToast(`Đang đổ màu ${state.w}×${state.h} (${(state.w * state.h).toLocaleString()} pixels)...`, 'info');
+        dom.viewport.style.cursor = 'wait';
+      }
+      setTimeout(() => {
+        _Tools.floodFill(cell, x, y, activeColor, { w: state.w, h: state.h });
+        rebuildArtworkBuffer();
+        repaintCanvas();
+        pushHistory();
+        syncCanvasToSource();
+        triggerAutosave();
+        if (isHuge) {
+          dom.viewport.style.cursor = 'crosshair';
+          showToast(`Đã đổ màu thành công (${(state.w * state.h).toLocaleString()} pixels)`, 'success');
+        }
+      }, isHuge ? 20 : 0);
       state.isDrawing = false;
       return;
     }
@@ -1785,9 +2033,11 @@
       const coords = getPixelCoord(e);
       x = coords.x;
       y = coords.y;
-      dom.coordLabel.textContent = `${x}, ${y}`;
-      updateHoverColor(x, y);
-      updateRulerHighlight(x, y);
+      if (!state.isDrawing) {
+        dom.coordLabel.textContent = `${x}, ${y}`;
+        updateHoverColor(x, y);
+        updateRulerHighlight(x, y);
+      }
     } else {
       if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection && !state.isSelecting) {
         dom.coordLabel.textContent = '-, -';
@@ -1805,6 +2055,7 @@
       state.panX = e.clientX - state.panStartX;
       state.panY = e.clientY - state.panStartY;
       updateContainerTransform();
+      requestCanvasRepaint();
       return;
     }
 
@@ -1848,6 +2099,11 @@
     }
 
     if (!state.isDrawing) return;
+
+    // P0 Point Deduplication: Drop redundant mousemove events within the same artwork pixel
+    if ((state.currentTool === 'pen' || state.currentTool === 'eraser') && x === state.lastX && y === state.lastY) {
+      return;
+    }
 
     const cell = getArtworkCell();
     if (!cell) return;
@@ -1893,6 +2149,7 @@
   }
 
   function onPointerUp(e) {
+    state.cachedCanvasRect = null;
     if (state.isPanning) {
       state.isPanning = false;
       dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
@@ -2029,7 +2286,7 @@
     const isRightClick = e.button === 2;
     const activeColor = isRightClick ? state.secondaryColor : state.primaryColor;
 
-    dom.ctxPreview.clearRect(0, 0, state.w * state.zoom, state.h * state.zoom);
+    clearPreviewCanvas();
 
     if (repaintRafId !== null) {
       cancelAnimationFrame(repaintRafId);
@@ -2061,6 +2318,13 @@
     }
 
     renderSelectionMarquee();
+
+    // Flush final coordinate and hover display
+    if (isEventOverCanvas(e)) {
+      dom.coordLabel.textContent = `${x}, ${y}`;
+      updateHoverColor(x, y);
+      updateRulerHighlight(x, y);
+    }
 
     // Canvas -> Code sync and history push strictly on Pointer Up when artwork modified
     if (state.currentTool !== 'select') {
@@ -2177,7 +2441,7 @@
 
   function drawPreviewLine(x0, y0, x1, y1, color) {
     const zoom = state.zoom;
-    dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
+    clearPreviewCanvas();
     dom.ctxPreview.fillStyle = color;
     _Tools.line(x0, y0, x1, y1, (px, py) => {
       dom.ctxPreview.fillRect(px * zoom, py * zoom, zoom, zoom);
@@ -2188,7 +2452,7 @@
 
   function drawPreviewRect(x0, y0, x1, y1, color, fill, shiftKey, altKey) {
     const zoom = state.zoom;
-    dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
+    clearPreviewCanvas();
     dom.ctxPreview.fillStyle = color;
     const { minX, minY, rw, rh } = computeShapeBounds(x0, y0, x1, y1, shiftKey, altKey);
 
@@ -2201,7 +2465,7 @@
 
   function drawPreviewCircle(x0, y0, x1, y1, color, fill, shiftKey, altKey) {
     const zoom = state.zoom;
-    dom.ctxPreview.clearRect(0, 0, state.w * zoom, state.h * zoom);
+    clearPreviewCanvas();
     dom.ctxPreview.fillStyle = color;
     const { minX, maxX, minY, maxY } = computeShapeBounds(x0, y0, x1, y1, shiftKey, altKey);
 
@@ -4239,8 +4503,8 @@ Do not include conversational greetings or postscripts.`;
         const file = await currentFileHandle.getFile();
         const currentModified = file.lastModified;
 
-        // Check if file modified time is newer than our recorded timestamp
-        if (!force && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified) {
+        // Check if file modified time is newer than our recorded timestamp (with 1s NTFS jitter tolerance)
+        if (!force && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified + 1000) {
           isExternalReloading = false;
           return;
         }

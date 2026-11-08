@@ -1118,6 +1118,7 @@ const PIX2 = (function () {
 
   function floodFillCell(cell, startX, startY, fillColor, defaultCellSize, profile = RESOURCE_PROFILES.studio) {
     if (!cell || isNaN(startX) || isNaN(startY) || !fillColor) return;
+    if (!cell.pixels) cell.pixels = {};
     const maxDim = (profile && profile.maxCellDim) ? profile.maxCellDim : MAX_CELL_DIM;
     const rawW = (cell.size && cell.size.w) || (defaultCellSize && defaultCellSize.w) || 16;
     const rawH = (cell.size && cell.size.h) || (defaultCellSize && defaultCellSize.h) || 16;
@@ -1129,26 +1130,49 @@ const PIX2 = (function () {
     const targetColor = cell.pixels[`${startX},${startY}`] || null;
     if (targetColor === fillColor) return;
 
-    const queue = [[startX, startY]];
-    const visited = new Set();
-    const maxSteps = Math.min(Math.max(65536, cellW * cellH * 4), 4194304);
+    const total = cellW * cellH;
+    const visited = new Uint8Array(total);
+    const queue = new Int32Array(total);
+    let head = 0;
+    let tail = 0;
+
+    const startIdx = startY * cellW + startX;
+    queue[tail++] = startIdx;
+    visited[startIdx] = 1;
+
+    const maxSteps = Math.min(total * 4, 4194304);
     let steps = 0;
 
-    while (queue.length > 0 && steps++ < maxSteps) {
-      const [x, y] = queue.pop();
-      if (x < 0 || x >= cellW || y < 0 || y >= cellH) continue;
+    while (head < tail && steps++ < maxSteps) {
+      const idx = queue[head++];
+      const x = idx % cellW;
+      const y = (idx / cellW) | 0;
       const key = `${x},${y}`;
-      if (visited.has(key)) continue;
-      visited.add(key);
 
       const currentColor = cell.pixels[key] || null;
       if (currentColor === targetColor) {
-        cell.pixels[key] = fillColor;
+        if (fillColor === null) {
+          delete cell.pixels[key];
+        } else {
+          cell.pixels[key] = fillColor;
+        }
 
-        if (x > 0) queue.push([x - 1, y]);
-        if (x < cellW - 1) queue.push([x + 1, y]);
-        if (y > 0) queue.push([x, y - 1]);
-        if (y < cellH - 1) queue.push([x, y + 1]);
+        if (x > 0 && !visited[idx - 1]) {
+          visited[idx - 1] = 1;
+          queue[tail++] = idx - 1;
+        }
+        if (x < cellW - 1 && !visited[idx + 1]) {
+          visited[idx + 1] = 1;
+          queue[tail++] = idx + 1;
+        }
+        if (y > 0 && !visited[idx - cellW]) {
+          visited[idx - cellW] = 1;
+          queue[tail++] = idx - cellW;
+        }
+        if (y < cellH - 1 && !visited[idx + cellW]) {
+          visited[idx + cellW] = 1;
+          queue[tail++] = idx + cellW;
+        }
       }
     }
   }

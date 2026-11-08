@@ -718,20 +718,17 @@ button.pa-dim-badge:focus-visible,
 }
 
 .pa-ruler-top-bar {
-  display: flex;
+  display: block;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
-  overflow: hidden;
   height: 24px;
   box-sizing: border-box;
 }
 
 .pa-ruler-left-bar {
-  display: flex;
-  flex-direction: column;
+  display: block;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-subtle);
-  overflow: hidden;
   width: 24px;
   box-sizing: border-box;
 }
