@@ -1212,6 +1212,11 @@
   let rulerStaticTop = null;
   let rulerStaticLeft = null;
 
+  function invalidateRulerCache() {
+    rulerStaticTop = null;
+    rulerStaticLeft = null;
+  }
+
   function renderRulers() {
     if (!dom.rulerTop || !dom.rulerLeft) return;
 
@@ -1707,6 +1712,7 @@
     if (dom && dom.zoomLabel) {
       dom.zoomLabel.textContent = formatZoom(state.zoom);
     }
+    invalidateRulerCache();
   }
 
   // Phase 1 Finding B: Smooth Auto-Centering (preserves current zoom level with 150ms animation)
@@ -2118,7 +2124,8 @@
 
     const { x, y } = getPixelCoord(e);
     state.isDrawing = true;
-    state.activeStrokeChanges = {};
+    const isStrokeTool = (state.currentTool === 'pen' || state.currentTool === 'eraser');
+    state.activeStrokeChanges = isStrokeTool ? {} : null;
     state.dragStartX = x;
     state.dragStartY = y;
     state.lastX = x;
@@ -2378,6 +2385,7 @@
     if (state.isPanning) {
       state.isPanning = false;
       dom.viewport.style.cursor = state.isSpaceDown ? 'grab' : (state.currentTool === 'pan' ? 'grab' : 'crosshair');
+      renderRulers();
       return;
     }
 
@@ -3243,6 +3251,7 @@
 
     const lastEntry = state.history[state.historyIndex];
     const dimChanged = !lastEntry || (lastEntry.w !== state.w || lastEntry.h !== state.h);
+    const hasStrokeDiff = state.activeStrokeChanges && Object.keys(state.activeStrokeChanges).length > 0;
 
     if (dimChanged) {
       const snapshot = {
@@ -3256,13 +3265,13 @@
       state.history.push(snapshot);
       state.lastHistoryPixels = { ...currPixels };
       state.activeStrokeChanges = null;
-    } else if (state.activeStrokeChanges) {
-      // Active stroke diff collected in O(K) time without cloning entire 1M-pixel canvas
+    } else if (hasStrokeDiff) {
+      // Active stroke diff collected in O(K) time without scanning full canvas
       const strokeDiff = state.activeStrokeChanges;
       state.activeStrokeChanges = null;
       const strokeKeys = Object.keys(strokeDiff);
 
-      if (strokeKeys.length > 0 && strokeKeys.length <= 25000) {
+      if (strokeKeys.length <= 25000) {
         state.history.push({
           type: 'diff',
           w: state.w,
@@ -3271,8 +3280,18 @@
           revision: documentRevision,
           diff: strokeDiff
         });
-        state.lastHistoryPixels = null; // Free baseline memory when delta diff was captured from stroke
-      } else if (strokeKeys.length > 25000) {
+        // Mutate baseline in-place in O(K) time to maintain continuous integrity across operations
+        if (!state.lastHistoryPixels) {
+          state.lastHistoryPixels = { ...currPixels };
+        } else {
+          for (let i = 0; i < strokeKeys.length; i++) {
+            const k = strokeKeys[i];
+            const newVal = strokeDiff[k][1];
+            if (newVal === null || newVal === undefined) delete state.lastHistoryPixels[k];
+            else state.lastHistoryPixels[k] = newVal;
+          }
+        }
+      } else {
         state.history.push({
           type: 'snapshot',
           w: state.w,
@@ -3284,10 +3303,15 @@
         state.lastHistoryPixels = { ...currPixels };
       }
     } else {
-      const prevPixels = state.lastHistoryPixels || {};
+      // Fallback for non-stroke tools (Bucket, Line, Rect, Circle, Clear, Paste, Script)
+      state.activeStrokeChanges = null;
+      if (!state.lastHistoryPixels) {
+        state.lastHistoryPixels = {};
+      }
+      const prevPixels = state.lastHistoryPixels;
       const diff = calculatePixelDiff(prevPixels, currPixels);
       const diffKeys = Object.keys(diff);
-      if (diffKeys.length === 0 && lastEntry.title === state.title) {
+      if (diffKeys.length === 0 && lastEntry && lastEntry.title === state.title) {
         return;
       }
 
@@ -3300,6 +3324,12 @@
           revision: documentRevision,
           diff: diff
         });
+        for (let i = 0; i < diffKeys.length; i++) {
+          const k = diffKeys[i];
+          const newVal = diff[k][1];
+          if (newVal === null || newVal === undefined) delete state.lastHistoryPixels[k];
+          else state.lastHistoryPixels[k] = newVal;
+        }
       } else {
         state.history.push({
           type: 'snapshot',
@@ -3309,8 +3339,8 @@
           revision: documentRevision,
           pixels: { ...currPixels }
         });
+        state.lastHistoryPixels = { ...currPixels };
       }
-      state.lastHistoryPixels = { ...currPixels };
     }
 
     state.historyIndex = state.history.length - 1;
@@ -4149,6 +4179,17 @@ Do not include conversational greetings or postscripts.`;
     state.h = backup.h || state.h;
     state.title = backup.title || state.title;
     if (dom.docTitle) dom.docTitle.value = state.title;
+
+    const currentFileId = currentFileName || (currentFileHandle ? currentFileHandle.name : null);
+    const backupFileId = backup.fileName || backup.docId || null;
+    if (currentFileId && backupFileId && currentFileId !== backupFileId) {
+      currentFileHandle = null;
+      currentFileName = null;
+      clearPersistedFileHandle();
+      state.title = backup.title ? `Restored - ${backup.title}` : 'Restored Artwork';
+      if (dom.docTitle) dom.docTitle.value = state.title;
+    }
+
     const cell = getArtworkCell();
     if (cell) {
       cell.size = { w: state.w, h: state.h };
@@ -4162,6 +4203,7 @@ Do not include conversational greetings or postscripts.`;
     markDocumentMutation('restore-backup');
     if (dom.recoveryBanner) dom.recoveryBanner.classList.add('hidden');
     await clearPreReloadBackup();
+    updateDocumentTitle();
     showToast(`Restored backup from ${new Date(backup.time || Date.now()).toLocaleTimeString()}!`, 'success');
     return true;
   }
@@ -4276,119 +4318,126 @@ Do not include conversational greetings or postscripts.`;
   let activeSavePromise = Promise.resolve();
   let saveSequenceCounter = 0;
   let lastCompletedSaveSeq = 0;
+  let isNativeSaving = false;
 
   function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
     const snapshotRevision = documentRevision;
     const saveSeq = ++saveSequenceCounter;
     const text = flushSourceCode();
+    isNativeSaving = true;
 
     const doSave = async () => {
-      // Prevent stale out-of-order writes if a newer queued save already completed
-      if (saveSeq < lastCompletedSaveSeq && !forceSaveAs) {
-        return;
-      }
+      try {
+        // Prevent stale out-of-order writes if a newer queued save already completed
+        if (saveSeq < lastCompletedSaveSeq && !forceSaveAs) {
+          return;
+        }
 
-      // Direct overwrite to existing handle
-      if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
-        try {
-          if (currentFileHandle.queryPermission) {
-            const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
-            if (perm !== 'granted') {
-              const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
-              if (req !== 'granted') {
-                showToast('Write permission to file was denied.', 'error');
-                return;
+        // Direct overwrite to existing handle
+        if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
+          try {
+            if (currentFileHandle.queryPermission) {
+              const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+              if (perm !== 'granted') {
+                const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
+                if (req !== 'granted') {
+                  showToast('Write permission to file was denied.', 'error');
+                  return;
+                }
               }
             }
+            const writable = await currentFileHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            try {
+              const fresh = await currentFileHandle.getFile();
+              lastKnownFileModified = fresh.lastModified;
+            } catch (_) {
+              lastKnownFileModified = Date.now();
+            }
+            lastSavedContent = text;
+            pendingExternalConflict = null;
+            const btnReload = document.getElementById('btn-reload-file');
+            if (btnReload) {
+              btnReload.classList.remove('pulse-warning');
+              btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+            }
+            await persistFileHandle(currentFileHandle);
+            try {
+              _storage.setItem('noiradix_pixelart_file_name', currentFileName);
+              _storage.setItem('pix2_last_saved_content', text);
+              _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+            } catch (_) {}
+            lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+            lastSavedRevision = snapshotRevision;
+            setDirty(documentRevision !== lastSavedRevision);
+            triggerAutosave(true);
+            showToast(`Saved to ${currentFileHandle.name}!`);
+            return;
+          } catch (err) {
+            console.warn('Direct overwrite failed, prompting Save As:', err);
           }
-          const writable = await currentFileHandle.createWritable();
-          await writable.write(text);
-          await writable.close();
-          try {
-            const fresh = await currentFileHandle.getFile();
-            lastKnownFileModified = fresh.lastModified;
-          } catch (_) {
-            lastKnownFileModified = Date.now();
-          }
-          lastSavedContent = text;
-          pendingExternalConflict = null;
-          const btnReload = document.getElementById('btn-reload-file');
-          if (btnReload) {
-            btnReload.classList.remove('pulse-warning');
-            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-          }
-          await persistFileHandle(currentFileHandle);
-          try {
-            _storage.setItem('noiradix_pixelart_file_name', currentFileName);
-            _storage.setItem('pix2_last_saved_content', text);
-            _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-          } catch (_) {}
-          triggerAutosave(true);
-          lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-          lastSavedRevision = snapshotRevision;
-          setDirty(documentRevision !== lastSavedRevision);
-          showToast(`Saved to ${currentFileHandle.name}!`);
-          return;
-        } catch (err) {
-          console.warn('Direct overwrite failed, prompting Save As:', err);
         }
-      }
 
-      // Save As via File System Access API
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-        try {
-          const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
-          const handle = await window.showSaveFilePicker({
-            suggestedName: suggested,
-            types: [{
-              description: 'PIX2 Sprite File (*.pix2)',
-              accept: { 'text/plain': ['.pix2'] }
-            }]
-          });
-          const writable = await handle.createWritable();
-          await writable.write(text);
-          await writable.close();
-          currentFileHandle = handle;
-          currentFileName = handle.name;
-          state.title = handle.name.replace(/\.[^/.]+$/, '');
-          if (dom.docTitle) dom.docTitle.value = state.title;
+        // Save As via File System Access API
+        if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
           try {
-            const fresh = await handle.getFile();
-            lastKnownFileModified = fresh.lastModified;
-          } catch (_) {
-            lastKnownFileModified = Date.now();
+            const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
+            const handle = await window.showSaveFilePicker({
+              suggestedName: suggested,
+              types: [{
+                description: 'PIX2 Sprite File (*.pix2)',
+                accept: { 'text/plain': ['.pix2'] }
+              }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            currentFileHandle = handle;
+            currentFileName = handle.name;
+            state.title = handle.name.replace(/\.[^/.]+$/, '');
+            if (dom.docTitle) dom.docTitle.value = state.title;
+            try {
+              const fresh = await handle.getFile();
+              lastKnownFileModified = fresh.lastModified;
+            } catch (_) {
+              lastKnownFileModified = Date.now();
+            }
+            lastSavedContent = text;
+            pendingExternalConflict = null;
+            const btnReload = document.getElementById('btn-reload-file');
+            if (btnReload) {
+              btnReload.classList.remove('pulse-warning');
+              btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+            }
+            await persistFileHandle(handle);
+            try {
+              _storage.setItem('noiradix_pixelart_file_name', currentFileName);
+              _storage.setItem('pix2_last_saved_content', text);
+              _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+            } catch (_) {}
+            lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+            lastSavedRevision = snapshotRevision;
+            setDirty(documentRevision !== lastSavedRevision);
+            triggerAutosave(true);
+            showToast(`Saved as ${handle.name}!`);
+            return;
+          } catch (err) {
+            if (err.name === 'AbortError') return;
+            console.warn('Save file picker failed, falling back to download:', err);
           }
-          lastSavedContent = text;
-          pendingExternalConflict = null;
-          const btnReload = document.getElementById('btn-reload-file');
-          if (btnReload) {
-            btnReload.classList.remove('pulse-warning');
-            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-          }
-          await persistFileHandle(handle);
-          try {
-            _storage.setItem('noiradix_pixelart_file_name', currentFileName);
-            _storage.setItem('pix2_last_saved_content', text);
-            _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-          } catch (_) {}
-          triggerAutosave(true);
-          lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-          lastSavedRevision = snapshotRevision;
-          setDirty(documentRevision !== lastSavedRevision);
-          showToast(`Saved as ${handle.name}!`);
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return;
-          console.warn('Save file picker failed, falling back to download:', err);
         }
-      }
 
-      // Fallback: Blob download
-      savePix2File();
-      lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-      lastSavedRevision = snapshotRevision;
-      setDirty(documentRevision !== lastSavedRevision);
+        // Fallback: Blob download
+        savePix2File();
+        lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+        lastSavedRevision = snapshotRevision;
+        setDirty(documentRevision !== lastSavedRevision);
+        triggerAutosave(true);
+      } finally {
+        isNativeSaving = false;
+      }
     };
 
     activeSavePromise = activeSavePromise.then(doSave, doSave);
@@ -4566,7 +4615,7 @@ Do not include conversational greetings or postscripts.`;
   }
 
   async function checkAndReloadExternalFileChanges(force = false) {
-    if (!currentFileHandle || isExternalReloading) return;
+    if (!currentFileHandle || isExternalReloading || isNativeSaving) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
     try {
@@ -4574,21 +4623,25 @@ Do not include conversational greetings or postscripts.`;
       const file = await currentFileHandle.getFile();
       const currentModified = file.lastModified;
 
-      // Ensure lastSavedContent is hydrated from storage if not set in memory
-      if (!lastSavedContent) {
-        lastSavedContent = _storage.getItem('pix2_last_saved_content') || '';
-      }
-
-      // If baseline timestamp is not yet recorded, record it and baseline content
+      // If baseline timestamp is not yet recorded, record it and baseline content from file
       if (lastKnownFileModified === 0) {
         lastKnownFileModified = currentModified;
         const curText = await file.text();
-        if (!lastSavedContent) {
-          lastSavedContent = curText;
-          try { _storage.setItem('pix2_last_saved_content', curText); } catch (_) {}
-        }
+        lastSavedContent = curText;
+        try { _storage.setItem('pix2_last_saved_content', curText); } catch (_) {}
         isExternalReloading = false;
         return;
+      }
+
+      // If filesystem timestamp has not changed, and baseline is recorded, no external change occurred
+      if (currentModified === lastKnownFileModified && !force && !pendingExternalConflict && lastSavedContent) {
+        isExternalReloading = false;
+        return;
+      }
+
+      // Ensure lastSavedContent is hydrated from storage if not set in memory
+      if (!lastSavedContent) {
+        lastSavedContent = _storage.getItem('pix2_last_saved_content') || '';
       }
 
       const text = await file.text();
@@ -4599,12 +4652,10 @@ Do not include conversational greetings or postscripts.`;
 
       const normDisk = normalizeForCompare(text);
       const normSaved = normalizeForCompare(lastSavedContent);
-      const diskHash = hashString(normDisk);
-      const savedHash = hashString(normSaved);
 
-      // Sub-second modification & content hash check:
+      // Strict content comparison:
       // If content on disk matches our last saved baseline, NO external modification occurred!
-      if (diskHash === savedHash || normDisk === normSaved) {
+      if (normDisk === normSaved) {
         lastKnownFileModified = currentModified;
         if (pendingExternalConflict) {
           pendingExternalConflict = null;
@@ -5651,6 +5702,7 @@ Do not include conversational greetings or postscripts.`;
       renderRulers,
       drawRulerHighlights,
       updateRulerHighlight,
+      invalidateRulerCache,
       calculatePixelDiff,
       applyPixelDiff,
       pushHistory,
