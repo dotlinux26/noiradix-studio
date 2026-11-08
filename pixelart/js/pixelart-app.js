@@ -533,7 +533,7 @@
     container.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-      if (e.target.closest('button, select, input, textarea, .pa-btn, .pa-icon-btn, .pa-color-slot, .pa-swatch, .pa-preset-chip, .pa-status-btn, .pa-mode-badge, .pa-autosave-pill, .pa-file-path-pill, .pa-file-source-badge, .pa-save-status-badge, .pa-btn-icon-xs, .pa-ai-ratio-btn')) return;
+      if (e.target.closest('button, select, input, textarea, [role="button"], .pa-dim-badge, .pa-btn, .pa-icon-btn, .pa-color-slot, .pa-swatch, .pa-preset-chip, .pa-status-btn, .pa-mode-badge, .pa-autosave-pill, .pa-file-path-pill, .pa-file-source-badge, .pa-save-status-badge, .pa-btn-icon-xs, .pa-ai-ratio-btn')) return;
       isDown = true;
       isDragging = false;
       startX = e.clientX;
@@ -854,13 +854,13 @@
   // CANVAS RENDERING & HIGH PRECISION GRID
   // ===========================================================================
   function resizeCanvasesToZoom() {
-    const totalW = state.w * state.zoom;
-    const totalH = state.h * state.zoom;
+    const totalW = Math.max(1, Math.round(state.w * state.zoom));
+    const totalH = Math.max(1, Math.round(state.h * state.zoom));
 
-    dom.canvasMain.width = totalW;
-    dom.canvasMain.height = totalH;
-    dom.canvasPreview.width = totalW;
-    dom.canvasPreview.height = totalH;
+    if (dom.canvasMain.width !== totalW) dom.canvasMain.width = totalW;
+    if (dom.canvasMain.height !== totalH) dom.canvasMain.height = totalH;
+    if (dom.canvasPreview.width !== totalW) dom.canvasPreview.width = totalW;
+    if (dom.canvasPreview.height !== totalH) dom.canvasPreview.height = totalH;
 
     const rulerOffset = state.showRulers ? 24 : 0;
     if (dom.container) {
@@ -880,13 +880,14 @@
     if (dom.rulerTop) dom.rulerTop.style.width = `${totalW}px`;
     if (dom.rulerLeft) dom.rulerLeft.style.height = `${totalH}px`;
     if (dom.btnToggleRulers) dom.btnToggleRulers.classList.toggle('active', state.showRulers);
+    updateContainerTransform();
   }
 
   function repaintCanvas() {
     const ctx = dom.ctxMain;
     const zoom = state.zoom;
-    const totalW = state.w * zoom;
-    const totalH = state.h * zoom;
+    const totalW = Math.max(1, Math.round(state.w * zoom));
+    const totalH = Math.max(1, Math.round(state.h * zoom));
 
     ctx.clearRect(0, 0, totalW, totalH);
 
@@ -903,8 +904,8 @@
     } else {
       // 'transparent' default: Cached 1:1 Pixel-Aligned Checkerboard Pattern (Zero lag even at 1024x1024)
       const isDark = document.body.classList.contains('dark-theme');
-      const tileArtPixels = zoom >= 4 ? 1 : (zoom === 1 ? 16 : 8);
-      const tileCanvasSize = tileArtPixels * zoom;
+      const tileArtPixels = zoom >= 4 ? 1 : (zoom <= 1 ? 16 : 8);
+      const tileCanvasSize = Math.max(8, Math.round(tileArtPixels * zoom));
       const pattern = getCheckerPattern(ctx, tileCanvasSize, isDark);
       ctx.fillStyle = pattern;
       ctx.fillRect(0, 0, totalW, totalH);
@@ -1032,23 +1033,28 @@
     const ch = state.h;
     const zoom = state.zoom;
 
-    // Adaptive step for tick numbering to prevent overlapping labels
-    let step = 4;
-    if (zoom < 3) step = 32;
-    else if (zoom < 6) step = 16;
-    else if (zoom < 12) step = 8;
-    else step = 4;
+    // Adaptive step so each numbered tick is >= 32px
+    const minTickPx = 32;
+    let interval = 1;
+    const allowedSteps = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+    for (const s of allowedSteps) {
+      if (s * zoom >= minTickPx) {
+        interval = s;
+        break;
+      }
+      interval = s;
+    }
+    state._rulerInterval = interval;
 
     // Top ruler ticks
     dom.rulerTop.innerHTML = '';
     const fragTop = document.createDocumentFragment();
-    for (let x = 0; x < cw; x++) {
+    for (let x = 0; x < cw; x += interval) {
+      const span = Math.min(interval, cw - x);
       const tick = document.createElement('div');
       tick.className = 'pa-ruler-tick';
-      tick.style.width = `${zoom}px`;
-      if (x % step === 0 || x === cw - 1) {
-        tick.textContent = String(x);
-      }
+      tick.style.width = `${Math.round(span * zoom)}px`;
+      tick.textContent = String(x);
       fragTop.appendChild(tick);
     }
     dom.rulerTop.appendChild(fragTop);
@@ -1056,13 +1062,12 @@
     // Left ruler ticks
     dom.rulerLeft.innerHTML = '';
     const fragLeft = document.createDocumentFragment();
-    for (let y = 0; y < ch; y++) {
+    for (let y = 0; y < ch; y += interval) {
+      const span = Math.min(interval, ch - y);
       const tick = document.createElement('div');
       tick.className = 'pa-ruler-tick-v';
-      tick.style.height = `${zoom}px`;
-      if (y % step === 0 || y === ch - 1) {
-        tick.textContent = String(y);
-      }
+      tick.style.height = `${Math.round(span * zoom)}px`;
+      tick.textContent = String(y);
       fragLeft.appendChild(tick);
     }
     dom.rulerLeft.appendChild(fragLeft);
@@ -1074,24 +1079,28 @@
   function updateRulerHighlight(px, py) {
     if (!state.showRulers || !dom.rulerTop || !dom.rulerLeft) return;
 
-    if (lastActiveTickX !== px) {
+    const interval = state._rulerInterval || 1;
+    const tickIdxX = px !== null ? Math.floor(px / interval) : null;
+    const tickIdxY = py !== null ? Math.floor(py / interval) : null;
+
+    if (lastActiveTickX !== tickIdxX) {
       if (lastActiveTickX !== null && dom.rulerTop.children[lastActiveTickX]) {
         dom.rulerTop.children[lastActiveTickX].classList.remove('active-ruler-tick');
       }
-      if (px !== null && dom.rulerTop.children[px]) {
-        dom.rulerTop.children[px].classList.add('active-ruler-tick');
+      if (tickIdxX !== null && dom.rulerTop.children[tickIdxX]) {
+        dom.rulerTop.children[tickIdxX].classList.add('active-ruler-tick');
       }
-      lastActiveTickX = px;
+      lastActiveTickX = tickIdxX;
     }
 
-    if (lastActiveTickY !== py) {
+    if (lastActiveTickY !== tickIdxY) {
       if (lastActiveTickY !== null && dom.rulerLeft.children[lastActiveTickY]) {
         dom.rulerLeft.children[lastActiveTickY].classList.remove('active-ruler-tick');
       }
-      if (py !== null && dom.rulerLeft.children[py]) {
-        dom.rulerLeft.children[py].classList.add('active-ruler-tick');
+      if (tickIdxY !== null && dom.rulerLeft.children[tickIdxY]) {
+        dom.rulerLeft.children[tickIdxY].classList.add('active-ruler-tick');
       }
-      lastActiveTickY = py;
+      lastActiveTickY = tickIdxY;
     }
   }
 
@@ -1277,9 +1286,41 @@
     return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 22;
   }
 
+  const ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+
+  function getMaxAllowedZoom() {
+    const maxDim = Math.max(state.w, state.h);
+    return Math.max(1, Math.min(64, Math.floor(16384 / maxDim)));
+  }
+
+  function getNextZoom(currentZoom, direction) {
+    const maxZ = getMaxAllowedZoom();
+    const ladder = ZOOM_LADDER.filter(z => z <= maxZ);
+    if (!ladder.includes(maxZ) && maxZ < 64) ladder.push(maxZ);
+
+    if (direction > 0) {
+      for (const z of ladder) {
+        if (z > currentZoom + 0.001) return z;
+      }
+      return ladder[ladder.length - 1];
+    } else {
+      for (let i = ladder.length - 1; i >= 0; i--) {
+        if (ladder[i] < currentZoom - 0.001) return ladder[i];
+      }
+      return ladder[0];
+    }
+  }
+
+  function formatZoom(z) {
+    if (z < 1) {
+      return `${Math.round(z * 100)}%`;
+    }
+    return Number.isInteger(z) ? `${z}×` : `${z.toFixed(1)}×`;
+  }
+
   function updateContainerTransform() {
     dom.container.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-    dom.zoomLabel.textContent = `${state.zoom}×`;
+    dom.zoomLabel.textContent = formatZoom(state.zoom);
   }
 
   function fitCanvasToViewport() {
@@ -1288,10 +1329,17 @@
     const vpH = dom.viewport.clientHeight - 40 - rulerOffset;
     if (vpW <= 0 || vpH <= 0) return;
 
-    const scaleX = vpW / state.w;
-    const scaleY = vpH / state.h;
-    const bestScale = Math.floor(Math.min(scaleX, scaleY));
-    state.zoom = Math.max(1, Math.min(64, bestScale || 1));
+    const scale = Math.min(vpW / state.w, vpH / state.h);
+    const maxZ = getMaxAllowedZoom();
+    let best = ZOOM_LADDER[0];
+    for (const z of ZOOM_LADDER) {
+      if (z <= scale && z <= maxZ) {
+        best = z;
+      } else {
+        break;
+      }
+    }
+    state.zoom = best;
     state.panX = 0;
     state.panY = 0;
     resizeCanvasesToZoom();
@@ -1519,42 +1567,66 @@
     };
   }
 
+  function renderPixelDirect(px, py, color) {
+    if (!dom.ctxMain) return;
+    const zoom = state.zoom;
+    const x = Math.floor(px * zoom);
+    const y = Math.floor(py * zoom);
+    const sz = Math.max(1, Math.ceil(zoom));
+
+    if (color === null) {
+      if (state.canvasBgMode === 'white') {
+        dom.ctxMain.fillStyle = '#ffffff';
+        dom.ctxMain.fillRect(x, y, sz, sz);
+      } else if (state.canvasBgMode === 'black') {
+        dom.ctxMain.fillStyle = '#000000';
+        dom.ctxMain.fillRect(x, y, sz, sz);
+      } else if (state.canvasBgMode === 'custom') {
+        dom.ctxMain.fillStyle = state.canvasBgColor || '#2a2e3f';
+        dom.ctxMain.fillRect(x, y, sz, sz);
+      } else {
+        const isDark = document.body.classList.contains('dark-theme');
+        const tileArtPixels = zoom >= 4 ? 1 : (zoom <= 1 ? 16 : 8);
+        const tileCanvasSize = Math.max(8, Math.round(tileArtPixels * zoom));
+        dom.ctxMain.fillStyle = getCheckerPattern(dom.ctxMain, tileCanvasSize, isDark);
+        dom.ctxMain.fillRect(x, y, sz, sz);
+      }
+    } else {
+      dom.ctxMain.fillStyle = color;
+      dom.ctxMain.fillRect(x, y, sz, sz);
+    }
+
+    if (state.showGrid && zoom >= 4) {
+      let isDarkBg = document.body.classList.contains('dark-theme');
+      if (state.canvasBgMode === 'black') isDarkBg = true;
+      else if (state.canvasBgMode === 'white') isDarkBg = false;
+      else if (state.canvasBgMode === 'custom') isDarkBg = isColorDark(state.canvasBgColor);
+      dom.ctxMain.strokeStyle = isDarkBg ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)';
+      dom.ctxMain.lineWidth = 1;
+      dom.ctxMain.strokeRect(x + 0.5, y + 0.5, sz, sz);
+    }
+  }
+
   function plotPixelWithSymmetry(cell, x, y, color) {
     if (x < 0 || x >= state.w || y < 0 || y >= state.h) return;
     const w = state.w;
     const h = state.h;
 
-    if (color === null) {
-      delete cell.pixels[`${x},${y}`];
-      plotPixelOnBuffer(x, y, null);
-      if (state.symH) {
-        delete cell.pixels[`${w - 1 - x},${y}`];
-        plotPixelOnBuffer(w - 1 - x, y, null);
+    const plotSingle = (px, py) => {
+      if (color === null) {
+        delete cell.pixels[`${px},${py}`];
+        plotPixelOnBuffer(px, py, null);
+      } else {
+        cell.pixels[`${px},${py}`] = color;
+        plotPixelOnBuffer(px, py, color);
       }
-      if (state.symV) {
-        delete cell.pixels[`${x},${h - 1 - y}`];
-        plotPixelOnBuffer(x, h - 1 - y, null);
-      }
-      if (state.symH && state.symV) {
-        delete cell.pixels[`${w - 1 - x},${h - 1 - y}`];
-        plotPixelOnBuffer(w - 1 - x, h - 1 - y, null);
-      }
-    } else {
-      cell.pixels[`${x},${y}`] = color;
-      plotPixelOnBuffer(x, y, color);
-      if (state.symH) {
-        cell.pixels[`${w - 1 - x},${y}`] = color;
-        plotPixelOnBuffer(w - 1 - x, y, color);
-      }
-      if (state.symV) {
-        cell.pixels[`${x},${h - 1 - y}`] = color;
-        plotPixelOnBuffer(x, h - 1 - y, color);
-      }
-      if (state.symH && state.symV) {
-        cell.pixels[`${w - 1 - x},${h - 1 - y}`] = color;
-        plotPixelOnBuffer(w - 1 - x, h - 1 - y, color);
-      }
-    }
+      renderPixelDirect(px, py, color);
+    };
+
+    plotSingle(x, y);
+    if (state.symH) plotSingle(w - 1 - x, y);
+    if (state.symV) plotSingle(x, h - 1 - y);
+    if (state.symH && state.symV) plotSingle(w - 1 - x, h - 1 - y);
   }
 
   function onPointerDown(e) {
@@ -1701,10 +1773,8 @@
     // Pen / Eraser
     if (state.currentTool === 'pen') {
       plotPixelWithSymmetry(cell, x, y, activeColor);
-      repaintCanvas();
     } else if (state.currentTool === 'eraser') {
       plotPixelWithSymmetry(cell, x, y, null);
-      repaintCanvas();
     }
   }
 
@@ -1809,7 +1879,6 @@
       });
       state.lastX = x;
       state.lastY = y;
-      requestCanvasRepaint();
     } else if (state.currentTool === 'line') {
       drawPreviewLine(state.dragStartX, state.dragStartY, x, y, activeColor);
     } else if (state.currentTool === 'rect') {
@@ -3554,8 +3623,8 @@ Do not include conversational greetings or postscripts.`;
     dom.viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
       const oldZoom = state.zoom;
-      const delta = e.deltaY < 0 ? 1 : -1;
-      const newZoom = Math.max(1, Math.min(64, oldZoom + delta));
+      const direction = e.deltaY < 0 ? 1 : -1;
+      const newZoom = getNextZoom(oldZoom, direction);
       if (newZoom === oldZoom) return;
 
       // Analytical Invariant Cursor-Centered Zoom:
@@ -3907,13 +3976,13 @@ Do not include conversational greetings or postscripts.`;
     }
 
     document.getElementById('btn-zoom-in').addEventListener('click', () => {
-      state.zoom = Math.min(64, state.zoom + 2);
+      state.zoom = getNextZoom(state.zoom, 1);
       resizeCanvasesToZoom();
       repaintCanvas();
       renderRulers();
     });
     document.getElementById('btn-zoom-out').addEventListener('click', () => {
-      state.zoom = Math.max(1, state.zoom - 2);
+      state.zoom = getNextZoom(state.zoom, -1);
       resizeCanvasesToZoom();
       repaintCanvas();
       renderRulers();
@@ -3921,6 +3990,8 @@ Do not include conversational greetings or postscripts.`;
     document.getElementById('btn-zoom-fit').addEventListener('click', fitCanvasToViewport);
     document.getElementById('btn-zoom-100').addEventListener('click', () => {
       state.zoom = 1;
+      state.panX = 0;
+      state.panY = 0;
       resizeCanvasesToZoom();
       repaintCanvas();
       renderRulers();
@@ -3932,6 +4003,7 @@ Do not include conversational greetings or postscripts.`;
         state.showRulers = !state.showRulers;
         localStorage.setItem('pix2_pixelart_rulers', String(state.showRulers));
         resizeCanvasesToZoom();
+        repaintCanvas();
         renderRulers();
         showToast(`Canvas Rulers: ${state.showRulers ? 'ON' : 'OFF'}`);
       });
@@ -3939,7 +4011,14 @@ Do not include conversational greetings or postscripts.`;
 
     // Dimension Badge Click / Keyboard trigger to open Resize Canvas Modal
     if (dom.dimBadge) {
-      dom.dimBadge.addEventListener('click', openResizeCanvasModal);
+      dom.dimBadge.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+      });
+      dom.dimBadge.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openResizeCanvasModal();
+      });
       dom.dimBadge.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();

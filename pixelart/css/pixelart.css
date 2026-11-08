@@ -253,11 +253,13 @@ html, body {
   50% { opacity: 1; transform: scale(1.2); }
 }
 
+button.pa-dim-badge,
 .pa-dim-badge {
   height: 28px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   font-size: 11px;
   font-family: var(--font-mono);
@@ -270,8 +272,11 @@ html, body {
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
+  line-height: normal;
+  outline: none;
 }
 
+button.pa-dim-badge:hover,
 .pa-dim-badge:hover {
   background: var(--bg-secondary);
   border-color: var(--accent-primary);
@@ -279,6 +284,7 @@ html, body {
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
+button.pa-dim-badge:focus-visible,
 .pa-dim-badge:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
