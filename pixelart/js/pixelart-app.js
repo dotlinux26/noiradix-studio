@@ -380,10 +380,21 @@
     } else if (documentRevision === lastSavedRevision) {
       documentRevision++;
     }
-    if (typeof document === 'undefined') return;
 
     const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || `${sanitizeFilename(state.title)}.pix2`;
     const isLinked = Boolean(currentFileHandle);
+
+    if (typeof paProjectSessions !== 'undefined' && activePaProjectId) {
+      const cur = paProjectSessions.find(p => p.id === activePaProjectId);
+      if (cur) {
+        cur.isDirty = dirty;
+        cur.fileName = fileName;
+      }
+    }
+
+    if (typeof document === 'undefined') return;
+
+    renderPaProjectTabs();
 
     document.title = (dirty || !isLinked)
       ? `● ${fileName} — NOIRADIX PixelArt`
@@ -592,10 +603,26 @@
 
   function createPaProjectSession(title, doc, fileHandle = null) {
     saveCurrentPaSession();
+
+    // If the active only session is pristine initial untitled with zero edits, replace it
+    if (paProjectSessions.length === 1 &&
+        paProjectSessions[0].id === 'pa_initial' &&
+        !paProjectSessions[0].isDirty &&
+        (!paProjectSessions[0].history || paProjectSessions[0].history.length <= 1)) {
+      const initCell = getArtworkCell();
+      if (!initCell || !initCell.pixels || Object.keys(initCell.pixels).length === 0) {
+        paProjectSessions.splice(0, 1);
+      }
+    }
+
+    const cell = (doc && doc.cells) ? (doc.cells.artwork || Object.values(doc.cells)[0]) : null;
+    const docW = (cell && cell.size && cell.size.w) || (doc && doc.grid && doc.grid.cell_size && doc.grid.cell_size.w) || state.w || 64;
+    const docH = (cell && cell.size && cell.size.h) || (doc && doc.grid && doc.grid.cell_size && doc.grid.cell_size.h) || state.h || 64;
+
     const newId = 'pa_proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const session = new PaProjectSession(newId, title, doc, fileHandle);
-    session.w = state.w;
-    session.h = state.h;
+    session.w = docW;
+    session.h = docH;
     paProjectSessions.push(session);
     switchPaProjectSession(newId);
     return session;
@@ -1228,6 +1255,23 @@
     renderRulers();
     syncCanvasToSource();
     triggerAutosave();
+
+    if (typeof paProjectSessions !== 'undefined' && activePaProjectId) {
+      const cur = paProjectSessions.find(p => p.id === activePaProjectId);
+      if (cur) {
+        cur.title = state.title;
+        cur.doc = state.doc;
+        cur.w = state.w;
+        cur.h = state.h;
+        cur.fileName = `${state.title}.pix2`;
+        cur.fileHandle = null;
+        cur.isDirty = false;
+        cur.history = [...state.history];
+        cur.historyIndex = state.historyIndex;
+        cur.isolatedNodeId = null;
+        renderPaProjectTabs();
+      }
+    }
   }
 
   function getArtworkCell() {
@@ -4966,6 +5010,8 @@ Do not include conversational greetings or postscripts.`;
           } catch (_) {}
           markDocumentSaved();
           triggerAutosave(true);
+          saveCurrentPaSession();
+          renderPaProjectTabs();
           showToast(`Opened ${file.name} from disk!`);
           return;
         } else if (file.type.startsWith('image/')) {
@@ -4979,6 +5025,8 @@ Do not include conversational greetings or postscripts.`;
           pendingExternalConflict = null;
           await clearPersistedFileHandle();
           markDocumentMutation('import-image');
+          saveCurrentPaSession();
+          renderPaProjectTabs();
           return;
         }
       } catch (err) {
@@ -5197,6 +5245,8 @@ Do not include conversational greetings or postscripts.`;
         } catch (_) {}
         markDocumentSaved();
         triggerAutosave(true);
+        saveCurrentPaSession();
+        renderPaProjectTabs();
         showToast(`Opened ${file.name}`);
       };
       reader.readAsText(file);
@@ -6440,7 +6490,7 @@ Do not include conversational greetings or postscripts.`;
       }
     });
 
-    // Multi-File Drag & Drop Tabs Router (.pix2)
+    // Multi-File Drag & Drop Tabs Router (.pix2, .txt, images)
     window.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -6450,22 +6500,56 @@ Do not include conversational greetings or postscripts.`;
     window.addEventListener('drop', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+      if (!e.dataTransfer) return;
+
+      // Extract FileSystemFileHandle if available via W3C File System Access API
+      const handleMap = new Map();
+      if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        for (let i = 0; i < e.dataTransfer.items.length; i++) {
+          const item = e.dataTransfer.items[i];
+          if (typeof item.getAsFileSystemHandle === 'function') {
+            try {
+              const handle = await item.getAsFileSystemHandle();
+              if (handle && handle.kind === 'file') {
+                handleMap.set(handle.name, handle);
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
 
       const files = Array.from(e.dataTransfer.files);
       const pix2Files = files.filter(f => f.name.toLowerCase().endsWith('.pix2') || f.name.toLowerCase().endsWith('.txt'));
+      const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(f.name));
 
+      // 1. Ingest PIX2 documents into independent project tabs
       if (pix2Files.length > 0) {
         for (const pf of pix2Files) {
           try {
             const text = await pf.text();
-            const doc = PIX2.parse(text);
-            const session = createPaProjectSession(pf.name.replace(/\.[^/.]+$/, ''), doc, null);
+            const doc = _PIX2.parse(text, { profile: 'pixelart' });
+            const handle = handleMap.get(pf.name) || null;
+            const session = createPaProjectSession(pf.name.replace(/\.[^/.]+$/, ''), doc, handle);
             session.fileName = pf.name;
+            session.isDirty = false;
             renderPaProjectTabs();
             showToast(`Opened ${pf.name} as tab!`, 'success');
           } catch (err) {
             showToast(`Error parsing ${pf.name}: ${err.message}`, 'error');
+          }
+        }
+      }
+
+      // 2. Ingest raster image files
+      if (imageFiles.length > 0) {
+        for (const imgFile of imageFiles) {
+          try {
+            importImageToPixelArt(imgFile);
+            showToast(`Imported ${imgFile.name}!`, 'success');
+          } catch (err) {
+            showToast(`Error importing ${imgFile.name}: ${err.message}`, 'error');
           }
         }
       }

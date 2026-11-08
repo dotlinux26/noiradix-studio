@@ -343,6 +343,38 @@ console.log('\nTest 8: PixelArt 2.0 DOM Contract Verification');
   console.log('  [PASS] PixelArt 2.0 Structure, Layers, and Region Select UI contract verified');
 }
 
+// Test 9: PixelArt Multi-Document Session Synchronization & Dimension Propagation
+console.log('\nTest 9: PixelArt Multi-Document Session Synchronization & Dimension Propagation');
+{
+  const paApp = require('../pixelart/js/pixelart-app.js');
+  const doc32 = PIX2.parse(`@pix2 1.1
+@meta
+  title: "Sprite32"
+@grid
+  columns: 1
+  rows: 1
+  default_cell: 32x32
+@cell s32
+  size: 32x32
+  p 0,0 #123456
+`);
+
+  // Create session with 32x32 document
+  const s32 = paApp.createPaProjectSession('Sprite32', doc32, null);
+  assert.strictEqual(s32.w, 32, 'Session width accurately derived from doc cell size');
+  assert.strictEqual(s32.h, 32, 'Session height accurately derived from doc cell size');
+  assert.strictEqual(paApp.state.w, 32, 'App state width updated to 32');
+  assert.strictEqual(paApp.state.h, 32, 'App state height updated to 32');
+
+  // Verify dirty state propagation to session
+  paApp.setDirty(true);
+  assert.strictEqual(s32.isDirty, true, 'Session isDirty synchronized via setDirty(true)');
+  paApp.setDirty(false);
+  assert.strictEqual(s32.isDirty, false, 'Session isDirty synchronized via setDirty(false)');
+
+  console.log('  [PASS] Multi-document session dimensions and dirty state synchronized accurately');
+}
+
 console.log('\n====================================================');
-console.log('ALL PIXELART 2.0 & MULTI-TRACK TESTS PASSED (8/8)');
+console.log('ALL PIXELART 2.0 & MULTI-TRACK TESTS PASSED (9/9)');
 console.log('====================================================\n');
