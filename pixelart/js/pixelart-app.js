@@ -503,11 +503,14 @@
           console.warn('Could not read persisted file handle directly:', handleErr);
         }
 
-        const diskHash = hashString(diskText);
-        const autosaveHasUnsavedEdits = autosavePayload && ((autosavePayload.revision || 0) > (autosavePayload.lastSavedRevision || 0));
+        const diskHash = hashString(normalizeForCompare(diskText));
+        const autosaveHasUnsavedEdits = autosavePayload && (
+          autosavePayload.isDirty === true ||
+          (autosavePayload.revision !== undefined && autosavePayload.lastSavedRevision !== undefined && autosavePayload.revision !== autosavePayload.lastSavedRevision)
+        );
         const autosaveMatchesDiskBaseline = autosavePayload && (!autosavePayload.baseContentHash || autosavePayload.baseContentHash === diskHash);
 
-        // If autosave has newer unsaved edits and disk has not drifted, recover autosave:
+        // If autosave has unsaved edits and disk has not drifted, recover autosave:
         if (autosaveHasUnsavedEdits && autosaveMatchesDiskBaseline) {
           createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || state.title || 'Recovered Artwork');
           const cell = getArtworkCell();
@@ -545,6 +548,8 @@
           const ok = applySourceCodeToCanvas();
           if (ok) {
             documentRestored = true;
+            lastSavedContent = lastSavedText;
+            lastKnownFileModified = Number(_storage.getItem('pix2_last_saved_time') || 0);
             setDirty(false);
           }
         } catch (_) {}
@@ -1204,6 +1209,9 @@
   // ===========================================================================
   // CANVAS RULERS & ADAPTIVE PIXEL TICKS (Canvas 2D Accelerated)
   // ===========================================================================
+  let rulerStaticTop = null;
+  let rulerStaticLeft = null;
+
   function renderRulers() {
     if (!dom.rulerTop || !dom.rulerLeft) return;
 
@@ -1227,10 +1235,30 @@
     const totalH = Math.max(1, Math.round(ch * zoom));
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    ctxT.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctxL.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const isDark = document.body.classList.contains('dark-theme');
+    // Create or resize offscreen static caches to avoid rebuilding ticks on every mousemove
+    if (typeof document !== 'undefined') {
+      if (!rulerStaticTop) rulerStaticTop = document.createElement('canvas');
+      if (!rulerStaticLeft) rulerStaticLeft = document.createElement('canvas');
+
+      const rwT = Math.min(16384, Math.round(totalW * dpr));
+      const rhT = Math.round(24 * dpr);
+      if (rulerStaticTop.width !== rwT) rulerStaticTop.width = rwT;
+      if (rulerStaticTop.height !== rhT) rulerStaticTop.height = rhT;
+
+      const rwL = Math.round(24 * dpr);
+      const rhL = Math.min(16384, Math.round(totalH * dpr));
+      if (rulerStaticLeft.width !== rwL) rulerStaticLeft.width = rwL;
+      if (rulerStaticLeft.height !== rhL) rulerStaticLeft.height = rhL;
+    }
+
+    const sCtxT = rulerStaticTop ? rulerStaticTop.getContext('2d') : ctxT;
+    const sCtxL = rulerStaticLeft ? rulerStaticLeft.getContext('2d') : ctxL;
+
+    if (sCtxT) sCtxT.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (sCtxL) sCtxL.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const isDark = typeof document !== 'undefined' && document.body && document.body.classList.contains('dark-theme');
     const bgColor = isDark ? '#141722' : '#f8fafc';
     const textColor = isDark ? '#94a3b8' : '#64748b';
     const tickColor = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.45)';
@@ -1254,133 +1282,177 @@
     const startX = Math.max(0, Math.floor((minX - interval) / interval) * interval);
     const endX = Math.min(cw, Math.ceil((maxX + interval) / interval) * interval);
 
-    // 1. RENDER TOP RULER
-    ctxT.fillStyle = bgColor;
-    ctxT.fillRect(0, 0, totalW, 24);
+    // 1. RENDER TOP RULER (STATIC BASELINE)
+    if (sCtxT) {
+      sCtxT.fillStyle = bgColor;
+      sCtxT.fillRect(0, 0, totalW, 24);
 
-    // Active cursor highlight
+      sCtxT.font = '9px "JetBrains Mono", monospace';
+      sCtxT.textBaseline = 'top';
+
+      // Sub-pixel tick marks when zoom >= 6
+      if (zoom >= 6) {
+        sCtxT.strokeStyle = subTickColor;
+        sCtxT.lineWidth = 1;
+        sCtxT.beginPath();
+        const subStart = Math.max(0, minX - 2);
+        const subEnd = Math.min(cw, maxX + 2);
+        for (let x = subStart; x < subEnd; x++) {
+          if (x % interval !== 0) {
+            const posX = Math.floor(x * zoom) + 0.5;
+            sCtxT.moveTo(posX, 16);
+            sCtxT.lineTo(posX, 24);
+          }
+        }
+        sCtxT.stroke();
+      }
+
+      // Main interval tick marks
+      sCtxT.strokeStyle = tickColor;
+      sCtxT.lineWidth = 1;
+      sCtxT.beginPath();
+      for (let x = startX; x <= endX; x += interval) {
+        const posX = Math.floor(x * zoom) + 0.5;
+        sCtxT.moveTo(posX, 10);
+        sCtxT.lineTo(posX, 24);
+      }
+      const endEdgeX = Math.floor(cw * zoom) + 0.5;
+      sCtxT.moveTo(endEdgeX, 6);
+      sCtxT.lineTo(endEdgeX, 24);
+      sCtxT.stroke();
+
+      // Numbers
+      for (let x = startX; x <= endX; x += interval) {
+        const posX = Math.floor(x * zoom);
+        sCtxT.fillStyle = textColor;
+        sCtxT.fillText(String(x), posX + 2, 2);
+      }
+    }
+
+    // 2. RENDER LEFT RULER (STATIC BASELINE)
+    if (sCtxL) {
+      const startY = Math.max(0, Math.floor((minY - interval) / interval) * interval);
+      const endY = Math.min(ch, Math.ceil((maxY + interval) / interval) * interval);
+
+      sCtxL.fillStyle = bgColor;
+      sCtxL.fillRect(0, 0, 24, totalH);
+
+      sCtxL.font = '9px "JetBrains Mono", monospace';
+      sCtxL.textBaseline = 'top';
+
+      if (zoom >= 6) {
+        sCtxL.strokeStyle = subTickColor;
+        sCtxL.lineWidth = 1;
+        sCtxL.beginPath();
+        const subStart = Math.max(0, minY - 2);
+        const subEnd = Math.min(ch, maxY + 2);
+        for (let y = subStart; y < subEnd; y++) {
+          if (y % interval !== 0) {
+            const posY = Math.floor(y * zoom) + 0.5;
+            sCtxL.moveTo(16, posY);
+            sCtxL.lineTo(24, posY);
+          }
+        }
+        sCtxL.stroke();
+      }
+
+      // Main interval tick marks
+      sCtxL.strokeStyle = tickColor;
+      sCtxL.lineWidth = 1;
+      sCtxL.beginPath();
+      for (let y = startY; y <= endY; y += interval) {
+        const posY = Math.floor(y * zoom) + 0.5;
+        sCtxL.moveTo(10, posY);
+        sCtxL.lineTo(24, posY);
+      }
+      const endEdgeY = Math.floor(ch * zoom) + 0.5;
+      sCtxL.moveTo(6, endEdgeY);
+      sCtxL.lineTo(24, endEdgeY);
+      sCtxL.stroke();
+
+      // Numbers
+      for (let y = startY; y <= endY; y += interval) {
+        const posY = Math.floor(y * zoom);
+        sCtxL.fillStyle = textColor;
+        sCtxL.fillText(String(y), 2, posY + 2);
+      }
+    }
+
+    drawRulerHighlights();
+  }
+
+  function drawRulerHighlights() {
+    if (!dom.rulerTop || !dom.rulerLeft || !state.showRulers) return;
+    const ctxT = dom.rulerTop.getContext('2d');
+    const ctxL = dom.rulerLeft.getContext('2d');
+    if (!ctxT || !ctxL) return;
+
+    const zoom = state.zoom;
+    const cw = state.w;
+    const ch = state.h;
+    const totalW = Math.max(1, Math.round(cw * zoom));
+    const totalH = Math.max(1, Math.round(ch * zoom));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    ctxT.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctxL.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Blit pre-rendered static ruler ticks in sub-millisecond time
+    if (rulerStaticTop && rulerStaticLeft) {
+      ctxT.drawImage(rulerStaticTop, 0, 0, totalW, 24);
+      ctxL.drawImage(rulerStaticLeft, 0, 0, 24, totalH);
+    }
+
+    // Active Selection Span Highlight on Rulers (tracks selection drag in real-time)
+    if (state.selection) {
+      const selX = Math.floor(state.selection.x * zoom);
+      const selW = Math.max(1, Math.round(state.selection.w * zoom));
+      const selY = Math.floor(state.selection.y * zoom);
+      const selH = Math.max(1, Math.round(state.selection.h * zoom));
+
+      ctxT.fillStyle = 'rgba(99, 102, 241, 0.2)';
+      ctxT.fillRect(selX, 0, selW, 24);
+      ctxT.fillStyle = '#6366f1';
+      ctxT.fillRect(selX, 22, selW, 2);
+
+      ctxL.fillStyle = 'rgba(99, 102, 241, 0.2)';
+      ctxL.fillRect(0, selY, 24, selH);
+      ctxL.fillStyle = '#6366f1';
+      ctxL.fillRect(22, selY, 2, selH);
+    }
+
+    // Real-time Cursor Tracking Highlight on Top Ruler
     if (state._hoverX !== null && state._hoverX >= 0 && state._hoverX < cw) {
       const hx = Math.floor(state._hoverX * zoom);
       const hw = Math.max(1, Math.round(zoom));
       ctxT.fillStyle = 'rgba(99, 102, 241, 0.35)';
       ctxT.fillRect(hx, 0, hw, 24);
       ctxT.fillStyle = '#6366f1';
-      ctxT.fillRect(hx, 21, hw, 3);
+      ctxT.fillRect(hx, 20, hw, 4);
     }
 
-    ctxT.font = '9px "JetBrains Mono", monospace';
-    ctxT.textBaseline = 'top';
-
-    // Sub-pixel tick marks when zoom >= 6 (viewport culled)
-    if (zoom >= 6) {
-      ctxT.strokeStyle = subTickColor;
-      ctxT.lineWidth = 1;
-      ctxT.beginPath();
-      const subStart = Math.max(0, minX - 2);
-      const subEnd = Math.min(cw, maxX + 2);
-      for (let x = subStart; x < subEnd; x++) {
-        if (x % interval !== 0) {
-          const posX = Math.floor(x * zoom) + 0.5;
-          ctxT.moveTo(posX, 16);
-          ctxT.lineTo(posX, 24);
-        }
-      }
-      ctxT.stroke();
-    }
-
-    // Main interval tick marks
-    ctxT.strokeStyle = tickColor;
-    ctxT.lineWidth = 1;
-    ctxT.beginPath();
-    for (let x = startX; x <= endX; x += interval) {
-      const posX = Math.floor(x * zoom) + 0.5;
-      ctxT.moveTo(posX, 10);
-      ctxT.lineTo(posX, 24);
-    }
-    const endEdgeX = Math.floor(cw * zoom) + 0.5;
-    ctxT.moveTo(endEdgeX, 6);
-    ctxT.lineTo(endEdgeX, 24);
-    ctxT.stroke();
-
-    // Numbers (placed precisely at start of pixel index)
-    for (let x = startX; x <= endX; x += interval) {
-      const posX = Math.floor(x * zoom);
-      const isHighlighted = (state._hoverX !== null && state._hoverX >= x && state._hoverX < x + interval);
-      ctxT.fillStyle = isHighlighted ? '#6366f1' : textColor;
-      ctxT.fillText(String(x), posX + 2, 2);
-    }
-
-    // 2. RENDER LEFT RULER
-    const startY = Math.max(0, Math.floor((minY - interval) / interval) * interval);
-    const endY = Math.min(ch, Math.ceil((maxY + interval) / interval) * interval);
-
-    ctxL.fillStyle = bgColor;
-    ctxL.fillRect(0, 0, 24, totalH);
-
-    // Active cursor highlight
+    // Real-time Cursor Tracking Highlight on Left Ruler
     if (state._hoverY !== null && state._hoverY >= 0 && state._hoverY < ch) {
       const hy = Math.floor(state._hoverY * zoom);
       const hh = Math.max(1, Math.round(zoom));
       ctxL.fillStyle = 'rgba(99, 102, 241, 0.35)';
       ctxL.fillRect(0, hy, 24, hh);
       ctxL.fillStyle = '#6366f1';
-      ctxL.fillRect(21, hy, 3, hh);
-    }
-
-    ctxL.font = '9px "JetBrains Mono", monospace';
-    ctxL.textBaseline = 'top';
-
-    // Sub-pixel tick marks when zoom >= 6 (viewport culled)
-    if (zoom >= 6) {
-      ctxL.strokeStyle = subTickColor;
-      ctxL.lineWidth = 1;
-      ctxL.beginPath();
-      const subStart = Math.max(0, minY - 2);
-      const subEnd = Math.min(ch, maxY + 2);
-      for (let y = subStart; y < subEnd; y++) {
-        if (y % interval !== 0) {
-          const posY = Math.floor(y * zoom) + 0.5;
-          ctxL.moveTo(16, posY);
-          ctxL.lineTo(24, posY);
-        }
-      }
-      ctxL.stroke();
-    }
-
-    // Main interval tick marks
-    ctxL.strokeStyle = tickColor;
-    ctxL.lineWidth = 1;
-    ctxL.beginPath();
-    for (let y = startY; y <= endY; y += interval) {
-      const posY = Math.floor(y * zoom) + 0.5;
-      ctxL.moveTo(10, posY);
-      ctxL.lineTo(24, posY);
-    }
-    const endEdgeY = Math.floor(ch * zoom) + 0.5;
-    ctxL.moveTo(6, endEdgeY);
-    ctxL.lineTo(24, endEdgeY);
-    ctxL.stroke();
-
-    // Numbers
-    for (let y = startY; y <= endY; y += interval) {
-      const posY = Math.floor(y * zoom);
-      const isHighlighted = (state._hoverY !== null && state._hoverY >= y && state._hoverY < y + interval);
-      ctxL.fillStyle = isHighlighted ? '#6366f1' : textColor;
-      ctxL.fillText(String(y), 2, posY + 2);
+      ctxL.fillRect(20, hy, 4, hh);
     }
   }
 
-  let rulerRafId = null;
   function updateRulerHighlight(px, py) {
     if (!state.showRulers) return;
     if (state._hoverX === px && state._hoverY === py) return;
     state._hoverX = px;
     state._hoverY = py;
-    if (rulerRafId === null) {
-      rulerRafId = requestAnimationFrame(() => {
-        rulerRafId = null;
-        renderRulers();
-      });
+
+    if (rulerStaticTop && rulerStaticLeft) {
+      // Instantaneous blit without dropping frames or lagging during pointer drag
+      drawRulerHighlights();
+    } else {
+      renderRulers();
     }
   }
 
@@ -1986,11 +2058,21 @@
     const h = state.h;
 
     const plotSingle = (px, py) => {
+      const key = `${px},${py}`;
+      const oldVal = (cell.pixels && cell.pixels[key]) ? cell.pixels[key] : null;
+      const newVal = color;
+      if (state.activeStrokeChanges && oldVal !== newVal) {
+        if (!state.activeStrokeChanges[key]) {
+          state.activeStrokeChanges[key] = [oldVal, newVal];
+        } else {
+          state.activeStrokeChanges[key][1] = newVal;
+        }
+      }
       if (color === null) {
-        delete cell.pixels[`${px},${py}`];
+        delete cell.pixels[key];
         plotPixelOnBuffer(px, py, null);
       } else {
-        cell.pixels[`${px},${py}`] = color;
+        cell.pixels[key] = color;
         plotPixelOnBuffer(px, py, color);
       }
       renderPixelDirect(px, py, color);
@@ -2036,6 +2118,7 @@
 
     const { x, y } = getPixelCoord(e);
     state.isDrawing = true;
+    state.activeStrokeChanges = {};
     state.dragStartX = x;
     state.dragStartY = y;
     state.lastX = x;
@@ -3096,6 +3179,9 @@
         bytes += Object.keys(item.diff).length * 64 + 256;
       }
     }
+    if (state.lastHistoryPixels) {
+      bytes += Object.keys(state.lastHistoryPixels).length * 48;
+    }
     return bytes;
   }
 
@@ -3119,7 +3205,8 @@
   }
 
   function pruneHistoryBudget() {
-    const MAX_BYTES = 50 * 1024 * 1024; // 50MB
+    // Dynamic ceiling: 50MB baseline, scaling with canvas resolution for large 1024x1024 canvases
+    const MAX_BYTES = Math.max(50 * 1024 * 1024, Math.round(state.w * state.h * 80));
     while (state.history.length > 1 && (state.history.length > state.maxHistory || estimateHistoryMemory() > MAX_BYTES)) {
       rebaseOldestHistoryEntry();
     }
@@ -3135,7 +3222,6 @@
       state.history = state.history.slice(0, state.historyIndex + 1);
     }
 
-    const prevPixels = state.lastHistoryPixels || {};
     const currPixels = cell.pixels || {};
 
     if (state.history.length === 0) {
@@ -3151,6 +3237,7 @@
       state.history.push(snapshot);
       state.historyIndex = 0;
       state.lastHistoryPixels = { ...currPixels };
+      state.activeStrokeChanges = null;
       return;
     }
 
@@ -3167,7 +3254,37 @@
         pixels: { ...currPixels }
       };
       state.history.push(snapshot);
+      state.lastHistoryPixels = { ...currPixels };
+      state.activeStrokeChanges = null;
+    } else if (state.activeStrokeChanges) {
+      // Active stroke diff collected in O(K) time without cloning entire 1M-pixel canvas
+      const strokeDiff = state.activeStrokeChanges;
+      state.activeStrokeChanges = null;
+      const strokeKeys = Object.keys(strokeDiff);
+
+      if (strokeKeys.length > 0 && strokeKeys.length <= 25000) {
+        state.history.push({
+          type: 'diff',
+          w: state.w,
+          h: state.h,
+          title: state.title,
+          revision: documentRevision,
+          diff: strokeDiff
+        });
+        state.lastHistoryPixels = null; // Free baseline memory when delta diff was captured from stroke
+      } else if (strokeKeys.length > 25000) {
+        state.history.push({
+          type: 'snapshot',
+          w: state.w,
+          h: state.h,
+          title: state.title,
+          revision: documentRevision,
+          pixels: { ...currPixels }
+        });
+        state.lastHistoryPixels = { ...currPixels };
+      }
     } else {
+      const prevPixels = state.lastHistoryPixels || {};
       const diff = calculatePixelDiff(prevPixels, currPixels);
       const diffKeys = Object.keys(diff);
       if (diffKeys.length === 0 && lastEntry.title === state.title) {
@@ -3193,10 +3310,10 @@
           pixels: { ...currPixels }
         });
       }
+      state.lastHistoryPixels = { ...currPixels };
     }
 
     state.historyIndex = state.history.length - 1;
-    state.lastHistoryPixels = { ...currPixels };
     pruneHistoryBudget();
   }
 
@@ -3339,7 +3456,8 @@
         title: state.title,
         revision: documentRevision,
         lastSavedRevision: lastSavedRevision,
-        baseContentHash: hashString(lastSavedContent),
+        isDirty: state.isDirty,
+        baseContentHash: hashString(normalizeForCompare(lastSavedContent)),
         pixels: cell.pixels,
         updatedAt: Date.now()
       };
@@ -3973,9 +4091,10 @@ Do not include conversational greetings or postscripts.`;
   }
 
   async function savePreReloadBackup(payload) {
+    let saved = false;
     try {
       const db = await getDb();
-      await new Promise((resolve) => {
+      saved = await new Promise((resolve) => {
         const tx = db.transaction(STORE_BACKUPS, 'readwrite');
         tx.objectStore(STORE_BACKUPS).put(payload, 'pre_reload_backup');
         tx.oncomplete = () => resolve(true);
@@ -3984,7 +4103,9 @@ Do not include conversational greetings or postscripts.`;
     } catch (_) {}
     try {
       _storage.setItem('pix2_backup_before_reload', JSON.stringify(payload));
+      saved = true;
     } catch (_) {}
+    return saved;
   }
 
   async function getPreReloadBackup() {
@@ -4153,16 +4274,18 @@ Do not include conversational greetings or postscripts.`;
   }
 
   let activeSavePromise = Promise.resolve();
-  let lastCommittedSaveRevision = 0;
+  let saveSequenceCounter = 0;
+  let lastCompletedSaveSeq = 0;
 
   function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
     const snapshotRevision = documentRevision;
+    const saveSeq = ++saveSequenceCounter;
     const text = flushSourceCode();
 
     const doSave = async () => {
-      // Phase 3: Prevent stale out-of-order writes from clobbering newer revisions
-      if (snapshotRevision < lastCommittedSaveRevision && lastCommittedSaveRevision > 0 && !forceSaveAs) {
+      // Prevent stale out-of-order writes if a newer queued save already completed
+      if (saveSeq < lastCompletedSaveSeq && !forceSaveAs) {
         return;
       }
 
@@ -4202,8 +4325,8 @@ Do not include conversational greetings or postscripts.`;
             _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
           } catch (_) {}
           triggerAutosave(true);
-          lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, snapshotRevision);
-          lastSavedRevision = Math.max(lastSavedRevision, snapshotRevision);
+          lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+          lastSavedRevision = snapshotRevision;
           setDirty(documentRevision !== lastSavedRevision);
           showToast(`Saved to ${currentFileHandle.name}!`);
           return;
@@ -4250,8 +4373,8 @@ Do not include conversational greetings or postscripts.`;
             _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
           } catch (_) {}
           triggerAutosave(true);
-          lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, snapshotRevision);
-          lastSavedRevision = Math.max(lastSavedRevision, snapshotRevision);
+          lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+          lastSavedRevision = snapshotRevision;
           setDirty(documentRevision !== lastSavedRevision);
           showToast(`Saved as ${handle.name}!`);
           return;
@@ -4263,8 +4386,8 @@ Do not include conversational greetings or postscripts.`;
 
       // Fallback: Blob download
       savePix2File();
-      lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, snapshotRevision);
-      lastSavedRevision = Math.max(lastSavedRevision, snapshotRevision);
+      lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+      lastSavedRevision = snapshotRevision;
       setDirty(documentRevision !== lastSavedRevision);
     };
 
@@ -4451,17 +4574,19 @@ Do not include conversational greetings or postscripts.`;
       const file = await currentFileHandle.getFile();
       const currentModified = file.lastModified;
 
-      // If baseline is not yet recorded, record it now and return
+      // Ensure lastSavedContent is hydrated from storage if not set in memory
+      if (!lastSavedContent) {
+        lastSavedContent = _storage.getItem('pix2_last_saved_content') || '';
+      }
+
+      // If baseline timestamp is not yet recorded, record it and baseline content
       if (lastKnownFileModified === 0) {
         lastKnownFileModified = currentModified;
         const curText = await file.text();
-        if (!lastSavedContent) lastSavedContent = curText;
-        isExternalReloading = false;
-        return;
-      }
-
-      // Sub-second modification check: skip only if file timestamp is identical and not forced
-      if (!force && currentModified === lastKnownFileModified) {
+        if (!lastSavedContent) {
+          lastSavedContent = curText;
+          try { _storage.setItem('pix2_last_saved_content', curText); } catch (_) {}
+        }
         isExternalReloading = false;
         return;
       }
@@ -4472,14 +4597,28 @@ Do not include conversational greetings or postscripts.`;
         return;
       }
 
-      // If content is identical to our last saved version (ignoring CRLF/LF line endings), sync timestamp cleanly
-      if (normalizeForCompare(text) === normalizeForCompare(lastSavedContent)) {
+      const normDisk = normalizeForCompare(text);
+      const normSaved = normalizeForCompare(lastSavedContent);
+      const diskHash = hashString(normDisk);
+      const savedHash = hashString(normSaved);
+
+      // Sub-second modification & content hash check:
+      // If content on disk matches our last saved baseline, NO external modification occurred!
+      if (diskHash === savedHash || normDisk === normSaved) {
         lastKnownFileModified = currentModified;
+        if (pendingExternalConflict) {
+          pendingExternalConflict = null;
+          const btnReload = document.getElementById('btn-reload-file');
+          if (btnReload) {
+            btnReload.classList.remove('pulse-warning');
+            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+          }
+        }
         isExternalReloading = false;
         return;
       }
 
-      // External change detected!
+      // Genuine External Change detected (disk content differs from saved content)
       if (state.isDirty && !force) {
         // PixelArt has unsaved edits: do NOT overwrite silently!
         showExternalConflictNotification(file, text, currentModified);
@@ -4497,6 +4636,7 @@ Do not include conversational greetings or postscripts.`;
         lastSavedContent = text;
         try {
           _storage.setItem('pix2_last_saved_content', text);
+          _storage.setItem('pix2_last_saved_time', String(currentModified));
         } catch (_) {}
         pendingExternalConflict = null;
         markDocumentSaved();
@@ -4540,13 +4680,26 @@ Do not include conversational greetings or postscripts.`;
       // Emergency snapshot to pre-reload backup before discarding canvas edits
       const cell = getArtworkCell();
       if (cell && cell.pixels) {
-        await savePreReloadBackup({
+        const backupPayload = {
+          schemaVersion: 2,
+          docId: state.title,
+          fileName: currentFileName || '',
+          revision: documentRevision,
+          lastSavedRevision: lastSavedRevision,
           w: state.w,
           h: state.h,
           title: state.title,
           pixels: { ...cell.pixels },
-          time: Date.now()
-        });
+          time: Date.now(),
+          baseContentHash: hashString(normalizeForCompare(lastSavedContent || ''))
+        };
+        const backupOk = await savePreReloadBackup(backupPayload);
+        if (!backupOk) {
+          const proceedWithoutBackup = confirm(
+            'WARNING: Could not save emergency backup to local storage or IndexedDB.\n\nProceeding will permanently discard your unsaved canvas edits. Are you sure you want to reload anyway?'
+          );
+          if (!proceedWithoutBackup) return;
+        }
       }
 
       const confirmDiscard = confirm(
@@ -5283,8 +5436,6 @@ Do not include conversational greetings or postscripts.`;
       });
     }
 
-    initFileWatcher();
-
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       // Don't intercept shortcuts when typing in inputs or editor (except Ctrl+S)
@@ -5497,6 +5648,9 @@ Do not include conversational greetings or postscripts.`;
       resizeCanvasesToZoom,
       centerCanvasInViewport,
       fitCanvasToViewport,
+      renderRulers,
+      drawRulerHighlights,
+      updateRulerHighlight,
       calculatePixelDiff,
       applyPixelDiff,
       pushHistory,

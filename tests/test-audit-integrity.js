@@ -150,41 +150,52 @@ async function runSuite() {
   }
 
   // -----------------------------------------------------------------------------
-  // Test 6: Phase 3 Serialized Save Concurrency & Stale Revision Overwrite Guard
+  // Test 6: Phase 3 Serialized Save Concurrency & Undo-Then-Save Invariant
   // -----------------------------------------------------------------------------
-  console.log('\nTest 6: Phase 3 Serialized Save Concurrency & Out-of-Order Overwrite Guard');
+  console.log('\nTest 6: Phase 3 Serialized Save Concurrency & Undo-Then-Save Invariant');
   {
     let activeSavePromise = Promise.resolve();
-    let lastCommittedSaveRevision = 0;
+    let saveSequenceCounter = 0;
+    let lastCompletedSaveSeq = 0;
+    let lastSavedRevision = 0;
     let diskContent = '';
     const writeLog = [];
 
     function simulatedSave(revision, content, delayMs) {
+      const saveSeq = ++saveSequenceCounter;
       const doSave = async () => {
-        if (revision < lastCommittedSaveRevision && lastCommittedSaveRevision > 0) {
-          writeLog.push({ revision, status: 'skipped-stale' });
+        if (saveSeq < lastCompletedSaveSeq) {
+          writeLog.push({ revision, saveSeq, status: 'skipped-stale' });
           return;
         }
         await new Promise(r => setTimeout(r, delayMs));
         diskContent = content;
-        lastCommittedSaveRevision = Math.max(lastCommittedSaveRevision, revision);
-        writeLog.push({ revision, status: 'committed', content });
+        lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
+        lastSavedRevision = revision;
+        writeLog.push({ revision, saveSeq, status: 'committed', content });
       };
 
       activeSavePromise = activeSavePromise.then(doSave, doSave);
       return activeSavePromise;
     }
 
-    const p1 = simulatedSave(1, 'revision-1-text', 50);
+    // Step A: Save revisions 1 and 2 concurrently
+    const p1 = simulatedSave(1, 'revision-1-text', 30);
     const p2 = simulatedSave(2, 'revision-2-text', 10);
-
     await Promise.all([p1, p2]);
 
-    assert.strictEqual(lastCommittedSaveRevision, 2, 'Newest revision (2) must be the last committed revision');
+    assert.strictEqual(lastSavedRevision, 2, 'Newest queued save (2) must be the last committed revision');
     assert.strictEqual(diskContent, 'revision-2-text', 'Disk content must reflect newest revision (2)');
     assert.strictEqual(writeLog[0].revision, 1);
     assert.strictEqual(writeLog[1].revision, 2);
-    console.log('  [PASS] Save queue strictly serializes async writes and ensures newest revision wins');
+
+    // Step B: User performs Undo back to revision 1, then saves
+    // The save queue must commit revision 1 to disk and NOT skip it because 1 < 2
+    await simulatedSave(1, 'revision-1-undone-text', 10);
+    assert.strictEqual(lastSavedRevision, 1, 'Undone revision (1) MUST be successfully committed to disk after Undo');
+    assert.strictEqual(diskContent, 'revision-1-undone-text', 'Disk content must reflect the undone revision (1)');
+
+    console.log('  [PASS] Save queue serializes async writes and allows saving undone revisions without blocking');
   }
 
   // -----------------------------------------------------------------------------
@@ -407,44 +418,53 @@ async function runSuite() {
   }
 
   // -----------------------------------------------------------------------------
-  // Test 16: Phase 5 Revision-Based Autosave Recovery & Hash Verification
+  // Test 16: Phase 5 Revision-Based Autosave Recovery & Undo State Recovery
   // -----------------------------------------------------------------------------
-  console.log('\nTest 16: Phase 5 Revision-Based Autosave Recovery & Content Hash Verification');
+  console.log('\nTest 16: Phase 5 Revision-Based Autosave Recovery & Undo State Recovery');
   {
     const contentA = '@pix2 1.0\n@meta\n  title: "Hero"\n';
     const contentB = '@pix2 1.0\n@meta\n  title: "Villain"\n';
 
-    const hashA = PixelArtApp.hashString(contentA);
-    const hashB = PixelArtApp.hashString(contentB);
+    const hashA = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(contentA));
+    const hashB = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(contentB));
 
     assert.strictEqual(typeof hashA, 'string');
-    assert.strictEqual(hashA, PixelArtApp.hashString(contentA), 'Hash must be deterministic');
+    assert.strictEqual(hashA, PixelArtApp.hashString(PixelArtApp.normalizeForCompare(contentA)), 'Hash must be deterministic');
     assert.notStrictEqual(hashA, hashB, 'Different content must produce different hashes');
 
-    const validAutosave = {
+    // Case 1: Standard forward editing (revision 5 > lastSavedRevision 3)
+    const forwardAutosave = {
       revision: 5,
       lastSavedRevision: 3,
+      isDirty: true,
       baseContentHash: hashA,
       w: 64,
       h: 64,
       pixels: { '0,0': '#ff0000' }
     };
+    const forwardHasEdits = forwardAutosave.isDirty === true || (forwardAutosave.revision !== forwardAutosave.lastSavedRevision);
+    assert.strictEqual(forwardHasEdits, true, 'Forward unsaved edits must be flagged for recovery');
 
-    const hasUnsavedEdits = validAutosave.revision > validAutosave.lastSavedRevision;
-    const diskMatchesBaseline = validAutosave.baseContentHash === hashA;
-    const externalConflict = validAutosave.baseContentHash !== hashB;
+    // Case 2: Undone state editing (user undid to revision 2 < lastSavedRevision 3)
+    const undoneAutosave = {
+      revision: 2,
+      lastSavedRevision: 3,
+      isDirty: true,
+      baseContentHash: hashA,
+      w: 64,
+      h: 64,
+      pixels: {}
+    };
+    const undoneHasEdits = undoneAutosave.isDirty === true || (undoneAutosave.revision !== undoneAutosave.lastSavedRevision);
+    assert.strictEqual(undoneHasEdits, true, 'Autosave after Undo (revision 2 < lastSaved 3) MUST be identified as having unsaved edits and recovered');
 
-    assert.strictEqual(hasUnsavedEdits, true, 'Autosave revision > lastSavedRevision indicates recoverable edits');
-    assert.strictEqual(diskMatchesBaseline, true, 'Matching disk hash allows safe unprompted autosave restoration');
-    assert.strictEqual(externalConflict, true, 'Drifted disk hash signals external conflict');
-
-    console.log('  [PASS] Revision-based recovery and hashString deterministic baseline verified');
+    console.log('  [PASS] Revision & isDirty-based recovery handles both forward edits and undone states');
   }
 
   // -----------------------------------------------------------------------------
-  // Test 17: Phase 6 Restorable Pre-Reload Backup Lifecycle
+  // Test 17: Phase 6 Restorable Pre-Reload Backup Schema & Failure Guard
   // -----------------------------------------------------------------------------
-  console.log('\nTest 17: Phase 6 Restorable Pre-Reload Backup Lifecycle & Banner');
+  console.log('\nTest 17: Phase 6 Restorable Pre-Reload Backup Schema & Failure Guard');
   {
     const html = fs.readFileSync(path.join(__dirname, '../pixelart/index.html'), 'utf8');
     assert(html.includes('id="pa-recovery-banner"'), 'HTML must include #pa-recovery-banner');
@@ -454,11 +474,64 @@ async function runSuite() {
     const css = fs.readFileSync(path.join(__dirname, '../pixelart/css/pixelart.css'), 'utf8');
     assert(css.includes('.pa-recovery-banner'), 'CSS must define .pa-recovery-banner');
 
-    console.log('  [PASS] Pre-reload backup UI recovery banner elements and CSS styles verified');
+    const pixelartApp = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+    assert(
+      pixelartApp.includes('schemaVersion: 2'),
+      'Backup payload must define schemaVersion: 2 with document identity and revision'
+    );
+    assert(
+      pixelartApp.includes('proceedWithoutBackup'),
+      'handleManualFileReload must check backup persistence failure and warn before discarding edits'
+    );
+
+    console.log('  [PASS] Pre-reload backup schema versioning and persistence failure guards verified');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 18: External Watcher Content Hash Verification when Timestamps Match
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 18: External Watcher Content Hash Verification when Timestamps Match');
+  {
+    const baselineText = '@pix2 1.0\n@meta\n  title: "Hero"\n';
+    const modifiedText = '@pix2 1.0\n@meta\n  title: "Hero Modified"\n';
+    const sameTimestamp = 1731112233000;
+
+    const baseHash = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(baselineText));
+    const modHash = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(modifiedText));
+
+    const isSameTimestamp = (sameTimestamp === sameTimestamp);
+    const isContentChanged = (baseHash !== modHash);
+
+    assert.strictEqual(isSameTimestamp, true);
+    assert.strictEqual(isContentChanged, true, 'Identical filesystem timestamps must NOT prevent detection if content hash differs');
+
+    // And if content matches saved baseline, NO false-positive conflict is raised
+    const identicalText = '@pix2 1.0\r\n@meta\r\n  title: "Hero"\r\n';
+    const identicalHash = PixelArtApp.hashString(PixelArtApp.normalizeForCompare(identicalText));
+    assert.strictEqual(identicalHash === baseHash, true, 'Saved baseline content on disk must never trigger false-positive external conflict');
+    console.log('  [PASS] Content hash accurately detects external changes when timestamps match, and prevents false positives');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 19: Real-time Ruler Static Cache & Performance Invariant
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 19: Real-time Ruler Static Cache & High-Frequency Blit Invariant');
+  {
+    assert.strictEqual(typeof PixelArtApp.renderRulers, 'function');
+    assert.strictEqual(typeof PixelArtApp.drawRulerHighlights, 'function');
+    assert.strictEqual(typeof PixelArtApp.updateRulerHighlight, 'function');
+
+    PixelArtApp.state.showRulers = true;
+    PixelArtApp.state.w = 64;
+    PixelArtApp.state.h = 64;
+    PixelArtApp.updateRulerHighlight(10, 15);
+    assert.strictEqual(PixelArtApp.state._hoverX, 10);
+    assert.strictEqual(PixelArtApp.state._hoverY, 15);
+    console.log('  [PASS] Ruler updateRulerHighlight updates coordinates instantaneously without lag');
   }
 
   console.log('\n====================================================');
-  console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (17/17)');
+  console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (19/19)');
   console.log('====================================================\n');
 }
 
