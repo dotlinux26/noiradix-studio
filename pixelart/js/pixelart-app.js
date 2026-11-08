@@ -714,7 +714,7 @@
     state.selection = null;
 
     // Construct canonical PIX2 document
-    const doc = _PIX2.createDocument(state.title, 1, 1, state.w, state.h);
+    const doc = _PIX2.createDocument(state.title, 1, 1, state.w, state.h, { profile: 'pixelart' });
     doc.meta.title = state.title;
     doc.meta.author = 'PixelArt User';
     doc.meta.color_mode = 'RGBA';
@@ -1126,7 +1126,7 @@
       // Free Multi-Angle Selection Rotation Handle (Stem + Circular Pivot)
       const topMidX = sx + sw / 2;
       const topMidY = sy;
-      const stemLen = 18;
+      const stemLen = (sy < 24) ? -20 : 20;
       const rotHandleX = topMidX;
       const rotHandleY = topMidY - stemLen;
 
@@ -1161,11 +1161,12 @@
     const sx = Math.floor(state.selection.x * state.zoom);
     const sy = Math.floor(state.selection.y * state.zoom);
     const sw = Math.floor(state.selection.w * state.zoom);
+    const stemLen = (sy < 24) ? -20 : 20;
     const handleCanvasX = sx + sw / 2;
-    const handleCanvasY = sy - 18;
+    const handleCanvasY = sy - stemLen;
     const mouseCanvasX = e.clientX - rect.left;
     const mouseCanvasY = e.clientY - rect.top;
-    return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 14;
+    return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 22;
   }
 
   function updateContainerTransform() {
@@ -1255,15 +1256,15 @@
     }
 
     try {
-      // 1. Parse raw PIX2 source into AST document
-      const parsedDoc = _PIX2.parse(source);
+      // 1. Parse raw PIX2 source into AST document with PixelArt profile (supports up to 1024x1024)
+      const parsedDoc = _PIX2.parse(source, { profile: 'pixelart' });
       if (!parsedDoc || !parsedDoc.cells) {
         throw new Error('PIX2 parse error: missing cells object.');
       }
 
       // Check parse diagnostics
       if (parsedDoc._diagnostics && parsedDoc._diagnostics.length > 0) {
-        const severeErr = parsedDoc._diagnostics.find(d => d.severity === 'error');
+        const severeErr = parsedDoc._diagnostics.find(d => d.code && d.code.startsWith('PIX2_ERR_'));
         if (severeErr) {
           dom.syncBadge.className = 'pa-sync-badge error';
           dom.syncBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Syntax Error';
@@ -1275,7 +1276,7 @@
       }
 
       // 2. Validate parsed AST document
-      const validation = _PIX2.validate(parsedDoc, { strict: false });
+      const validation = _PIX2.validate(parsedDoc, { profile: 'pixelart', strict: false });
       if (!validation.valid && validation.errors && validation.errors.length > 0) {
         const firstErr = validation.errors[0];
         dom.syncBadge.className = 'pa-sync-badge error';
@@ -1436,6 +1437,9 @@
     if (e.button === 2) {
       return;
     }
+    if (e.button === 0) {
+      e.preventDefault();
+    }
 
     // Pan via Hand tool, middle click or Space key
     if (e.button === 1 || e.spaceKey || state.currentTool === 'pan') {
@@ -1583,11 +1587,17 @@
       return;
     }
 
-    // Free Multi-Angle Selection Rotation Drag
+    // Free Multi-Angle Selection Rotation Drag with Magnetic 90° & 15° Snapping
     if (state.isRotatingSelection && state.rotationCenter) {
       const currentAngle = Math.atan2(e.clientY - state.rotationCenter.y, e.clientX - state.rotationCenter.x);
       let deltaAngle = currentAngle - state.rotationStartAngle;
-      if (e.shiftKey) {
+
+      const halfPi = Math.PI / 2;
+      const nearest90 = Math.round(deltaAngle / halfPi) * halfPi;
+      const snapThreshold = (10 * Math.PI) / 180; // 10 degree magnetic snap zone
+      if (Math.abs(deltaAngle - nearest90) < snapThreshold) {
+        deltaAngle = nearest90;
+      } else if (e.shiftKey) {
         // Shift key: Snap to 15-degree steps
         const step = (15 * Math.PI) / 180;
         deltaAngle = Math.round(deltaAngle / step) * step;
@@ -1685,9 +1695,11 @@
         // Check if angle is a multiple of 90 degrees (pi/2)
         const halfPi = Math.PI / 2;
         const steps90 = Math.round(theta / halfPi);
-        const isNear90 = Math.abs(theta - steps90 * halfPi) < 0.05;
+        const isNear90 = Math.abs(theta - steps90 * halfPi) < 0.12;
 
-        let newW, newH, cosT, sinT;
+        let newW, newH;
+        const rotatedPixels = {};
+
         if (isNear90) {
           const normSteps = ((steps90 % 4) + 4) % 4;
           if (normSteps === 1 || normSteps === 3) {
@@ -1697,68 +1709,70 @@
             newW = origW;
             newH = origH;
           }
-          const snappedAngle = steps90 * halfPi;
-          cosT = Math.round(Math.cos(snappedAngle));
-          sinT = Math.round(Math.sin(snappedAngle));
-        } else {
-          cosT = Math.cos(theta);
-          sinT = Math.sin(theta);
-          newW = Math.max(1, Math.round(Math.abs(origW * cosT) + Math.abs(origH * sinT)));
-          newH = Math.max(1, Math.round(Math.abs(origW * sinT) + Math.abs(origH * cosT)));
-        }
 
-        const origCenterX = origW / 2;
-        const origCenterY = origH / 2;
-        const newCenterX = newW / 2;
-        const newCenterY = newH / 2;
+          for (const key in basePixels) {
+            const commaIdx = key.indexOf(',');
+            if (commaIdx === -1) continue;
+            const px = Number(key.substring(0, commaIdx));
+            const py = Number(key.substring(commaIdx + 1));
+            const col = basePixels[key];
+            if (!col) continue;
 
-        const rotatedPixels = {};
-        for (let dy = 0; dy < newH; dy++) {
-          for (let dx = 0; dx < newW; dx++) {
-            const rx = dx - newCenterX + 0.5;
-            const ry = dy - newCenterY + 0.5;
-            const srcX = Math.floor(rx * cosT + ry * sinT + origCenterX);
-            const srcY = Math.floor(-rx * sinT + ry * cosT + origCenterY);
-
-            if (srcX >= 0 && srcX < origW && srcY >= 0 && srcY < origH) {
-              const col = basePixels[`${srcX},${srcY}`];
-              if (col) {
-                rotatedPixels[`${dx},${dy}`] = col;
-              }
+            let rx, ry;
+            if (normSteps === 0) {
+              rx = px;
+              ry = py;
+            } else if (normSteps === 1) { // 90 deg clockwise
+              rx = origH - 1 - py;
+              ry = px;
+            } else if (normSteps === 2) { // 180 deg
+              rx = origW - 1 - px;
+              ry = origH - 1 - py;
+            } else if (normSteps === 3) { // 270 deg clockwise
+              rx = py;
+              ry = origW - 1 - px;
+            }
+            if (rx >= 0 && rx < newW && ry >= 0 && ry < newH) {
+              rotatedPixels[`${rx},${ry}`] = col;
             }
           }
-        }
 
-        // Tight crop to actual rotated pixels to prevent bounding box from inflating
-        const keys = Object.keys(rotatedPixels);
-        if (keys.length > 0) {
-          let minX = Infinity, maxX = -Infinity;
-          let minY = Infinity, maxY = -Infinity;
-          for (const k of keys) {
-            const [px, py] = k.split(',').map(Number);
-            if (px < minX) minX = px;
-            if (px > maxX) maxX = px;
-            if (py < minY) minY = py;
-            if (py > maxY) maxY = py;
-          }
-
-          const tightW = maxX - minX + 1;
-          const tightH = maxY - minY + 1;
-          const trimmedPixels = {};
-          for (const k of keys) {
-            const [px, py] = k.split(',').map(Number);
-            trimmedPixels[`${px - minX},${py - minY}`] = rotatedPixels[k];
-          }
-
-          state.selection.x = Math.round(origX + (origW - newW) / 2 + minX);
-          state.selection.y = Math.round(origY + (origH - newH) / 2 + minY);
-          state.selection.w = tightW;
-          state.selection.h = tightH;
-          state.floatingPixels = trimmedPixels;
+          state.selection.x = Math.round(origX + (origW - newW) / 2);
+          state.selection.y = Math.round(origY + (origH - newH) / 2);
+          state.selection.w = newW;
+          state.selection.h = newH;
+          state.floatingPixels = rotatedPixels;
           state.floatingCurrentX = state.selection.x;
           state.floatingCurrentY = state.selection.y;
           rebuildFloatingBuffer();
         } else {
+          // Free continuous angle rotation
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+          newW = Math.max(1, Math.round(Math.abs(origW * cosT) + Math.abs(origH * sinT)));
+          newH = Math.max(1, Math.round(Math.abs(origW * sinT) + Math.abs(origH * cosT)));
+
+          const origCenterX = origW / 2;
+          const origCenterY = origH / 2;
+          const newCenterX = newW / 2;
+          const newCenterY = newH / 2;
+
+          for (let dy = 0; dy < newH; dy++) {
+            for (let dx = 0; dx < newW; dx++) {
+              const rx = dx - newCenterX + 0.5;
+              const ry = dy - newCenterY + 0.5;
+              const srcX = Math.floor(rx * cosT + ry * sinT + origCenterX);
+              const srcY = Math.floor(-rx * sinT + ry * cosT + origCenterY);
+
+              if (srcX >= 0 && srcX < origW && srcY >= 0 && srcY < origH) {
+                const col = basePixels[`${srcX},${srcY}`];
+                if (col) {
+                  rotatedPixels[`${dx},${dy}`] = col;
+                }
+              }
+            }
+          }
+
           state.selection.x = Math.round(origX + (origW - newW) / 2);
           state.selection.y = Math.round(origY + (origH - newH) / 2);
           state.selection.w = newW;
@@ -3313,7 +3327,7 @@ Do not include conversational greetings or postscripts.`;
 
     // Canvas Viewport Events
     dom.viewport.addEventListener('mousedown', onPointerDown);
-    dom.viewport.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mousemove', onPointerMove);
     window.addEventListener('mouseup', onPointerUp);
     dom.viewport.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -3347,8 +3361,16 @@ Do not include conversational greetings or postscripts.`;
       repaintCanvas();
     }, { passive: false });
 
-    // Source Code Editor Input
+    // Source Code Editor Input & Escape-to-Cancel
     dom.codeEditor.addEventListener('input', handleSourceCodeInput);
+    dom.codeEditor.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.isCodeEditingUnlocked) {
+        e.preventDefault();
+        syncCanvasToSource();
+        lockCodeEditor();
+        showToast('Code locked (reverted to canvas state).', 'info');
+      }
+    });
     dom.codeEditor.addEventListener('scroll', () => {
       dom.codeGutter.scrollTop = dom.codeEditor.scrollTop;
     });

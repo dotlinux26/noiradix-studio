@@ -112,7 +112,7 @@ const Tools = (function () {
 
     const queue = [[startX, startY]];
     const visited = new Set();
-    const maxSteps = Math.min(65536, w * h * 4);
+    const maxSteps = Math.min(Math.max(65536, w * h * 4), 4194304);
     let steps = 0;
 
     while (queue.length > 0 && steps++ < maxSteps) {

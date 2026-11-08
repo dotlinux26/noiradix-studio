@@ -18,15 +18,67 @@ const PIX2 = (function () {
   // SECURITY & RESOURCE BOUNDS (Anti-DoS & Anti-Prototype Pollution)
   // ===========================================================================
   const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-  const MAX_GRID_COLS = 128;
-  const MAX_GRID_ROWS = 256;
-  const MAX_CELL_DIM = 512;
-  const MIN_CELL_DIM = 1;
-  const MAX_ANIM_FPS = 120;
-  const MAX_FRAMES_PER_ANIM = 512;
-  const MAX_TOTAL_CELLS = 4096;
-  const MAX_COORD_ABS = 2048;
+
+  const RESOURCE_PROFILES = {
+    studio: {
+      name: 'studio',
+      maxCellDim: 512,
+      minCellDim: 1,
+      maxGridCols: 128,
+      maxGridRows: 256,
+      maxTotalCells: 4096,
+      maxCoordAbs: 2048,
+      maxFileSize: 20 * 1024 * 1024,
+      maxFramesPerAnim: 512,
+      maxAnimFps: 120
+    },
+    pixelart: {
+      name: 'pixelart',
+      maxCellDim: 1024,
+      minCellDim: 1,
+      maxGridCols: 16,
+      maxGridRows: 16,
+      maxTotalCells: 256,
+      maxCoordAbs: 2048,
+      maxFileSize: 20 * 1024 * 1024,
+      maxFramesPerAnim: 64,
+      maxAnimFps: 60
+    },
+    unlimited: {
+      name: 'unlimited',
+      maxCellDim: 2048,
+      minCellDim: 1,
+      maxGridCols: 256,
+      maxGridRows: 256,
+      maxTotalCells: 8192,
+      maxCoordAbs: 4096,
+      maxFileSize: 50 * 1024 * 1024,
+      maxFramesPerAnim: 1024,
+      maxAnimFps: 120
+    }
+  };
+
+  function resolveResourceProfile(options) {
+    if (!options) return RESOURCE_PROFILES.studio;
+    const base = (options.profile && RESOURCE_PROFILES[options.profile])
+      ? RESOURCE_PROFILES[options.profile]
+      : RESOURCE_PROFILES.studio;
+    if (typeof options.maxCellDim === 'number' || typeof options.maxFileSize === 'number') {
+      return Object.assign({}, base, options);
+    }
+    return base;
+  }
+
+  // Legacy default constants (backed by Studio profile)
+  const MAX_FILE_SIZE = RESOURCE_PROFILES.studio.maxFileSize;
+  const MAX_GRID_COLS = RESOURCE_PROFILES.studio.maxGridCols;
+  const MAX_GRID_ROWS = RESOURCE_PROFILES.studio.maxGridRows;
+  const MAX_CELL_DIM = RESOURCE_PROFILES.studio.maxCellDim;
+  const MIN_CELL_DIM = RESOURCE_PROFILES.studio.minCellDim;
+  const MAX_ANIM_FPS = RESOURCE_PROFILES.studio.maxAnimFps;
+  const MAX_FRAMES_PER_ANIM = RESOURCE_PROFILES.studio.maxFramesPerAnim;
+  const MAX_TOTAL_CELLS = RESOURCE_PROFILES.studio.maxTotalCells;
+  const MAX_COORD_ABS = RESOURCE_PROFILES.studio.maxCoordAbs;
 
   function isSafeIdentifier(key) {
     if (!key || typeof key !== 'string') return false;
@@ -303,11 +355,12 @@ const PIX2 = (function () {
   /**
    * Create a new PIX2 document
    */
-  function createDocument(title = 'New Sprite', cols = 4, rows = 4, cellW = 16, cellH = 16) {
-    cols = Math.min(Math.max(1, parseStrictInt(cols) || 4), MAX_GRID_COLS);
-    rows = Math.min(Math.max(1, parseStrictInt(rows) || 4), MAX_GRID_ROWS);
-    cellW = Math.min(Math.max(MIN_CELL_DIM, parseStrictInt(cellW) || 16), MAX_CELL_DIM);
-    cellH = Math.min(Math.max(MIN_CELL_DIM, parseStrictInt(cellH) || 16), MAX_CELL_DIM);
+  function createDocument(title = 'New Sprite', cols = 4, rows = 4, cellW = 16, cellH = 16, options = {}) {
+    const profile = resolveResourceProfile(options);
+    cols = Math.min(Math.max(1, parseStrictInt(cols) || 4), profile.maxGridCols);
+    rows = Math.min(Math.max(1, parseStrictInt(rows) || 4), profile.maxGridRows);
+    cellW = Math.min(Math.max(profile.minCellDim, parseStrictInt(cellW) || 16), profile.maxCellDim);
+    cellH = Math.min(Math.max(profile.minCellDim, parseStrictInt(cellH) || 16), profile.maxCellDim);
 
     const meta = {
       title: String(title || 'New Sprite').normalize('NFC').slice(0, 256),
@@ -357,14 +410,15 @@ const PIX2 = (function () {
   // PARSER (Text -> AST)
   // ===========================================================================
 
-  function parse(text) {
-    if (typeof text !== 'string') return createDocument();
-    if (text.length > MAX_FILE_SIZE) {
-      throw new Error(`PIX2 security violation: file size exceeds maximum limit (${MAX_FILE_SIZE} bytes).`);
+  function parse(text, options = {}) {
+    const profile = resolveResourceProfile(options);
+    if (typeof text !== 'string') return createDocument('Untitled', 4, 4, 16, 16, options);
+    if (text.length > profile.maxFileSize) {
+      throw new Error(`PIX2 security violation: file size exceeds maximum limit (${profile.maxFileSize} bytes).`);
     }
 
     const lines = (text || '').normalize('NFC').split(/\r\n|\r|\n/);
-    const doc = createDocument('Untitled', 4, 4, 16, 16);
+    const doc = createDocument('Untitled', 4, 4, 16, 16, options);
     doc.meta.version = null; // Requires explicit @pix2 version directive in source
     doc.palette = {};
     doc.cells = {};
@@ -556,9 +610,20 @@ const PIX2 = (function () {
           } else if (key === 'default_cell' || key === 'cell_size') {
             const dims = parseDimension(val);
             if (dims) {
+              const parsedW = dims[0];
+              const parsedH = dims[1];
+              const clampedW = Math.min(Math.max(profile.minCellDim, parsedW), profile.maxCellDim);
+              const clampedH = Math.min(Math.max(profile.minCellDim, parsedH), profile.maxCellDim);
+              if (parsedW > profile.maxCellDim || parsedH > profile.maxCellDim) {
+                diagnostics.push({
+                  code: 'PIX2_WARN_CLAMPED_CELL_SIZE',
+                  line: i + 1,
+                  message: `Requested cell size (${parsedW}x${parsedH}) exceeds profile "${profile.name}" limit (${profile.maxCellDim}); clamped to ${clampedW}x${clampedH}`
+                });
+              }
               doc.meta.cell_size = {
-                w: Math.min(Math.max(MIN_CELL_DIM, dims[0]), MAX_CELL_DIM),
-                h: Math.min(Math.max(MIN_CELL_DIM, dims[1]), MAX_CELL_DIM)
+                w: clampedW,
+                h: clampedH
               };
               attachCellSizeAlias(doc.meta);
             } else {
@@ -725,9 +790,20 @@ const PIX2 = (function () {
         } else if (line.startsWith('size:')) {
           const dims = parseDimension(line.split(':')[1].trim());
           if (dims) {
+            const parsedCellW = dims[0];
+            const parsedCellH = dims[1];
+            const clampedCellW = Math.min(Math.max(profile.minCellDim, parsedCellW), profile.maxCellDim);
+            const clampedCellH = Math.min(Math.max(profile.minCellDim, parsedCellH), profile.maxCellDim);
+            if (parsedCellW > profile.maxCellDim || parsedCellH > profile.maxCellDim) {
+              diagnostics.push({
+                code: 'PIX2_WARN_CLAMPED_CELL_SIZE',
+                line: i + 1,
+                message: `Requested cell size (${parsedCellW}x${parsedCellH}) exceeds profile "${profile.name}" limit (${profile.maxCellDim}); clamped to ${clampedCellW}x${clampedCellH}`
+              });
+            }
             currentCell.size = {
-              w: Math.min(Math.max(MIN_CELL_DIM, dims[0]), MAX_CELL_DIM),
-              h: Math.min(Math.max(MIN_CELL_DIM, dims[1]), MAX_CELL_DIM)
+              w: clampedCellW,
+              h: clampedCellH
             };
           } else {
             diagnostics.push({
@@ -1040,12 +1116,13 @@ const PIX2 = (function () {
     }
   }
 
-  function floodFillCell(cell, startX, startY, fillColor, defaultCellSize) {
+  function floodFillCell(cell, startX, startY, fillColor, defaultCellSize, profile = RESOURCE_PROFILES.studio) {
     if (!cell || isNaN(startX) || isNaN(startY) || !fillColor) return;
+    const maxDim = (profile && profile.maxCellDim) ? profile.maxCellDim : MAX_CELL_DIM;
     const rawW = (cell.size && cell.size.w) || (defaultCellSize && defaultCellSize.w) || 16;
     const rawH = (cell.size && cell.size.h) || (defaultCellSize && defaultCellSize.h) || 16;
-    const cellW = Math.min(Math.max(1, rawW), MAX_CELL_DIM);
-    const cellH = Math.min(Math.max(1, rawH), MAX_CELL_DIM);
+    const cellW = Math.min(Math.max(1, rawW), maxDim);
+    const cellH = Math.min(Math.max(1, rawH), maxDim);
 
     if (startX < 0 || startX >= cellW || startY < 0 || startY >= cellH) return;
 
@@ -1054,7 +1131,7 @@ const PIX2 = (function () {
 
     const queue = [[startX, startY]];
     const visited = new Set();
-    const maxSteps = Math.min(65536, cellW * cellH * 4);
+    const maxSteps = Math.min(Math.max(65536, cellW * cellH * 4), 4194304);
     let steps = 0;
 
     while (queue.length > 0 && steps++ < maxSteps) {
@@ -1343,6 +1420,7 @@ const PIX2 = (function () {
   function validate(doc, options) {
     const opts = options || {};
     const strict = opts.strict === true;
+    const profile = resolveResourceProfile(opts);
     const errors = [];
     const warnings = [];
     const structuredDiagnostics = [];
@@ -1379,16 +1457,18 @@ const PIX2 = (function () {
       if (!doc.meta.grid || typeof doc.meta.grid.cols !== 'number' || typeof doc.meta.grid.rows !== 'number') {
         recordDiagnostic('PIX2_ERR_INVALID_GRID', 'error', 'Invalid grid definition');
       } else {
-        if (doc.meta.grid.cols < 1 || doc.meta.grid.cols > MAX_GRID_COLS) {
-          recordDiagnostic('PIX2_WARN_CLAMPED_COLS', 'warning', `Grid columns clamped to max ${MAX_GRID_COLS}`);
+        if (doc.meta.grid.cols < 1 || doc.meta.grid.cols > profile.maxGridCols) {
+          recordDiagnostic('PIX2_WARN_CLAMPED_COLS', 'warning', `Grid columns clamped to max ${profile.maxGridCols}`);
         }
-        if (doc.meta.grid.rows < 1 || doc.meta.grid.rows > MAX_GRID_ROWS) {
-          recordDiagnostic('PIX2_WARN_CLAMPED_ROWS', 'warning', `Grid rows clamped to max ${MAX_GRID_ROWS}`);
+        if (doc.meta.grid.rows < 1 || doc.meta.grid.rows > profile.maxGridRows) {
+          recordDiagnostic('PIX2_WARN_CLAMPED_ROWS', 'warning', `Grid rows clamped to max ${profile.maxGridRows}`);
         }
       }
       const cellDim = doc.meta.cell_size || doc.meta.cellSize;
       if (!cellDim || typeof cellDim.w !== 'number' || typeof cellDim.h !== 'number') {
         recordDiagnostic('PIX2_ERR_INVALID_CELL_SIZE', 'error', 'Invalid cell_size definition');
+      } else if (cellDim.w > profile.maxCellDim || cellDim.h > profile.maxCellDim) {
+        recordDiagnostic('PIX2_WARN_CLAMPED_CELL_SIZE', 'warning', `Cell dimension (${cellDim.w}x${cellDim.h}) exceeds profile "${profile.name}" limit (${profile.maxCellDim})`);
       }
     }
 
@@ -1504,7 +1584,9 @@ const PIX2 = (function () {
     attachCellSizeAlias,
     renderCellToCanvas,
     renderAtlasToCanvas,
-    resizeCells
+    resizeCells,
+    PROFILES: RESOURCE_PROFILES,
+    resolveResourceProfile
   };
 })();
 
