@@ -287,7 +287,15 @@
     isDirty: false,
 
     // Code Editor Lock / Safe Mode
-    isCodeEditingUnlocked: false
+    isCodeEditingUnlocked: false,
+
+    // Hardware-Accelerated 1:1 Canvas Buffers & Performance
+    artworkCanvas: null,
+    artworkCtx: null,
+    floatingCanvas: null,
+    floatingCtx: null,
+    isSourceDirty: false,
+    viewMode: 'split'
   };
 
   // Toast Notification System
@@ -428,6 +436,7 @@
           createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || state.title || 'Recovered Artwork');
           const cell = getArtworkCell();
           cell.pixels = { ...autosavePayload.pixels };
+          rebuildArtworkBuffer();
           repaintCanvas();
           syncCanvasToSource();
           documentRestored = true;
@@ -476,6 +485,7 @@
       createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || 'Recovered Artwork');
       const cell = getArtworkCell();
       cell.pixels = { ...autosavePayload.pixels };
+      rebuildArtworkBuffer();
       repaintCanvas();
       syncCanvasToSource();
       documentRestored = true;
@@ -735,6 +745,7 @@
     dom.docTitle.value = state.title;
 
     resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
     repaintCanvas();
     syncCanvasToSource();
     triggerAutosave();
@@ -745,6 +756,87 @@
     if (state.doc.cells.artwork) return state.doc.cells.artwork;
     const firstKey = Object.keys(state.doc.cells)[0];
     return firstKey ? state.doc.cells[firstKey] : null;
+  }
+
+  // ===========================================================================
+  // HARDWARE-ACCELERATED 1:1 OFFSCREEN TEXTURE BUFFERS
+  // ===========================================================================
+  function rebuildArtworkBuffer() {
+    if (!state.artworkCanvas) {
+      state.artworkCanvas = document.createElement('canvas');
+      state.artworkCtx = state.artworkCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (state.artworkCanvas.width !== state.w || state.artworkCanvas.height !== state.h) {
+      state.artworkCanvas.width = state.w;
+      state.artworkCanvas.height = state.h;
+    }
+    const actx = state.artworkCtx;
+    actx.clearRect(0, 0, state.w, state.h);
+    const cell = getArtworkCell();
+    if (cell && cell.pixels) {
+      for (const key in cell.pixels) {
+        const commaIdx = key.indexOf(',');
+        if (commaIdx === -1) continue;
+        const px = Number(key.substring(0, commaIdx));
+        const py = Number(key.substring(commaIdx + 1));
+        const color = cell.pixels[key];
+        if (px >= 0 && px < state.w && py >= 0 && py < state.h && color) {
+          actx.fillStyle = color;
+          actx.fillRect(px, py, 1, 1);
+        }
+      }
+    }
+  }
+
+  function plotPixelOnBuffer(px, py, color) {
+    if (!state.artworkCtx) return;
+    if (px < 0 || px >= state.w || py < 0 || py >= state.h) return;
+    if (color === null) {
+      state.artworkCtx.clearRect(px, py, 1, 1);
+    } else {
+      state.artworkCtx.fillStyle = color;
+      state.artworkCtx.fillRect(px, py, 1, 1);
+    }
+  }
+
+  function rebuildFloatingBuffer() {
+    if (!state.floatingPixels || !state.selection) {
+      state.floatingCanvas = null;
+      state.floatingCtx = null;
+      return;
+    }
+    const w = state.selection.w;
+    const h = state.selection.h;
+    if (!state.floatingCanvas) {
+      state.floatingCanvas = document.createElement('canvas');
+      state.floatingCtx = state.floatingCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (state.floatingCanvas.width !== w || state.floatingCanvas.height !== h) {
+      state.floatingCanvas.width = w;
+      state.floatingCanvas.height = h;
+    }
+    const fctx = state.floatingCtx;
+    fctx.clearRect(0, 0, w, h);
+    for (const relKey in state.floatingPixels) {
+      const commaIdx = relKey.indexOf(',');
+      if (commaIdx === -1) continue;
+      const rx = Number(relKey.substring(0, commaIdx));
+      const ry = Number(relKey.substring(commaIdx + 1));
+      const col = state.floatingPixels[relKey];
+      if (rx >= 0 && rx < w && ry >= 0 && ry < h && col) {
+        fctx.fillStyle = col;
+        fctx.fillRect(rx, ry, 1, 1);
+      }
+    }
+  }
+
+  let repaintRafId = null;
+  function requestCanvasRepaint() {
+    if (repaintRafId !== null) return;
+    repaintRafId = requestAnimationFrame(() => {
+      repaintRafId = null;
+      repaintCanvas();
+    });
   }
 
   // ===========================================================================
@@ -795,20 +887,13 @@
       ctx.fillRect(0, 0, totalW, totalH);
     }
 
-    const cell = getArtworkCell();
-    if (cell && cell.pixels) {
-      // 2. Render all artwork pixels (Integer zoom * zoom block)
-      for (const key in cell.pixels) {
-        const parts = key.split(',');
-        const px = parseInt(parts[0], 10);
-        const py = parseInt(parts[1], 10);
-        const color = cell.pixels[key];
-
-        if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
-          ctx.fillStyle = color;
-          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
-        }
-      }
+    // 2. Render all artwork pixels via GPU-accelerated 1:1 texture blit (Nearest-Neighbor)
+    if (!state.artworkCanvas) {
+      rebuildArtworkBuffer();
+    }
+    if (state.artworkCanvas) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(state.artworkCanvas, 0, 0, totalW, totalH);
     }
 
     // 3. Razor-Sharp Pixel Grid Overlay (Active at zoom >= 4)
@@ -912,29 +997,21 @@
 
     // Render floating pixels being dragged/transformed on preview canvas
     if (state.floatingPixels) {
-      if (state.isRotatingSelection && state.rotationCurrentAngle !== 0) {
-        ctx.save();
-        const centerCanvasX = (x + w / 2) * zoom;
-        const centerCanvasY = (y + h / 2) * zoom;
-        ctx.translate(centerCanvasX, centerCanvasY);
-        ctx.rotate(state.rotationCurrentAngle);
-        for (const relKey in state.floatingPixels) {
-          const [rx, ry] = relKey.split(',').map(Number);
-          const px = (rx - w / 2) * zoom;
-          const py = (ry - h / 2) * zoom;
-          ctx.fillStyle = state.floatingPixels[relKey];
-          ctx.fillRect(px, py, zoom, zoom);
-        }
-        ctx.restore();
-      } else {
-        for (const relKey in state.floatingPixels) {
-          const [rx, ry] = relKey.split(',').map(Number);
-          const px = x + rx;
-          const py = y + ry;
-          if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
-            ctx.fillStyle = state.floatingPixels[relKey];
-            ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
-          }
+      if (!state.floatingCanvas) {
+        rebuildFloatingBuffer();
+      }
+      if (state.floatingCanvas) {
+        ctx.imageSmoothingEnabled = false;
+        if (state.isRotatingSelection && state.rotationCurrentAngle !== 0) {
+          ctx.save();
+          const centerCanvasX = (x + w / 2) * zoom;
+          const centerCanvasY = (y + h / 2) * zoom;
+          ctx.translate(centerCanvasX, centerCanvasY);
+          ctx.rotate(state.rotationCurrentAngle);
+          ctx.drawImage(state.floatingCanvas, (-w / 2) * zoom, (-h / 2) * zoom, w * zoom, h * zoom);
+          ctx.restore();
+        } else {
+          ctx.drawImage(state.floatingCanvas, x * zoom, y * zoom, w * zoom, h * zoom);
         }
       }
     }
@@ -1118,7 +1195,13 @@
   // 1. Canvas -> Source (Strictly On Pointer Up for 60fps performance)
   function syncCanvasToSource() {
     if (state.isSyncingFromSource) return;
+    if (state.viewMode === 'canvas') {
+      state.isSourceDirty = true;
+      updatePixelCount();
+      return;
+    }
     state.isSyncingFromCanvas = true;
+    state.isSourceDirty = false;
 
     try {
       const cell = getArtworkCell();
@@ -1246,6 +1329,7 @@
         }
       }
 
+      rebuildArtworkBuffer();
       repaintCanvas();
       pushHistory();
       triggerAutosave();
@@ -1271,14 +1355,23 @@
     }
   }
 
+  let lastGutterLineCount = 0;
   function updateCodeGutter() {
-    const lines = dom.codeEditor.value.split('\n');
-    let gutterHtml = '';
-    for (let i = 1; i <= lines.length; i++) {
-      gutterHtml += `${i}<br>`;
+    const text = dom.codeEditor.value || '';
+    let lineCount = 1;
+    for (let i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) === 10) lineCount++;
     }
-    dom.codeGutter.innerHTML = gutterHtml;
-    dom.codeLinesCount.textContent = `${lines.length} lines`;
+    dom.codeLinesCount.textContent = `${lineCount} lines`;
+
+    if (lineCount === lastGutterLineCount) return;
+    lastGutterLineCount = lineCount;
+
+    let gutterText = '';
+    for (let i = 1; i <= lineCount; i++) {
+      gutterText += i + '\n';
+    }
+    dom.codeGutter.textContent = gutterText;
   }
 
   function updatePixelCount() {
@@ -1307,14 +1400,34 @@
 
     if (color === null) {
       delete cell.pixels[`${x},${y}`];
-      if (state.symH) delete cell.pixels[`${w - 1 - x},${y}`];
-      if (state.symV) delete cell.pixels[`${x},${h - 1 - y}`];
-      if (state.symH && state.symV) delete cell.pixels[`${w - 1 - x},${h - 1 - y}`];
+      plotPixelOnBuffer(x, y, null);
+      if (state.symH) {
+        delete cell.pixels[`${w - 1 - x},${y}`];
+        plotPixelOnBuffer(w - 1 - x, y, null);
+      }
+      if (state.symV) {
+        delete cell.pixels[`${x},${h - 1 - y}`];
+        plotPixelOnBuffer(x, h - 1 - y, null);
+      }
+      if (state.symH && state.symV) {
+        delete cell.pixels[`${w - 1 - x},${h - 1 - y}`];
+        plotPixelOnBuffer(w - 1 - x, h - 1 - y, null);
+      }
     } else {
       cell.pixels[`${x},${y}`] = color;
-      if (state.symH) cell.pixels[`${w - 1 - x},${y}`] = color;
-      if (state.symV) cell.pixels[`${x},${h - 1 - y}`] = color;
-      if (state.symH && state.symV) cell.pixels[`${w - 1 - x},${h - 1 - y}`] = color;
+      plotPixelOnBuffer(x, y, color);
+      if (state.symH) {
+        cell.pixels[`${w - 1 - x},${y}`] = color;
+        plotPixelOnBuffer(w - 1 - x, y, color);
+      }
+      if (state.symV) {
+        cell.pixels[`${x},${h - 1 - y}`] = color;
+        plotPixelOnBuffer(x, h - 1 - y, color);
+      }
+      if (state.symH && state.symV) {
+        cell.pixels[`${w - 1 - x},${h - 1 - y}`] = color;
+        plotPixelOnBuffer(w - 1 - x, h - 1 - y, color);
+      }
     }
   }
 
@@ -1363,6 +1476,8 @@
             }
           }
         }
+        rebuildArtworkBuffer();
+        rebuildFloatingBuffer();
         repaintCanvas();
       }
       state.rotationBaseFloatingPixels = { ...state.floatingPixels };
@@ -1403,6 +1518,8 @@
               }
             }
           }
+          rebuildArtworkBuffer();
+          rebuildFloatingBuffer();
           repaintCanvas();
         }
         renderSelectionMarquee();
@@ -1432,6 +1549,7 @@
     // Bucket
     if (state.currentTool === 'bucket') {
       _Tools.floodFill(cell, x, y, activeColor, { w: state.w, h: state.h });
+      rebuildArtworkBuffer();
       repaintCanvas();
       pushHistory();
       syncCanvasToSource();
@@ -1530,7 +1648,7 @@
       });
       state.lastX = x;
       state.lastY = y;
-      repaintCanvas();
+      requestCanvasRepaint();
     } else if (state.currentTool === 'line') {
       drawPreviewLine(state.dragStartX, state.dragStartY, x, y, activeColor);
     } else if (state.currentTool === 'rect') {
@@ -1639,6 +1757,7 @@
           state.floatingPixels = trimmedPixels;
           state.floatingCurrentX = state.selection.x;
           state.floatingCurrentY = state.selection.y;
+          rebuildFloatingBuffer();
         } else {
           state.selection.x = Math.round(origX + (origW - newW) / 2);
           state.selection.y = Math.round(origY + (origH - newH) / 2);
@@ -1647,6 +1766,7 @@
           state.floatingPixels = rotatedPixels;
           state.floatingCurrentX = state.selection.x;
           state.floatingCurrentY = state.selection.y;
+          rebuildFloatingBuffer();
         }
 
         const deg = Math.round((theta * 180) / Math.PI);
@@ -1677,6 +1797,11 @@
 
     dom.ctxPreview.clearRect(0, 0, state.w * state.zoom, state.h * state.zoom);
 
+    if (repaintRafId !== null) {
+      cancelAnimationFrame(repaintRafId);
+      repaintRafId = null;
+    }
+
     if (state.currentTool === 'line') {
       _Tools.line(state.dragStartX, state.dragStartY, x, y, (px, py) => {
         plotPixelWithSymmetry(cell, px, py, activeColor);
@@ -1696,6 +1821,8 @@
       for (const pt of points) {
         plotPixelWithSymmetry(cell, pt.x, pt.y, activeColor);
       }
+      repaintCanvas();
+    } else {
       repaintCanvas();
     }
 
@@ -1886,6 +2013,7 @@
           cell.pixels[`${destX},${destY}`] = state.floatingPixels[relKey];
         }
       }
+      rebuildArtworkBuffer();
       pushHistory();
       repaintCanvas();
       syncCanvasToSource();
@@ -1893,6 +2021,8 @@
     }
     state.floatingPixels = null;
     state.floatingOriginalSel = null;
+    state.floatingCanvas = null;
+    state.floatingCtx = null;
   }
 
   // ===========================================================================
@@ -1967,6 +2097,7 @@
 
     if (!state.selection) {
       cell.pixels = {};
+      rebuildArtworkBuffer();
       repaintCanvas();
       pushHistory();
       syncCanvasToSource();
@@ -1983,6 +2114,7 @@
     }
 
     state.selection = null;
+    rebuildArtworkBuffer();
     renderSelectionMarquee();
     repaintCanvas();
     pushHistory();
@@ -2010,6 +2142,7 @@
     state.floatingCurrentX = startX;
     state.floatingCurrentY = startY;
     state.floatingPixels = { ...state.clipboard.pixels };
+    rebuildFloatingBuffer();
 
     selectTool('select');
     renderSelectionMarquee();
@@ -2027,6 +2160,7 @@
           cell.pixels[`${px},${py}`] = state.primaryColor;
         }
       }
+      rebuildArtworkBuffer();
       repaintCanvas();
       pushHistory();
       syncCanvasToSource();
@@ -2044,6 +2178,9 @@
 
     state.floatingPixels = null;
     state.floatingOriginalSel = null;
+    state.floatingCanvas = null;
+    state.floatingCtx = null;
+    rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -2068,6 +2205,8 @@
         }
       }
     }
+    rebuildArtworkBuffer();
+    rebuildFloatingBuffer();
   }
 
   // Transform Actions (Selection or Full Canvas)
@@ -2093,6 +2232,7 @@
         state.floatingOriginalSel.w = oldH;
         state.floatingOriginalSel.h = oldW;
       }
+      rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
       pushHistory();
@@ -2103,6 +2243,7 @@
     }
 
     _Tools.rotate90Clockwise(cell, state.w, state.h);
+    rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -2124,6 +2265,7 @@
         newFloating[`${nx},${ry}`] = state.floatingPixels[relKey];
       }
       state.floatingPixels = newFloating;
+      rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
       pushHistory();
@@ -2134,6 +2276,7 @@
     }
 
     _Tools.flipHorizontal(cell, state.w);
+    rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -2155,6 +2298,7 @@
         newFloating[`${rx},${ny}`] = state.floatingPixels[relKey];
       }
       state.floatingPixels = newFloating;
+      rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
       pushHistory();
@@ -2165,6 +2309,7 @@
     }
 
     _Tools.flipVertical(cell, state.h);
+    rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -2231,6 +2376,7 @@
       }
     }
     cell.pixels = newPixels;
+    rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -2254,6 +2400,7 @@
     const cell = getArtworkCell();
     if (!cell) return;
     _Tools.nudge(cell, dx, dy, state.w, state.h);
+    rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
     syncCanvasToSource();
@@ -2314,6 +2461,7 @@
 
     dom.dimBadge.textContent = `${state.w}×${state.h}`;
     resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
     repaintCanvas();
     syncCanvasToSource();
     triggerAutosave();
@@ -2322,22 +2470,32 @@
   // ===========================================================================
   // AUTOSAVE & CRASH RECOVERY
   // ===========================================================================
-  function triggerAutosave() {
-    const cell = getArtworkCell();
-    if (!cell) return;
+  let autosaveTimer = null;
+  function triggerAutosave(immediate = false) {
+    clearTimeout(autosaveTimer);
+    const execute = () => {
+      const cell = getArtworkCell();
+      if (!cell) return;
 
-    const payload = {
-      w: state.w,
-      h: state.h,
-      title: state.title,
-      pixels: cell.pixels,
-      updatedAt: Date.now()
+      const payload = {
+        w: state.w,
+        h: state.h,
+        title: state.title,
+        pixels: cell.pixels,
+        updatedAt: Date.now()
+      };
+
+      try {
+        localStorage.setItem('pix2_pixelart_autosave', JSON.stringify(payload));
+      } catch (e) {
+        // Storage quota exceeded or disabled
+      }
     };
 
-    try {
-      localStorage.setItem('pix2_pixelart_autosave', JSON.stringify(payload));
-    } catch (e) {
-      // Storage quota exceeded or disabled
+    if (immediate) {
+      execute();
+    } else {
+      autosaveTimer = setTimeout(execute, 1000);
     }
   }
 
@@ -2479,13 +2637,10 @@
       pctx.fillRect(0, 0, state.w, state.h);
     }
 
-    const cell = getArtworkCell();
-    if (cell && cell.pixels) {
-      for (const k in cell.pixels) {
-        const [px, py] = k.split(',').map(Number);
-        pctx.fillStyle = cell.pixels[k];
-        pctx.fillRect(px, py, 1, 1);
-      }
+    if (!state.artworkCanvas) rebuildArtworkBuffer();
+    if (state.artworkCanvas) {
+      pctx.imageSmoothingEnabled = false;
+      pctx.drawImage(state.artworkCanvas, 0, 0, state.w, state.h);
     }
   }
 
@@ -2503,14 +2658,10 @@
       ctx.fillRect(0, 0, offscreen.width, offscreen.height);
     }
 
-    // Draw scaled nearest-neighbor from pixel matrix
-    const cell = getArtworkCell();
-    if (cell && cell.pixels) {
-      for (const k in cell.pixels) {
-        const [px, py] = k.split(',').map(Number);
-        ctx.fillStyle = cell.pixels[k];
-        ctx.fillRect(px * scale, py * scale, scale, scale);
-      }
+    if (!state.artworkCanvas) rebuildArtworkBuffer();
+    if (state.artworkCanvas) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(state.artworkCanvas, 0, 0, offscreen.width, offscreen.height);
     }
 
     offscreen.toBlob((blob) => {
@@ -2911,6 +3062,9 @@ Do not include conversational greetings or postscripts.`;
 
   async function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
+    if (state.isSourceDirty) {
+      syncCanvasToSource();
+    }
     const text = dom.codeEditor.value || _PIX2.serialize(state.doc);
 
     // Direct overwrite to existing handle
@@ -3001,6 +3155,9 @@ Do not include conversational greetings or postscripts.`;
   }
 
   function savePix2File() {
+    if (state.isSourceDirty) {
+      syncCanvasToSource();
+    }
     const text = dom.codeEditor.value || _PIX2.serialize(state.doc);
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -3086,6 +3243,7 @@ Do not include conversational greetings or postscripts.`;
           }
         }
 
+        rebuildArtworkBuffer();
         repaintCanvas();
         pushHistory();
         syncCanvasToSource();
@@ -3241,6 +3399,7 @@ Do not include conversational greetings or postscripts.`;
         const cell = getArtworkCell();
         if (cell) {
           cell.pixels = {};
+          rebuildArtworkBuffer();
           repaintCanvas();
           pushHistory();
           syncCanvasToSource();
@@ -3342,6 +3501,9 @@ Do not include conversational greetings or postscripts.`;
     document.getElementById('btn-save-pix2').addEventListener('click', () => saveFileNative(false));
     document.getElementById('btn-export-png').addEventListener('click', openExportModal);
     document.getElementById('btn-ai-assistant').addEventListener('click', () => {
+      if (state.isSourceDirty) {
+        syncCanvasToSource();
+      }
       updateAiPromptView();
       dom.modalAi.classList.remove('hidden');
     });
@@ -3357,6 +3519,7 @@ Do not include conversational greetings or postscripts.`;
     const btnCode = document.getElementById('btn-view-code');
 
     function setViewMode(mode) {
+      state.viewMode = mode;
       dom.workspace.classList.remove('view-canvas-only', 'view-code-only');
       btnSplit.classList.remove('active');
       btnCanvas.classList.remove('active');
@@ -3370,9 +3533,15 @@ Do not include conversational greetings or postscripts.`;
         dom.workspace.classList.add('view-code-only');
         btnCode.classList.add('active');
         dom.codePane.style.width = '100%';
+        if (state.isSourceDirty) {
+          syncCanvasToSource();
+        }
       } else {
         btnSplit.classList.add('active');
         dom.codePane.style.width = `${state.codePaneWidth}px`;
+        if (state.isSourceDirty) {
+          syncCanvasToSource();
+        }
       }
     }
 
@@ -3509,12 +3678,20 @@ Do not include conversational greetings or postscripts.`;
 
     // Code Header Actions
     document.getElementById('btn-copy-code').addEventListener('click', () => {
+      if (state.isSourceDirty) {
+        syncCanvasToSource();
+      }
       navigator.clipboard.writeText(dom.codeEditor.value).then(() => {
-        alert('PIX2 code copied to clipboard!');
+        showToast('PIX2 code copied to clipboard!');
       });
     });
 
-    document.getElementById('btn-download-pix2').addEventListener('click', () => saveFileNative(false));
+    document.getElementById('btn-download-pix2').addEventListener('click', () => {
+      if (state.isSourceDirty) {
+        syncCanvasToSource();
+      }
+      saveFileNative(false);
+    });
 
     // Modal Close buttons
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
@@ -3794,6 +3971,7 @@ Do not include conversational greetings or postscripts.`;
 
     // Real-time window beforeunload watcher
     window.addEventListener('beforeunload', (e) => {
+      triggerAutosave(true);
       if (state.isDirty || (!currentFileHandle && state.doc && Object.keys(getArtworkCell()?.pixels || {}).length > 0)) {
         e.preventDefault();
         e.returnValue = '';
