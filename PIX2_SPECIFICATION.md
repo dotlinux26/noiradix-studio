@@ -286,7 +286,7 @@ USER TASK:
 
 ---
 
-## 4. PIX2 1.1 Structural Graphics Architecture
+## 8. PIX2 1.1 Structural Graphics Architecture
 
 PIX2 1.1 evolves the standard from flat pixel arrays into a structured, hierarchical document object model designed for semantic AI reasoning, non-destructive editing, and modular asset pipelines.
 
@@ -299,9 +299,9 @@ PIX2 1.1 evolves the standard from flat pixel arrays into a structured, hierarch
   └── [direct legacy/flat pixels for backwards compatibility]
 ```
 
-### 4.1 Structural Primitives: `@layer`, `@group`, and `@region`
+### 8.1 Structural Primitives: `@layer`, `@group`, and `@region`
 
-#### 4.1.1 The `@layer` Directive
+#### 8.1.1 The `@layer` Directive
 A top-level visual stratum within a cell. Layers are evaluated in document order (or explicit `z_index`) using standard alpha compositing.
 ```pix2
 @cell cell_0_0
@@ -322,7 +322,7 @@ A top-level visual stratum within a cell. Layers are evaluated in document order
   - `blend: <string>` — Compositing blend mode (`normal`).
   - `z_index: <integer>` — Explicit layer rendering depth (default: document pre-order).
 
-#### 4.1.2 The `@group` Directive
+#### 8.1.2 The `@group` Directive
 A hierarchical organizational folder inside a layer or parent group. Groups inherit parent visibility and opacity.
 ```pix2
     @group equipment
@@ -340,7 +340,7 @@ A hierarchical organizational folder inside a layer or parent group. Groups inhe
   - `opacity: <float>` — Cascading opacity multiplier.
   - `collapsed: <boolean>` — Editor tree fold state.
 
-#### 4.1.3 The `@region` Directive (Semantic Isolation)
+#### 8.1.3 The `@region` Directive (Semantic Isolation)
 A named, isolated pixel partition representing an individual anatomical feature, garment, or accessory (e.g., `left_eye`, `visor`, `cape`).
 ```pix2
       @region left_eye
@@ -359,7 +359,7 @@ A named, isolated pixel partition representing an individual anatomical feature,
   - `tags: [<string>, ...]` — Optional query tags for AI reasoning.
   - `p <x,y> <color>` — Local cell-anchored pixel coordinates.
 
-### 4.2 Semantic Isolation & Zero Cross-Region Mutation Invariant
+### 8.2 Semantic Isolation & Zero Cross-Region Mutation Invariant
 
 In traditional flat pixel art formats, sprites are an undifferentiated bag of coordinates. When an AI model or artist attempts to edit a specific feature (such as changing eye color or adjusting hair length), coordinates belonging to adjacent features (skin, eyebrows, hat) are frequently corrupted or overwritten.
 
@@ -368,7 +368,7 @@ In traditional flat pixel art formats, sprites are an undifferentiated bag of co
 2. **Zero Cross-Region Mutation:** Pixels belonging to sibling or parent regions remain strictly immutable during edit transactions.
 3. **Editor Focus & Dimming:** In Isolation Mode, non-isolated regions are dimmed to `0.22` opacity, providing clear visual focus while retaining context.
 
-### 4.3 Compositing, Z-Order & Alpha Blending
+### 8.3 Compositing, Z-Order & Alpha Blending
 
 Cells composite structural nodes using standard Porter-Duff source-over normal alpha blending:
 $$\alpha_{\text{out}} = \alpha_A + \alpha_B (1 - \alpha_A)$$
@@ -376,7 +376,7 @@ $$C_{\text{out}} = \frac{C_A \alpha_A + C_B \alpha_B (1 - \alpha_A)}{\alpha_{\te
 
 Evaluation proceeds in depth pre-order: lower layers render first, followed by child groups and regions, composited over the transparent background.
 
-### 4.4 Platformer 2-Direction Locomotion Template
+### 8.4 Platformer 2-Direction Locomotion Template
 
 PIX2 1.1 formalizes the **Platformer 2D (Left/Right)** animation template, catering to sidescrollers, metroidvanias, and action platformers:
 - **Direction Tags:** `right` (primary facing), `left` (mirrored or asymmetric facing).
@@ -386,7 +386,7 @@ PIX2 1.1 formalizes the **Platformer 2D (Left/Right)** animation template, cater
   - Optional: `jump_right`, `jump_left`, `fall_right`, `fall_left`, `attack_right`, `attack_left`
 - **Standard Sheet Layout:** `4×2` (4 frames, 2 tracks) or `6×2` (6 frames, 2 tracks) with `32×32` or `48×48` cell resolutions.
 
-### 4.5 Backward Compatibility & Migration
+### 8.5 Backward Compatibility & Migration
 
 - **100% Backward Compatible:** Any PIX2 1.0 flat document loads seamlessly in PIX2 1.1 editors without modification.
 - **Lossless Upgrade:** Flat cells are automatically wrapped into an implicit root layer upon structural mutation (`PIX2.upgradeV10ToV11`).
