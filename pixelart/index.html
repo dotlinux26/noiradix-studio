@@ -30,7 +30,7 @@
       <div class="pa-doc-info">
         <input type="text" id="pa-doc-title" class="pa-title-input" value="Pixel Artwork" title="Click to rename artwork" aria-label="Artwork Title">
         <span id="pa-header-dirty-dot" class="pa-dirty-dot" title="Unsaved changes (Ctrl+S to save)">●</span>
-        <span class="pa-dim-badge" id="pa-dim-badge">64×64</span>
+        <span class="pa-dim-badge" id="pa-dim-badge" role="button" tabindex="0" title="Click to resize canvas resolution (W × H)" aria-label="Resize Canvas Resolution">64×64</span>
         <div class="pa-file-status-group" id="pa-file-status-group">
           <span id="pa-file-source-badge" class="pa-file-source-badge draft" title="File Source: In-Memory Draft. Press Ctrl+S to save to disk.">
             <i class="fa-solid fa-clock-rotate-left"></i> <span id="pa-file-source-text">Draft</span>
@@ -209,8 +209,13 @@
     <section class="pa-canvas-pane" id="pa-canvas-pane">
       <div class="pa-canvas-viewport" id="pa-canvas-viewport">
         <div class="pa-canvas-container" id="pa-canvas-container">
-          <canvas id="pa-canvas-main" width="64" height="64" class="pa-canvas-layer"></canvas>
-          <canvas id="pa-canvas-preview" width="64" height="64" class="pa-canvas-layer pa-canvas-overlay"></canvas>
+          <div class="pa-ruler-corner" id="pa-ruler-corner"></div>
+          <div id="pa-ruler-top" class="pa-ruler-top-bar"></div>
+          <div id="pa-ruler-left" class="pa-ruler-left-bar"></div>
+          <div class="pa-canvas-stack" id="pa-canvas-stack">
+            <canvas id="pa-canvas-main" width="64" height="64" class="pa-canvas-layer"></canvas>
+            <canvas id="pa-canvas-preview" width="64" height="64" class="pa-canvas-layer pa-canvas-overlay"></canvas>
+          </div>
         </div>
       </div>
 
@@ -259,6 +264,11 @@
           <button id="btn-toggle-grid" class="pa-status-btn active" title="Toggle Pixel Grid">
             <i class="fa-solid fa-border-all"></i>
             <span>Grid</span>
+          </button>
+
+          <button id="btn-toggle-rulers" class="pa-status-btn active" title="Toggle Canvas Pixel Rulers">
+            <i class="fa-solid fa-ruler-combined"></i>
+            <span>Rulers</span>
           </button>
 
           <div class="pa-status-divider" aria-hidden="true"></div>
@@ -515,6 +525,69 @@
       <div class="pa-modal-footer">
         <button class="pa-btn" data-close-modal>Cancel</button>
         <button id="btn-confirm-new-canvas" class="pa-btn pa-btn-accent">Create Canvas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESIZE CANVAS MODAL -->
+  <div id="modal-resize-canvas" class="pa-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="pa-resize-modal-title">
+    <div class="pa-modal-dialog">
+      <div class="pa-modal-header">
+        <h3 id="pa-resize-modal-title"><i class="fa-solid fa-up-right-and-down-left-from-center text-accent"></i> Resize Canvas Resolution</h3>
+        <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pa-modal-body">
+        <p class="pa-modal-hint">Select a standard pixel art aspect ratio or specify custom dimensions up to 1024×1024. Existing artwork pixels will be preserved.</p>
+        
+        <div class="pa-preset-category-label">Square (1:1)</div>
+        <div class="pa-presets-grid" id="pa-resize-presets-square">
+          <button class="pa-preset-chip" data-w="16" data-h="16">16 × 16</button>
+          <button class="pa-preset-chip" data-w="24" data-h="24">24 × 24</button>
+          <button class="pa-preset-chip" data-w="32" data-h="32">32 × 32</button>
+          <button class="pa-preset-chip" data-w="48" data-h="48">48 × 48</button>
+          <button class="pa-preset-chip" data-w="64" data-h="64">64 × 64</button>
+          <button class="pa-preset-chip" data-w="128" data-h="128">128 × 128</button>
+          <button class="pa-preset-chip" data-w="256" data-h="256">256 × 256</button>
+          <button class="pa-preset-chip" data-w="512" data-h="512">512 × 512</button>
+          <button class="pa-preset-chip" data-w="1024" data-h="1024">1024 × 1024</button>
+        </div>
+
+        <div class="pa-preset-category-label">Classic &amp; Handheld (4:3 &amp; 3:2)</div>
+        <div class="pa-presets-grid" id="pa-resize-presets-classic">
+          <button class="pa-preset-chip" data-w="32" data-h="24">32 × 24 (4:3)</button>
+          <button class="pa-preset-chip" data-w="64" data-h="48">64 × 48 (4:3)</button>
+          <button class="pa-preset-chip" data-w="160" data-h="120">160 × 120 (4:3)</button>
+          <button class="pa-preset-chip" data-w="320" data-h="240">320 × 240 (4:3)</button>
+          <button class="pa-preset-chip" data-w="48" data-h="32">48 × 32 (3:2)</button>
+          <button class="pa-preset-chip" data-w="240" data-h="160">240 × 160 (GBA 3:2)</button>
+        </div>
+
+        <div class="pa-preset-category-label">Widescreen &amp; Cinematic (16:9 &amp; 21:9)</div>
+        <div class="pa-presets-grid" id="pa-resize-presets-wide">
+          <button class="pa-preset-chip" data-w="64" data-h="36">64 × 36 (16:9)</button>
+          <button class="pa-preset-chip" data-w="192" data-h="108">192 × 108 (16:9)</button>
+          <button class="pa-preset-chip" data-w="320" data-h="180">320 × 180 (16:9)</button>
+          <button class="pa-preset-chip" data-w="640" data-h="360">640 × 360 (16:9)</button>
+          <button class="pa-preset-chip" data-w="256" data-h="110">256 × 110 (21:9)</button>
+        </div>
+
+        <div class="pa-custom-size-row">
+          <div class="pa-input-group">
+            <label for="input-resize-w">Width (px)</label>
+            <input type="number" id="input-resize-w" min="1" max="1024" value="64">
+          </div>
+          <span class="pa-times">×</span>
+          <div class="pa-input-group">
+            <label for="input-resize-h">Height (px)</label>
+            <input type="number" id="input-resize-h" min="1" max="1024" value="64">
+          </div>
+        </div>
+      </div>
+      <div class="pa-modal-footer">
+        <button class="pa-btn" data-close-modal>Cancel</button>
+        <button id="btn-confirm-resize-canvas" class="pa-btn pa-btn-accent">
+          <i class="fa-solid fa-arrows-up-down-left-right"></i> Resize Canvas
+        </button>
       </div>
     </div>
   </div>

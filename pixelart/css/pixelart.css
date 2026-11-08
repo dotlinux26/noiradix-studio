@@ -258,6 +258,7 @@ html, body {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-family: var(--font-mono);
   background: var(--bg-primary);
@@ -266,6 +267,22 @@ html, body {
   border-radius: 6px;
   color: var(--text-muted);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pa-dim-badge:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.pa-dim-badge:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 
 /* File Status & Direct-to-Disk Badges */
@@ -653,9 +670,106 @@ html, body {
 
 .pa-canvas-container {
   position: absolute;
+  display: inline-grid;
+  grid-template-columns: 24px auto;
+  grid-template-rows: 24px auto;
+  border-radius: 6px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  background: transparent;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
   transform-origin: center center;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.pa-canvas-container.hide-rulers {
+  grid-template-columns: 0 auto;
+  grid-template-rows: 0 auto;
+  border: none;
+  background: transparent;
+}
+
+.pa-canvas-container.hide-rulers .pa-ruler-corner,
+.pa-canvas-container.hide-rulers .pa-ruler-top-bar,
+.pa-canvas-container.hide-rulers .pa-ruler-left-bar {
+  display: none !important;
+}
+
+.pa-ruler-corner {
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--text-dim);
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pa-ruler-top-bar {
+  display: flex;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+  height: 24px;
+  box-sizing: border-box;
+}
+
+.pa-ruler-left-bar {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  overflow: hidden;
+  width: 24px;
+  box-sizing: border-box;
+}
+
+.pa-ruler-tick {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  border-right: 1px solid rgba(148, 163, 184, 0.25);
+  box-sizing: border-box;
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.pa-ruler-tick-v {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  box-sizing: border-box;
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.pa-ruler-tick.active-ruler-tick,
+.pa-ruler-tick-v.active-ruler-tick {
+  background-color: var(--accent-primary, #6366f1) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.pa-canvas-stack {
+  position: relative;
+  background-color: transparent;
+  display: block;
+  line-height: 0;
 }
 
 .pa-canvas-layer {

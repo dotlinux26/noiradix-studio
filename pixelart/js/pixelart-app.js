@@ -239,6 +239,7 @@
     panX: 0,
     panY: 0,
     showGrid: true,
+    showRulers: localStorage.getItem('pix2_pixelart_rulers') !== 'false',
     isPanning: false,
     panStartX: 0,
     panStartY: 0,
@@ -631,6 +632,10 @@
     // Canvas
     dom.viewport = document.getElementById('pa-canvas-viewport');
     dom.container = document.getElementById('pa-canvas-container');
+    dom.canvasStack = document.getElementById('pa-canvas-stack');
+    dom.rulerCorner = document.getElementById('pa-ruler-corner');
+    dom.rulerTop = document.getElementById('pa-ruler-top');
+    dom.rulerLeft = document.getElementById('pa-ruler-left');
     dom.canvasMain = document.getElementById('pa-canvas-main');
     dom.canvasPreview = document.getElementById('pa-canvas-preview');
     dom.ctxMain = dom.canvasMain.getContext('2d');
@@ -642,6 +647,7 @@
     dom.hoverColorLabel = document.getElementById('pa-hover-color-label');
     dom.zoomLabel = document.getElementById('pa-zoom-label');
     dom.btnToggleGrid = document.getElementById('btn-toggle-grid');
+    dom.btnToggleRulers = document.getElementById('btn-toggle-rulers');
     dom.btnBgTransparent = document.getElementById('btn-bg-transparent');
     dom.btnBgWhite = document.getElementById('btn-bg-white');
     dom.btnBgBlack = document.getElementById('btn-bg-black');
@@ -683,6 +689,10 @@
 
     // Modals
     dom.modalNew = document.getElementById('modal-new-canvas');
+    dom.modalResize = document.getElementById('modal-resize-canvas');
+    dom.inputResizeW = document.getElementById('input-resize-w');
+    dom.inputResizeH = document.getElementById('input-resize-h');
+    dom.btnConfirmResizeCanvas = document.getElementById('btn-confirm-resize-canvas');
     dom.modalExport = document.getElementById('modal-export-png');
     dom.modalAi = document.getElementById('modal-ai-assistant');
     dom.modalHelp = document.getElementById('modal-help');
@@ -747,6 +757,7 @@
     resizeCanvasesToZoom();
     rebuildArtworkBuffer();
     repaintCanvas();
+    renderRulers();
     syncCanvasToSource();
     triggerAutosave();
   }
@@ -851,12 +862,24 @@
     dom.canvasPreview.width = totalW;
     dom.canvasPreview.height = totalH;
 
-    dom.container.style.width = `${totalW}px`;
-    dom.container.style.height = `${totalH}px`;
+    const rulerOffset = state.showRulers ? 24 : 0;
+    if (dom.container) {
+      dom.container.classList.toggle('hide-rulers', !state.showRulers);
+      dom.container.style.width = `${totalW + rulerOffset}px`;
+      dom.container.style.height = `${totalH + rulerOffset}px`;
+    }
+    if (dom.canvasStack) {
+      dom.canvasStack.style.width = `${totalW}px`;
+      dom.canvasStack.style.height = `${totalH}px`;
+    }
     dom.canvasMain.style.width = `${totalW}px`;
     dom.canvasMain.style.height = `${totalH}px`;
     dom.canvasPreview.style.width = `${totalW}px`;
     dom.canvasPreview.style.height = `${totalH}px`;
+
+    if (dom.rulerTop) dom.rulerTop.style.width = `${totalW}px`;
+    if (dom.rulerLeft) dom.rulerLeft.style.height = `${totalH}px`;
+    if (dom.btnToggleRulers) dom.btnToggleRulers.classList.toggle('active', state.showRulers);
   }
 
   function repaintCanvas() {
@@ -985,6 +1008,91 @@
 
     renderSelectionMarquee();
     updateContainerTransform();
+  }
+
+  // ===========================================================================
+  // CANVAS RULERS & ADAPTIVE PIXEL TICKS
+  // ===========================================================================
+  let lastActiveTickX = null;
+  let lastActiveTickY = null;
+
+  function renderRulers() {
+    if (!dom.rulerTop || !dom.rulerLeft) return;
+
+    if (!state.showRulers) {
+      if (dom.container) dom.container.classList.add('hide-rulers');
+      if (dom.btnToggleRulers) dom.btnToggleRulers.classList.remove('active');
+      return;
+    }
+
+    if (dom.container) dom.container.classList.remove('hide-rulers');
+    if (dom.btnToggleRulers) dom.btnToggleRulers.classList.add('active');
+
+    const cw = state.w;
+    const ch = state.h;
+    const zoom = state.zoom;
+
+    // Adaptive step for tick numbering to prevent overlapping labels
+    let step = 4;
+    if (zoom < 3) step = 32;
+    else if (zoom < 6) step = 16;
+    else if (zoom < 12) step = 8;
+    else step = 4;
+
+    // Top ruler ticks
+    dom.rulerTop.innerHTML = '';
+    const fragTop = document.createDocumentFragment();
+    for (let x = 0; x < cw; x++) {
+      const tick = document.createElement('div');
+      tick.className = 'pa-ruler-tick';
+      tick.style.width = `${zoom}px`;
+      if (x % step === 0 || x === cw - 1) {
+        tick.textContent = String(x);
+      }
+      fragTop.appendChild(tick);
+    }
+    dom.rulerTop.appendChild(fragTop);
+
+    // Left ruler ticks
+    dom.rulerLeft.innerHTML = '';
+    const fragLeft = document.createDocumentFragment();
+    for (let y = 0; y < ch; y++) {
+      const tick = document.createElement('div');
+      tick.className = 'pa-ruler-tick-v';
+      tick.style.height = `${zoom}px`;
+      if (y % step === 0 || y === ch - 1) {
+        tick.textContent = String(y);
+      }
+      fragLeft.appendChild(tick);
+    }
+    dom.rulerLeft.appendChild(fragLeft);
+
+    lastActiveTickX = null;
+    lastActiveTickY = null;
+  }
+
+  function updateRulerHighlight(px, py) {
+    if (!state.showRulers || !dom.rulerTop || !dom.rulerLeft) return;
+
+    if (lastActiveTickX !== px) {
+      if (lastActiveTickX !== null && dom.rulerTop.children[lastActiveTickX]) {
+        dom.rulerTop.children[lastActiveTickX].classList.remove('active-ruler-tick');
+      }
+      if (px !== null && dom.rulerTop.children[px]) {
+        dom.rulerTop.children[px].classList.add('active-ruler-tick');
+      }
+      lastActiveTickX = px;
+    }
+
+    if (lastActiveTickY !== py) {
+      if (lastActiveTickY !== null && dom.rulerLeft.children[lastActiveTickY]) {
+        dom.rulerLeft.children[lastActiveTickY].classList.remove('active-ruler-tick');
+      }
+      if (py !== null && dom.rulerLeft.children[py]) {
+        dom.rulerLeft.children[py].classList.add('active-ruler-tick');
+      }
+      lastActiveTickY = py;
+    }
   }
 
   function renderSelectionMarquee() {
@@ -1175,8 +1283,9 @@
   }
 
   function fitCanvasToViewport() {
-    const vpW = dom.viewport.clientWidth - 40;
-    const vpH = dom.viewport.clientHeight - 40;
+    const rulerOffset = state.showRulers ? 24 : 0;
+    const vpW = dom.viewport.clientWidth - 40 - rulerOffset;
+    const vpH = dom.viewport.clientHeight - 40 - rulerOffset;
     if (vpW <= 0 || vpH <= 0) return;
 
     const scaleX = vpW / state.w;
@@ -1187,6 +1296,7 @@
     state.panY = 0;
     resizeCanvasesToZoom();
     repaintCanvas();
+    renderRulers();
   }
 
   // ===========================================================================
@@ -1312,6 +1422,7 @@
           state.h = Math.max(1, Math.min(1024, cell.size.h));
           dom.dimBadge.textContent = `${state.w}×${state.h}`;
           resizeCanvasesToZoom();
+          renderRulers();
         }
       }
 
@@ -1391,6 +1502,13 @@
   // ===========================================================================
   // DRAWING TOOLS & CANVAS INTERACTIONS
   // ===========================================================================
+  function isEventOverCanvas(e) {
+    if (!dom.canvasMain) return false;
+    const rect = dom.canvasMain.getBoundingClientRect();
+    return e.clientX >= rect.left && e.clientX < rect.right &&
+           e.clientY >= rect.top && e.clientY < rect.bottom;
+  }
+
   function getPixelCoord(e) {
     const rect = dom.canvasMain.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / state.zoom);
@@ -1454,6 +1572,17 @@
       state.panStartX = e.clientX - state.panX;
       state.panStartY = e.clientY - state.panY;
       dom.viewport.style.cursor = 'grab';
+      return;
+    }
+
+    // Ignore clicks on ruler corner or ruler tick bars
+    if (e.target && (e.target.closest('#pa-ruler-top') || e.target.closest('#pa-ruler-left') || e.target.closest('#pa-ruler-corner'))) {
+      return;
+    }
+
+    // Don't initiate drawing if click is outside canvas and not over active selection rotation handle
+    const overCanvas = isEventOverCanvas(e);
+    if (!overCanvas && !isOverRotationHandle(e)) {
       return;
     }
 
@@ -1580,11 +1709,26 @@
   }
 
   function onPointerMove(e) {
-    const { x, y } = getPixelCoord(e);
-
-    // Update coordinate labels
-    dom.coordLabel.textContent = `${x}, ${y}`;
-    updateHoverColor(x, y);
+    const overCanvas = isEventOverCanvas(e);
+    let x = null, y = null;
+    if (overCanvas) {
+      const coords = getPixelCoord(e);
+      x = coords.x;
+      y = coords.y;
+      dom.coordLabel.textContent = `${x}, ${y}`;
+      updateHoverColor(x, y);
+      updateRulerHighlight(x, y);
+    } else {
+      if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection && !state.isSelecting) {
+        dom.coordLabel.textContent = '-, -';
+        updateHoverColor(null, null);
+        updateRulerHighlight(null, null);
+      } else {
+        const coords = getPixelCoord(e);
+        x = coords.x;
+        y = coords.y;
+      }
+    }
 
     // Pan movement
     if (state.isPanning) {
@@ -2484,6 +2628,7 @@
     resizeCanvasesToZoom();
     rebuildArtworkBuffer();
     repaintCanvas();
+    renderRulers();
     syncCanvasToSource();
     triggerAutosave();
   }
@@ -2625,6 +2770,75 @@
     if (dom.bgCustomChip) {
       dom.bgCustomChip.style.backgroundColor = state.canvasBgColor || '#2a2e3f';
     }
+  }
+
+  // ===========================================================================
+  // RESIZE CANVAS MODAL & RESOLUTION MANAGER
+  // ===========================================================================
+  function openResizeCanvasModal() {
+    if (!dom.modalResize) return;
+    if (dom.inputResizeW) dom.inputResizeW.value = state.w;
+    if (dom.inputResizeH) dom.inputResizeH.value = state.h;
+
+    const chips = dom.modalResize.querySelectorAll('.pa-preset-chip');
+    chips.forEach(chip => {
+      const cw = parseInt(chip.dataset.w, 10);
+      const ch = parseInt(chip.dataset.h, 10);
+      chip.classList.toggle('active', cw === state.w && ch === state.h);
+    });
+
+    dom.modalResize.classList.remove('hidden');
+    if (dom.inputResizeW) dom.inputResizeW.focus();
+  }
+
+  function resizeCanvas(newW, newH) {
+    newW = Math.max(1, Math.min(1024, parseInt(newW, 10) || 64));
+    newH = Math.max(1, Math.min(1024, parseInt(newH, 10) || 64));
+
+    if (newW === state.w && newH === state.h) {
+      if (dom.modalResize) dom.modalResize.classList.add('hidden');
+      return;
+    }
+
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    commitFloatingSelection();
+    state.selection = null;
+
+    state.w = newW;
+    state.h = newH;
+    cell.size = { w: newW, h: newH };
+    if (state.doc && state.doc.meta) {
+      state.doc.meta.cell_size = { w: newW, h: newH };
+      state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${newW}x${newH}` };
+    }
+
+    // Clean out-of-bounds pixels if shrank
+    if (cell.pixels) {
+      for (const k in cell.pixels) {
+        const comma = k.indexOf(',');
+        if (comma === -1) continue;
+        const x = Number(k.substring(0, comma));
+        const y = Number(k.substring(comma + 1));
+        if (x < 0 || x >= newW || y < 0 || y >= newH) {
+          delete cell.pixels[k];
+        }
+      }
+    }
+
+    dom.dimBadge.textContent = `${state.w}×${state.h}`;
+    resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderRulers();
+    syncCanvasToSource(true);
+    pushHistory();
+    triggerAutosave();
+    setDirty(true);
+
+    if (dom.modalResize) dom.modalResize.classList.add('hidden');
+    showToast(`Canvas resized to ${newW}×${newH}`, 'success');
   }
 
   // ===========================================================================
@@ -3361,7 +3575,16 @@ Do not include conversational greetings or postscripts.`;
 
       resizeCanvasesToZoom();
       repaintCanvas();
+      renderRulers();
     }, { passive: false });
+
+    dom.viewport.addEventListener('mouseleave', () => {
+      if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection && !state.isSelecting) {
+        dom.coordLabel.textContent = '-, -';
+        updateHoverColor(null, null);
+        updateRulerHighlight(null, null);
+      }
+    });
 
     // Source Code Editor Input & Escape-to-Cancel
     dom.codeEditor.addEventListener('input', handleSourceCodeInput);
@@ -3687,18 +3910,43 @@ Do not include conversational greetings or postscripts.`;
       state.zoom = Math.min(64, state.zoom + 2);
       resizeCanvasesToZoom();
       repaintCanvas();
+      renderRulers();
     });
     document.getElementById('btn-zoom-out').addEventListener('click', () => {
       state.zoom = Math.max(1, state.zoom - 2);
       resizeCanvasesToZoom();
       repaintCanvas();
+      renderRulers();
     });
     document.getElementById('btn-zoom-fit').addEventListener('click', fitCanvasToViewport);
     document.getElementById('btn-zoom-100').addEventListener('click', () => {
       state.zoom = 1;
       resizeCanvasesToZoom();
       repaintCanvas();
+      renderRulers();
     });
+
+    // Toggle Canvas Rulers button
+    if (dom.btnToggleRulers) {
+      dom.btnToggleRulers.addEventListener('click', () => {
+        state.showRulers = !state.showRulers;
+        localStorage.setItem('pix2_pixelart_rulers', String(state.showRulers));
+        resizeCanvasesToZoom();
+        renderRulers();
+        showToast(`Canvas Rulers: ${state.showRulers ? 'ON' : 'OFF'}`);
+      });
+    }
+
+    // Dimension Badge Click / Keyboard trigger to open Resize Canvas Modal
+    if (dom.dimBadge) {
+      dom.dimBadge.addEventListener('click', openResizeCanvasModal);
+      dom.dimBadge.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openResizeCanvasModal();
+        }
+      });
+    }
 
     // Code Header Actions
     document.getElementById('btn-copy-code').addEventListener('click', () => {
@@ -3719,10 +3967,17 @@ Do not include conversational greetings or postscripts.`;
       });
     });
 
+    // Modal Backdrop click to dismiss
+    document.querySelectorAll('.pa-modal-backdrop').forEach((backdrop) => {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) backdrop.classList.add('hidden');
+      });
+    });
+
     // New Canvas Modal confirm
-    document.querySelectorAll('.pa-preset-chip').forEach((chip) => {
+    document.querySelectorAll('#modal-new-canvas .pa-preset-chip').forEach((chip) => {
       chip.addEventListener('click', () => {
-        document.querySelectorAll('.pa-preset-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('#modal-new-canvas .pa-preset-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         const pw = parseInt(chip.dataset.w, 10);
         const ph = parseInt(chip.dataset.h, 10);
@@ -3738,6 +3993,37 @@ Do not include conversational greetings or postscripts.`;
       dom.modalNew.classList.add('hidden');
       setTimeout(fitCanvasToViewport, 50);
     });
+
+    // Resize Canvas Modal confirm & preset chips
+    document.querySelectorAll('#modal-resize-canvas .pa-preset-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('#modal-resize-canvas .pa-preset-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const pw = parseInt(chip.dataset.w, 10);
+        const ph = parseInt(chip.dataset.h, 10);
+        if (dom.inputResizeW) dom.inputResizeW.value = pw;
+        if (dom.inputResizeH) dom.inputResizeH.value = ph;
+      });
+    });
+
+    if (dom.btnConfirmResizeCanvas) {
+      dom.btnConfirmResizeCanvas.addEventListener('click', () => {
+        const rw = parseInt(dom.inputResizeW ? dom.inputResizeW.value : state.w, 10) || state.w;
+        const rh = parseInt(dom.inputResizeH ? dom.inputResizeH.value : state.h, 10) || state.h;
+        resizeCanvas(rw, rh);
+      });
+    }
+
+    const onResizeKeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const rw = parseInt(dom.inputResizeW ? dom.inputResizeW.value : state.w, 10) || state.w;
+        const rh = parseInt(dom.inputResizeH ? dom.inputResizeH.value : state.h, 10) || state.h;
+        resizeCanvas(rw, rh);
+      }
+    };
+    if (dom.inputResizeW) dom.inputResizeW.addEventListener('keydown', onResizeKeydown);
+    if (dom.inputResizeH) dom.inputResizeH.addEventListener('keydown', onResizeKeydown);
 
     // Export Modal Scale buttons
     document.querySelectorAll('.pa-scale-btn').forEach((btn) => {
