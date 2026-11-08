@@ -41,6 +41,12 @@ class EditorState {
     // Cross-tab clipboard state (Persistent across cell tabs & document operations)
     this.clipboard = null; // { w, h, pixels: { 'relX,relY': hex }, originCellId, originX, originY }
 
+    // PIX2 1.1 Structural Hierarchy & Isolation State
+    this.activeLayerId = null;
+    this.activeGroupId = null;
+    this.activeRegionId = null;
+    this.isolatedNodeId = null; // null = no isolation; string = nodeId
+
     // History undo/redo stacks
     this.history = [];
     this.historyIndex = -1;
@@ -237,6 +243,296 @@ class EditorState {
         }
       }
     }
+  }
+
+  // ===========================================================================
+  // PIX2 1.1 STRUCTURAL TREE OPERATIONS & ACTIVE REGION RESOLUTION
+  // ===========================================================================
+
+  // Find node by ID within cell
+  findNode(cellId, nodeId) {
+    if (!this.doc || !this.doc.cells) return null;
+    const cell = cellId ? this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell || !cell.layers) return null;
+
+    function search(nodes, parent, currentLayer) {
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const layer = currentLayer || (node.type === 'layer' ? node : null);
+        if (node.id === nodeId) {
+          return { node, parent, layer, cell, index: i, siblings: nodes };
+        }
+        if (node.children && node.children.length > 0) {
+          const res = search(node.children, node, layer);
+          if (res) return res;
+        }
+      }
+      return null;
+    }
+
+    return search(cell.layers, null, null);
+  }
+
+  // Resolve active region target for painting/erasing
+  getActiveRegion(cellId) {
+    if (!this.doc || !this.doc.cells) return null;
+    const cell = cellId ? this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell) return null;
+
+    if (!cell.layers || cell.layers.length === 0) {
+      // Pure v1.0 flat cell fallback
+      return {
+        id: `region_legacy_${cell.id}`,
+        cell: cell.id,
+        type: 'region',
+        name: cell.name || 'Artwork',
+        visible: true,
+        locked: false,
+        pixels: cell.pixels,
+        tags: []
+      };
+    }
+
+    // If explicit active region is selected
+    if (this.activeRegionId) {
+      const match = this.findNode(cell.id, this.activeRegionId);
+      if (match && match.node.type === 'region') {
+        return match.node;
+      }
+    }
+
+    // Default to first unlocked, visible region
+    function findFirstEditable(nodes) {
+      for (const node of nodes || []) {
+        if (node.type === 'region' && node.visible !== false && !node.locked) {
+          return node;
+        }
+        if (node.children) {
+          const res = findFirstEditable(node.children);
+          if (res) return res;
+        }
+      }
+      return null;
+    }
+
+    const first = findFirstEditable(cell.layers);
+    if (first) {
+      this.activeRegionId = first.id;
+      return first;
+    }
+
+    return null;
+  }
+
+  // Synchronize composite cell pixels from layer tree
+  syncCellComposite(cellId) {
+    if (!this.doc || !this.doc.cells || !_PIX2) return;
+    const cell = cellId ? this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell || !cell.layers || cell.layers.length === 0) return;
+    const defaultSize = (this.doc.meta && (this.doc.meta.cell_size || this.doc.meta.cellSize)) || { w: 16, h: 16 };
+    cell.pixels = _PIX2.compositeCellLayers(cell, defaultSize, {
+      isolatedNodeId: this.isolatedNodeId
+    });
+  }
+
+  // Add a new layer to cell
+  addLayer(cellId, layerName = 'New Layer', options = {}) {
+    if (!this.doc || !this.doc.cells) return null;
+    const cell = cellId ? this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell) return null;
+    if (!cell.layers) cell.layers = [];
+
+    const layerId = options.id || `layer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const newLayer = {
+      type: 'layer',
+      id: layerId,
+      cell: cell.id,
+      name: layerName,
+      visible: options.visible !== false,
+      locked: Boolean(options.locked),
+      opacity: options.opacity !== undefined ? options.opacity : 1.0,
+      blend: 'normal',
+      children: []
+    };
+
+    // Also create a default region inside so user can paint immediately
+    const regionId = `region_${layerId}`;
+    const defaultRegion = {
+      type: 'region',
+      id: regionId,
+      cell: cell.id,
+      parent: layerId,
+      name: `${layerName} Region`,
+      tags: [],
+      visible: true,
+      locked: false,
+      pixels: {},
+      primitives: []
+    };
+    newLayer.children.push(defaultRegion);
+    cell.layers.push(newLayer);
+
+    this.activeLayerId = layerId;
+    this.activeRegionId = regionId;
+    this.syncCellComposite(cell.id);
+    this.saveSnapshot(`Add Layer: ${layerName}`);
+    return newLayer;
+  }
+
+  // Add a group inside a layer or group
+  addGroup(cellId, parentId, groupName = 'New Group', tags = []) {
+    const parentMatch = this.findNode(cellId, parentId);
+    if (!parentMatch || (parentMatch.node.type !== 'layer' && parentMatch.node.type !== 'group')) {
+      return null;
+    }
+    const cell = parentMatch.cell;
+    const groupId = `grp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const newGroup = {
+      type: 'group',
+      id: groupId,
+      cell: cell.id,
+      parent: parentId,
+      name: groupName,
+      visible: true,
+      locked: false,
+      tags: Array.isArray(tags) ? [...tags] : [],
+      children: []
+    };
+    parentMatch.node.children.push(newGroup);
+    this.activeGroupId = groupId;
+    this.saveSnapshot(`Add Group: ${groupName}`);
+    return newGroup;
+  }
+
+  // Add a region inside a layer or group
+  addRegion(cellId, parentId, regionName = 'New Region', tags = []) {
+    const parentMatch = this.findNode(cellId, parentId);
+    if (!parentMatch || (parentMatch.node.type !== 'layer' && parentMatch.node.type !== 'group')) {
+      return null;
+    }
+    const cell = parentMatch.cell;
+    const regionId = `reg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const newRegion = {
+      type: 'region',
+      id: regionId,
+      cell: cell.id,
+      parent: parentId,
+      name: regionName,
+      tags: Array.isArray(tags) ? [...tags] : [],
+      visible: true,
+      locked: false,
+      pixels: {},
+      primitives: []
+    };
+    parentMatch.node.children.push(newRegion);
+    this.activeRegionId = regionId;
+    this.saveSnapshot(`Add Region: ${regionName}`);
+    return newRegion;
+  }
+
+  // Remove a structural node (layer, group, or region)
+  removeNode(cellId, nodeId) {
+    const match = this.findNode(cellId, nodeId);
+    if (!match) return false;
+    const { siblings, index, cell, node } = match;
+    siblings.splice(index, 1);
+    if (this.activeRegionId === nodeId) this.activeRegionId = null;
+    if (this.activeGroupId === nodeId) this.activeGroupId = null;
+    if (this.activeLayerId === nodeId) this.activeLayerId = null;
+    if (this.isolatedNodeId === nodeId) this.isolatedNodeId = null;
+    this.syncCellComposite(cell.id);
+    this.saveSnapshot(`Delete Node: ${node.name || nodeId}`);
+    return true;
+  }
+
+  // Toggle or set node visibility
+  setNodeVisibility(cellId, nodeId, visible) {
+    const match = this.findNode(cellId, nodeId);
+    if (!match) return false;
+    match.node.visible = visible !== undefined ? Boolean(visible) : !match.node.visible;
+    this.syncCellComposite(match.cell.id);
+    this.saveSnapshot(`Toggle Visibility: ${match.node.name || nodeId}`);
+    return true;
+  }
+
+  // Toggle or set node lock
+  setNodeLocked(cellId, nodeId, locked) {
+    const match = this.findNode(cellId, nodeId);
+    if (!match) return false;
+    match.node.locked = locked !== undefined ? Boolean(locked) : !match.node.locked;
+    this.saveSnapshot(`Toggle Lock: ${match.node.name || nodeId}`);
+    return true;
+  }
+
+  // Set layer opacity
+  setLayerOpacity(cellId, layerId, opacity) {
+    const match = this.findNode(cellId, layerId);
+    if (!match || match.node.type !== 'layer') return false;
+    match.node.opacity = Math.max(0, Math.min(1, Number(opacity) || 0));
+    this.syncCellComposite(match.cell.id);
+    this.saveSnapshot(`Set Opacity: ${match.node.name || layerId}`);
+    return true;
+  }
+
+  // Set node name
+  setNodeName(cellId, nodeId, name) {
+    const match = this.findNode(cellId, nodeId);
+    if (!match || typeof name !== 'string') return false;
+    match.node.name = name.trim();
+    this.saveSnapshot(`Rename Node: ${match.node.name}`);
+    return true;
+  }
+
+  // Set node tags
+  setNodeTags(cellId, nodeId, tags) {
+    const match = this.findNode(cellId, nodeId);
+    if (!match || !Array.isArray(tags)) return false;
+    match.node.tags = [...tags];
+    this.saveSnapshot(`Update Tags: ${match.node.name || nodeId}`);
+    return true;
+  }
+
+  // Toggle or exit isolation mode
+  setIsolation(nodeId = null) {
+    if (this.isolatedNodeId === nodeId) {
+      this.isolatedNodeId = null;
+    } else {
+      this.isolatedNodeId = nodeId;
+    }
+    const cell = this.getActiveCell();
+    if (cell) this.syncCellComposite(cell.id);
+    return this.isolatedNodeId;
+  }
+
+  // Plot a pixel into the active region (or cell.pixels in v1.0)
+  plotPixelAt(cellId, x, y, color) {
+    const cell = cellId ? this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell) return false;
+
+    if (!cell.layers || cell.layers.length === 0) {
+      // v1.0 mode
+      const key = `${x},${y}`;
+      if (color === null) {
+        delete cell.pixels[key];
+      } else {
+        cell.pixels[key] = color;
+      }
+      return true;
+    }
+
+    const region = this.getActiveRegion(cell.id);
+    if (!region || region.locked || region.visible === false) {
+      return false; // Can't draw in locked or hidden region
+    }
+
+    const key = `${x},${y}`;
+    if (color === null) {
+      delete region.pixels[key];
+    } else {
+      region.pixels[key] = color;
+    }
+    this.syncCellComposite(cell.id);
+    return true;
   }
 }
 

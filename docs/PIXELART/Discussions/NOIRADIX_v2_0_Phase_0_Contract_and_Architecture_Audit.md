@@ -373,7 +373,7 @@ Registered Adapters:
 #### Engine-Neutral Manifest Schema (`manifest.json`)
 ```json
 {
-  "$schema": "https://noiradix.org/schemas/pix2-manifest-v1.json",
+  "$schema": "https://noiradix.me/schemas/pix2-manifest-v1.json",
   "formatVersion": "1.1",
   "generator": "NOIRADIX Studio 2.0.0",
   "document": {

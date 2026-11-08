@@ -1569,38 +1569,50 @@ const PIX2 = (function () {
   // PIX2 1.1 STRUCTURAL COMPOSITING & MIGRATION
   // ===========================================================================
 
-  function compositeCellLayers(cell, defaultSize) {
+  function compositeCellLayers(cell, defaultSize, options = {}) {
     if (!cell || !cell.layers || cell.layers.length === 0) {
       return { ...(cell ? cell.pixels : {}) };
     }
+    const isolatedId = options.isolatedNodeId || null;
+    const dimFactor = options.dimNonIsolated !== undefined ? options.dimNonIsolated : 1.0;
     const resultPixels = {};
 
-    function renderNode(node, parentVisible, parentOpacity) {
+    function nodeIsIsolatedOrChild(node, inIsolatedPath) {
+      if (inIsolatedPath || node.id === isolatedId) return true;
+      return false;
+    }
+
+    function renderNode(node, parentVisible, parentOpacity, inIsolatedPath) {
       const isVisible = parentVisible && (node.visible !== false);
       if (!isVisible) return;
+      const isIsolated = nodeIsIsolatedOrChild(node, inIsolatedPath);
+      let effectiveNodeOpacity = parentOpacity;
+      if (isolatedId && !isIsolated) {
+        effectiveNodeOpacity *= dimFactor;
+      }
 
       if (node.type === 'layer') {
-        const layerOpacity = (node.opacity !== undefined ? node.opacity : 1.0) * parentOpacity;
+        const layerOpacity = (node.opacity !== undefined ? node.opacity : 1.0) * effectiveNodeOpacity;
         for (const child of node.children || []) {
-          renderNode(child, isVisible, layerOpacity);
+          renderNode(child, isVisible, layerOpacity, isIsolated);
         }
       } else if (node.type === 'group') {
         for (const child of node.children || []) {
-          renderNode(child, isVisible, parentOpacity);
+          renderNode(child, isVisible, effectiveNodeOpacity, isIsolated);
         }
       } else if (node.type === 'region') {
-        const effectiveOpacity = parentOpacity;
+        if (isolatedId && !isIsolated && dimFactor <= 0.0) return;
         for (const coord in node.pixels) {
           const hex = node.pixels[coord];
           if (!hex) continue;
-          if (effectiveOpacity >= 1.0) {
+          if (effectiveNodeOpacity >= 1.0) {
             resultPixels[coord] = hex;
-          } else if (effectiveOpacity <= 0.0) {
+          } else if (effectiveNodeOpacity <= 0.0) {
             // invisible
           } else {
             const rgba = hexToRgba(hex);
             if (rgba) {
-              const blendedA = Math.round(rgba.a * effectiveOpacity);
+              const blendedA = Math.round(rgba.a * effectiveNodeOpacity);
               resultPixels[coord] = rgbaToHex(rgba.r, rgba.g, rgba.b, blendedA);
             } else {
               resultPixels[coord] = hex;
@@ -1611,7 +1623,7 @@ const PIX2 = (function () {
     }
 
     for (const layer of cell.layers) {
-      renderNode(layer, true, 1.0);
+      renderNode(layer, true, 1.0, false);
     }
     return resultPixels;
   }
@@ -1968,11 +1980,12 @@ const PIX2 = (function () {
   // RASTERIZATION (Cell -> HTML5 Canvas)
   // ===========================================================================
 
-  function renderCellToCanvas(cell, defaultCellSize, targetCanvas = null) {
+  function renderCellToCanvas(cell, defaultCellSize, targetCanvas = null, options = {}) {
     const w = (cell.size && cell.size.w) || defaultCellSize.w;
     const h = (cell.size && cell.size.h) || defaultCellSize.h;
 
-    const canvas = targetCanvas || document.createElement('canvas');
+    const canvas = targetCanvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+    if (!canvas) return null;
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -1981,13 +1994,17 @@ const PIX2 = (function () {
     const imgData = ctx.createImageData(w, h);
     const d = imgData.data;
 
-    for (const coord in cell.pixels) {
+    const pixelsToRender = (cell.layers && cell.layers.length > 0)
+      ? compositeCellLayers(cell, defaultCellSize, options)
+      : (cell.pixels || {});
+
+    for (const coord in pixelsToRender) {
       const parsed = parseCoordinate(coord);
       if (!parsed) continue;
       const [x, y] = parsed;
       if (x < 0 || x >= w || y < 0 || y >= h) continue;
 
-      const rgba = hexToRgba(cell.pixels[coord]);
+      const rgba = hexToRgba(pixelsToRender[coord]);
       const idx = (y * w + x) * 4;
       d[idx] = rgba.r;
       d[idx + 1] = rgba.g;

@@ -6686,8 +6686,9 @@ ${serialized}
 
       const unityJsonData = {
         meta: {
-          app: "NOIRADIX Studio v1.0",
-          version: "1.0",
+          app: "NOIRADIX Studio v2.0.0",
+          version: "2.0.0",
+          formatVersion: "1.1",
           image: pngName,
           cellWidth: state.doc.meta.cellSize.w * opts.scale,
           cellHeight: state.doc.meta.cellSize.h * opts.scale,
@@ -7059,8 +7060,9 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         frames: tpFrames,
         animations: tpAnimations,
         meta: {
-          app: "NOIRADIX Studio v1.0",
-          version: "1.0",
+          app: "NOIRADIX Studio v2.0.0",
+          version: "2.0.0",
+          formatVersion: "1.1",
           image: pngName,
           format: "RGBA8888",
           size: { w: atlasData.width, h: atlasData.height },

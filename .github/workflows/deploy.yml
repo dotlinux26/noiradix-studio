@@ -37,6 +37,8 @@ jobs:
           node --check js/editor-state.js
           node --check js/animation-player.js
           node --check js/tools.js
+          node --check js/modular-export.js
+          node --check js/import-slice.js
           node --check pix2/js/pix2-format.js
           node --check pixelart/js/pixelart-app.js
 
@@ -54,6 +56,15 @@ jobs:
 
       - name: Run PIX2 1.1 Specification & Integration Tests (9 Tests)
         run: node tests/test-pix2-v11.js
+
+      - name: Run Editor State Structural Engine Tests (8 Tests)
+        run: node tests/test-editor-state-structural.js
+
+      - name: Run Modular Component Export Tests (4 Tests)
+        run: node tests/test-modular-export.js
+
+      - name: Run Import & Slice Pipeline Tests (6 Tests)
+        run: node tests/test-import-slice.js
 
       - name: Run Audit Data Integrity & Regression Tests
         run: node tests/test-audit-integrity.js
