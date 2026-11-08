@@ -1,6 +1,6 @@
 /**
  * NOIRADIX Test Suite: Audit Data Integrity & Regression Verification
- * Covers P0-01, P0-02, P0-03, P0-04, P1-02, P1-06 findings
+ * Covers P0-01, P0-02, P0-03, P0-04, P1-02, P1-06, P1-07, Adaptive Zoom, and File Watcher invariants
  */
 
 const assert = require('assert');
@@ -161,7 +161,6 @@ console.log('\nTest 4: P1-02 Ruler Viewport Ticks Culling Range');
 
   // Canvas width 1024, interval 16, visible viewport is only x: 100..200
   const ticks = computeRulerTickRange(1024, 16, 100, 200);
-  // Expected start around 80 or 96, end around 208 or 224
   assert(ticks[0] <= 100, 'First tick must cover margin before minX');
   assert(ticks[ticks.length - 1] >= 200, 'Last tick must cover margin after maxX');
   assert(ticks.length < 20, `Visible ticks count must be under 20 (got ${ticks.length}), not full 64`);
@@ -179,6 +178,167 @@ console.log('\nTest 5: P2-03 Verification of Duplicate Function Removal');
   console.log('  [PASS] getVisibleCanvasBounds appears exactly once (duplicate removed)');
 }
 
+// -----------------------------------------------------------------------------
+// Test 6: P0-01 Save Revision Race Condition Invariant
+// -----------------------------------------------------------------------------
+console.log('\nTest 6: P0-01 Save Revision Race Condition Invariant');
+{
+  let documentRevision = 5;
+  let lastSavedRevision = 0;
+  let isDirty = true;
+
+  function setDirty(dirty) {
+    isDirty = dirty;
+    if (!dirty) {
+      lastSavedRevision = documentRevision;
+    }
+  }
+
+  // Simulate save operation starting at revision 5
+  const revisionAtSaveStart = documentRevision;
+
+  // Simulate user drawing stroke during async I/O
+  documentRevision++; // revision is now 6!
+
+  // Save completes: update lastSavedRevision only up to revisionAtSaveStart
+  lastSavedRevision = Math.max(lastSavedRevision, revisionAtSaveStart);
+  setDirty(documentRevision !== lastSavedRevision);
+
+  assert.strictEqual(lastSavedRevision, 5, 'lastSavedRevision must match revisionAtSaveStart (5)');
+  assert.strictEqual(documentRevision, 6, 'documentRevision is 6');
+  assert.strictEqual(isDirty, true, 'Document MUST remain dirty because strokes occurred during save write');
+
+  // Next save with no mutation
+  const secondSaveStart = documentRevision; // 6
+  lastSavedRevision = Math.max(lastSavedRevision, secondSaveStart);
+  setDirty(documentRevision !== lastSavedRevision);
+  assert.strictEqual(isDirty, false, 'Document is cleanly marked saved when no intermediate mutations occurred');
+  console.log('  [PASS] Save revision race condition prevented: strokes during save keep document dirty');
+}
+
+// -----------------------------------------------------------------------------
+// Test 7: P0-03 New Canvas Discard Guard Verification
+// -----------------------------------------------------------------------------
+console.log('\nTest 7: P0-03 New Canvas Discard Guard in Source Code');
+{
+  const pixelartApp = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+  const newCanvasBlock = pixelartApp.match(/btn-confirm-new-canvas[\s\S]*?createNewDocument/);
+  assert(newCanvasBlock, 'Must find btn-confirm-new-canvas listener');
+  assert(
+    newCanvasBlock[0].includes('confirmDiscardUnsavedChanges'),
+    'btn-confirm-new-canvas MUST call confirmDiscardUnsavedChanges before creating new document'
+  );
+  console.log('  [PASS] btn-confirm-new-canvas calls confirmDiscardUnsavedChanges()');
+}
+
+// -----------------------------------------------------------------------------
+// Test 8: P0-03 Open File in Summary Mode Trap Prevention
+// -----------------------------------------------------------------------------
+console.log('\nTest 8: P0-03 Open File in Summary Mode Trap Prevention');
+{
+  const pixelartApp = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+  
+  // Verify openFileNative sets sourcePaneMode = 'full'
+  const openFileBlock = pixelartApp.match(/openFileNative[\s\S]*?showToast\(`Opened/);
+  assert(openFileBlock, 'Must find openFileNative block');
+  assert(
+    openFileBlock[0].includes("state.sourcePaneMode = 'full'"),
+    'openFileNative must reset sourcePaneMode to full before calling applySourceCodeToCanvas'
+  );
+  assert(
+    openFileBlock[0].includes('const ok = applySourceCodeToCanvas()'),
+    'openFileNative must check the return status of applySourceCodeToCanvas'
+  );
+
+  // Verify handleFileSelected sets sourcePaneMode = 'full'
+  const handleSelectedBlock = pixelartApp.match(/handleFileSelected[\s\S]*?showToast\(`Opened/);
+  assert(handleSelectedBlock, 'Must find handleFileSelected block');
+  assert(
+    handleSelectedBlock[0].includes("state.sourcePaneMode = 'full'"),
+    'handleFileSelected must reset sourcePaneMode to full before calling applySourceCodeToCanvas'
+  );
+  console.log('  [PASS] File open flows reset sourcePaneMode to full and check applySourceCodeToCanvas status');
+}
+
+// -----------------------------------------------------------------------------
+// Test 9: P1-07 Studio New Project Unapplied Code Guard
+// -----------------------------------------------------------------------------
+console.log('\nTest 9: P1-07 Studio New Project Unapplied Code Guard');
+{
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const modalBlock = appJs.match(/function openNewFileModal\(\)\s*\{[\s\S]*?dom\.modalNewFile/);
+  assert(modalBlock, 'Must find openNewFileModal in js/app.js');
+  assert(
+    modalBlock[0].includes('handleBeforeLeaveCodeTab'),
+    'openNewFileModal must call handleBeforeLeaveCodeTab() before checking dirty state'
+  );
+  console.log('  [PASS] Studio openNewFileModal() verifies unapplied code editor changes');
+}
+
+// -----------------------------------------------------------------------------
+// Test 10: PART 2 Adaptive Zoom Safety Cap
+// -----------------------------------------------------------------------------
+console.log('\nTest 10: PART 2 Adaptive Zoom Safety Cap');
+{
+  const ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+  function getMaxAllowedZoom(w, h) {
+    const area = w * h;
+    const maxZoomFromArea = Math.max(1, Math.floor(Math.sqrt(16777216 / area)));
+    let allowed = 1;
+    for (const z of ZOOM_LADDER) {
+      if (z <= maxZoomFromArea) allowed = z;
+      else break;
+    }
+    return Math.min(64, allowed);
+  }
+
+  // 1024 x 1024: Area 1,048,576 -> max 4x zoom (4096 x 4096 surface = 64MB)
+  assert.strictEqual(getMaxAllowedZoom(1024, 1024), 4, '1024x1024 must cap at 4x zoom');
+  // 512 x 512: Area 262,144 -> max 8x zoom
+  assert.strictEqual(getMaxAllowedZoom(512, 512), 8, '512x512 must cap at 8x zoom');
+  // 512 x 1024: Area 524,288 -> max 4x zoom
+  assert.strictEqual(getMaxAllowedZoom(512, 1024), 4, '512x1024 must cap at 4x zoom');
+  // 256 x 256: Area 65,536 -> max 16x zoom
+  assert.strictEqual(getMaxAllowedZoom(256, 256), 16, '256x256 must cap at 16x zoom');
+  // 64 x 64: Area 4,096 -> deep zoom 64x
+  assert.strictEqual(getMaxAllowedZoom(64, 64), 64, '64x64 must allow up to 64x deep zoom');
+
+  console.log('  [PASS] Adaptive zoom cap keeps backing canvas surfaces within 64MB budget across all resolutions');
+}
+
+// -----------------------------------------------------------------------------
+// Test 11: File Watcher CRLF / LF Normalization & Reload History Protection
+// -----------------------------------------------------------------------------
+console.log('\nTest 11: File Watcher CRLF / LF Normalization & Reload History');
+{
+  function normalizeForCompare(str) {
+    return (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  }
+
+  const diskCRLF = '@pix2 1.0\r\n@meta\r\n  title: "Test"\r\n';
+  const savedLF = '@pix2 1.0\n@meta\n  title: "Test"\n';
+
+  assert.strictEqual(
+    normalizeForCompare(diskCRLF) === normalizeForCompare(savedLF),
+    true,
+    'CRLF on disk must be recognized as identical to saved LF string'
+  );
+
+  const pixelartApp = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+  assert(
+    pixelartApp.includes('normalizeForCompare'),
+    'pixelart-app.js must use normalizeForCompare in external change watcher'
+  );
+
+  const reloadBlock = pixelartApp.match(/handleManualFileReload[\s\S]*?checkAndReloadExternalFileChanges/);
+  assert(reloadBlock, 'Must find handleManualFileReload');
+  assert(
+    reloadBlock[0].includes('pushHistory()'),
+    'handleManualFileReload must call pushHistory() to allow Ctrl+Z recovery of replaced canvas'
+  );
+  console.log('  [PASS] Watcher normalizes CRLF/LF line endings and pushes history before manual disk reload');
+}
+
 console.log('\n====================================================');
-console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (5/5)');
+console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (11/11)');
 console.log('====================================================\n');

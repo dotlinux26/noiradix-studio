@@ -1090,7 +1090,7 @@
       }
     }
 
-    // 5. Alignment Guidelines (Trục dóng dọc, dóng ngang, tâm giữa)
+    // 5. Alignment Guidelines (Vertical, Horizontal, Center Axis)
     if (state.guideCenter || state.guideV) {
       const gX = Math.floor((state.w / 2) * zoom) + 0.5;
       if (gX >= renderX && gX <= renderX + renderW) {
@@ -1520,8 +1520,16 @@
   const ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
 
   function getMaxAllowedZoom() {
-    const maxDim = Math.max(state.w, state.h);
-    return Math.max(1, Math.min(64, Math.floor(16384 / maxDim)));
+    const area = state.w * state.h;
+    // Backing surface budget: ~64MB per RGBA canvas (4096 x 4096 = 16,777,216 pixels)
+    // Combined with preview canvas: ~128MB max GPU backing budget across all canvas surfaces
+    const maxZoomFromArea = Math.max(1, Math.floor(Math.sqrt(16777216 / area)));
+    let allowed = 1;
+    for (const z of ZOOM_LADDER) {
+      if (z <= maxZoomFromArea) allowed = z;
+      else break;
+    }
+    return Math.min(64, allowed);
   }
 
   function getNextZoom(currentZoom, direction) {
@@ -2031,7 +2039,7 @@
     if (state.currentTool === 'bucket') {
       const isHuge = (state.w * state.h >= 262144);
       if (isHuge) {
-        showToast(`Đang đổ màu ${state.w}×${state.h} (${(state.w * state.h).toLocaleString()} pixels)...`, 'info');
+        showToast(`Filling ${state.w}×${state.h} (${(state.w * state.h).toLocaleString()} pixels)...`, 'info');
         dom.viewport.style.cursor = 'wait';
       }
       setTimeout(() => {
@@ -2043,7 +2051,7 @@
         triggerAutosave();
         if (isHuge) {
           dom.viewport.style.cursor = 'crosshair';
-          showToast(`Đã đổ màu thành công (${(state.w * state.h).toLocaleString()} pixels)`, 'success');
+          showToast(`Flood fill completed (${(state.w * state.h).toLocaleString()} pixels)`, 'success');
         }
       }, isHuge ? 20 : 0);
       state.isDrawing = false;
@@ -3652,8 +3660,13 @@ Do not include conversational greetings or postscripts.`;
             showToast(`Cannot open file: ${valErr.message}`, 'error');
             return;
           }
+          state.sourcePaneMode = 'full';
           dom.codeEditor.value = text;
-          applySourceCodeToCanvas();
+          const ok = applySourceCodeToCanvas();
+          if (!ok) {
+            showToast('Failed to apply file to canvas.', 'error');
+            return;
+          }
           currentFileHandle = handle;
           currentFileName = file.name;
           state.title = file.name.replace(/\.[^/.]+$/, '');
@@ -3667,9 +3680,11 @@ Do not include conversational greetings or postscripts.`;
             btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
           }
           await persistFileHandle(handle);
-          localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
-          localStorage.setItem('pix2_last_saved_content', text);
-          localStorage.setItem('pix2_last_saved_time', String(file.lastModified));
+          try {
+            localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
+            localStorage.setItem('pix2_last_saved_content', text);
+            localStorage.setItem('pix2_last_saved_time', String(file.lastModified));
+          } catch (_) {}
           markDocumentSaved();
           triggerAutosave(true);
           showToast(`Opened ${file.name} from disk!`);
@@ -3697,6 +3712,7 @@ Do not include conversational greetings or postscripts.`;
 
   async function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
+    const revisionAtSaveStart = documentRevision;
     const text = flushSourceCode();
 
     // Direct overwrite to existing handle
@@ -3729,11 +3745,14 @@ Do not include conversational greetings or postscripts.`;
           btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
         }
         await persistFileHandle(currentFileHandle);
-        localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
-        localStorage.setItem('pix2_last_saved_content', text);
-        localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+        try {
+          localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
+          localStorage.setItem('pix2_last_saved_content', text);
+          localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+        } catch (_) {}
         triggerAutosave(true);
-        setDirty(false);
+        lastSavedRevision = Math.max(lastSavedRevision, revisionAtSaveStart);
+        setDirty(documentRevision !== lastSavedRevision);
         showToast(`Saved to ${currentFileHandle.name}!`);
         return;
       } catch (err) {
@@ -3773,11 +3792,16 @@ Do not include conversational greetings or postscripts.`;
           btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
         }
         await persistFileHandle(handle);
-        localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
-        localStorage.setItem('pix2_last_saved_content', text);
-        localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+        try {
+          localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
+          localStorage.setItem('pix2_last_saved_content', text);
+          localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+        } catch (_) {}
         triggerAutosave(true);
-        setDirty(false);
+        lastSavedRevision = Math.max(lastSavedRevision, revisionAtSaveStart);
+        setDirty(documentRevision !== lastSavedRevision);
+        showToast(`Saved as ${handle.name}!`);
+        return;
         showToast(`Saved as ${handle.name}!`);
         return;
       } catch (err) {
@@ -3847,9 +3871,29 @@ Do not include conversational greetings or postscripts.`;
           showToast(`Cannot open file: ${valErr.message}`, 'error');
           return;
         }
+        state.sourcePaneMode = 'full';
         dom.codeEditor.value = text;
-        applySourceCodeToCanvas();
+        const ok = applySourceCodeToCanvas();
+        if (!ok) {
+          showToast('Failed to apply file to canvas.', 'error');
+          return;
+        }
+        currentFileHandle = null;
+        currentFileName = file.name;
+        state.title = file.name.replace(/\.[^/.]+$/, '');
+        dom.docTitle.value = state.title;
+        lastKnownFileModified = 0;
+        lastSavedContent = text;
+        pendingExternalConflict = null;
+        clearPersistedFileHandle();
+        try {
+          localStorage.removeItem('noiradix_pixelart_file_name');
+          localStorage.setItem('pix2_last_saved_content', text);
+          localStorage.removeItem('pix2_last_saved_time');
+        } catch (_) {}
         markDocumentSaved();
+        triggerAutosave(true);
+        showToast(`Opened ${file.name}`);
       };
       reader.readAsText(file);
     } else if (file.type.startsWith('image/')) {
@@ -4264,6 +4308,7 @@ Do not include conversational greetings or postscripts.`;
         const ok = applySourceCodeToCanvas();
         if (ok) {
           lockCodeEditor();
+          setViewMode('canvas');
           showToast('Applied code changes to canvas!');
         }
       });
@@ -4421,7 +4466,8 @@ Do not include conversational greetings or postscripts.`;
       });
     });
 
-    document.getElementById('btn-confirm-new-canvas').addEventListener('click', () => {
+    document.getElementById('btn-confirm-new-canvas').addEventListener('click', async () => {
+      if (!await confirmDiscardUnsavedChanges('create a new canvas')) return;
       const cw = parseInt(document.getElementById('input-custom-w').value, 10) || 64;
       const ch = parseInt(document.getElementById('input-custom-h').value, 10) || 64;
       currentFileHandle = null;
@@ -4441,7 +4487,7 @@ Do not include conversational greetings or postscripts.`;
       }
       createNewDocument(cw, ch, 'New Artwork');
       updateDocumentTitle();
-      setDirty(false);
+      markDocumentSaved();
       dom.modalNew.classList.add('hidden');
       setTimeout(fitCanvasToViewport, 50);
     });
@@ -4603,6 +4649,10 @@ Do not include conversational greetings or postscripts.`;
     // ===========================================================================
     // REAL-TIME FILE WATCHER & LIVE HOT-RELOAD (External AI & Disk Collaboration)
     // ===========================================================================
+    function normalizeForCompare(str) {
+      return (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    }
+
     async function checkAndReloadExternalFileChanges(force = false) {
       if (!currentFileHandle || isExternalReloading) return;
       if (typeof currentFileHandle.getFile !== 'function') return;
@@ -4621,8 +4671,8 @@ Do not include conversational greetings or postscripts.`;
           return;
         }
 
-        // Check if file modified time is newer than our recorded timestamp (with 1s NTFS jitter tolerance)
-        if (!force && currentModified <= lastKnownFileModified + 1000) {
+        // Check if file modified time is newer than our recorded timestamp (with 2s NTFS jitter tolerance)
+        if (!force && currentModified <= lastKnownFileModified + 2000) {
           isExternalReloading = false;
           return;
         }
@@ -4634,7 +4684,7 @@ Do not include conversational greetings or postscripts.`;
         }
 
         // If content is identical to our last saved version, just sync timestamp
-        if (text === lastSavedContent) {
+        if (normalizeForCompare(text) === normalizeForCompare(lastSavedContent)) {
           lastKnownFileModified = currentModified;
           isExternalReloading = false;
           return;
@@ -4649,14 +4699,18 @@ Do not include conversational greetings or postscripts.`;
         }
 
         // Safe reload
+        pushHistory(); // Critical! Save undo state so user can Ctrl+Z immediately if unwanted
+        state.sourcePaneMode = 'full';
         dom.codeEditor.value = text;
         const ok = applySourceCodeToCanvas();
         if (ok) {
           lastKnownFileModified = currentModified;
           lastSavedContent = text;
-          localStorage.setItem('pix2_last_saved_content', text);
+          try {
+            localStorage.setItem('pix2_last_saved_content', text);
+          } catch (_) {}
           pendingExternalConflict = null;
-          setDirty(false);
+          markDocumentSaved();
           const btnReload = document.getElementById('btn-reload-file');
           if (btnReload) {
             btnReload.classList.remove('pulse-warning');
@@ -4713,6 +4767,7 @@ Do not include conversational greetings or postscripts.`;
         );
         if (!confirmDiscard) return;
       }
+      pushHistory(); // Allow instant Ctrl+Z recovery of current canvas!
       await checkAndReloadExternalFileChanges(true);
       const btnReload = document.getElementById('btn-reload-file');
       if (btnReload) {
@@ -4720,7 +4775,7 @@ Do not include conversational greetings or postscripts.`;
         btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
       }
       pendingExternalConflict = null;
-      showToast(`Đã nạp lại ${currentFileHandle.name} từ đĩa. (Nhấn Ctrl+Z để hoàn tác nếu cần)`, 'info');
+      showToast(`Reloaded ${currentFileHandle.name} from disk. (Press Ctrl+Z to undo if needed)`, 'info');
     }
 
     function initFileWatcher() {

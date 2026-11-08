@@ -1204,6 +1204,9 @@
   }
 
   function openNewFileModal() {
+    if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
+      return;
+    }
     if (isDocumentDirty) {
       if (!confirm('You have unsaved changes. Discard and create new file?')) {
         return;
