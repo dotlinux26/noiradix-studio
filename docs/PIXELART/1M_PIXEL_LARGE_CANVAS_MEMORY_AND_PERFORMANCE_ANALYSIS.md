@@ -166,3 +166,4 @@ When pixel count exceeds $25,000$ (e.g. after a full canvas flood fill):
     ; [Mọi dữ liệu vẽ, lưu file và xuất PNG vẫn nguyên vẹn 100%]
   ```
 * Prevents the 25MB textarea layout freeze while guaranteeing all data is preserved when saving or exporting PNG.
+

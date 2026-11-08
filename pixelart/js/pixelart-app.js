@@ -434,8 +434,22 @@
         state.title = persisted.name.replace(/\.[^/.]+$/, '');
         if (dom.docTitle) dom.docTitle.value = state.title;
 
+        // Establish disk baseline first!
+        let diskText = '';
+        let diskModified = 0;
+        try {
+          const file = await persisted.getFile();
+          diskModified = file.lastModified;
+          diskText = await file.text();
+          lastKnownFileModified = diskModified;
+          lastSavedContent = diskText;
+          state.lastFileModified = diskModified;
+        } catch (handleErr) {
+          console.warn('Could not read persisted file handle directly:', handleErr);
+        }
+
         // If autosave has newer unsaved edits than what's on disk, prioritize recovering those edits:
-        if (autosavePayload && (autosavePayload.updatedAt || 0) > (lastSavedTime + 1000)) {
+        if (autosavePayload && (autosavePayload.updatedAt || 0) > (lastSavedTime + 1000) && (!diskText || (autosavePayload.updatedAt || 0) > diskModified)) {
           createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || state.title || 'Recovered Artwork');
           const cell = getArtworkCell();
           cell.pixels = { ...autosavePayload.pixels };
@@ -443,26 +457,18 @@
           repaintCanvas();
           syncCanvasToSource();
           documentRestored = true;
+          state.title = persisted.name.replace(/\.[^/.]+$/, '');
+          if (dom.docTitle) dom.docTitle.value = state.title;
+          updateDocumentTitle();
           setDirty(true);
-        } else {
+        } else if (diskText && diskText.trim()) {
           // Read directly from disk handle
-          try {
-            const file = await persisted.getFile();
-            const text = await file.text();
-            if (text && text.trim()) {
-              dom.codeEditor.value = text;
-              const ok = applySourceCodeToCanvas();
-              if (ok) {
-                documentRestored = true;
-                lastSavedContent = text;
-                lastKnownFileModified = file.lastModified;
-                state.lastFileModified = file.lastModified;
-                pendingExternalConflict = null;
-                setDirty(false);
-              }
-            }
-          } catch (handleErr) {
-            console.warn('Could not read persisted file handle directly:', handleErr);
+          dom.codeEditor.value = diskText;
+          const ok = applySourceCodeToCanvas();
+          if (ok) {
+            documentRestored = true;
+            pendingExternalConflict = null;
+            setDirty(false);
           }
         }
       }
@@ -3614,6 +3620,8 @@ Do not include conversational greetings or postscripts.`;
           await persistFileHandle(handle);
           localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
           localStorage.setItem('pix2_last_saved_content', text);
+          localStorage.setItem('pix2_last_saved_time', String(file.lastModified));
+          triggerAutosave(true);
           setDirty(false);
           showToast(`Opened ${file.name} from disk!`);
           return;
@@ -3674,6 +3682,8 @@ Do not include conversational greetings or postscripts.`;
         await persistFileHandle(currentFileHandle);
         localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
         localStorage.setItem('pix2_last_saved_content', text);
+        localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+        triggerAutosave(true);
         setDirty(false);
         showToast(`Saved to ${currentFileHandle.name}!`);
         return;
@@ -3716,6 +3726,8 @@ Do not include conversational greetings or postscripts.`;
         await persistFileHandle(handle);
         localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
         localStorage.setItem('pix2_last_saved_content', text);
+        localStorage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
+        triggerAutosave(true);
         setDirty(false);
         showToast(`Saved as ${handle.name}!`);
         return;
@@ -4342,7 +4354,24 @@ Do not include conversational greetings or postscripts.`;
     document.getElementById('btn-confirm-new-canvas').addEventListener('click', () => {
       const cw = parseInt(document.getElementById('input-custom-w').value, 10) || 64;
       const ch = parseInt(document.getElementById('input-custom-h').value, 10) || 64;
+      currentFileHandle = null;
+      currentFileName = null;
+      lastKnownFileModified = 0;
+      lastSavedContent = '';
+      pendingExternalConflict = null;
+      clearPersistedFileHandle();
+      localStorage.removeItem('noiradix_pixelart_file_name');
+      localStorage.removeItem('pix2_last_saved_content');
+      localStorage.removeItem('pix2_last_saved_time');
+      localStorage.removeItem('pix2_pixelart_autosave');
+      const btnReload = document.getElementById('btn-reload-file');
+      if (btnReload) {
+        btnReload.classList.remove('pulse-warning');
+        btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+      }
       createNewDocument(cw, ch, 'New Artwork');
+      updateDocumentTitle();
+      setDirty(false);
       dom.modalNew.classList.add('hidden');
       setTimeout(fitCanvasToViewport, 50);
     });
@@ -4513,8 +4542,17 @@ Do not include conversational greetings or postscripts.`;
         const file = await currentFileHandle.getFile();
         const currentModified = file.lastModified;
 
+        // If baseline is not yet recorded, record it now and return
+        if (lastKnownFileModified === 0) {
+          lastKnownFileModified = currentModified;
+          const curText = await file.text();
+          if (!lastSavedContent) lastSavedContent = curText;
+          isExternalReloading = false;
+          return;
+        }
+
         // Check if file modified time is newer than our recorded timestamp (with 1s NTFS jitter tolerance)
-        if (!force && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified + 1000) {
+        if (!force && currentModified <= lastKnownFileModified + 1000) {
           isExternalReloading = false;
           return;
         }
@@ -4586,8 +4624,22 @@ Do not include conversational greetings or postscripts.`;
         return;
       }
       if (state.isDirty) {
+        // Emergency snapshot before discarding canvas edits so user never loses their work
+        const cell = getArtworkCell();
+        if (cell && cell.pixels) {
+          try {
+            localStorage.setItem('pix2_backup_before_reload', JSON.stringify({
+              w: state.w,
+              h: state.h,
+              title: state.title,
+              pixels: cell.pixels,
+              time: Date.now()
+            }));
+          } catch (_) {}
+        }
+
         const confirmDiscard = confirm(
-          `"${currentFileHandle.name}" has unsaved changes in NOIRADIX PixelArt.\n\nReloading from disk will discard your current editor edits and load the external disk version.\n\nDo you want to discard PixelArt edits and reload from disk?`
+          `"${currentFileHandle.name}" has unsaved changes in NOIRADIX PixelArt.\n\nReloading from disk will discard your current editor edits and load the external disk version.\n\n(Tip: You can press Ctrl+Z immediately after reload to undo and recover your edits).\n\nDo you want to discard PixelArt edits and reload from disk?`
         );
         if (!confirmDiscard) return;
       }
@@ -4598,6 +4650,7 @@ Do not include conversational greetings or postscripts.`;
         btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
       }
       pendingExternalConflict = null;
+      showToast(`Đã nạp lại ${currentFileHandle.name} từ đĩa. (Nhấn Ctrl+Z để hoàn tác nếu cần)`, 'info');
     }
 
     function initFileWatcher() {
