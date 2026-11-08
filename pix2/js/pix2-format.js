@@ -30,7 +30,13 @@ const PIX2 = (function () {
       maxCoordAbs: 2048,
       maxFileSize: 20 * 1024 * 1024,
       maxFramesPerAnim: 512,
-      maxAnimFps: 120
+      maxAnimFps: 120,
+      maxStructuralNodes: 16384,
+      maxLayersPerCell: 64,
+      maxGroupDepth: 16,
+      maxTagsPerNode: 32,
+      maxTagLength: 32,
+      maxNameLength: 256
     },
     pixelart: {
       name: 'pixelart',
@@ -42,7 +48,13 @@ const PIX2 = (function () {
       maxCoordAbs: 2048,
       maxFileSize: 20 * 1024 * 1024,
       maxFramesPerAnim: 64,
-      maxAnimFps: 60
+      maxAnimFps: 60,
+      maxStructuralNodes: 4096,
+      maxLayersPerCell: 64,
+      maxGroupDepth: 16,
+      maxTagsPerNode: 32,
+      maxTagLength: 32,
+      maxNameLength: 256
     },
     unlimited: {
       name: 'unlimited',
@@ -54,7 +66,13 @@ const PIX2 = (function () {
       maxCoordAbs: 4096,
       maxFileSize: 50 * 1024 * 1024,
       maxFramesPerAnim: 1024,
-      maxAnimFps: 120
+      maxAnimFps: 120,
+      maxStructuralNodes: 32768,
+      maxLayersPerCell: 128,
+      maxGroupDepth: 32,
+      maxTagsPerNode: 64,
+      maxTagLength: 64,
+      maxNameLength: 512
     }
   };
 
@@ -348,6 +366,22 @@ const PIX2 = (function () {
       .replace(/\\\\/g, '\\');
   }
 
+  /**
+   * Parse comma-delimited tag list inside brackets, e.g. [face, eye, left]
+   */
+  function parseTagsList(str, profile = RESOURCE_PROFILES.studio) {
+    if (typeof str !== 'string') return [];
+    const match = str.match(/\[(.*?)\]/);
+    const content = match ? match[1] : str;
+    const maxTags = (profile && profile.maxTagsPerNode) || 32;
+    const maxLen = (profile && profile.maxTagLength) || 32;
+    return content.split(',')
+      .map(t => t.trim().replace(/^["']|["']$/g, ''))
+      .filter(t => t.length > 0 && isSafeIdentifier(t))
+      .slice(0, maxTags)
+      .map(t => t.slice(0, maxLen));
+  }
+
   // ===========================================================================
   // DOCUMENT CREATION & DATA MODEL
   // ===========================================================================
@@ -431,6 +465,13 @@ const PIX2 = (function () {
     let currentSection = null;
     let currentCell = null;
     let currentAnim = null;
+    let currentLayer = null;
+    let currentGroup = null;
+    let currentRegion = null;
+    const parsedLayers = [];
+    const parsedGroups = [];
+    const parsedRegions = [];
+    const nodeRegistry = new Map();
 
     for (let i = 0; i < lines.length; i++) {
       const line = stripComment(lines[i]);
@@ -445,11 +486,11 @@ const PIX2 = (function () {
           hasPix2Header = true;
           if (parts.length >= 2 && parts[1]) {
             doc.meta.version = sanitizeKey(parts[1], '');
-            if (doc.meta.version !== '1.0') {
+            if (doc.meta.version !== '1.0' && doc.meta.version !== '1.1') {
               diagnostics.push({
                 code: 'PIX2_ERR_UNSUPPORTED_VERSION',
                 line: i + 1,
-                message: `Unsupported PIX2 version: "${doc.meta.version}" (expected "1.0")`
+                message: `Unsupported PIX2 version: "${doc.meta.version}" (expected "1.0" or "1.1")`
               });
             }
           } else {
@@ -457,7 +498,7 @@ const PIX2 = (function () {
             diagnostics.push({
               code: 'PIX2_ERR_MISSING_VERSION',
               line: i + 1,
-              message: 'Missing version parameter in @pix2 header directive (expected "@pix2 1.0")'
+              message: 'Missing version parameter in @pix2 header directive (expected "@pix2 1.0" or "@pix2 1.1")'
             });
           }
           continue;
@@ -465,25 +506,40 @@ const PIX2 = (function () {
           currentSection = 'meta';
           currentCell = null;
           currentAnim = null;
+          currentLayer = null;
+          currentGroup = null;
+          currentRegion = null;
           continue;
         } else if (secName === 'grid') {
           currentSection = 'grid';
           currentCell = null;
           currentAnim = null;
+          currentLayer = null;
+          currentGroup = null;
+          currentRegion = null;
           continue;
         } else if (secName === 'palette') {
           currentSection = 'palette';
           currentCell = null;
           currentAnim = null;
+          currentLayer = null;
+          currentGroup = null;
+          currentRegion = null;
           continue;
         } else if (secName === 'animations') {
           currentSection = 'animations_block';
           currentCell = null;
           currentAnim = null;
+          currentLayer = null;
+          currentGroup = null;
+          currentRegion = null;
           continue;
         } else if (secName === 'animation') {
           currentSection = 'animation';
           currentCell = null;
+          currentLayer = null;
+          currentGroup = null;
+          currentRegion = null;
           const rawAnimId = parts[1] || `anim_${Object.keys(doc.animations).length}`;
           const animId = sanitizeKey(rawAnimId, `anim_${Object.keys(doc.animations).length}`);
           if (doc.animations[animId]) {
@@ -504,9 +560,115 @@ const PIX2 = (function () {
           };
           doc.animations[animId] = currentAnim;
           continue;
+        } else if (secName === 'layer') {
+          currentSection = 'layer';
+          currentAnim = null;
+          currentGroup = null;
+          currentRegion = null;
+          const rawLayerId = parts[1] || `layer_${parsedLayers.length}`;
+          const layerId = sanitizeKey(rawLayerId, `layer_${parsedLayers.length}`);
+          if (!isSafeIdentifier(layerId)) {
+            diagnostics.push({
+              code: 'PIX2_ERR_PROTOTYPE_POLLUTION',
+              line: i + 1,
+              message: `Illegal identifier in layer: "${layerId}"`
+            });
+          }
+          if (nodeRegistry.has(layerId)) {
+            diagnostics.push({
+              code: 'PIX2_ERR_DUPLICATE_NODE_ID',
+              line: i + 1,
+              message: `Duplicate node identifier "${layerId}" detected.`
+            });
+          }
+          currentLayer = {
+            type: 'layer',
+            id: layerId,
+            cell: (currentCell && currentCell.id) || null,
+            name: layerId,
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blend: 'normal',
+            children: []
+          };
+          nodeRegistry.set(layerId, currentLayer);
+          parsedLayers.push(currentLayer);
+          continue;
+        } else if (secName === 'group') {
+          currentSection = 'group';
+          currentAnim = null;
+          currentRegion = null;
+          const rawGroupId = parts[1] || `group_${parsedGroups.length}`;
+          const groupId = sanitizeKey(rawGroupId, `group_${parsedGroups.length}`);
+          if (!isSafeIdentifier(groupId)) {
+            diagnostics.push({
+              code: 'PIX2_ERR_PROTOTYPE_POLLUTION',
+              line: i + 1,
+              message: `Illegal identifier in group: "${groupId}"`
+            });
+          }
+          if (nodeRegistry.has(groupId)) {
+            diagnostics.push({
+              code: 'PIX2_ERR_DUPLICATE_NODE_ID',
+              line: i + 1,
+              message: `Duplicate node identifier "${groupId}" detected.`
+            });
+          }
+          currentGroup = {
+            type: 'group',
+            id: groupId,
+            cell: (currentCell && currentCell.id) || (currentLayer && currentLayer.cell) || null,
+            parent: (currentLayer && currentLayer.id) || null,
+            name: groupId,
+            visible: true,
+            locked: false,
+            tags: [],
+            children: []
+          };
+          nodeRegistry.set(groupId, currentGroup);
+          parsedGroups.push(currentGroup);
+          continue;
+        } else if (secName === 'region') {
+          currentSection = 'region';
+          currentAnim = null;
+          const rawRegionId = parts[1] || `region_${parsedRegions.length}`;
+          const regionId = sanitizeKey(rawRegionId, `region_${parsedRegions.length}`);
+          if (!isSafeIdentifier(regionId)) {
+            diagnostics.push({
+              code: 'PIX2_ERR_PROTOTYPE_POLLUTION',
+              line: i + 1,
+              message: `Illegal identifier in region: "${regionId}"`
+            });
+          }
+          if (nodeRegistry.has(regionId)) {
+            diagnostics.push({
+              code: 'PIX2_ERR_DUPLICATE_NODE_ID',
+              line: i + 1,
+              message: `Duplicate node identifier "${regionId}" detected.`
+            });
+          }
+          currentRegion = {
+            type: 'region',
+            id: regionId,
+            cell: (currentCell && currentCell.id) || (currentGroup && currentGroup.cell) || (currentLayer && currentLayer.cell) || null,
+            parent: (currentGroup && currentGroup.id) || (currentLayer && currentLayer.id) || null,
+            name: regionId,
+            visible: true,
+            locked: false,
+            tags: [],
+            pixels: {},
+            primitives: []
+          };
+          nodeRegistry.set(regionId, currentRegion);
+          parsedRegions.push(currentRegion);
+          continue;
         } else if (secName === 'cell' || secName === 'frame') {
           currentSection = 'cell';
           currentAnim = null;
+          currentLayer = null;
+          currentGroup = null;
+          currentRegion = null;
           const rawCellId = parts[1] || `cell_${Object.keys(doc.cells).length}`;
           const cellId = sanitizeKey(rawCellId, `cell_${Object.keys(doc.cells).length}`);
 
@@ -750,70 +912,176 @@ const PIX2 = (function () {
                 .slice(0, MAX_FRAMES_PER_ANIM);
             }
           }
+          else if (key === 'action') currentAnim.action = val.toLowerCase().slice(0, 32);
+          else if (key === 'template') currentAnim.template = val.toLowerCase().slice(0, 32);
         }
       }
 
-      // Inside @cell
-      else if (currentSection === 'cell' && currentCell) {
-        // Properties
-        if (line.startsWith('name:')) {
-          currentCell.name = unescapePix2String(line.slice(5).trim()).slice(0, 256);
-          continue;
-        } else if (line.startsWith('direction:') || line.startsWith('dir:')) {
-          currentCell.direction = line.split(':')[1].trim().toLowerCase().slice(0, 32);
-          continue;
-        } else if (line.startsWith('frame:')) {
-          const num = parseStrictInt(line.split(':')[1].trim());
-          if (!isNaN(num)) {
-            currentCell.frame = Math.min(Math.max(0, num), 2048);
-          } else {
-            diagnostics.push({
-              code: 'PIX2_ERR_INVALID_INTEGER',
-              line: i + 1,
-              message: `Invalid integer for frame: "${line.split(':')[1].trim()}"`
-            });
-          }
-          continue;
-        } else if (line.startsWith('grid_pos:') || line.startsWith('pos:')) {
-          const coord = parseCoordinate(line.split(':')[1].trim());
-          if (coord) {
-            currentCell.row = Math.min(Math.max(0, coord[0]), MAX_GRID_ROWS);
-            currentCell.col = Math.min(Math.max(0, coord[1]), MAX_GRID_COLS);
-          } else {
-            diagnostics.push({
-              code: 'PIX2_ERR_INVALID_COORDINATE',
-              line: i + 1,
-              message: `Invalid grid_pos coordinate format: "${line.split(':')[1].trim()}"`
-            });
-          }
-          continue;
-        } else if (line.startsWith('size:')) {
-          const dims = parseDimension(line.split(':')[1].trim());
-          if (dims) {
-            const parsedCellW = dims[0];
-            const parsedCellH = dims[1];
-            const clampedCellW = Math.min(Math.max(profile.minCellDim, parsedCellW), profile.maxCellDim);
-            const clampedCellH = Math.min(Math.max(profile.minCellDim, parsedCellH), profile.maxCellDim);
-            if (parsedCellW > profile.maxCellDim || parsedCellH > profile.maxCellDim) {
+      // Inside @layer
+      else if (currentSection === 'layer' && currentLayer) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > 0) {
+          const key = line.slice(0, colonIdx).trim().toLowerCase();
+          const val = unescapePix2String(line.slice(colonIdx + 1).trim());
+          if (key === 'cell') {
+            currentLayer.cell = sanitizeKey(val, '');
+          } else if (key === 'name') {
+            currentLayer.name = val.normalize('NFC').slice(0, profile.maxNameLength || 256);
+          } else if (key === 'visible') {
+            currentLayer.visible = (val.toLowerCase() !== 'false');
+          } else if (key === 'locked') {
+            currentLayer.locked = (val.toLowerCase() === 'true');
+          } else if (key === 'opacity') {
+            const op = parseFloat(val);
+            if (isNaN(op) || op < 0 || op > 1) {
               diagnostics.push({
-                code: 'PIX2_WARN_CLAMPED_CELL_SIZE',
+                code: 'PIX2_ERR_INVALID_OPACITY',
                 line: i + 1,
-                message: `Requested cell size (${parsedCellW}x${parsedCellH}) exceeds profile "${profile.name}" limit (${profile.maxCellDim}); clamped to ${clampedCellW}x${clampedCellH}`
+                message: `Invalid layer opacity "${val}" (expected float between 0.0 and 1.0)`
+              });
+            } else {
+              currentLayer.opacity = op;
+            }
+          } else if (key === 'blend') {
+            const mode = val.toLowerCase();
+            if (mode !== 'normal') {
+              diagnostics.push({
+                code: 'PIX2_ERR_UNSUPPORTED_BLEND',
+                line: i + 1,
+                message: `Unsupported blend mode "${val}" (only "normal" supported in v1.1)`
+              });
+            } else {
+              currentLayer.blend = 'normal';
+            }
+          }
+        }
+        continue;
+      }
+
+      // Inside @group
+      else if (currentSection === 'group' && currentGroup) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > 0) {
+          const key = line.slice(0, colonIdx).trim().toLowerCase();
+          const val = unescapePix2String(line.slice(colonIdx + 1).trim());
+          if (key === 'cell') {
+            currentGroup.cell = sanitizeKey(val, '');
+          } else if (key === 'parent') {
+            currentGroup.parent = sanitizeKey(val, '');
+          } else if (key === 'name') {
+            currentGroup.name = val.normalize('NFC').slice(0, profile.maxNameLength || 256);
+          } else if (key === 'visible') {
+            currentGroup.visible = (val.toLowerCase() !== 'false');
+          } else if (key === 'locked') {
+            currentGroup.locked = (val.toLowerCase() === 'true');
+          } else if (key === 'tags') {
+            currentGroup.tags = parseTagsList(line.slice(colonIdx + 1).trim(), profile);
+          }
+        }
+        continue;
+      }
+
+      // Inside @cell or @region
+      else if ((currentSection === 'cell' && currentCell) || (currentSection === 'region' && currentRegion)) {
+        if (currentSection === 'region') {
+          const colonIdx = line.indexOf(':');
+          const firstWord = line.split(/\s+/)[0].toLowerCase();
+          const isDrawingCmd = ['p', 'pixel', 'dot', 'd', 'line', 'rect', 'fill', 'sym_dot'].includes(firstWord);
+          if (colonIdx > 0 && !isDrawingCmd) {
+            const key = line.slice(0, colonIdx).trim().toLowerCase();
+            const val = unescapePix2String(line.slice(colonIdx + 1).trim());
+            if (key === 'cell') {
+              currentRegion.cell = sanitizeKey(val, '');
+            } else if (key === 'parent') {
+              currentRegion.parent = sanitizeKey(val, '');
+            } else if (key === 'name') {
+              currentRegion.name = val.normalize('NFC').slice(0, profile.maxNameLength || 256);
+            } else if (key === 'visible') {
+              currentRegion.visible = (val.toLowerCase() !== 'false');
+            } else if (key === 'locked') {
+              currentRegion.locked = (val.toLowerCase() === 'true');
+            } else if (key === 'tags') {
+              currentRegion.tags = parseTagsList(line.slice(colonIdx + 1).trim(), profile);
+            }
+            continue;
+          }
+        }
+
+        if (currentSection === 'cell') {
+          // Properties
+          if (line.startsWith('name:')) {
+            currentCell.name = unescapePix2String(line.slice(5).trim()).slice(0, 256);
+            continue;
+          } else if (line.startsWith('direction:') || line.startsWith('dir:')) {
+            currentCell.direction = line.split(':')[1].trim().toLowerCase().slice(0, 32);
+            continue;
+          } else if (line.startsWith('frame:')) {
+            const num = parseStrictInt(line.split(':')[1].trim());
+            if (!isNaN(num)) {
+              currentCell.frame = Math.min(Math.max(0, num), 2048);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_INTEGER',
+                line: i + 1,
+                message: `Invalid integer for frame: "${line.split(':')[1].trim()}"`
               });
             }
-            currentCell.size = {
-              w: clampedCellW,
-              h: clampedCellH
-            };
-          } else {
-            diagnostics.push({
-              code: 'PIX2_ERR_INVALID_DIMENSION',
-              line: i + 1,
-              message: `Invalid cell size format: "${line.split(':')[1].trim()}"`
-            });
+            continue;
+          } else if (line.startsWith('grid_pos:') || line.startsWith('pos:')) {
+            const coord = parseCoordinate(line.split(':')[1].trim());
+            if (coord) {
+              currentCell.row = Math.min(Math.max(0, coord[0]), MAX_GRID_ROWS);
+              currentCell.col = Math.min(Math.max(0, coord[1]), MAX_GRID_COLS);
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_COORDINATE',
+                line: i + 1,
+                message: `Invalid grid_pos coordinate format: "${line.split(':')[1].trim()}"`
+              });
+            }
+            continue;
+          } else if (line.startsWith('size:')) {
+            const dims = parseDimension(line.split(':')[1].trim());
+            if (dims) {
+              const parsedCellW = dims[0];
+              const parsedCellH = dims[1];
+              const clampedCellW = Math.min(Math.max(profile.minCellDim, parsedCellW), profile.maxCellDim);
+              const clampedCellH = Math.min(Math.max(profile.minCellDim, parsedCellH), profile.maxCellDim);
+              if (parsedCellW > profile.maxCellDim || parsedCellH > profile.maxCellDim) {
+                diagnostics.push({
+                  code: 'PIX2_WARN_CLAMPED_CELL_SIZE',
+                  line: i + 1,
+                  message: `Requested cell size (${parsedCellW}x${parsedCellH}) exceeds profile "${profile.name}" limit (${profile.maxCellDim}); clamped to ${clampedCellW}x${clampedCellH}`
+                });
+              }
+              currentCell.size = {
+                w: clampedCellW,
+                h: clampedCellH
+              };
+            } else {
+              diagnostics.push({
+                code: 'PIX2_ERR_INVALID_DIMENSION',
+                line: i + 1,
+                message: `Invalid cell size format: "${line.split(':')[1].trim()}"`
+              });
+            }
+            continue;
           }
-          continue;
         }
+
+        const targetPixels = (currentSection === 'region' && currentRegion) ? currentRegion.pixels : (currentCell ? currentCell.pixels : null);
+        let targetCell = currentCell;
+        if (currentSection === 'region' && currentRegion && currentRegion.cell && doc.cells[currentRegion.cell]) {
+          targetCell = doc.cells[currentRegion.cell];
+        }
+
+        function plotPixel(px, py, col) {
+          if (targetPixels) targetPixels[`${px},${py}`] = col;
+          if (targetCell && targetPixels !== targetCell.pixels) targetCell.pixels[`${px},${py}`] = col;
+        }
+
+        const cellW = (targetCell && targetCell.size && targetCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
+        const cellH = (targetCell && targetCell.size && targetCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
 
         // Multiple pixel tokens on one line: e.g. "p 5,2 1  p 6,2 2  p 7,2 #ffffff"
         if (line.startsWith('p ') || line.includes(' p ') || line.startsWith('pixel ') || line.includes(' pixel ')) {
@@ -828,7 +1096,7 @@ const PIX2 = (function () {
                 diagnostics.push({
                   code: 'PIX2_ERR_INVALID_COORDINATE',
                   line: i + 1,
-                  message: `Invalid coordinate syntax "${coord}" in cell "${currentCell.id}"`
+                  message: `Invalid coordinate syntax "${coord}" in cell "${(targetCell && targetCell.id) || 'unknown'}"`
                 });
               } else {
                 const [x, y] = parsed;
@@ -837,7 +1105,7 @@ const PIX2 = (function () {
                   diagnostics.push({
                     code: 'PIX2_ERR_UNRESOLVED_COLOR',
                     line: i + 1,
-                    message: `Unresolved or invalid color reference "${colRef}" in cell "${currentCell.id}"`
+                    message: `Unresolved or invalid color reference "${colRef}" in cell "${(targetCell && targetCell.id) || 'unknown'}"`
                   });
                 } else if (Math.abs(x) > MAX_COORD_ABS || Math.abs(y) > MAX_COORD_ABS) {
                   diagnostics.push({
@@ -846,7 +1114,7 @@ const PIX2 = (function () {
                     message: `Coordinate (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
                   });
                 } else {
-                  currentCell.pixels[`${x},${y}`] = color;
+                  plotPixel(x, y, color);
                 }
               }
               t += 2;
@@ -883,7 +1151,7 @@ const PIX2 = (function () {
                 message: `Coordinate (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
               });
             } else {
-              currentCell.pixels[`${x},${y}`] = color;
+              plotPixel(x, y, color);
             }
           }
         } else if (cmd === 'line') {
@@ -905,8 +1173,6 @@ const PIX2 = (function () {
           } else {
             const [x1, y1] = p1;
             const [x2, y2] = p2;
-            const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
-            const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
             if (Math.abs(x1) > MAX_COORD_ABS || Math.abs(y1) > MAX_COORD_ABS ||
                 Math.abs(x2) > MAX_COORD_ABS || Math.abs(y2) > MAX_COORD_ABS) {
               diagnostics.push({
@@ -917,7 +1183,7 @@ const PIX2 = (function () {
             } else {
               drawLineBresenham(x1, y1, x2, y2, (x, y) => {
                 if (x >= 0 && x < cellW && y >= 0 && y < cellH) {
-                  currentCell.pixels[`${x},${y}`] = color;
+                  plotPixel(x, y, color);
                 }
               });
             }
@@ -949,8 +1215,6 @@ const PIX2 = (function () {
           } else {
             const [x, y] = origin;
             const [w, h] = dims;
-            const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
-            const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
             if (Math.abs(x) > MAX_COORD_ABS || Math.abs(y) > MAX_COORD_ABS) {
               diagnostics.push({
                 code: 'PIX2_ERR_RESOURCE_LIMIT',
@@ -968,7 +1232,7 @@ const PIX2 = (function () {
                     if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
                       const px = x + dx, py = y + dy;
                       if (px >= 0 && px < cellW && py >= 0 && py < cellH) {
-                        currentCell.pixels[`${px},${py}`] = color;
+                        plotPixel(px, py, color);
                       }
                     }
                   }
@@ -1000,7 +1264,13 @@ const PIX2 = (function () {
                 message: `fill seed point (${startX}, ${startY}) exceeds safety limit (${MAX_COORD_ABS})`
               });
             } else {
-              floodFillCell(currentCell, startX, startY, color, doc.meta.cell_size);
+              const fillTarget = targetCell || currentCell;
+              if (fillTarget) {
+                floodFillCell(fillTarget, startX, startY, color, { w: cellW, h: cellH }, profile);
+                if (targetPixels && targetPixels !== fillTarget.pixels) {
+                  Object.assign(targetPixels, fillTarget.pixels);
+                }
+              }
             }
           }
         } else if (cmd === 'sym_dot') {
@@ -1013,8 +1283,6 @@ const PIX2 = (function () {
             });
           } else {
             const [x, y] = pt;
-            const cellW = (currentCell.size && currentCell.size.w) || (doc.meta.cell_size && doc.meta.cell_size.w) || 16;
-            const cellH = (currentCell.size && currentCell.size.h) || (doc.meta.cell_size && doc.meta.cell_size.h) || 16;
             let axisX, colToken;
             if (parts.length >= 4) {
               axisX = parseFloat(parts[2]);
@@ -1039,11 +1307,11 @@ const PIX2 = (function () {
               });
             } else {
               if (x >= 0 && x < cellW && y >= 0 && y < cellH) {
-                currentCell.pixels[`${x},${y}`] = color;
+                plotPixel(x, y, color);
               }
               const mx = Math.round(2 * axisX - x);
               if (mx >= 0 && mx < cellW && y >= 0 && y < cellH) {
-                currentCell.pixels[`${mx},${y}`] = color;
+                plotPixel(mx, y, color);
               }
             }
           }
@@ -1055,8 +1323,128 @@ const PIX2 = (function () {
       diagnostics.push({
         code: 'PIX2_WARN_MISSING_HEADER',
         line: 1,
-        message: 'Missing standard @pix2 header directive (expected "@pix2 1.0")'
+        message: 'Missing standard @pix2 header directive (expected "@pix2 1.0" or "@pix2 1.1")'
       });
+    }
+
+    // Post-parsing: Tree Assembly for v1.1 nodes
+    for (const group of parsedGroups) {
+      if (group.parent) {
+        const parentNode = nodeRegistry.get(group.parent);
+        if (!parentNode) {
+          diagnostics.push({
+            code: 'PIX2_ERR_MISSING_PARENT',
+            line: 1,
+            message: `Group "${group.id}" references non-existent parent "${group.parent}"`
+          });
+        } else if (parentNode.type === 'region') {
+          diagnostics.push({
+            code: 'PIX2_ERR_INVALID_PARENT_TYPE',
+            line: 1,
+            message: `Group "${group.id}" cannot have region "${group.parent}" as parent`
+          });
+        } else if (group.cell && parentNode.cell && group.cell !== parentNode.cell) {
+          diagnostics.push({
+            code: 'PIX2_ERR_CROSS_CELL_PARENT',
+            line: 1,
+            message: `Group "${group.id}" in cell "${group.cell}" cannot reference parent in cell "${parentNode.cell}"`
+          });
+        } else {
+          parentNode.children.push(group);
+        }
+      } else {
+        diagnostics.push({
+          code: 'PIX2_ERR_MISSING_PARENT',
+          line: 1,
+          message: `Group "${group.id}" has no parent specified`
+        });
+      }
+    }
+
+    for (const region of parsedRegions) {
+      if (region.parent) {
+        const parentNode = nodeRegistry.get(region.parent);
+        if (!parentNode) {
+          diagnostics.push({
+            code: 'PIX2_ERR_MISSING_PARENT',
+            line: 1,
+            message: `Region "${region.id}" references non-existent parent "${region.parent}"`
+          });
+        } else if (parentNode.type === 'region') {
+          diagnostics.push({
+            code: 'PIX2_ERR_INVALID_PARENT_TYPE',
+            line: 1,
+            message: `Region "${region.id}" cannot have region "${region.parent}" as parent`
+          });
+        } else if (region.cell && parentNode.cell && region.cell !== parentNode.cell) {
+          diagnostics.push({
+            code: 'PIX2_ERR_CROSS_CELL_PARENT',
+            line: 1,
+            message: `Region "${region.id}" in cell "${region.cell}" cannot reference parent in cell "${parentNode.cell}"`
+          });
+        } else {
+          parentNode.children.push(region);
+        }
+      } else {
+        diagnostics.push({
+          code: 'PIX2_ERR_MISSING_PARENT',
+          line: 1,
+          message: `Region "${region.id}" has no parent specified`
+        });
+      }
+    }
+
+    for (const layer of parsedLayers) {
+      const targetCellId = layer.cell || (Object.keys(doc.cells)[0] || null);
+      if (targetCellId && doc.cells[targetCellId]) {
+        layer.cell = targetCellId;
+        if (!doc.cells[targetCellId].layers) doc.cells[targetCellId].layers = [];
+        doc.cells[targetCellId].layers.push(layer);
+      } else {
+        diagnostics.push({
+          code: 'PIX2_ERR_MISSING_CELL',
+          line: 1,
+          message: `Layer "${layer.id}" references non-existent cell "${layer.cell}"`
+        });
+      }
+    }
+
+    // Normalization: Ensure cells in v1.1 documents have a valid layer & region tree
+    if (doc.meta.version === '1.1' || parsedLayers.length > 0) {
+      for (const cid in doc.cells) {
+        const cell = doc.cells[cid];
+        if (!cell.layers || cell.layers.length === 0) {
+          const legacyLayerId = `layer_legacy_${cell.id}`;
+          const legacyRegionId = `region_legacy_${cell.id}`;
+          const legacyLayer = {
+            type: 'layer',
+            id: legacyLayerId,
+            cell: cell.id,
+            name: 'Default',
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blend: 'normal',
+            children: []
+          };
+          const legacyRegion = {
+            type: 'region',
+            id: legacyRegionId,
+            cell: cell.id,
+            parent: legacyLayerId,
+            name: cell.name || 'Artwork',
+            tags: [],
+            visible: true,
+            locked: false,
+            pixels: { ...cell.pixels },
+            primitives: []
+          };
+          legacyLayer.children.push(legacyRegion);
+          cell.layers = [legacyLayer];
+        } else {
+          cell.pixels = compositeCellLayers(cell, doc.meta.cellSize);
+        }
+      }
     }
 
     // Post-check: ensure cells without explicit grid position are placed logically
@@ -1178,17 +1566,171 @@ const PIX2 = (function () {
   }
 
   // ===========================================================================
+  // PIX2 1.1 STRUCTURAL COMPOSITING & MIGRATION
+  // ===========================================================================
+
+  function compositeCellLayers(cell, defaultSize) {
+    if (!cell || !cell.layers || cell.layers.length === 0) {
+      return { ...(cell ? cell.pixels : {}) };
+    }
+    const resultPixels = {};
+
+    function renderNode(node, parentVisible, parentOpacity) {
+      const isVisible = parentVisible && (node.visible !== false);
+      if (!isVisible) return;
+
+      if (node.type === 'layer') {
+        const layerOpacity = (node.opacity !== undefined ? node.opacity : 1.0) * parentOpacity;
+        for (const child of node.children || []) {
+          renderNode(child, isVisible, layerOpacity);
+        }
+      } else if (node.type === 'group') {
+        for (const child of node.children || []) {
+          renderNode(child, isVisible, parentOpacity);
+        }
+      } else if (node.type === 'region') {
+        const effectiveOpacity = parentOpacity;
+        for (const coord in node.pixels) {
+          const hex = node.pixels[coord];
+          if (!hex) continue;
+          if (effectiveOpacity >= 1.0) {
+            resultPixels[coord] = hex;
+          } else if (effectiveOpacity <= 0.0) {
+            // invisible
+          } else {
+            const rgba = hexToRgba(hex);
+            if (rgba) {
+              const blendedA = Math.round(rgba.a * effectiveOpacity);
+              resultPixels[coord] = rgbaToHex(rgba.r, rgba.g, rgba.b, blendedA);
+            } else {
+              resultPixels[coord] = hex;
+            }
+          }
+        }
+      }
+    }
+
+    for (const layer of cell.layers) {
+      renderNode(layer, true, 1.0);
+    }
+    return resultPixels;
+  }
+
+  function upgradeV10ToV11(doc) {
+    if (!doc || typeof doc !== 'object' || !doc.cells) {
+      return { success: false, error: 'Invalid document structure' };
+    }
+    const upgraded = JSON.parse(JSON.stringify(doc));
+    upgraded.meta.version = '1.1';
+    for (const cid in upgraded.cells) {
+      const cell = upgraded.cells[cid];
+      if (!cell.layers || cell.layers.length === 0) {
+        const layerId = `layer_legacy_${cell.id}`;
+        const regionId = `region_legacy_${cell.id}`;
+        const layer = {
+          type: 'layer',
+          id: layerId,
+          cell: cell.id,
+          name: 'Default',
+          visible: true,
+          locked: false,
+          opacity: 1.0,
+          blend: 'normal',
+          children: []
+        };
+        const region = {
+          type: 'region',
+          id: regionId,
+          cell: cell.id,
+          parent: layerId,
+          name: cell.name || 'Artwork',
+          tags: [],
+          visible: true,
+          locked: false,
+          pixels: { ...cell.pixels },
+          primitives: []
+        };
+        layer.children.push(region);
+        cell.layers = [layer];
+      }
+    }
+    return { success: true, doc: upgraded };
+  }
+
+  function flattenV11ToV10(doc, options = {}) {
+    if (!doc || typeof doc !== 'object' || !doc.cells) {
+      return { success: false, error: 'Invalid document structure' };
+    }
+    const flattened = JSON.parse(JSON.stringify(doc));
+    flattened.meta.version = '1.0';
+    const lossReport = {
+      discardedLayers: [],
+      discardedGroups: [],
+      discardedRegions: [],
+      discardedTags: [],
+      flattenedOpacityCount: 0,
+      warningCount: 0
+    };
+
+    function collectDiscarded(node) {
+      if (!node) return;
+      if (node.type === 'layer') {
+        lossReport.discardedLayers.push(node.id);
+        if (node.opacity !== undefined && node.opacity < 1.0) {
+          lossReport.flattenedOpacityCount++;
+        }
+        for (const ch of node.children || []) collectDiscarded(ch);
+      } else if (node.type === 'group') {
+        lossReport.discardedGroups.push(node.id);
+        if (node.tags && node.tags.length) lossReport.discardedTags.push(...node.tags);
+        for (const ch of node.children || []) collectDiscarded(ch);
+      } else if (node.type === 'region') {
+        lossReport.discardedRegions.push(node.id);
+        if (node.tags && node.tags.length) lossReport.discardedTags.push(...node.tags);
+      }
+    }
+
+    for (const cid in flattened.cells) {
+      const cell = flattened.cells[cid];
+      if (cell.layers && cell.layers.length > 0) {
+        cell.pixels = compositeCellLayers(cell, flattened.meta.cellSize);
+        for (const l of cell.layers) {
+          collectDiscarded(l);
+        }
+        delete cell.layers;
+      }
+    }
+    lossReport.warningCount = lossReport.discardedLayers.length + lossReport.discardedGroups.length;
+    return { success: true, doc: flattened, lossReport };
+  }
+
+  // ===========================================================================
   // SERIALIZER (AST -> Text)
   // ===========================================================================
 
   function serialize(doc) {
-    // 1. Gather all unique colors used across cells
+    const isV11 = doc.meta && doc.meta.version === '1.1';
+
+    // 1. Gather all unique colors used across cells and regions
     const colorUsage = Object.create(null);
     for (const cellId in doc.cells) {
       const cell = doc.cells[cellId];
       for (const k in cell.pixels) {
         const c = normalizeHex(cell.pixels[k]);
         if (c) colorUsage[c] = (colorUsage[c] || 0) + 1;
+      }
+      if (isV11 && cell.layers && Array.isArray(cell.layers)) {
+        function collectColors(node) {
+          if (!node) return;
+          if (node.type === 'region' && node.pixels) {
+            for (const k in node.pixels) {
+              const c = normalizeHex(node.pixels[k]);
+              if (c) colorUsage[c] = (colorUsage[c] || 0) + 1;
+            }
+          }
+          for (const ch of node.children || []) collectColors(ch);
+        }
+        for (const l of cell.layers) collectColors(l);
       }
     }
 
@@ -1222,12 +1764,12 @@ const PIX2 = (function () {
     }
 
     const lines = [];
-    lines.push('@pix2 1.0');
+    lines.push(isV11 ? '@pix2 1.1' : '@pix2 1.0');
     lines.push('');
     lines.push('@meta');
     lines.push(`  title: "${escapePix2String(doc.meta.title || 'Untitled')}"`);
     lines.push(`  author: "${escapePix2String(doc.meta.author || 'User')}"`);
-    lines.push(`  version: "${escapePix2String(doc.meta.version || '1.0')}"`);
+    lines.push(`  version: "${escapePix2String(isV11 ? '1.1' : (doc.meta.version || '1.0'))}"`);
     lines.push(`  color_mode: "${escapePix2String(doc.meta.color_mode || 'RGBA')}"`);
     lines.push(`  coordinate_origin: "${escapePix2String(doc.meta.coordinate_origin || 'top-left')}"`);
     lines.push('');
@@ -1274,23 +1816,79 @@ const PIX2 = (function () {
       }
       if (cell.size) lines.push(`  size: ${cell.size.w}x${cell.size.h}`);
 
-      // Group pixels by Y coordinate for clean human/AI reading
-      const pixelsByY = {};
-      for (const coord in cell.pixels) {
-        const parsed = parseCoordinate(coord);
-        if (!parsed) continue;
-        const [x, y] = parsed;
-        if (!pixelsByY[y]) pixelsByY[y] = [];
-        const color = normalizeHex(cell.pixels[coord]);
-        const pId = paletteMap[color] || color;
-        pixelsByY[y].push({ x, pId });
-      }
+      if (isV11 && cell.layers && cell.layers.length > 0) {
+        function serializeNode(node) {
+          if (node.type === 'layer') {
+            lines.push(`@layer ${node.id}`);
+            lines.push(`  cell: ${node.cell || cid}`);
+            if (node.name) lines.push(`  name: "${escapePix2String(node.name)}"`);
+            lines.push(`  visible: ${node.visible !== false}`);
+            lines.push(`  locked: ${Boolean(node.locked)}`);
+            lines.push(`  opacity: ${node.opacity !== undefined ? node.opacity : 1.0}`);
+            lines.push(`  blend: ${node.blend || 'normal'}`);
+            for (const child of node.children || []) serializeNode(child);
+          } else if (node.type === 'group') {
+            lines.push(`@group ${node.id}`);
+            lines.push(`  cell: ${node.cell || cid}`);
+            if (node.parent) lines.push(`  parent: ${node.parent}`);
+            if (node.name) lines.push(`  name: "${escapePix2String(node.name)}"`);
+            lines.push(`  visible: ${node.visible !== false}`);
+            lines.push(`  locked: ${Boolean(node.locked)}`);
+            if (node.tags && node.tags.length > 0) {
+              lines.push(`  tags: [${node.tags.join(', ')}]`);
+            }
+            for (const child of node.children || []) serializeNode(child);
+          } else if (node.type === 'region') {
+            lines.push(`@region ${node.id}`);
+            lines.push(`  cell: ${node.cell || cid}`);
+            if (node.parent) lines.push(`  parent: ${node.parent}`);
+            if (node.name) lines.push(`  name: "${escapePix2String(node.name)}"`);
+            lines.push(`  visible: ${node.visible !== false}`);
+            lines.push(`  locked: ${Boolean(node.locked)}`);
+            if (node.tags && node.tags.length > 0) {
+              lines.push(`  tags: [${node.tags.join(', ')}]`);
+            }
+            const pixelsByY = {};
+            for (const coord in node.pixels) {
+              const parsed = parseCoordinate(coord);
+              if (!parsed) continue;
+              const [x, y] = parsed;
+              if (!pixelsByY[y]) pixelsByY[y] = [];
+              const color = normalizeHex(node.pixels[coord]);
+              const pId = paletteMap[color] || color;
+              pixelsByY[y].push({ x, pId });
+            }
+            const sortedY = Object.keys(pixelsByY).map(Number).sort((a, b) => a - b);
+            for (const y of sortedY) {
+              const rowPixels = pixelsByY[y].sort((a, b) => a.x - b.x);
+              const pStrs = rowPixels.map(p => `pixel ${p.x},${y} ${p.pId}`);
+              lines.push('  ' + pStrs.join(' '));
+            }
+          }
+        }
 
-      const sortedY = Object.keys(pixelsByY).map(Number).sort((a, b) => a - b);
-      for (const y of sortedY) {
-        const rowPixels = pixelsByY[y].sort((a, b) => a.x - b.x);
-        const pStrs = rowPixels.map(p => `pixel ${p.x},${y} ${p.pId}`);
-        lines.push('  ' + pStrs.join(' '));
+        for (const layer of cell.layers) {
+          serializeNode(layer);
+        }
+      } else {
+        // Group pixels by Y coordinate for clean human/AI reading
+        const pixelsByY = {};
+        for (const coord in cell.pixels) {
+          const parsed = parseCoordinate(coord);
+          if (!parsed) continue;
+          const [x, y] = parsed;
+          if (!pixelsByY[y]) pixelsByY[y] = [];
+          const color = normalizeHex(cell.pixels[coord]);
+          const pId = paletteMap[color] || color;
+          pixelsByY[y].push({ x, pId });
+        }
+
+        const sortedY = Object.keys(pixelsByY).map(Number).sort((a, b) => a - b);
+        for (const y of sortedY) {
+          const rowPixels = pixelsByY[y].sort((a, b) => a.x - b.x);
+          const pStrs = rowPixels.map(p => `pixel ${p.x},${y} ${p.pId}`);
+          lines.push('  ' + pStrs.join(' '));
+        }
       }
       lines.push('');
     }
@@ -1301,6 +1899,8 @@ const PIX2 = (function () {
       lines.push(`@animation ${animId}`);
       if (anim.name) lines.push(`  name: "${escapePix2String(anim.name)}"`);
       if (anim.direction && anim.direction !== 'none') lines.push(`  direction: ${anim.direction}`);
+      if (isV11 && anim.action) lines.push(`  action: ${anim.action}`);
+      if (isV11 && anim.template) lines.push(`  template: ${anim.template}`);
       const framesStr = (anim.frames || []).join(', ');
       lines.push(`  frames: [${framesStr}]`);
       lines.push(`  fps: ${anim.fps || 6}`);
@@ -1475,8 +2075,8 @@ const PIX2 = (function () {
     if (!doc.meta || typeof doc.meta !== 'object') {
       recordDiagnostic('PIX2_ERR_MISSING_META', 'error', 'Missing or invalid @meta object');
     } else {
-      if (strict && (!doc.meta.version || doc.meta.version !== '1.0')) {
-        recordDiagnostic('PIX2_ERR_UNSUPPORTED_VERSION', 'error', `Unsupported or missing @pix2 version header: "${doc.meta.version || 'none'}" (expected "1.0")`);
+      if (strict && (!doc.meta.version || (doc.meta.version !== '1.0' && doc.meta.version !== '1.1'))) {
+        recordDiagnostic('PIX2_ERR_UNSUPPORTED_VERSION', 'error', `Unsupported or missing @pix2 version header: "${doc.meta.version || 'none'}" (expected "1.0" or "1.1")`);
       }
       if (!doc.meta.grid || typeof doc.meta.grid.cols !== 'number' || typeof doc.meta.grid.rows !== 'number') {
         recordDiagnostic('PIX2_ERR_INVALID_GRID', 'error', 'Invalid grid definition');
@@ -1574,6 +2174,134 @@ const PIX2 = (function () {
       }
     }
 
+    // Semantic checks: PIX2 1.1 Structural Trees & Resource Limits
+    let totalStructuralNodes = 0;
+    const globalNodeIds = new Set();
+
+    if (doc.cells && typeof doc.cells === 'object') {
+      for (const cellId in doc.cells) {
+        const cell = doc.cells[cellId];
+        if (!cell || typeof cell !== 'object') continue;
+        const cellW = (cell.size && cell.size.w) || defaultW;
+        const cellH = (cell.size && cell.size.h) || defaultH;
+
+        if (cell.layers && Array.isArray(cell.layers)) {
+          if (cell.layers.length > (profile.maxLayersPerCell || 64)) {
+            recordDiagnostic('PIX2_ERR_RESOURCE_LIMIT', 'error', `Cell "${cellId}" exceeds maximum layer limit (${cell.layers.length} > ${profile.maxLayersPerCell || 64})`, { cell_id: cellId, count: cell.layers.length, limit: profile.maxLayersPerCell || 64 });
+          }
+
+          function validateNode(node, depth, visitedAncestors) {
+            if (!node || typeof node !== 'object') return;
+            totalStructuralNodes++;
+
+            if (!node.id || typeof node.id !== 'string') {
+              recordDiagnostic('PIX2_ERR_INVALID_NODE_ID', 'error', `Structural node missing valid string id`, { cell_id: cellId });
+              return;
+            }
+
+            if (!isSafeIdentifier(node.id) || FORBIDDEN_KEYS.has(node.id.toLowerCase())) {
+              recordDiagnostic('PIX2_ERR_PROTOTYPE_POLLUTION', 'error', `Illegal prototype pollution identifier in node id: "${node.id}"`, { cell_id: cellId, node_id: node.id });
+            }
+
+            if (globalNodeIds.has(node.id)) {
+              recordDiagnostic('PIX2_ERR_DUPLICATE_NODE_ID', 'error', `Duplicate structural node id "${node.id}" found in document`, { cell_id: cellId, node_id: node.id });
+            } else {
+              globalNodeIds.add(node.id);
+            }
+
+            if (node.cell && node.cell !== cellId) {
+              recordDiagnostic('PIX2_ERR_CROSS_CELL_PARENT', 'error', `Node "${node.id}" specifies cell "${node.cell}" which does not match enclosing cell "${cellId}"`, { cell_id: cellId, node_id: node.id, node_cell: node.cell });
+            }
+
+            if (visitedAncestors.has(node.id)) {
+              recordDiagnostic('PIX2_ERR_HIERARCHY_CYCLE', 'error', `Cycle detected in hierarchy at node "${node.id}"`, { cell_id: cellId, node_id: node.id });
+              return;
+            }
+
+            const currentAncestors = new Set(visitedAncestors);
+            currentAncestors.add(node.id);
+
+            if (node.type === 'layer') {
+              if (node.opacity !== undefined) {
+                if (typeof node.opacity !== 'number' || isNaN(node.opacity) || node.opacity < 0 || node.opacity > 1) {
+                  recordDiagnostic('PIX2_ERR_INVALID_OPACITY', 'error', `Layer "${node.id}" has invalid opacity ${node.opacity} (must be 0.0 - 1.0)`, { cell_id: cellId, layer_id: node.id, opacity: node.opacity });
+                }
+              }
+              if (node.blend !== undefined && node.blend !== null && node.blend !== 'normal') {
+                recordDiagnostic('PIX2_ERR_UNSUPPORTED_BLEND', 'error', `Layer "${node.id}" specifies unsupported blend mode "${node.blend}" (expected "normal")`, { cell_id: cellId, layer_id: node.id, blend: node.blend });
+              }
+              if (node.children && Array.isArray(node.children)) {
+                for (const child of node.children) {
+                  if (child.type === 'layer') {
+                    recordDiagnostic('PIX2_ERR_INVALID_HIERARCHY', 'error', `Layer "${child.id}" cannot be a child of another layer "${node.id}"`, { cell_id: cellId, parent_id: node.id, child_id: child.id });
+                  }
+                  validateNode(child, depth + 1, currentAncestors);
+                }
+              }
+            } else if (node.type === 'group') {
+              if (depth > (profile.maxGroupDepth || 16)) {
+                recordDiagnostic('PIX2_ERR_RESOURCE_LIMIT', 'error', `Group "${node.id}" exceeds maximum group nesting depth (${depth} > ${profile.maxGroupDepth || 16})`, { cell_id: cellId, group_id: node.id, depth, limit: profile.maxGroupDepth || 16 });
+              }
+              if (node.tags && Array.isArray(node.tags)) {
+                if (node.tags.length > (profile.maxTagsPerNode || 32)) {
+                  recordDiagnostic('PIX2_ERR_RESOURCE_LIMIT', 'error', `Group "${node.id}" exceeds max tags per node (${node.tags.length} > ${profile.maxTagsPerNode || 32})`, { cell_id: cellId, group_id: node.id });
+                }
+                for (const tag of node.tags) {
+                  if (typeof tag !== 'string' || tag.length > (profile.maxTagLength || 32) || !isSafeIdentifier(tag)) {
+                    recordDiagnostic('PIX2_ERR_INVALID_TAG', 'error', `Group "${node.id}" contains invalid tag "${tag}"`, { cell_id: cellId, group_id: node.id, tag });
+                  }
+                }
+              }
+              if (node.children && Array.isArray(node.children)) {
+                for (const child of node.children) {
+                  if (child.type === 'layer') {
+                    recordDiagnostic('PIX2_ERR_INVALID_HIERARCHY', 'error', `Layer "${child.id}" cannot be nested inside group "${node.id}"`, { cell_id: cellId, parent_id: node.id, child_id: child.id });
+                  }
+                  validateNode(child, depth + 1, currentAncestors);
+                }
+              }
+            } else if (node.type === 'region') {
+              if (node.tags && Array.isArray(node.tags)) {
+                if (node.tags.length > (profile.maxTagsPerNode || 32)) {
+                  recordDiagnostic('PIX2_ERR_RESOURCE_LIMIT', 'error', `Region "${node.id}" exceeds max tags per node (${node.tags.length} > ${profile.maxTagsPerNode || 32})`, { cell_id: cellId, region_id: node.id });
+                }
+                for (const tag of node.tags) {
+                  if (typeof tag !== 'string' || tag.length > (profile.maxTagLength || 32) || !isSafeIdentifier(tag)) {
+                    recordDiagnostic('PIX2_ERR_INVALID_TAG', 'error', `Region "${node.id}" contains invalid tag "${tag}"`, { cell_id: cellId, region_id: node.id, tag });
+                  }
+                }
+              }
+              if (node.pixels && typeof node.pixels === 'object') {
+                for (const coord in node.pixels) {
+                  const parsed = parseCoordinate(coord);
+                  if (!parsed) {
+                    recordDiagnostic('PIX2_ERR_INVALID_COORDINATE', 'warning', `Region "${node.id}": malformed pixel coordinate "${coord}"`, { region_id: node.id, raw_coordinate: coord });
+                    continue;
+                  }
+                  const [x, y] = parsed;
+                  if (x < 0 || x >= cellW || y < 0 || y >= cellH) {
+                    recordDiagnostic('PIX2_WARN_OUT_OF_BOUNDS', 'warning', `Region "${node.id}": pixel (${x}, ${y}) is outside cell bounds [0..${cellW - 1}, 0..${cellH - 1}]`, { region_id: node.id, coordinate: [x, y] });
+                  }
+                  const col = node.pixels[coord];
+                  if (!isValidHex(col)) {
+                    recordDiagnostic('PIX2_ERR_INVALID_COLOR', 'error', `Region "${node.id}": pixel (${x}, ${y}) has invalid color "${col}"`, { region_id: node.id, color: col });
+                  }
+                }
+              }
+            }
+          }
+
+          for (const layer of cell.layers) {
+            validateNode(layer, 1, new Set());
+          }
+        }
+      }
+
+      if (totalStructuralNodes > (profile.maxStructuralNodes || 16384)) {
+        recordDiagnostic('PIX2_ERR_RESOURCE_LIMIT', 'error', `Document exceeds maximum structural node limit (${totalStructuralNodes} > ${profile.maxStructuralNodes || 16384})`, { count: totalStructuralNodes, limit: profile.maxStructuralNodes || 16384 });
+      }
+    }
+
     return {
       valid: errors.length === 0,
       errors,
@@ -1609,6 +2337,9 @@ const PIX2 = (function () {
     renderCellToCanvas,
     renderAtlasToCanvas,
     resizeCells,
+    compositeCellLayers,
+    upgradeV10ToV11,
+    flattenV11ToV10,
     PROFILES: RESOURCE_PROFILES,
     resolveResourceProfile
   };
