@@ -1135,6 +1135,7 @@
     dom.paLayersTree = document.getElementById('pa-layers-tree');
     dom.btnPaAddLayer = document.getElementById('btn-pa-add-layer');
     dom.btnPaAddGroup = document.getElementById('btn-pa-add-group');
+    dom.btnPaAddRegion = document.getElementById('btn-pa-add-region');
     dom.paIsolationBanner = document.getElementById('pa-isolation-banner');
     dom.paIsolationBreadcrumb = document.getElementById('pa-isolation-breadcrumb');
     dom.btnPaExitIsolation = document.getElementById('btn-pa-exit-isolation');
@@ -5883,6 +5884,34 @@ Do not include conversational greetings or postscripts.`;
         parentLayer.children.push(newGroup);
         renderPaLayersTree();
         setDirty(true);
+      });
+    }
+
+    if (dom.btnPaAddRegion) {
+      dom.btnPaAddRegion.addEventListener('click', () => {
+        const cell = getArtworkCell();
+        if (!cell || !cell.layers || cell.layers.length === 0) {
+          if (typeof showToast === 'function') showToast('Please create a layer first');
+          return;
+        }
+        const regionName = prompt('Enter Region Name:', 'New Region');
+        if (!regionName) return;
+        const parentLayer = cell.layers.find(l => l.id === state.activeLayerId) || cell.layers[0];
+        if (!parentLayer.children) parentLayer.children = [];
+        const newRegion = {
+          type: 'region',
+          id: 'region_' + Date.now().toString(36),
+          cell: cell.id,
+          parent: parentLayer.id,
+          name: regionName.trim(),
+          visible: true,
+          pixels: {}
+        };
+        parentLayer.children.push(newRegion);
+        state.activeRegionId = newRegion.id;
+        renderPaLayersTree();
+        setDirty(true);
+        if (typeof showToast === 'function') showToast(`Created region: "${regionName.trim()}"`);
       });
     }
 

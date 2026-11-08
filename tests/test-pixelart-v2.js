@@ -314,6 +314,35 @@ console.log('\nTest 7: Zero Cross-Region Mutation Invariant');
   console.log('  [PASS] Zero cross-region mutation invariant upheld');
 }
 
+// Test 8: PixelArt 2.0 DOM Contract Verification
+console.log('\nTest 8: PixelArt 2.0 DOM Contract Verification');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, '../pixelart/index.html'), 'utf8');
+
+  const requiredIds = [
+    'btn-pa-tool-region-select',
+    'pa-isolation-banner',
+    'pa-isolation-breadcrumb',
+    'btn-pa-exit-isolation',
+    'pa-layers-view',
+    'pa-layers-tree',
+    'btn-pa-add-layer',
+    'btn-pa-add-group',
+    'btn-pa-add-region',
+    'btn-pa-side-layers',
+    'pa-project-tabs-strip',
+    'modal-about-pa'
+  ];
+
+  for (const id of requiredIds) {
+    assert(html.includes(`id="${id}"`), `pixelart/index.html must define #${id}`);
+  }
+
+  console.log('  [PASS] PixelArt 2.0 Structure, Layers, and Region Select UI contract verified');
+}
+
 console.log('\n====================================================');
-console.log('ALL PIXELART 2.0 & MULTI-TRACK TESTS PASSED (7/7)');
+console.log('ALL PIXELART 2.0 & MULTI-TRACK TESTS PASSED (8/8)');
 console.log('====================================================\n');
