@@ -764,7 +764,7 @@
   function rebuildArtworkBuffer() {
     if (!state.artworkCanvas) {
       state.artworkCanvas = document.createElement('canvas');
-      state.artworkCtx = state.artworkCanvas.getContext('2d', { willReadFrequently: true });
+      state.artworkCtx = state.artworkCanvas.getContext('2d');
     }
     if (state.artworkCanvas.width !== state.w || state.artworkCanvas.height !== state.h) {
       state.artworkCanvas.width = state.w;
@@ -809,7 +809,7 @@
     const h = state.selection.h;
     if (!state.floatingCanvas) {
       state.floatingCanvas = document.createElement('canvas');
-      state.floatingCtx = state.floatingCanvas.getContext('2d', { willReadFrequently: true });
+      state.floatingCtx = state.floatingCanvas.getContext('2d');
     }
     if (state.floatingCanvas.width !== w || state.floatingCanvas.height !== h) {
       state.floatingCanvas.width = w;
@@ -1194,9 +1194,9 @@
   // ===========================================================================
 
   // 1. Canvas -> Source (Strictly On Pointer Up for 60fps performance)
-  function syncCanvasToSource() {
+  function syncCanvasToSource(force = false) {
     if (state.isSyncingFromSource) return;
-    if (state.viewMode === 'canvas') {
+    if (state.viewMode === 'canvas' && !force) {
       state.isSourceDirty = true;
       updatePixelCount();
       return;
@@ -1232,6 +1232,13 @@
     } finally {
       state.isSyncingFromCanvas = false;
     }
+  }
+
+  function flushSourceCode() {
+    if (state.isSourceDirty || state.viewMode === 'canvas') {
+      syncCanvasToSource(true);
+    }
+    return dom.codeEditor.value || _PIX2.serialize(state.doc);
   }
 
   // 2. Source -> Canvas (Debounced 200ms)
@@ -3076,10 +3083,7 @@ Do not include conversational greetings or postscripts.`;
 
   async function saveFileNative(forceSaveAs = false) {
     commitFloatingSelection();
-    if (state.isSourceDirty) {
-      syncCanvasToSource();
-    }
-    const text = dom.codeEditor.value || _PIX2.serialize(state.doc);
+    const text = flushSourceCode();
 
     // Direct overwrite to existing handle
     if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
@@ -3169,10 +3173,8 @@ Do not include conversational greetings or postscripts.`;
   }
 
   function savePix2File() {
-    if (state.isSourceDirty) {
-      syncCanvasToSource();
-    }
-    const text = dom.codeEditor.value || _PIX2.serialize(state.doc);
+    commitFloatingSelection();
+    const text = flushSourceCode();
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3556,13 +3558,13 @@ Do not include conversational greetings or postscripts.`;
         btnCode.classList.add('active');
         dom.codePane.style.width = '100%';
         if (state.isSourceDirty) {
-          syncCanvasToSource();
+          syncCanvasToSource(true);
         }
       } else {
         btnSplit.classList.add('active');
         dom.codePane.style.width = `${state.codePaneWidth}px`;
         if (state.isSourceDirty) {
-          syncCanvasToSource();
+          syncCanvasToSource(true);
         }
       }
     }
@@ -3700,18 +3702,13 @@ Do not include conversational greetings or postscripts.`;
 
     // Code Header Actions
     document.getElementById('btn-copy-code').addEventListener('click', () => {
-      if (state.isSourceDirty) {
-        syncCanvasToSource();
-      }
-      navigator.clipboard.writeText(dom.codeEditor.value).then(() => {
+      const text = flushSourceCode();
+      navigator.clipboard.writeText(text).then(() => {
         showToast('PIX2 code copied to clipboard!');
       });
     });
 
     document.getElementById('btn-download-pix2').addEventListener('click', () => {
-      if (state.isSourceDirty) {
-        syncCanvasToSource();
-      }
       saveFileNative(false);
     });
 

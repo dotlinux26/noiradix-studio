@@ -1585,6 +1585,11 @@
     }
 
     tab.addEventListener('click', () => {
+      if (state.activeTabId === 'tab-pix2-code' && id !== 'tab-pix2-code') {
+        if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
+          return;
+        }
+      }
       commitFloatingSelection();
       state.selection = null;
       closeContextMenu();
@@ -2934,6 +2939,9 @@
         item.appendChild(titleSpan);
         item.appendChild(badgeSpan);
         item.addEventListener('click', () => {
+          if (state.activeTabId === 'tab-pix2-code') {
+            if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) return;
+          }
           activeStudioClipId = animName;
           state.activeTabId = 'tab-anim-studio';
           refreshAll();
@@ -5103,8 +5111,8 @@
       commitFloatingSelection();
     }
 
-    // If manual code editing is active, ensure edits are parsed into document before saving
-    if (isCodeEditingUnlocked && dom.codeTextarea) {
+    // If manual code editing is active in the Code tab, ensure edits are parsed into document before saving
+    if (isCodeEditingUnlocked && dom.codeTextarea && state.activeTabId === 'tab-pix2-code') {
       try {
         const parsed = PIX2.parse(dom.codeTextarea.value);
         state.setDocument(parsed, true);
@@ -5458,6 +5466,75 @@
     updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
   }
 
+  function lockCodeEditingSilently() {
+    isCodeEditingUnlocked = false;
+    if (dom.codeTextarea) {
+      dom.codeTextarea.classList.add('hidden');
+      dom.codeTextarea.readOnly = true;
+      dom.codeTextarea.classList.remove('editing-active');
+    }
+
+    if (dom.codeViewer && state.doc) {
+      const serialized = PIX2.serialize(state.doc);
+      if (dom.codeTextarea) dom.codeTextarea.value = serialized;
+      dom.codeViewer.innerHTML = highlightPix2Code(serialized);
+      dom.codeViewer.classList.remove('hidden');
+    }
+
+    if (dom.btnToggleEditCode) {
+      dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
+      dom.btnToggleEditCode.classList.remove('btn-warning');
+      dom.btnToggleEditCode.classList.add('btn-secondary');
+      dom.btnToggleEditCode.title = 'Unlock to edit PIX2 code manually';
+    }
+
+    if (dom.codeModeBadge) {
+      dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+      dom.codeModeBadge.className = 'badge badge-subtle';
+    }
+
+    if (dom.btnApplyCode) {
+      dom.btnApplyCode.classList.add('hidden');
+    }
+  }
+
+  function handleBeforeLeaveCodeTab() {
+    if (!isCodeEditingUnlocked || !dom.codeTextarea || !state.doc) return true;
+    const currentDocCode = PIX2.serialize(state.doc);
+    const textareaCode = dom.codeTextarea.value;
+    if (textareaCode.trim() === currentDocCode.trim()) {
+      lockCodeEditingSilently();
+      return true;
+    }
+
+    const wantApply = confirm(
+      '⚠️ UNAPPLIED CODE EDITS DETECTED:\n\n' +
+      'You have manual modifications in the PIX2 Code Editor that have not been applied to the project.\n\n' +
+      '• Click OK to APPLY edits to canvas and continue.\n' +
+      '• Click Cancel to DISCARD edits and switch tabs.'
+    );
+
+    if (wantApply) {
+      try {
+        const parsed = PIX2.parse(textareaCode);
+        state.setDocument(parsed, true);
+        state.saveSnapshot('Apply Code');
+        triggerEventAutosave();
+        lockCodeEditingSilently();
+        showToast('Applied PIX2 code edits to project!', 'success');
+        return true;
+      } catch (err) {
+        alert(`Cannot switch tab: PIX2 code contains syntax errors:\n${err.message}\n\nPlease fix the errors or click Cancel to discard.`);
+        return false;
+      }
+    } else {
+      // Discard edits and lock back to safe AST view
+      lockCodeEditingSilently();
+      showToast('Unapplied code edits discarded.', 'info');
+      return true;
+    }
+  }
+
   function toggleCodeEditMode() {
     if (!dom.codeTextarea) return;
 
@@ -5515,43 +5592,16 @@
         }
       }
 
-      isCodeEditingUnlocked = false;
-      if (dom.codeTextarea) {
-        dom.codeTextarea.classList.add('hidden');
-        dom.codeTextarea.readOnly = true;
-        dom.codeTextarea.classList.remove('editing-active');
-      }
-
-      if (dom.codeViewer && state.doc) {
-        const serialized = PIX2.serialize(state.doc);
-        if (dom.codeTextarea) dom.codeTextarea.value = serialized;
-        dom.codeViewer.innerHTML = highlightPix2Code(serialized);
-        dom.codeViewer.classList.remove('hidden');
-      }
-
-      if (dom.btnToggleEditCode) {
-        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
-        dom.btnToggleEditCode.classList.remove('btn-warning');
-        dom.btnToggleEditCode.classList.add('btn-secondary');
-        dom.btnToggleEditCode.title = 'Unlock to edit PIX2 code manually';
-      }
-
-      if (dom.codeModeBadge) {
-        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-        dom.codeModeBadge.className = 'badge badge-subtle';
-      }
-
-      if (dom.btnApplyCode) {
-        dom.btnApplyCode.classList.add('hidden');
-      }
-
+      lockCodeEditingSilently();
       showToast('Code locked in safe syntax view mode.', 'info');
     }
   }
 
   function copyRawPix2Code() {
     if (!state.doc) return;
-    const code = dom.codeTextarea ? dom.codeTextarea.value : PIX2.serialize(state.doc);
+    const code = (isCodeEditingUnlocked && dom.codeTextarea && state.activeTabId === 'tab-pix2-code')
+      ? dom.codeTextarea.value
+      : PIX2.serialize(state.doc);
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(code).then(() => {
         showToast('Copied raw .PIX2 code to clipboard!', 'success');
@@ -5589,30 +5639,14 @@
       triggerEventAutosave();
 
       // Automatically lock code editing after successful apply for safety
-      isCodeEditingUnlocked = false;
-      if (dom.codeTextarea) {
-        dom.codeTextarea.classList.add('hidden');
-        dom.codeTextarea.readOnly = true;
-        dom.codeTextarea.classList.remove('editing-active');
-      }
-      if (dom.codeViewer) {
-        dom.codeViewer.innerHTML = highlightPix2Code(code);
-        dom.codeViewer.classList.remove('hidden');
-      }
-      if (dom.btnToggleEditCode) {
-        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
-        dom.btnToggleEditCode.classList.remove('btn-warning');
-        dom.btnToggleEditCode.classList.add('btn-secondary');
-      }
-      if (dom.codeModeBadge) {
-        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-        dom.codeModeBadge.className = 'badge badge-subtle';
-      }
-      if (dom.btnApplyCode) {
-        dom.btnApplyCode.classList.add('hidden');
-      }
+      lockCodeEditingSilently();
 
       refreshAll();
+      showToast('PIX2 Code parsed & applied to canvas successfully!', 'success');
+    } catch (err) {
+      alert(`Error parsing PIX2 code:\n${err.message}`);
+    }
+  }
       showToast('PIX2 Code parsed & applied to canvas successfully!', 'success');
     } catch (err) {
       alert(`Error parsing PIX2 code:\n${err.message}`);

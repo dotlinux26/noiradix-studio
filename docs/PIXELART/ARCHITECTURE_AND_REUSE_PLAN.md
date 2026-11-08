@@ -107,23 +107,47 @@ When an artist pastes code into the editor or edits directly:
 * **If valid:** The document AST updates active state, artwork dimensions adjust dynamically, palette swatches synchronize, canvas repaints, and the editor automatically locks back to View Only mode.
 * **If invalid:** The canvas maintains the last valid artwork without clearing or corrupting the drawing, while the status pill surfaces the exact error code (e.g. `[PIX2_ERR_INVALID_COORDINATE]`).
 
-### 4.5 High-Performance 60 FPS Engine for Large Canvases (Up to 1024×1024)
-To ensure sustained 60–120 FPS drawing and editing responsiveness even on dense $512 \times 512$ or $1024 \times 1024$ canvases with hundreds of thousands of active pixels:
-1. **GPU-Accelerated 1:1 Canvas Texture Blitting:**
-   * Instead of iterating through tens of thousands of coordinate keys with string splitting (`key.split(',')`) and JavaScript `ctx.fillRect()` loops on every frame, PixelArt maintains an offscreen 1:1 canvas buffer (`state.artworkCanvas`).
-   * On repaint, a single hardware-accelerated call `ctx.drawImage(state.artworkCanvas, 0, 0, totalW, totalH)` scales the sprite to screen coordinates using nearest-neighbor rasterization (`imageSmoothingEnabled = false`) in **0.03 milliseconds** (over 1000x faster).
+### 4.3 Zero-Data-Loss Disk & Session Persistence Pipeline
+To eliminate any risk of artwork disappearance upon page reload:
+1. **Physical File Handle Retention:** Saving via Native File System Access API preserves `currentFileHandle` in IndexedDB (`noiradix_pixelart_db`).
+2. **Reload Recovery Ladder:** On browser reload (<kbd>F5</kbd> / <kbd>Ctrl+R</kbd>), the editor checks:
+   * **Level 1 (Disk Handle):** Reads directly from `persisted.getFile()` and applies source code to canvas.
+   * **Level 2 (Disk Cache):** If permission is not yet re-granted, reads from `pix2_last_saved_content` in `localStorage`.
+   * **Level 3 (Newer Autosave):** If the user made unsaved strokes after saving to disk, restores the newer autosaved snapshot (`pix2_pixelart_autosave`) and flags `isDirty = true`.
+   * **Level 4 (Default):** Blank canvas if starting fresh.
+3. **Real-Time 2-Way Title Sync:** Changing the artwork title immediately updates the file status pill and window title in real time.
+
+### 4.4 Real-Time File Watcher & Conflict Engine (Studio Reuse)
+Faithfully ported and reused from NOIRADIX Studio (`js/app.js`):
+1. **Triple-Trigger Watcher Architecture:**
+   * `focus`: Triggers whenever window focus is restored from an external IDE (VS Code, Cursor) or AI generator.
+   * `visibilitychange`: Triggers when switching browser tabs.
+   * `setInterval(1500ms)`: Background heartbeat polling during active viewing sessions.
+2. **Conflict Resolution Strategy:**
+   * If local state is clean (`!state.isDirty`): Auto-reloads external changes from disk silently into the canvas and code editor, showing a confirmation toast `⚡ Reloaded <file.name> from disk (external update detected)!`.
+   * If local state is dirty (`state.isDirty`): Prevents destructive overwrite, displays warning toast `⚠️ "<file.name>" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`, and animates `#btn-reload-file` with `.pulse-warning`.
+3. **Explicit Manual Reload (<kbd>Ctrl+Shift+R</kbd>):**
+   * Prompts user with native `confirm()` before discarding unsaved canvas edits.
+   * Clears `.pulse-warning` glow and re-synchronizes timestamps on completion.
+
+### 4.5 High-Performance Engine for Large Canvases (Up to 1024×1024)
+To ensure sustained 60 FPS drawing responsiveness even on dense $512 \times 512$ or $1024 \times 1024$ canvases with hundreds of thousands of active pixels:
+1. **Hardware-Accelerated 1:1 Canvas Texture Blitting:**
+   * Instead of iterating through tens of thousands of coordinate keys with string splitting (`key.split(',')`) and JavaScript `ctx.fillRect()` loops on every frame, PixelArt maintains a detached 1:1 HTML canvas buffer (`state.artworkCanvas`).
+   * On repaint, a single call `ctx.drawImage(state.artworkCanvas, 0, 0, totalW, totalH)` blits the sprite to screen coordinates using nearest-neighbor scaling (`imageSmoothingEnabled = false`), leveraging the browser's hardware-accelerated 2D pipeline (without `{ willReadFrequently: true }` CPU readback de-optimizations).
 2. **Incremental Stroke Plotting (`plotPixelOnBuffer`):**
-   * Continuous mouse gestures update only the exact 1–4 affected pixels directly on the 1:1 offscreen buffer, eliminating full-canvas redraw passes during drag strokes.
-3. **`requestAnimationFrame` Vsync Throttling (`requestCanvasRepaint`):**
-   * High-polling gaming mice (500Hz–1000Hz) queue stroke points while rendering is strictly batched to the monitor's display vsync (60Hz / 120Hz / 144Hz / 240Hz), completely eliminating redundant rendering frames.
-4. **Deferred / Lazy Serialization in Canvas Only Mode:**
-   * When painting in full-canvas mode (`state.viewMode === 'canvas'`), full text serialization (`_PIX2.serialize`) and DOM gutter generation are deferred until the artist switches back to Split/Code mode or saves the file (`saveFileNative`).
+   * Continuous mouse gestures update only the exact 1–4 affected pixels directly on the 1:1 buffer, eliminating full-canvas dictionary traversals during drag strokes.
+3. **`requestAnimationFrame` Vsync Batching (`requestCanvasRepaint`):**
+   * High-polling mice queue stroke points while rendering is strictly batched to the display vsync (60Hz / 120Hz / 144Hz / 240Hz), completely eliminating redundant rendering frames.
+4. **Deferred / Lazy Serialization with Strict Export Flush:**
+   * In Canvas Only mode (`state.viewMode === 'canvas'`), full text serialization (`_PIX2.serialize`) and DOM gutter generation are deferred during painting (`state.isSourceDirty = true`).
+   * When saving (`saveFileNative`), downloading (`savePix2File`), copying code, or switching to Split/Code mode, `flushSourceCode()` forces an immediate synchronous flush (`syncCanvasToSource(true)`), guaranteeing zero stale source exports.
 5. **DOM-Free Virtualized Code Gutter:**
    * Uses CSS `white-space: pre` and a single `textContent` string rather than tens of thousands of `<br>` DOM nodes, while caching line count to avoid redundant DOM updates during painting.
 6. **Debounced Autosave (1000ms):**
    * Background snapshot serialization (`localStorage.setItem`) is debounced by 1 second during active drawing and flushed immediately on page unload.
 7. **Pre-Rendered Floating Selection Buffers:**
-   * Floating marquee pixels are cached onto an offscreen canvas (`state.floatingCanvas`) upon lifting, allowing 60 FPS multi-angle rotation and dragging via a single quad draw call.
+   * Floating marquee pixels are cached onto an offscreen canvas (`state.floatingCanvas`) upon lifting, allowing 60 FPS multi-angle rotation and dragging via a single draw call.
 
 ---
 
