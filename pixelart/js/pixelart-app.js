@@ -401,33 +401,86 @@
       dom.codeEditor.readOnly = true;
     }
 
-    // Check for persisted file handle in IndexedDB
+    let documentRestored = false;
+    const lastSavedTime = parseInt(localStorage.getItem('pix2_last_saved_time') || '0', 10);
+    const savedAutosave = localStorage.getItem('pix2_pixelart_autosave');
+    let autosavePayload = null;
+    if (savedAutosave) {
+      try {
+        const parsed = JSON.parse(savedAutosave);
+        if (parsed && parsed.w && parsed.h && parsed.pixels && Object.keys(parsed.pixels).length > 0) {
+          autosavePayload = parsed;
+        }
+      } catch (_) {}
+    }
+
+    // 1. Check for persisted physical file handle in IndexedDB
     try {
       const persisted = await retrievePersistedFileHandle();
       if (persisted) {
         currentFileHandle = persisted;
         currentFileName = persisted.name;
+        state.title = persisted.name.replace(/\.[^/.]+$/, '');
+        if (dom.docTitle) dom.docTitle.value = state.title;
+
+        // If autosave has newer unsaved edits than what's on disk, prioritize recovering those edits:
+        if (autosavePayload && (autosavePayload.updatedAt || 0) > (lastSavedTime + 1000)) {
+          createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || state.title || 'Recovered Artwork');
+          const cell = getArtworkCell();
+          cell.pixels = { ...autosavePayload.pixels };
+          repaintCanvas();
+          syncCanvasToSource();
+          documentRestored = true;
+          setDirty(true);
+        } else {
+          // Read directly from disk handle
+          try {
+            const file = await persisted.getFile();
+            const text = await file.text();
+            if (text && text.trim()) {
+              dom.codeEditor.value = text;
+              const ok = applySourceCodeToCanvas();
+              if (ok) {
+                documentRestored = true;
+                state.lastFileModified = file.lastModified;
+                setDirty(false);
+              }
+            }
+          } catch (handleErr) {
+            console.warn('Could not read persisted file handle directly:', handleErr);
+          }
+        }
       }
     } catch (_) {}
 
-    // Check for crash recovery / autosave
-    const saved = localStorage.getItem('pix2_pixelart_autosave');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.w && parsed.h && parsed.pixels) {
-          createNewDocument(parsed.w, parsed.h, parsed.title || 'Recovered Artwork');
-          const cell = getArtworkCell();
-          cell.pixels = { ...parsed.pixels };
-          repaintCanvas();
-          syncCanvasToSource();
-        } else {
-          createNewDocument(64, 64, 'Pixel Artwork');
-        }
-      } catch (e) {
-        createNewDocument(64, 64, 'Pixel Artwork');
+    // 2. Fallback: If handle could not be read directly, check last saved disk content in localStorage
+    if (!documentRestored && currentFileName) {
+      const lastSavedText = localStorage.getItem('pix2_last_saved_content');
+      if (lastSavedText && lastSavedText.trim()) {
+        try {
+          dom.codeEditor.value = lastSavedText;
+          const ok = applySourceCodeToCanvas();
+          if (ok) {
+            documentRestored = true;
+            setDirty(false);
+          }
+        } catch (_) {}
       }
-    } else {
+    }
+
+    // 3. Fallback: Check for crash recovery / autosave if no disk file was restored
+    if (!documentRestored && autosavePayload) {
+      createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || 'Recovered Artwork');
+      const cell = getArtworkCell();
+      cell.pixels = { ...autosavePayload.pixels };
+      repaintCanvas();
+      syncCanvasToSource();
+      documentRestored = true;
+      setDirty(false);
+    }
+
+    // 4. Default: Blank canvas if nothing was restored
+    if (!documentRestored) {
       createNewDocument(64, 64, 'Pixel Artwork');
     }
 
@@ -436,7 +489,7 @@
     updateUi();
     updateCanvasBgUi();
     updateAiPromptView();
-    setDirty(false);
+    updateDocumentTitle();
 
     // Responsive Drag & Mouse-Wheel Horizontal Scroll across all horizontal bars
     enableHorizontalDragScroll(document.querySelector('.pa-header'));
@@ -883,6 +936,69 @@
       }
     }
 
+    // Free Multi-Angle Selection Rotation Marquee & Pivot
+    if (state.isRotatingSelection && state.rotationCurrentAngle !== 0) {
+      ctx.save();
+      const centerCanvasX = (x + w / 2) * zoom;
+      const centerCanvasY = (y + h / 2) * zoom;
+      ctx.translate(centerCanvasX, centerCanvasY);
+      ctx.rotate(state.rotationCurrentAngle);
+
+      const localLeft = (-w / 2) * zoom;
+      const localTop = (-h / 2) * zoom;
+      const localW = w * zoom;
+      const localH = h * zoom;
+
+      // Soft scrim inside rotated selection
+      ctx.fillStyle = 'rgba(99, 102, 241, 0.18)';
+      ctx.fillRect(localLeft, localTop, localW, localH);
+
+      // Rotated dashed marquee border
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.strokeRect(localLeft + 0.5, localTop + 0.5, localW - 1, localH - 1);
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(localLeft + 0.5, localTop + 0.5, localW - 1, localH - 1);
+
+      // Rotated handle stem + knob
+      const rotHandleY = localTop - 18;
+      ctx.beginPath();
+      ctx.moveTo(0, localTop);
+      ctx.lineTo(0, rotHandleY);
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, rotHandleY, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Mini pivot center dot inside handle
+      ctx.beginPath();
+      ctx.arc(0, rotHandleY, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#4f46e5';
+      ctx.fill();
+
+      // Degree readout
+      const deg = Math.round((state.rotationCurrentAngle * 180) / Math.PI);
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = '#4f46e5';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${deg}°`, 0, rotHandleY - 8);
+
+      ctx.restore();
+      return;
+    }
+
     const sx = Math.floor(x * zoom);
     const sy = Math.floor(y * zoom);
     const sw = Math.floor(w * zoom);
@@ -894,7 +1010,7 @@
     ctx.fillRect(sx, sy, sw, sh);
 
     if (w === 1 && h === 1) {
-      // Single pixel cell: Draw ultra-crisp solid border + inner highlight (never looks broken/blurry)
+      // Single pixel cell: Draw ultra-crisp solid border + inner highlight
       ctx.strokeStyle = '#4f46e5';
       ctx.lineWidth = 1;
       ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
@@ -943,7 +1059,7 @@
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(rotHandleX, rotHandleY, 5, 0, Math.PI * 2);
+      ctx.arc(rotHandleX, rotHandleY, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.strokeStyle = '#4f46e5';
@@ -969,7 +1085,7 @@
     const handleCanvasY = sy - 18;
     const mouseCanvasX = e.clientX - rect.left;
     const mouseCanvasY = e.clientY - rect.top;
-    return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 9;
+    return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 14;
   }
 
   function updateContainerTransform() {
@@ -1047,25 +1163,52 @@
   function applySourceCodeToCanvas() {
     state.isSyncingFromSource = true;
     const source = dom.codeEditor.value;
+    if (!source || !source.trim()) {
+      state.isSyncingFromSource = false;
+      return false;
+    }
 
     try {
-      // Validate
-      const validation = _PIX2.validate(source, false);
-      if (!validation.valid && validation.errors.length > 0) {
+      // 1. Parse raw PIX2 source into AST document
+      const parsedDoc = _PIX2.parse(source);
+      if (!parsedDoc || !parsedDoc.cells) {
+        throw new Error('PIX2 parse error: missing cells object.');
+      }
+
+      // Check parse diagnostics
+      if (parsedDoc._diagnostics && parsedDoc._diagnostics.length > 0) {
+        const severeErr = parsedDoc._diagnostics.find(d => d.severity === 'error');
+        if (severeErr) {
+          dom.syncBadge.className = 'pa-sync-badge error';
+          dom.syncBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Syntax Error';
+          dom.diagnosticPill.className = 'pa-diagnostic-pill error';
+          dom.diagnosticPill.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(severeErr.message)}`;
+          showToast(`Syntax error: ${severeErr.message}`, 'error');
+          return false;
+        }
+      }
+
+      // 2. Validate parsed AST document
+      const validation = _PIX2.validate(parsedDoc, { strict: false });
+      if (!validation.valid && validation.errors && validation.errors.length > 0) {
         const firstErr = validation.errors[0];
         dom.syncBadge.className = 'pa-sync-badge error';
         dom.syncBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Syntax Error';
 
         dom.diagnosticPill.className = 'pa-diagnostic-pill error';
         dom.diagnosticPill.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(firstErr)}`;
-        return; // Non-destructive: keep canvas intact!
+        showToast(`Validation error: ${firstErr}`, 'error');
+        return false; // Non-destructive: keep canvas intact!
       }
 
-      // Parse
-      const parsedDoc = _PIX2.parse(source);
-      if (!parsedDoc || !parsedDoc.cells) return;
-
+      // 3. Document is valid - commit to active state
       state.doc = parsedDoc;
+
+      // Extract artwork title
+      if (parsedDoc.meta && parsedDoc.meta.title) {
+        state.title = parsedDoc.meta.title;
+        if (dom.docTitle) dom.docTitle.value = state.title;
+      }
 
       // Extract artwork dimensions
       const cell = getArtworkCell();
@@ -1082,7 +1225,7 @@
       if (parsedDoc.palette && Object.keys(parsedDoc.palette).length > 0) {
         state.activeSwatches = Object.values(parsedDoc.palette);
         populatePaletteDropdown();
-    renderPaletteSwatches();
+        renderPaletteSwatches();
       }
 
       // Sync background directive if present
@@ -1112,11 +1255,14 @@
 
       updateCodeGutter();
       updatePixelCount();
+      return true;
     } catch (err) {
       dom.syncBadge.className = 'pa-sync-badge error';
       dom.syncBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Parse Error';
       dom.diagnosticPill.className = 'pa-diagnostic-pill error';
       dom.diagnosticPill.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(err.message)}`;
+      showToast(`Parse error: ${err.message}`, 'error');
+      return false;
     } finally {
       state.isSyncingFromSource = false;
     }
@@ -1195,6 +1341,41 @@
     state.lastY = y;
 
     const activeColor = state.primaryColor;
+
+    // Check if clicking on Rotation Handle of active selection
+    if (state.selection && isOverRotationHandle(e)) {
+      state.isRotatingSelection = true;
+      state.isDrawing = false;
+      if (!state.floatingPixels) {
+        state.floatingOriginalSel = { ...state.selection };
+        state.floatingCurrentX = state.selection.x;
+        state.floatingCurrentY = state.selection.y;
+        state.floatingPixels = {};
+        for (let py = 0; py < state.selection.h; py++) {
+          for (let px = 0; px < state.selection.w; px++) {
+            const key = `${state.selection.x + px},${state.selection.y + py}`;
+            if (cell.pixels && cell.pixels[key]) {
+              state.floatingPixels[`${px},${py}`] = cell.pixels[key];
+              delete cell.pixels[key];
+            }
+          }
+        }
+        repaintCanvas();
+      }
+      state.rotationBaseFloatingPixels = { ...state.floatingPixels };
+      state.rotationBaseSel = { ...state.selection };
+
+      const rect = dom.canvasMain.getBoundingClientRect();
+      const cx = state.selection.x + state.selection.w / 2;
+      const cy = state.selection.y + state.selection.h / 2;
+      const screenCenterX = rect.left + cx * state.zoom;
+      const screenCenterY = rect.top + cy * state.zoom;
+      state.rotationCenter = { x: screenCenterX, y: screenCenterY, cx, cy };
+      state.rotationStartAngle = Math.atan2(e.clientY - screenCenterY, e.clientX - screenCenterX);
+      state.rotationCurrentAngle = 0;
+      dom.viewport.style.cursor = 'grabbing';
+      return;
+    }
 
     // Selection Tool Handling
     if (state.currentTool === 'select') {
@@ -1281,6 +1462,20 @@
       return;
     }
 
+    // Free Multi-Angle Selection Rotation Drag
+    if (state.isRotatingSelection && state.rotationCenter) {
+      const currentAngle = Math.atan2(e.clientY - state.rotationCenter.y, e.clientX - state.rotationCenter.x);
+      let deltaAngle = currentAngle - state.rotationStartAngle;
+      if (e.shiftKey) {
+        // Shift key: Snap to 15-degree steps
+        const step = (15 * Math.PI) / 180;
+        deltaAngle = Math.round(deltaAngle / step) * step;
+      }
+      state.rotationCurrentAngle = deltaAngle;
+      renderSelectionMarquee();
+      return;
+    }
+
     // Moving active selection
     if (state.isMovingSelection && state.floatingOriginalSel) {
       const dx = x - state.moveStartX;
@@ -1291,6 +1486,13 @@
       state.selection.y = state.floatingCurrentY;
       renderSelectionMarquee();
       return;
+    }
+
+    // Rotation Handle Hover Cursor
+    if (isOverRotationHandle(e)) {
+      dom.viewport.style.cursor = 'grab';
+    } else if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection) {
+      dom.viewport.style.cursor = (state.currentTool === 'pan') ? 'grab' : 'crosshair';
     }
 
     if (!state.isDrawing) return;
@@ -1343,6 +1545,64 @@
     if (state.isPanning) {
       state.isPanning = false;
       dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+      return;
+    }
+
+    if (state.isRotatingSelection) {
+      const theta = state.rotationCurrentAngle;
+      state.isRotatingSelection = false;
+      state.rotationCurrentAngle = 0;
+      dom.viewport.style.cursor = 'crosshair';
+
+      if (Math.abs(theta) > 0.01 && state.rotationBaseFloatingPixels) {
+        const basePixels = state.rotationBaseFloatingPixels;
+        const origW = state.rotationBaseSel.w;
+        const origH = state.rotationBaseSel.h;
+        const origX = state.rotationBaseSel.x;
+        const origY = state.rotationBaseSel.y;
+
+        const cosT = Math.cos(theta);
+        const sinT = Math.sin(theta);
+
+        const newW = Math.max(1, Math.round(Math.abs(origW * cosT) + Math.abs(origH * sinT)));
+        const newH = Math.max(1, Math.round(Math.abs(origW * sinT) + Math.abs(origH * cosT)));
+
+        const origCenterX = origW / 2;
+        const origCenterY = origH / 2;
+        const newCenterX = newW / 2;
+        const newCenterY = newH / 2;
+
+        const rotatedPixels = {};
+        for (let dy = 0; dy < newH; dy++) {
+          for (let dx = 0; dx < newW; dx++) {
+            const rx = dx - newCenterX + 0.5;
+            const ry = dy - newCenterY + 0.5;
+            const srcX = Math.floor(rx * cosT + ry * sinT + origCenterX);
+            const srcY = Math.floor(-rx * sinT + ry * cosT + origCenterY);
+
+            if (srcX >= 0 && srcX < origW && srcY >= 0 && srcY < origH) {
+              const col = basePixels[`${srcX},${srcY}`];
+              if (col) {
+                rotatedPixels[`${dx},${dy}`] = col;
+              }
+            }
+          }
+        }
+
+        state.selection.x = Math.round(origX + (origW - newW) / 2);
+        state.selection.y = Math.round(origY + (origH - newH) / 2);
+        state.selection.w = newW;
+        state.selection.h = newH;
+        state.floatingPixels = rotatedPixels;
+        state.floatingCurrentX = state.selection.x;
+        state.floatingCurrentY = state.selection.y;
+
+        const deg = Math.round((theta * 180) / Math.PI);
+        showToast(`Rotated selection by ${deg}°`);
+        setDirty(true);
+      }
+
+      renderSelectionMarquee();
       return;
     }
 
@@ -3026,51 +3286,51 @@ Do not include conversational greetings or postscripts.`;
     btnCanvas.addEventListener('click', () => setViewMode('canvas'));
     btnCode.addEventListener('click', () => setViewMode('code'));
 
-    // Code Editor Lock & Edit Controls
-    function toggleCodeLock() {
-      if (!state.isCodeEditingUnlocked) {
-        state.isCodeEditingUnlocked = true;
-        dom.codeEditor.readOnly = false;
-        if (dom.codeModeBadge) {
-          dom.codeModeBadge.className = 'pa-mode-badge editing';
-          dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-pen"></i> Editing';
-          dom.codeModeBadge.title = 'Direct editing unlocked. Click "Apply" to commit changes to canvas.';
-        }
-        if (dom.btnToggleCodeLock) {
-          dom.btnToggleCodeLock.innerHTML = '<i class="fa-solid fa-lock"></i> <span>Lock</span>';
-          dom.btnToggleCodeLock.title = 'Lock code and return to safe View Only mode';
-        }
-        if (dom.btnApplyCode) {
-          dom.btnApplyCode.classList.remove('hidden');
-        }
-        dom.codeEditor.focus();
-        showToast('Code editor unlocked for direct edits. Click "Apply" when done.');
-      } else {
-        state.isCodeEditingUnlocked = false;
-        dom.codeEditor.readOnly = true;
-        if (dom.codeModeBadge) {
-          dom.codeModeBadge.className = 'pa-mode-badge locked';
-          dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-          dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
-        }
-        if (dom.btnToggleCodeLock) {
-          dom.btnToggleCodeLock.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> <span>Edit</span>';
-          dom.btnToggleCodeLock.title = 'Unlock to edit PIX2 code directly';
-        }
-        if (dom.btnApplyCode) {
-          dom.btnApplyCode.classList.add('hidden');
-        }
-        showToast('Code locked in safe View Only mode.');
+    // Code Editor Lock & Edit Controls (Auto-locks on Apply, No separate Lock button)
+    function unlockCodeEditor() {
+      state.isCodeEditingUnlocked = true;
+      dom.codeEditor.readOnly = false;
+      if (dom.codeModeBadge) {
+        dom.codeModeBadge.className = 'pa-mode-badge editing';
+        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-pen"></i> Editing';
+        dom.codeModeBadge.title = 'Direct editing unlocked. Click "Apply" to commit changes to canvas.';
+      }
+      if (dom.btnToggleCodeLock) {
+        dom.btnToggleCodeLock.classList.add('hidden');
+      }
+      if (dom.btnApplyCode) {
+        dom.btnApplyCode.classList.remove('hidden');
+      }
+      dom.codeEditor.focus();
+      showToast('Code editor unlocked for direct edits. Click "Apply" when done.');
+    }
+
+    function lockCodeEditor() {
+      state.isCodeEditingUnlocked = false;
+      dom.codeEditor.readOnly = true;
+      if (dom.codeModeBadge) {
+        dom.codeModeBadge.className = 'pa-mode-badge locked';
+        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+        dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
+      }
+      if (dom.btnToggleCodeLock) {
+        dom.btnToggleCodeLock.classList.remove('hidden');
+      }
+      if (dom.btnApplyCode) {
+        dom.btnApplyCode.classList.add('hidden');
       }
     }
 
     if (dom.btnToggleCodeLock) {
-      dom.btnToggleCodeLock.addEventListener('click', toggleCodeLock);
+      dom.btnToggleCodeLock.addEventListener('click', unlockCodeEditor);
     }
     if (dom.btnApplyCode) {
       dom.btnApplyCode.addEventListener('click', () => {
-        applySourceCodeToCanvas();
-        showToast('Applied code changes to canvas!');
+        const ok = applySourceCodeToCanvas();
+        if (ok) {
+          lockCodeEditor();
+          showToast('Applied code changes to canvas!');
+        }
       });
     }
 
@@ -3289,6 +3549,8 @@ Do not include conversational greetings or postscripts.`;
     dom.docTitle.addEventListener('input', (e) => {
       const val = e.target.value.trim();
       const cleanFileName = `${sanitizeFilename(val || 'artwork')}.pix2`;
+      state.title = val || 'artwork';
+      currentFileName = cleanFileName;
       const pathText = document.getElementById('pa-file-path-text');
       if (pathText) {
         pathText.textContent = cleanFileName;
