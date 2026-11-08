@@ -42,8 +42,160 @@
       '#e43b44', '#f77622', '#feae34', '#fee761', '#63c74d', '#3e8948', '#265c42', '#193c3e',
       '#124e89', '#0099db', '#2ce8f5', '#ffffff', '#c0cbdc', '#8b9bb4', '#5a6988', '#3a4466',
       '#262b44', '#181425', '#ff0044', '#68386c', '#b55088', '#f6757a', '#e8b796', '#c28569'
+    ],
+    solarenvy: [
+      '#10141f', '#2f2e41', '#3b5dc9', '#41a6f6', '#73eff7', '#257179', '#38b764', '#a7f070',
+      '#ffcd75', '#ef7d57', '#b13e53', '#5d275d', '#333c57', '#566c86', '#94b0c2', '#f4f4f4',
+      '#181425', '#262b44', '#3a4466', '#5a6988', '#8b9bb4', '#c0cbdc', '#ffffff', '#2ce8f5',
+      '#0099db', '#124e89', '#193c3e', '#265c42', '#3e8948', '#63c74d', '#fee761', '#feae34'
+    ],
+    dawnbringer16: [
+      '#140c1c', '#442434', '#30346d', '#4e4a4e', '#854c30', '#346524', '#d04648', '#757161',
+      '#597dce', '#d27d2c', '#8595a1', '#6daa2c', '#d2aa99', '#6dc2ca', '#dad45e', '#deeed6'
+    ],
+    dawnbringer32: [
+      '#000000', '#222034', '#45283c', '#663931', '#8f563b', '#df7126', '#d9a066', '#eec39a',
+      '#fbf236', '#99e550', '#6abe30', '#37946e', '#4b692f', '#524b24', '#323c39', '#3f3f74',
+      '#306082', '#5b6ee1', '#639bff', '#5fcde4', '#cbdbfc', '#ffffff', '#9badb7', '#847e87',
+      '#696a6a', '#595652', '#76428a', '#ac3232', '#d95763', '#d77643', '#8f974a', '#8a6f30'
+    ],
+    nes54: [
+      '#7c7c7c', '#0000fc', '#0000bc', '#4428bc', '#940084', '#a80020', '#a81000', '#881400',
+      '#503000', '#007800', '#006800', '#0058f8', '#004058', '#000000', '#bcbcbc', '#0078f8',
+      '#6844fc', '#d800cc', '#e40058', '#f83800', '#e45c10', '#ac7c00', '#00b800', '#00a800',
+      '#00a844', '#008888', '#f8f8f8', '#3cbcfc', '#6888fc', '#9878f8', '#f878f8', '#f85898',
+      '#f87858', '#fca044', '#f8b800', '#b8f818', '#58d854', '#58f898', '#00e8d8', '#fcfcfc',
+      '#a4e4fc', '#b8b8f8', '#d8b8f8', '#f8b8f8', '#f8a4c0', '#f0d0b0', '#fce0a8', '#f8d878',
+      '#d8f878', '#b8f8b8', '#b8f8d8', '#00fcfc'
     ]
   };
+
+  const CUSTOM_PALETTES_STORAGE_KEY = 'noiradix_custom_palettes';
+
+  function loadCustomPalettes() {
+    try {
+      const raw = localStorage.getItem(CUSTOM_PALETTES_STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveCustomPalettes(palettesObj) {
+    try {
+      localStorage.setItem(CUSTOM_PALETTES_STORAGE_KEY, JSON.stringify(palettesObj));
+    } catch (err) {
+      console.warn('Failed to save custom palettes to storage:', err);
+    }
+  }
+
+  function populatePaletteDropdown() {
+    if (!dom.paletteSelect) return;
+    const prevVal = dom.paletteSelect.value;
+    dom.paletteSelect.innerHTML = '';
+
+    // 1. Built-in presets
+    const builtInGroup = document.createElement('optgroup');
+    builtInGroup.label = 'Built-in Presets';
+    const builtIns = [
+      { id: 'noiradix', name: 'Noiradix Classic', count: PRESET_PALETTES.noiradix.length },
+      { id: 'pico8', name: 'PICO-8', count: PRESET_PALETTES.pico8.length },
+      { id: 'endesga32', name: 'Endesga 32', count: PRESET_PALETTES.endesga32.length },
+      { id: 'gameboy', name: 'Game Boy', count: PRESET_PALETTES.gameboy.length },
+      { id: 'sweetie16', name: 'Sweetie 16', count: PRESET_PALETTES.sweetie16.length },
+      { id: 'solarenvy', name: 'Solar Envy', count: PRESET_PALETTES.solarenvy.length },
+      { id: 'dawnbringer16', name: 'DawnBringer 16', count: PRESET_PALETTES.dawnbringer16.length },
+      { id: 'dawnbringer32', name: 'DawnBringer 32', count: PRESET_PALETTES.dawnbringer32.length },
+      { id: 'nes54', name: 'NES 54', count: PRESET_PALETTES.nes54.length }
+    ];
+    builtIns.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = `${b.name} (${b.count})`;
+      builtInGroup.appendChild(opt);
+    });
+    dom.paletteSelect.appendChild(builtInGroup);
+
+    // 2. Custom Library presets
+    const customPalettes = loadCustomPalettes();
+    const customKeys = Object.keys(customPalettes);
+    if (customKeys.length > 0) {
+      const customGroup = document.createElement('optgroup');
+      customGroup.label = 'Custom Library';
+      customKeys.forEach(k => {
+        const item = customPalettes[k];
+        const opt = document.createElement('option');
+        opt.value = `custom_${k}`;
+        opt.textContent = `${item.name} (${item.colors ? item.colors.length : 0})`;
+        customGroup.appendChild(opt);
+      });
+      dom.paletteSelect.appendChild(customGroup);
+    }
+
+    // 3. Action option
+    const actionGroup = document.createElement('optgroup');
+    actionGroup.label = 'Actions';
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new_preset__';
+    newOpt.textContent = '+ Save Current Palette to Library...';
+    actionGroup.appendChild(newOpt);
+    dom.paletteSelect.appendChild(actionGroup);
+
+    if (prevVal && dom.paletteSelect.querySelector(`option[value="${prevVal}"]`)) {
+      dom.paletteSelect.value = prevVal;
+    } else {
+      dom.paletteSelect.value = 'noiradix';
+    }
+  }
+
+  function promptAndSavePalettePreset() {
+    const colors = [];
+    if (state.activeSwatches && state.activeSwatches.length > 0) {
+      state.activeSwatches.forEach(c => {
+        const hex = (typeof _PIX2 !== 'undefined' && _PIX2.normalizeHex) ? _PIX2.normalizeHex(c) : c;
+        if (hex && !colors.includes(hex)) colors.push(hex);
+      });
+    }
+    if (state.doc && state.doc.palette) {
+      for (const id in state.doc.palette) {
+        const c = state.doc.palette[id];
+        const hex = (typeof _PIX2 !== 'undefined' && _PIX2.normalizeHex) ? _PIX2.normalizeHex(c) : c;
+        if (hex && !colors.includes(hex)) colors.push(hex);
+      }
+    }
+
+    if (colors.length === 0) {
+      showToast('Palette has no valid colors to save.', 'error');
+      return;
+    }
+
+    const defaultName = `${state.title || 'My'} Palette`;
+    const inputName = prompt(`Save ${colors.length} colors to your Palette Library.\nEnter preset name:`, defaultName);
+    if (inputName === null) {
+      populatePaletteDropdown();
+      return;
+    }
+    const finalName = inputName.trim() || defaultName;
+    const key = finalName.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || `palette_${Date.now()}`;
+    const customPalettes = loadCustomPalettes();
+    customPalettes[key] = {
+      name: finalName,
+      colors: colors,
+      created: Date.now()
+    };
+    saveCustomPalettes(customPalettes);
+
+    populatePaletteDropdown();
+    if (dom.paletteSelect) {
+      dom.paletteSelect.value = `custom_${key}`;
+    }
+    state.activeSwatches = [...colors];
+    renderPaletteSwatches();
+    syncPaletteToDoc();
+    showToast(`Saved palette "${finalName}" (${colors.length} colors) to library!`);
+  }
 
   // ===========================================================================
   // APPLICATION STATE
@@ -154,6 +306,7 @@
       createNewDocument(64, 64, 'Pixel Artwork');
     }
 
+    populatePaletteDropdown();
     renderPaletteSwatches();
     updateUi();
     updateCanvasBgUi();
@@ -190,18 +343,30 @@
       isDragging = false;
       startX = e.clientX;
       startScrollLeft = container.scrollLeft;
+      try { container.setPointerCapture(e.pointerId); } catch (_) {}
     });
 
     container.addEventListener('pointermove', (e) => {
       if (!isDown) return;
       const dx = e.clientX - startX;
-      if (Math.abs(dx) > 3) isDragging = true;
+      if (Math.abs(dx) > 3) {
+        isDragging = true;
+        container.classList.add('pa-is-dragging');
+      }
       container.scrollLeft = startScrollLeft - dx;
     });
 
-    const stopDrag = () => { isDown = false; };
-    window.addEventListener('pointerup', stopDrag);
-    window.addEventListener('pointercancel', stopDrag);
+    const stopDrag = (e) => {
+      if (isDown) {
+        isDown = false;
+        container.classList.remove('pa-is-dragging');
+        if (e && e.pointerId) {
+          try { container.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      }
+    };
+    container.addEventListener('pointerup', stopDrag);
+    container.addEventListener('pointercancel', stopDrag);
 
     container.addEventListener('wheel', (e) => {
       const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
@@ -230,18 +395,30 @@
       isDragging = false;
       startY = e.clientY;
       startScrollTop = container.scrollTop;
+      try { container.setPointerCapture(e.pointerId); } catch (_) {}
     });
 
     container.addEventListener('pointermove', (e) => {
       if (!isDown) return;
       const dy = e.clientY - startY;
-      if (Math.abs(dy) > 3) isDragging = true;
+      if (Math.abs(dy) > 3) {
+        isDragging = true;
+        container.classList.add('pa-is-dragging');
+      }
       container.scrollTop = startScrollTop - dy;
     });
 
-    const stopDrag = () => { isDown = false; };
-    window.addEventListener('pointerup', stopDrag);
-    window.addEventListener('pointercancel', stopDrag);
+    const stopDrag = (e) => {
+      if (isDown) {
+        isDown = false;
+        container.classList.remove('pa-is-dragging');
+        if (e && e.pointerId) {
+          try { container.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      }
+    };
+    container.addEventListener('pointerup', stopDrag);
+    container.addEventListener('pointercancel', stopDrag);
 
     container.addEventListener('wheel', (e) => {
       const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
@@ -656,7 +833,8 @@
       // Update palette swatches if document palette has colors
       if (parsedDoc.palette && Object.keys(parsedDoc.palette).length > 0) {
         state.activeSwatches = Object.values(parsedDoc.palette);
-        renderPaletteSwatches();
+        populatePaletteDropdown();
+    renderPaletteSwatches();
       }
 
       // Sync background directive if present
@@ -744,6 +922,11 @@
   }
 
   function onPointerDown(e) {
+    // Right click is reserved exclusively for Desktop Context Menu
+    if (e.button === 2) {
+      return;
+    }
+
     // Pan via Hand tool, middle click or Space key
     if (e.button === 1 || e.spaceKey || state.currentTool === 'pan') {
       state.isPanning = true;
@@ -763,8 +946,7 @@
     state.lastX = x;
     state.lastY = y;
 
-    const isRightClick = e.button === 2;
-    const activeColor = isRightClick ? state.secondaryColor : state.primaryColor;
+    const activeColor = state.primaryColor;
 
     // Selection Tool Handling
     if (state.currentTool === 'select') {
@@ -1154,21 +1336,37 @@
   // ===========================================================================
   // SELECTION & TRANSFORM HELPERS
   // ===========================================================================
+  function selectAll() {
+    commitFloatingSelection();
+    state.selection = {
+      x: 0,
+      y: 0,
+      w: state.w,
+      h: state.h
+    };
+    selectTool('select');
+    renderSelectionMarquee();
+    showToast(`Selected entire canvas (${state.w}×${state.h})`);
+  }
+
   function copySelection() {
-    if (!state.selection) return;
     const cell = getArtworkCell();
     if (!cell || !cell.pixels) return;
 
-    if (state.floatingPixels) {
+    if (state.floatingPixels && state.selection) {
       state.clipboard = {
         w: state.selection.w,
         h: state.selection.h,
         pixels: { ...state.floatingPixels }
       };
+      showToast(`Copied floating selection (${state.selection.w}×${state.selection.h})`);
       return;
     }
 
-    const { x, y, w, h } = state.selection;
+    const x = state.selection ? state.selection.x : 0;
+    const y = state.selection ? state.selection.y : 0;
+    const w = state.selection ? state.selection.w : state.w;
+    const h = state.selection ? state.selection.h : state.h;
     const copiedPixels = {};
 
     for (let py = y; py < y + h; py++) {
@@ -1181,10 +1379,10 @@
     }
 
     state.clipboard = { w, h, pixels: copiedPixels };
+    showToast(`Copied ${Object.keys(copiedPixels).length} pixels (${w}×${h})`);
   }
 
   function cutSelection() {
-    if (!state.selection) return;
     copySelection();
     deleteSelection();
   }
@@ -1202,9 +1400,18 @@
       return;
     }
 
-    if (!state.selection) return;
     const cell = getArtworkCell();
     if (!cell || !cell.pixels) return;
+
+    if (!state.selection) {
+      cell.pixels = {};
+      repaintCanvas();
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+      showToast('Cleared canvas content');
+      return;
+    }
 
     const { x, y, w, h } = state.selection;
     for (let py = y; py < y + h; py++) {
@@ -1222,7 +1429,10 @@
   }
 
   function pasteSelection() {
-    if (!state.clipboard || !state.clipboard.pixels) return;
+    if (!state.clipboard || !state.clipboard.pixels) {
+      showToast('Clipboard is empty', 'error');
+      return;
+    }
     commitFloatingSelection();
 
     const startX = state.selection ? state.selection.x : 0;
@@ -1239,14 +1449,29 @@
     state.floatingCurrentY = startY;
     state.floatingPixels = { ...state.clipboard.pixels };
 
+    selectTool('select');
     renderSelectionMarquee();
     syncCanvasToSource();
+    showToast(`Pasted ${Object.keys(state.clipboard.pixels).length} pixels`);
   }
 
   function fillSelection() {
-    if (!state.selection) return;
     const cell = getArtworkCell();
     if (!cell) return;
+
+    if (!state.selection) {
+      for (let py = 0; py < state.h; py++) {
+        for (let px = 0; px < state.w; px++) {
+          cell.pixels[`${px},${py}`] = state.primaryColor;
+        }
+      }
+      repaintCanvas();
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+      showToast(`Filled entire canvas (${state.w}×${state.h})`);
+      return;
+    }
 
     const { x, y, w, h } = state.selection;
     for (let py = y; py < y + h; py++) {
@@ -1261,6 +1486,7 @@
     pushHistory();
     syncCanvasToSource();
     triggerAutosave();
+    showToast(`Filled selection (${w}×${h})`);
   }
 
   function ensureFloatingSelection() {
@@ -1782,8 +2008,113 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
   }
 
   // ===========================================================================
-  // FILE I/O & SAVE
+  // FILE SYSTEM ACCESS API & I/O
   // ===========================================================================
+  let currentFileHandle = null;
+  let currentFileName = null;
+
+  function updateDocumentTitle() {
+    const name = currentFileName || `${state.title || 'Untitled'}.pix2`;
+    document.title = `${name} — NOIRADIX PixelArt`;
+  }
+
+  async function openFileNative() {
+    if ('showOpenFilePicker' in window) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [
+            {
+              description: 'PIX2 Sprite & Images (*.pix2, *.txt, *.png, *.jpg)',
+              accept: {
+                'text/plain': ['.pix2', '.txt'],
+                'image/*': ['.png', '.jpg', '.jpeg', '.webp']
+              }
+            }
+          ],
+          multiple: false
+        });
+        const file = await handle.getFile();
+        if (file.name.endsWith('.pix2') || file.name.endsWith('.txt')) {
+          const text = await file.text();
+          dom.codeEditor.value = text;
+          applySourceCodeToCanvas();
+          currentFileHandle = handle;
+          currentFileName = file.name;
+          updateDocumentTitle();
+          showToast(`Opened ${file.name} from disk!`);
+          return;
+        } else if (file.type.startsWith('image/')) {
+          importImageToPixelArt(file);
+          currentFileHandle = null;
+          currentFileName = file.name;
+          updateDocumentTitle();
+          return;
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('File System Access API failed, falling back:', err);
+      }
+    }
+    dom.fileInput.click();
+  }
+
+  async function saveFileNative(forceSaveAs = false) {
+    commitFloatingSelection();
+    const text = dom.codeEditor.value || _PIX2.serialize(state.doc);
+
+    // Direct overwrite to existing handle
+    if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
+      try {
+        if (currentFileHandle.queryPermission) {
+          const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') {
+            const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
+            if (req !== 'granted') {
+              showToast('Write permission to file was denied.', 'error');
+              return;
+            }
+          }
+        }
+        const writable = await currentFileHandle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        updateDocumentTitle();
+        showToast(`Saved to ${currentFileHandle.name}!`);
+        return;
+      } catch (err) {
+        console.warn('Direct overwrite failed, prompting Save As:', err);
+      }
+    }
+
+    // Save As via File System Access API
+    if ('showSaveFilePicker' in window) {
+      try {
+        const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
+        const handle = await window.showSaveFilePicker({
+          suggestedName: suggested,
+          types: [{
+            description: 'PIX2 Sprite File (*.pix2)',
+            accept: { 'text/plain': ['.pix2'] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        currentFileHandle = handle;
+        currentFileName = handle.name;
+        updateDocumentTitle();
+        showToast(`Saved as ${handle.name}!`);
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('Save file picker failed, falling back to download:', err);
+      }
+    }
+
+    // Fallback: Blob download
+    savePix2File();
+  }
+
   function savePix2File() {
     const text = dom.codeEditor.value || _PIX2.serialize(state.doc);
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -1793,6 +2124,29 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     a.download = `${sanitizeFilename(state.title)}.pix2`;
     a.click();
     URL.revokeObjectURL(url);
+    showToast(`Downloaded ${sanitizeFilename(state.title)}.pix2`);
+  }
+
+  // ===========================================================================
+  // DESKTOP CONTEXT MENU (RIGHT-CLICK)
+  // ===========================================================================
+  const contextMenu = document.getElementById('pa-context-menu');
+
+  function openContextMenu(x, y) {
+    if (!contextMenu) return;
+    contextMenu.classList.remove('hidden');
+
+    const menuW = 215;
+    const menuH = 370;
+    const posX = Math.max(10, Math.min(x, window.innerWidth - menuW - 10));
+    const posY = Math.max(10, Math.min(y, window.innerHeight - menuH - 10));
+
+    contextMenu.style.left = `${posX}px`;
+    contextMenu.style.top = `${posY}px`;
+  }
+
+  function closeContextMenu() {
+    if (contextMenu) contextMenu.classList.add('hidden');
   }
 
   function handleFileSelected(e) {
@@ -1918,7 +2272,10 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     dom.viewport.addEventListener('mousedown', onPointerDown);
     dom.viewport.addEventListener('mousemove', onPointerMove);
     window.addEventListener('mouseup', onPointerUp);
-    dom.viewport.addEventListener('contextmenu', (e) => e.preventDefault());
+    dom.viewport.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openContextMenu(e.clientX, e.clientY);
+    });
 
     // Wheel Zoom centered on cursor
     dom.viewport.addEventListener('wheel', (e) => {
@@ -2025,7 +2382,23 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
     document.getElementById('btn-add-palette-color').addEventListener('click', addActiveColorToPalette);
 
     dom.paletteSelect.addEventListener('change', (e) => {
-      const preset = PRESET_PALETTES[e.target.value];
+      const val = e.target.value;
+      if (val === '__new_preset__') {
+        promptAndSavePalettePreset();
+        return;
+      }
+      if (val.startsWith('custom_')) {
+        const key = val.replace('custom_', '');
+        const customPalettes = loadCustomPalettes();
+        if (customPalettes[key] && customPalettes[key].colors) {
+          state.activeSwatches = [...customPalettes[key].colors];
+          renderPaletteSwatches();
+          syncPaletteToDoc();
+          showToast(`Loaded palette "${customPalettes[key].name}"`);
+        }
+        return;
+      }
+      const preset = PRESET_PALETTES[val];
       if (preset) {
         state.activeSwatches = [...preset];
         renderPaletteSwatches();
@@ -2033,17 +2406,55 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       }
     });
 
+    const btnSavePalette = document.getElementById('btn-save-palette');
+    if (btnSavePalette) {
+      btnSavePalette.addEventListener('click', promptAndSavePalettePreset);
+    }
+
+    // Close context menu on click outside, resize, or scroll
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#pa-context-menu')) {
+        closeContextMenu();
+      }
+    });
+    window.addEventListener('resize', closeContextMenu);
+    window.addEventListener('scroll', closeContextMenu, true);
+
+    // Desktop Context Menu Item Actions
+    document.querySelectorAll('#pa-context-menu .context-menu-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = item.dataset.action;
+        closeContextMenu();
+        switch (action) {
+          case 'cut': cutSelection(); break;
+          case 'copy': copySelection(); break;
+          case 'paste': pasteSelection(); break;
+          case 'select-all': selectAll(); break;
+          case 'deselect':
+            commitFloatingSelection();
+            state.selection = null;
+            renderSelectionMarquee();
+            break;
+          case 'fill': fillSelection(); break;
+          case 'flip-h': flipArtworkH(); break;
+          case 'flip-v': flipArtworkV(); break;
+          case 'rotate-90': rotateArtwork(); break;
+          case 'align-center': alignArtwork('center'); break;
+          case 'delete': deleteSelection(); break;
+        }
+      });
+    });
+
     // Navigation & File Buttons
     document.getElementById('btn-new-canvas').addEventListener('click', () => {
       dom.modalNew.classList.remove('hidden');
     });
 
-    document.getElementById('btn-open-file').addEventListener('click', () => {
-      dom.fileInput.click();
-    });
+    document.getElementById('btn-open-file').addEventListener('click', openFileNative);
     dom.fileInput.addEventListener('change', handleFileSelected);
 
-    document.getElementById('btn-save-pix2').addEventListener('click', savePix2File);
+    document.getElementById('btn-save-pix2').addEventListener('click', () => saveFileNative(false));
     document.getElementById('btn-export-png').addEventListener('click', openExportModal);
     document.getElementById('btn-ai-assistant').addEventListener('click', () => {
       updateAiPromptView();
@@ -2144,7 +2555,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       });
     });
 
-    document.getElementById('btn-download-pix2').addEventListener('click', savePix2File);
+    document.getElementById('btn-download-pix2').addEventListener('click', () => saveFileNative(false));
 
     // Modal Close buttons
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
@@ -2224,28 +2635,37 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
-      // Don't intercept shortcuts when typing in inputs or editor
+      // Don't intercept shortcuts when typing in inputs or editor (except Ctrl+S)
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        if (e.ctrlKey && e.key === 's') {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
           e.preventDefault();
-          savePix2File();
+          saveFileNative(true);
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          saveFileNative(false);
         }
         return;
       }
 
-      if (e.ctrlKey && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        selectAll();
+      } else if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
         undo();
       } else if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'Z')) {
         e.preventDefault();
         redo();
-      } else if (e.ctrlKey && e.key === 's') {
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        savePix2File();
-      } else if (e.ctrlKey && e.key === 'o') {
+        saveFileNative(true);
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        dom.fileInput.click();
-      } else if (e.ctrlKey && e.key === 'n') {
+        saveFileNative(false);
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        openFileNative();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N')) {
         e.preventDefault();
         dom.modalNew.classList.remove('hidden');
       } else if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
@@ -2257,7 +2677,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteSelection();
       } else if (e.key === 'f' || e.key === 'F') {
-        if (state.selection) fillSelection();
+        fillSelection();
       } else if (e.key === 'ArrowUp') {
         nudgeArtwork(0, -1);
       } else if (e.key === 'ArrowDown') {
@@ -2283,6 +2703,7 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       } else if (e.key === 'r' || e.key === 'R') {
         rotateArtwork();
       } else if (e.key === 'Escape') {
+        closeContextMenu();
         commitFloatingSelection();
         state.selection = null;
         renderSelectionMarquee();

@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — Functional & UI/UX Specification
 
 **Document ID:** `docs/PIXELART/SPECIFICATION.md`  
-**Version:** 1.3.0  
+**Version:** 1.4.0  
 **Date:** 2026-11-08  
 **Route:** `/pixelart/`  
 **License:** Apache-2.0  
@@ -101,11 +101,13 @@ The workspace follows a responsive split-view architecture:
 * **Clear Canvas:** Wipes current artboard with confirmation and history snapshot.
 * **Vertical Drag-Scroll:** The toolbar supports smooth vertical scrolling on short screens (`enableVerticalDragScroll`).
 
-### 2.3 Canvas Artboard & High-Precision Grid
+### 2.3 Canvas Artboard, High-Precision Grid & Desktop Context Menu
 * **Pixel-Aligned Checkerboard:** Rendered directly onto `dom.ctxMain`. At `zoom >= 4`, each checker tile is **EXACTLY** 1 artwork pixel (`zoom × zoom` screen px), eliminating all visual vibration/eye strain.
 * **Razor-Sharp Normative Grid:** Grid lines are rendered directly onto the canvas with half-pixel $(+0.5\text{px})$ offset at zoom levels $\ge 4\times$, perfectly separating pixel boundaries.
 * **Analytical Invariant Cursor Zoom:** Smooth mouse wheel zoom (1x to 64x integer multiples) mathematically invariant under the cursor position.
-* **Status Readout:** Real-time $(X, Y)$ coordinate readout and color under cursor.
+* **Separated Statusbar Geometry:** Features explicit 14px dividers (`.pa-status-divider`) with 6px margins and dedicated min-widths, guaranteeing zero collision between cursor coordinates, hover color (`Transparent` / hex), background style selector, grid toggle, and zoom controls on narrow panes.
+* **Desktop Right-Click Context Menu (`#pa-context-menu`):** Right-clicking anywhere on the canvas or viewport opens a native desktop context menu featuring Cut (`Ctrl+X`), Copy (`Ctrl+C`), Paste (`Ctrl+V`), Select All (`Ctrl+A`), Deselect (`Esc`), Fill (`F`), Flip Horizontal (`H`), Flip Vertical (`Shift+H`), Rotate 90° Clockwise (`R`), Center Content, and Delete (`Del`).
+* **Decoupled Secondary Color Drawing:** Secondary color painting via right-click has been decoupled in favor of the context menu. Artists effortlessly swap primary and secondary colors using the `X` key or the swap button.
 
 ### 2.4 Draggable Split Pane Resizer
 * A dedicated horizontal resize bar (`#pa-split-resizer`) sits between the canvas pane and code pane.
@@ -118,13 +120,21 @@ The workspace follows a responsive split-view architecture:
 * **Non-Destructive Error Handling:** When users type incomplete code, canvas remains untouched and a diagnostic banner reports the error.
 * **Direct Primitive Support:** Supports manual entry of `rect`, `line`, `fill`, `sym_dot`, `p`, and `dot`.
 
-### 2.6 Palette & Color Deck
-* **Dual Color Slots:** Primary color (Left click) and Secondary color (Right click / Alt). Quick swap via `X` shortcut.
-* **Color Controls:** Hex input field (`#RRGGBB` or `#RRGGBBAA`) and visual RGBA sliders.
-* **Preset Palettes:** PICO-8 (16), Game Boy Classic (4), Sweetie 16, Endesga 32, Noiradix Cyber (8).
+### 2.6 Palette Deck & Shared Custom Library
+* **Dual Color Slots:** Primary color (Left click) and Secondary color. Quick swap via `X` shortcut or the swap button.
+* **Color Controls:** Hex input field (`#RRGGBB` or `#RRGGBBAA`) and visual RGBA alpha slider (0-255).
+* **Preset Palettes:** Noiradix Classic (8), PICO-8 (16), Game Boy (4), Sweetie 16, Endesga 32, Solar Envy (32), DawnBringer 16/32, NES 54.
+* **Custom Palette Library (`localStorage` Sync):** Palettes saved in either NOIRADIX Studio or NOIRADIX PixelArt are universally stored under `noiradix_custom_palettes` and instantly accessible across both apps. Dedicated "+ Save Current Palette to Library..." and `#btn-save-palette` allow naming and archiving custom palettes.
 * **Custom Swatches:** Click swatch to select; right-click swatch to replace with current color; click `+` to append new color.
 * **Auto-Synchronization:** Swatches automatically serialize into the `@palette` section of the `.pix2` document.
-* **Universal Horizontal Drag-Scroll:** Smooth drag and wheel scrolling across colors and palette presets.
+* **Universal Drag-Scroll Architecture:** Smooth drag and wheel scrolling across colors and palette presets with hand grab/grabbing cursor feedback.
+
+### 2.7 Native File System Access API
+* **Direct File Handle Tracking (`currentFileHandle`):** Native `showOpenFilePicker()` and `showSaveFilePicker()` integration.
+* **Single-Keystroke Overwrite (`Ctrl+S`):** Directly writes back to the opened file without annoying save prompts when permissions are granted.
+* **Save As (`Ctrl+Shift+S`):** Prompts for new filename or location while maintaining session state.
+* **Automatic Title Sync:** Window title dynamically reflects the active filename (`artwork.pix2 — NOIRADIX PixelArt`).
+* **Universal Fallbacks:** Automatic fallback to standard `<input type="file">` and Blob downloads on unsupported platforms (e.g. mobile/older Safari).
 
 ---
 
@@ -132,6 +142,9 @@ The workspace follows a responsive split-view architecture:
 
 | Shortcut | Action |
 | :--- | :--- |
+| `Right-Click` | Open Desktop Context Menu (Transform, Edit, Select) |
+| `Ctrl + A` | Select Entire Canvas |
+| `Escape` | Deselect / Dismiss Context Menu |
 | `B` | Pencil Tool |
 | `E` | Eraser Tool |
 | `G` | Flood Fill Tool |
@@ -149,15 +162,17 @@ The workspace follows a responsive split-view architecture:
 | `H` / `Shift + H` | Horizontal / Vertical Bilateral Symmetry |
 | `R` | Rotate 90° Clockwise (Selection or Canvas) |
 | `Arrows` | Nudge Pixels / Selection (1px Offset) |
-| `Ctrl + C` / `Ctrl + V` | Copy / Paste Selection |
+| `Ctrl + C` / `Ctrl + V` | Copy / Paste Selection (or Full Canvas) |
 | `Ctrl + X` | Cut Selection |
 | `Delete` / `Backspace` | Clear Selection / Delete Floating Pixels |
-| `F` | Fill Selection with Primary Color |
+| `F` | Fill Selection (or Canvas) with Primary Color |
 | `Enter` | Commit Floating Selection |
-| `Escape` | Cancel / Commit Selection |
 | `Ctrl + Z` | Undo |
 | `Ctrl + Y` / `Ctrl + Shift + Z` | Redo |
-| `Ctrl + S` | Save `.pix2` file |
+| `Ctrl + S` | Save File (Direct Disk Writeback or Download) |
+| `Ctrl + Shift + S` | Save As (File System Picker) |
+| `Ctrl + O` | Open File (`.pix2`, `.png`, `.jpg`) |
+| `Ctrl + N` | New Canvas Modal |
 | `Ctrl + O` | Open file |
 | `Ctrl + N` | New Canvas |
 | `Mouse Wheel` | Invariant Cursor-Centered Zoom |
