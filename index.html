@@ -89,10 +89,10 @@
   <!-- ================= TOP NAVIGATION / APP HEADER ================= -->
   <header class="studio-header">
     <div class="header-left">
-      <div class="brand-badge" id="btn-brand-about" title="About NOIRADIX Studio (v1.1.7) by dotlinux26 - Click for info" style="cursor: pointer;">
+      <div class="brand-badge" id="btn-brand-about" title="About NOIRADIX Studio (v2.0.0) by dotlinux26 - Click for info" style="cursor: pointer;">
         <img src="noiradix-studio-logo.svg" alt="NOIRADIX Logo" class="brand-logo-img">
         <span class="brand-title">NOIRADIX</span>
-        <span class="brand-ver">v1.1.7</span>
+        <span class="brand-ver">v2.0.0</span>
       </div>
 
       <!-- Professional File Document Header Widget -->
@@ -719,6 +719,156 @@
       </div>
     </section>
 
+    <!-- 5. VIEW: IMPORT & SLICE -->
+    <section id="view-import-slice" class="view-panel">
+      <div class="import-slice-layout" style="display: flex; flex-direction: column; height: 100%; padding: 16px; gap: 16px; box-sizing: border-box; overflow-y: auto;">
+        <!-- Top Toolbar / Header -->
+        <div class="view-sub-toolbar" style="margin-bottom: 0;">
+          <div class="toolbar-section">
+            <span class="toolbar-title"><i class="fa-solid fa-scissors"></i> Import &amp; Slice Studio</span>
+            <span class="sub-text">Ingest PNG Spritesheets &amp; Atlas Metadata into PIX2 1.1 Document</span>
+          </div>
+          <div class="toolbar-section">
+            <button id="btn-import-slice-commit" class="btn btn-sm btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-file-import"></i> Commit Slices to Project
+            </button>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 340px 1fr; gap: 16px; flex: 1; min-height: 480px;">
+          <!-- Left Configuration Sidebar -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- File Input / Drop Area -->
+            <div class="sidebar-card">
+              <div class="card-header">
+                <span><i class="fa-solid fa-cloud-arrow-up"></i> Source Files</span>
+              </div>
+              <div class="card-body" style="display: flex; flex-direction: column; gap: 10px;">
+                <div id="import-slice-dropzone" style="border: 2px dashed var(--border-subtle); border-radius: 6px; padding: 18px; text-align: center; cursor: pointer; transition: all 0.15s ease; background: rgba(255,255,255,0.02);">
+                  <i class="fa-solid fa-file-image" style="font-size: 28px; color: var(--accent-primary); margin-bottom: 8px;"></i>
+                  <p style="margin: 0; font-size: 12px; font-weight: 500;">Drop PNG &amp; JSON here</p>
+                  <p style="margin: 4px 0 0; font-size: 10px; color: var(--text-dim);">or click to browse files</p>
+                  <input type="file" id="input-import-slice-file" accept="image/png,application/json,.json,.png" multiple style="display: none;">
+                </div>
+                <div id="import-slice-file-info" style="font-size: 11px; color: var(--text-muted); display: none;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-check text-success"></i>
+                    <span id="import-slice-file-name" style="font-weight: 500;">image.png</span>
+                    <span id="import-slice-img-dims" class="badge-tag">0×0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slicing Mode Strategy -->
+            <div class="sidebar-card">
+              <div class="card-header">
+                <span><i class="fa-solid fa-sliders"></i> Slicing Strategy</span>
+              </div>
+              <div class="card-body" style="display: flex; flex-direction: column; gap: 10px;">
+                <label class="form-label">Slicing Method:</label>
+                <select id="select-slice-method" class="modern-select full-width">
+                  <option value="grid" selected>Uniform Grid Slicing</option>
+                  <option value="alpha">Alpha Island Auto-Detect</option>
+                  <option value="atlas">TexturePacker / NOIRADIX JSON</option>
+                </select>
+
+                <!-- Grid Options -->
+                <div id="slice-opts-grid" style="display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                      <label class="form-label">Cell Width (px):</label>
+                      <input type="number" id="input-slice-cell-w" class="modern-input full-width" value="32" min="1" max="512">
+                    </div>
+                    <div>
+                      <label class="form-label">Cell Height (px):</label>
+                      <input type="number" id="input-slice-cell-h" class="modern-input full-width" value="32" min="1" max="512">
+                    </div>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                      <label class="form-label">Columns (opt):</label>
+                      <input type="number" id="input-slice-cols" class="modern-input full-width" value="" placeholder="Auto">
+                    </div>
+                    <div>
+                      <label class="form-label">Rows (opt):</label>
+                      <input type="number" id="input-slice-rows" class="modern-input full-width" value="" placeholder="Auto">
+                    </div>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                      <label class="form-label">Spacing / Gap (px):</label>
+                      <input type="number" id="input-slice-spacing" class="modern-input full-width" value="0" min="0" max="64">
+                    </div>
+                    <div>
+                      <label class="form-label">Margin / Padding (px):</label>
+                      <input type="number" id="input-slice-margin" class="modern-input full-width" value="0" min="0" max="64">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Alpha Island Options -->
+                <div id="slice-opts-alpha" style="display: none; flex-direction: column; gap: 8px;">
+                  <div>
+                    <label class="form-label">Alpha Threshold (0-255):</label>
+                    <input type="number" id="input-slice-alpha-thresh" class="modern-input full-width" value="10" min="1" max="255">
+                  </div>
+                  <div>
+                    <label class="form-label">Min Island Size (px):</label>
+                    <input type="number" id="input-slice-min-size" class="modern-input full-width" value="2" min="1" max="100">
+                  </div>
+                </div>
+
+                <!-- Atlas Options -->
+                <div id="slice-opts-atlas" style="display: none; flex-direction: column; gap: 8px;">
+                  <div id="atlas-detected-info" style="font-size: 11px; color: var(--text-muted); background: var(--bg-card); padding: 8px; border-radius: 4px; border: 1px solid var(--border-subtle);">
+                    <span>Drop or choose a JSON atlas file (.json) alongside your PNG.</span>
+                  </div>
+                </div>
+
+                <button id="btn-run-slice-preview" class="btn btn-sm btn-secondary full-width" style="margin-top: 6px;">
+                  <i class="fa-solid fa-arrows-rotate"></i> Update Slice Preview
+                </button>
+              </div>
+            </div>
+
+            <!-- Ingestion Target -->
+            <div class="sidebar-card">
+              <div class="card-header">
+                <span><i class="fa-solid fa-layer-group"></i> Destination Invariant</span>
+              </div>
+              <div class="card-body" style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="checkbox" id="chk-slice-auto-animate" checked>
+                  <span>Auto-assemble animations from name sequences</span>
+                </label>
+                <div>
+                  <label class="form-label">Layer Name:</label>
+                  <input type="text" id="input-slice-layer-name" class="modern-input full-width" value="Imported Sprites">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Interactive Preview Area -->
+          <div class="sidebar-card" style="display: flex; flex-direction: column; overflow: hidden;">
+            <div class="card-header flex-between" style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fa-regular fa-eye"></i> Slicing Viewport &amp; Rectangles</span>
+              <span id="slice-count-badge" class="badge-tag">0 slices detected</span>
+            </div>
+            <div class="card-body" style="flex: 1; position: relative; overflow: auto; background: var(--bg-canvas-area); display: flex; align-items: center; justify-content: center; min-height: 380px;">
+              <canvas id="import-slice-canvas" style="box-shadow: 0 4px 16px rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
+              <div id="import-slice-empty-prompt" style="position: absolute; text-align: center; color: var(--text-dim);">
+                <i class="fa-solid fa-image" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
+                <p style="margin: 0; font-size: 13px;">No spritesheet loaded yet</p>
+                <p style="margin: 4px 0 0; font-size: 11px; opacity: 0.7;">Drop a PNG image here or choose one to begin slicing</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ================= FLOATING ANIMATION STUDIO (4-DIR, 8-DIR & CUSTOM) ================= -->
@@ -740,6 +890,7 @@
           <!-- Dynamically populated: walk_down, walk_up, idle, attack, custom... -->
         </select>
         <select id="anim-mode-select" class="modern-select select-xs" title="Compass Mode">
+          <option value="platformer_2dir">2-Dir Platformer</option>
           <option value="4dir" selected>4-Dir</option>
           <option value="8dir">8-Dir</option>
         </select>
@@ -1041,6 +1192,10 @@
         <div class="template-section">
           <label class="form-label">Direction Mode:</label>
           <div class="template-mode-toggle">
+            <button type="button" class="mode-toggle-btn" id="btn-mode-2dir" data-dirs="2">
+              <i class="fa-solid fa-arrows-left-right"></i>
+              <span>2 Directions (Platformer Left / Right)</span>
+            </button>
             <button type="button" class="mode-toggle-btn active" id="btn-mode-4dir" data-dirs="4">
               <i class="fa-solid fa-arrows-up-down-left-right"></i>
               <span>4 Directions (Down, Up, Right, Left)</span>
@@ -1285,10 +1440,25 @@
         <div class="template-section">
           <label class="form-label">Sheet Layout Presets:</label>
           <div class="action-chips-container" id="new-file-presets">
-            <button type="button" class="chip-btn active" data-cols="4" data-rows="4" data-cw="16" data-ch="16">4-Direction (4x4, 16px)</button>
-            <button type="button" class="chip-btn" data-cols="8" data-rows="4" data-cw="16" data-ch="16">8-Direction (8x4, 16px)</button>
-            <button type="button" class="chip-btn" data-cols="6" data-rows="1" data-cw="24" data-ch="24">Action Strip (6x1, 24px)</button>
-            <button type="button" class="chip-btn" data-cols="1" data-rows="1" data-cw="32" data-ch="32">Single Frame (1x1, 32px)</button>
+            <button type="button" class="chip-btn active" data-cols="4" data-rows="4" data-cw="16" data-ch="16" data-template="4dir">4-Direction (4x4, 16px)</button>
+            <button type="button" class="chip-btn" data-cols="4" data-rows="2" data-cw="32" data-ch="32" data-template="platformer_2dir">Platformer 2D (4x2, 32px)</button>
+            <button type="button" class="chip-btn" data-cols="8" data-rows="4" data-cw="16" data-ch="16" data-template="8dir">8-Direction (8x4, 16px)</button>
+            <button type="button" class="chip-btn" data-cols="6" data-rows="1" data-cw="24" data-ch="24" data-template="custom">Action Strip (6x1, 24px)</button>
+            <button type="button" class="chip-btn" data-cols="1" data-rows="1" data-cw="32" data-ch="32" data-template="custom">Single Frame (1x1, 32px)</button>
+          </div>
+        </div>
+
+        <!-- 3b. Resolution Quick Select -->
+        <div class="template-section">
+          <label class="form-label">Frame Resolution Presets (Max: 512×512):</label>
+          <div class="action-chips-container" id="new-file-res-presets">
+            <button type="button" class="chip-btn active" data-res="16">16×16</button>
+            <button type="button" class="chip-btn" data-res="24">24×24</button>
+            <button type="button" class="chip-btn" data-res="32">32×32</button>
+            <button type="button" class="chip-btn" data-res="48">48×48</button>
+            <button type="button" class="chip-btn" data-res="64">64×64</button>
+            <button type="button" class="chip-btn" data-res="128">128×128</button>
+            <button type="button" class="chip-btn" data-res="256">256×256</button>
           </div>
         </div>
 
@@ -1535,6 +1705,7 @@
   </div>
 
   <!-- ================= SCRIPTS ================= -->
+  <script src="js/version.js?v=2.0.0"></script>
   <script src="js/default-sample.js?v=2.0.0"></script>
   <script src="js/pix2-format.js?v=2.0.0"></script>
   <script src="js/editor-state.js?v=2.0.0"></script>

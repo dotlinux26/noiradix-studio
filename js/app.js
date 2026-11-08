@@ -36,6 +36,15 @@
   let userClosedFloatingPreview = false;
   let marqueeAnimFrameId = null;
 
+  // Import & Slice State (PIX2 1.1 Ingestion Pipeline)
+  let importSliceState = {
+    image: null,
+    imageInfo: null,
+    rawBytes: null,
+    jsonAtlas: null,
+    frames: []
+  };
+
   // DOM Elements cache
   const dom = {};
 
@@ -269,7 +278,8 @@
       grid: document.getElementById('view-grid-overview'),
       anim: document.getElementById('view-anim-studio'),
       cell: document.getElementById('view-cell-editor'),
-      code: document.getElementById('view-code-editor')
+      code: document.getElementById('view-code-editor'),
+      'import-slice': document.getElementById('view-import-slice')
     };
 
     // Canvas elements
@@ -282,6 +292,47 @@
     dom.animCanvas = document.getElementById('anim-canvas');
     dom.canvasViewport = document.getElementById('canvas-viewport');
     dom.canvasContainerWithRulers = document.getElementById('canvas-container-with-rulers');
+
+    // Structure & Layers (PIX2 1.1)
+    dom.structureLayersCard = document.getElementById('structure-layers-card');
+    dom.structureTreeContainer = document.getElementById('structure-tree-container');
+    dom.btnAddLayer = document.getElementById('btn-add-layer');
+    dom.btnAddGroup = document.getElementById('btn-add-group');
+    dom.btnAddRegion = document.getElementById('btn-add-region');
+    dom.isolationBanner = document.getElementById('isolation-banner');
+    dom.isolationBreadcrumbText = document.getElementById('isolation-breadcrumb-text');
+    dom.btnExitIsolation = document.getElementById('btn-exit-isolation');
+    dom.btnToolRegionSelect = document.getElementById('btn-tool-region-select');
+
+    // Import & Slice elements
+    dom.importSliceDropzone = document.getElementById('import-slice-dropzone');
+    dom.inputImportSliceFile = document.getElementById('input-import-slice-file');
+    dom.importSliceFileInfo = document.getElementById('import-slice-file-info');
+    dom.importSliceFileName = document.getElementById('import-slice-file-name');
+    dom.importSliceImgDims = document.getElementById('import-slice-img-dims');
+    dom.selectSliceMethod = document.getElementById('select-slice-method');
+    dom.sliceOptsGrid = document.getElementById('slice-opts-grid');
+    dom.sliceOptsAlpha = document.getElementById('slice-opts-alpha');
+    dom.sliceOptsAtlas = document.getElementById('slice-opts-atlas');
+    dom.inputSliceCellW = document.getElementById('input-slice-cell-w');
+    dom.inputSliceCellH = document.getElementById('input-slice-cell-h');
+    dom.inputSliceCols = document.getElementById('input-slice-cols');
+    dom.inputSliceRows = document.getElementById('input-slice-rows');
+    dom.inputSliceSpacing = document.getElementById('input-slice-spacing');
+    dom.inputSliceMargin = document.getElementById('input-slice-margin');
+    dom.inputSliceAlphaThresh = document.getElementById('input-slice-alpha-thresh');
+    dom.inputSliceMinSize = document.getElementById('input-slice-min-size');
+    dom.atlasDetectedInfo = document.getElementById('atlas-detected-info');
+    dom.btnRunSlicePreview = document.getElementById('btn-run-slice-preview');
+    dom.chkSliceAutoAnimate = document.getElementById('chk-slice-auto-animate');
+    dom.inputSliceLayerName = document.getElementById('input-slice-layer-name');
+    dom.btnImportSliceCommit = document.getElementById('btn-import-slice-commit');
+    dom.sliceCountBadge = document.getElementById('slice-count-badge');
+    dom.importSliceCanvas = document.getElementById('import-slice-canvas');
+    dom.importSliceEmptyPrompt = document.getElementById('import-slice-empty-prompt');
+
+    // Direction 2-dir button
+    dom.btnMode2dir = document.getElementById('btn-mode-2dir');
 
     // Tool buttons
     dom.toolButtons = document.querySelectorAll('[data-tool]');
@@ -1260,10 +1311,36 @@
 
     const cols = dom.newFileCols ? (parseInt(dom.newFileCols.value, 10) || 4) : 4;
     const rows = dom.newFileRows ? (parseInt(dom.newFileRows.value, 10) || 4) : 4;
-    const cellW = dom.newFileCellW ? (parseInt(dom.newFileCellW.value, 10) || 16) : 16;
-    const cellH = dom.newFileCellH ? (parseInt(dom.newFileCellH.value, 10) || 16) : 16;
+    const cellW = dom.newFileCellW ? Math.min(512, Math.max(1, parseInt(dom.newFileCellW.value, 10) || 16)) : 16;
+    const cellH = dom.newFileCellH ? Math.min(512, Math.max(1, parseInt(dom.newFileCellH.value, 10) || 16)) : 16;
 
     createBlankProject(cleanFileName, derivedTitle, cols, rows, cellW, cellH);
+
+    // If platformer preset was selected
+    const activePreset = dom.newFilePresets?.querySelector('.chip-btn.active');
+    if (activePreset && activePreset.dataset.template === 'platformer_2dir' && state.doc) {
+      state.doc.animations['idle_right'] = {
+        name: 'Idle Right',
+        direction: 'right',
+        action: 'idle',
+        template: 'platformer_2dir',
+        frames: ['cell_0_0'],
+        fps: 5,
+        loop: true,
+        mode: 'loop'
+      };
+      state.doc.animations['idle_left'] = {
+        name: 'Idle Left',
+        direction: 'left',
+        action: 'idle',
+        template: 'platformer_2dir',
+        frames: ['cell_1_0'],
+        fps: 5,
+        loop: true,
+        mode: 'loop'
+      };
+    }
+
     closeNewFileModal();
     refreshAll();
     showToast(`Created new file "${cleanFileName}"!`, 'success');
@@ -1455,12 +1532,17 @@
       } else if (state.activeTabId === 'tab-pix2-code') {
         switchView('code');
         renderCodeEditor();
+      } else if (state.activeTabId === 'tab-import-slice') {
+        switchView('import-slice');
+        renderImportSliceView();
       } else {
         switchView('cell');
         renderCellEditor();
         renderCellRulers();
         renderMiniPreview();
         updateCellEditorTagUI();
+        renderStructureLayersTree();
+        updateIsolationBannerUI();
       }
     }
 
@@ -1553,7 +1635,17 @@
       dom.tabsContainer.appendChild(tabEl);
     });
 
-    // 4. PIX2 Code & AI Tab
+    // 4. Import & Slice Tab (Pinned)
+    const importSliceTab = createTabElement({
+      id: 'tab-import-slice',
+      title: 'Import & Slice',
+      icon: 'fa-solid fa-scissors',
+      isActive: state.activeTabId === 'tab-import-slice',
+      closable: false
+    });
+    dom.tabsContainer.appendChild(importSliceTab);
+
+    // 5. PIX2 Code & AI Tab
     const codeTab = createTabElement({
       id: 'tab-pix2-code',
       title: 'PIX2 Code & AI',
@@ -3049,6 +3141,398 @@
     }
   }
 
+  function updateIsolationBannerUI() {
+    if (!dom.isolationBanner) return;
+    if (state.isolatedNodeId) {
+      dom.isolationBanner.classList.remove('hidden');
+      dom.isolationBanner.style.display = 'flex';
+      const cell = state.getActiveCell();
+      let nodeLabel = state.isolatedNodeId;
+      if (cell && typeof state.findNode === 'function') {
+        const match = state.findNode(cell.id, state.isolatedNodeId);
+        if (match && match.node) {
+          nodeLabel = `${match.node.name || match.node.id} (${match.node.type})`;
+        }
+      }
+      if (dom.isolationBreadcrumbText) {
+        dom.isolationBreadcrumbText.textContent = nodeLabel;
+      }
+    } else {
+      dom.isolationBanner.classList.add('hidden');
+      dom.isolationBanner.style.display = 'none';
+    }
+  }
+
+  function renderStructureLayersTree() {
+    if (!dom.structureLayersCard || !dom.structureTreeContainer) return;
+    const isCellTab = state.activeTabId && state.activeTabId.startsWith('cell_');
+    if (!isCellTab && !state.getActiveCell()) {
+      dom.structureLayersCard.style.display = 'none';
+      return;
+    }
+    dom.structureLayersCard.style.display = 'block';
+
+    const cell = state.getActiveCell();
+    if (!cell) {
+      dom.structureTreeContainer.innerHTML = '<div style="padding: 8px; color: var(--text-dim); font-size: 11px;">No cell selected</div>';
+      return;
+    }
+
+    if (!cell.layers || cell.layers.length === 0) {
+      dom.structureTreeContainer.innerHTML = `
+        <div style="padding: 10px; text-align: center; color: var(--text-muted); font-size: 11px;">
+          <p style="margin: 0 0 8px 0;">Flat PIX2 1.0 frame (no layers).</p>
+          <button id="btn-convert-v11-layers" class="btn btn-xs btn-primary" style="display: inline-flex; align-items: center; gap: 4px;">
+            <i class="fa-solid fa-layer-group"></i> Convert to PIX2 1.1 Layers
+          </button>
+        </div>
+      `;
+      const btnConvert = document.getElementById('btn-convert-v11-layers');
+      if (btnConvert) {
+        btnConvert.addEventListener('click', () => {
+          state.addLayer(cell.id, 'Base Layer');
+          if (cell.layers && cell.layers[0] && cell.layers[0].children && cell.layers[0].children[0]) {
+            const reg = cell.layers[0].children[0];
+            reg.pixels = { ...cell.pixels };
+          }
+          state.syncCellComposite(cell.id);
+          refreshAll();
+          showToast('Converted frame to PIX2 1.1 structural layers');
+        });
+      }
+      return;
+    }
+
+    dom.structureTreeContainer.innerHTML = '';
+
+    function renderNode(node, depth = 0) {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'structure-tree-item';
+      itemEl.dataset.id = node.id;
+      itemEl.dataset.type = node.type;
+      itemEl.style.paddingLeft = `${depth * 14 + 6}px`;
+
+      const isActive = (state.activeRegionId === node.id || state.activeGroupId === node.id || state.activeLayerId === node.id);
+      if (isActive) itemEl.classList.add('active');
+      if (state.isolatedNodeId === node.id) itemEl.classList.add('isolated');
+      if (node.locked) itemEl.classList.add('is-locked');
+      if (node.visible === false) itemEl.classList.add('is-hidden');
+
+      let iconClass = 'fa-solid fa-vector-square';
+      if (node.type === 'layer') iconClass = 'fa-solid fa-layer-group';
+      else if (node.type === 'group') iconClass = 'fa-solid fa-folder';
+
+      let tagsHtml = '';
+      if (Array.isArray(node.tags) && node.tags.length > 0) {
+        tagsHtml = node.tags.map(t => `<span class="structure-node-tag">${escapeHTML(t)}</span>`).join('');
+      }
+
+      let opacityHtml = '';
+      if (node.type === 'layer') {
+        const pct = Math.round((node.opacity !== undefined ? node.opacity : 1) * 100);
+        opacityHtml = `<input type="number" min="0" max="100" class="structure-opacity-input" value="${pct}" title="Layer Opacity (%)">`;
+      }
+
+      itemEl.innerHTML = `
+        <i class="${iconClass} structure-node-icon"></i>
+        <span class="structure-node-name" title="${escapeHTML(node.name || node.id)}">${escapeHTML(node.name || node.id)}</span>
+        ${tagsHtml}
+        ${opacityHtml}
+        <button class="structure-action-btn btn-vis" title="Toggle Visibility"><i class="fa-solid ${node.visible !== false ? 'fa-eye' : 'fa-eye-slash'}"></i></button>
+        <button class="structure-action-btn btn-lock" title="Toggle Lock"><i class="fa-solid ${node.locked ? 'fa-lock' : 'fa-lock-open'}"></i></button>
+        <button class="structure-action-btn btn-del" title="Delete Node"><i class="fa-solid fa-trash"></i></button>
+      `;
+
+      itemEl.addEventListener('click', (e) => {
+        if (e.target.closest('.structure-action-btn') || e.target.closest('.structure-opacity-input')) return;
+        if (node.type === 'region') state.activeRegionId = node.id;
+        else if (node.type === 'group') state.activeGroupId = node.id;
+        else if (node.type === 'layer') state.activeLayerId = node.id;
+        renderStructureLayersTree();
+      });
+
+      itemEl.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.structure-action-btn') || e.target.closest('.structure-opacity-input')) return;
+        const newIso = (state.isolatedNodeId === node.id) ? null : node.id;
+        state.setIsolation(cell.id, newIso);
+        refreshAll();
+        showToast(newIso ? `Isolated ${node.type}: "${node.name || node.id}"` : 'Exited Isolation Mode');
+      });
+
+      const btnVis = itemEl.querySelector('.btn-vis');
+      btnVis?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.setNodeVisibility(cell.id, node.id, !(node.visible !== false));
+        refreshAll();
+      });
+
+      const btnLock = itemEl.querySelector('.btn-lock');
+      btnLock?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.setNodeLocked(cell.id, node.id, !node.locked);
+        refreshAll();
+      });
+
+      const btnDel = itemEl.querySelector('.btn-del');
+      btnDel?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete ${node.type} "${node.name || node.id}"?`)) {
+          state.removeNode(cell.id, node.id);
+          refreshAll();
+        }
+      });
+
+      const inputOpacity = itemEl.querySelector('.structure-opacity-input');
+      inputOpacity?.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const val = Math.max(0, Math.min(100, Number(inputOpacity.value) || 100)) / 100;
+        state.setLayerOpacity(cell.id, node.id, val);
+        renderCellEditor();
+      });
+
+      dom.structureTreeContainer.appendChild(itemEl);
+
+      if (Array.isArray(node.children)) {
+        node.children.forEach(child => renderNode(child, depth + 1));
+      }
+    }
+
+    cell.layers.forEach(l => renderNode(l, 0));
+  }
+
+  // ===========================================================================
+  // IMPORT & SLICE STUDIO CONTROLLER (PIX2 1.1)
+  // ===========================================================================
+  function renderImportSliceView() {
+    if (!dom.views['import-slice']) return;
+    const canvas = dom.importSliceCanvas;
+    if (!canvas) return;
+
+    if (!importSliceState.image) {
+      if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'block';
+      canvas.width = 320;
+      canvas.height = 240;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'none';
+
+    const img = importSliceState.image;
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // Checkerboard
+    const isDark = document.body.classList.contains('dark-theme');
+    const c1 = isDark ? '#1f202e' : '#ffffff';
+    const c2 = isDark ? '#171822' : '#e2e8f0';
+    for (let y = 0; y < canvas.height; y += 8) {
+      for (let x = 0; x < canvas.width; x += 8) {
+        ctx.fillStyle = ((x / 8 + y / 8) % 2 === 0) ? c1 : c2;
+        ctx.fillRect(x, y, 8, 8);
+      }
+    }
+
+    // Draw source image
+    ctx.drawImage(img, 0, 0);
+
+    // Draw sliced frame boxes and labels
+    const frames = importSliceState.frames || [];
+    if (dom.sliceCountBadge) {
+      dom.sliceCountBadge.textContent = `${frames.length} slice${frames.length === 1 ? '' : 's'} detected`;
+    }
+
+    ctx.save();
+    frames.forEach((f, idx) => {
+      const rect = f.frame;
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
+
+      // Label
+      ctx.fillStyle = 'rgba(99, 102, 241, 0.85)';
+      const labelW = Math.min(rect.w, 90);
+      ctx.fillRect(rect.x, Math.max(0, rect.y - 14), labelW, 14);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '10px monospace';
+      ctx.fillText(f.name || `frame_${idx}`, rect.x + 3, Math.max(0, rect.y - 14) + 10);
+    });
+    ctx.restore();
+  }
+
+  function updateImportSlices() {
+    if (!importSliceState.image) return;
+    const method = dom.selectSliceMethod ? dom.selectSliceMethod.value : 'grid';
+
+    if (method === 'grid') {
+      const cellW = Math.max(1, parseInt(dom.inputSliceCellW?.value, 10) || 32);
+      const cellH = Math.max(1, parseInt(dom.inputSliceCellH?.value, 10) || 32);
+      const cols = dom.inputSliceCols?.value ? parseInt(dom.inputSliceCols.value, 10) : undefined;
+      const rows = dom.inputSliceRows?.value ? parseInt(dom.inputSliceRows.value, 10) : undefined;
+      const spacing = parseInt(dom.inputSliceSpacing?.value, 10) || 0;
+      const margin = parseInt(dom.inputSliceMargin?.value, 10) || 0;
+
+      const rects = ImportSlice.sliceGrid({
+        imageWidth: importSliceState.image.width,
+        imageHeight: importSliceState.image.height,
+        cellWidth: cellW,
+        cellHeight: cellH,
+        columns: cols,
+        rows: rows,
+        spacing: spacing,
+        margin: margin
+      });
+
+      importSliceState.frames = rects.map((r, i) => ({
+        name: `slice_${String(i).padStart(3, '0')}`,
+        frame: r,
+        sourceSize: { w: r.w, h: r.h },
+        spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
+      }));
+    } else if (method === 'alpha') {
+      const canvas = document.createElement('canvas');
+      canvas.width = importSliceState.image.width;
+      canvas.height = importSliceState.image.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(importSliceState.image, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const alphaThresh = parseInt(dom.inputSliceAlphaThresh?.value, 10) || 10;
+      const minSize = parseInt(dom.inputSliceMinSize?.value, 10) || 2;
+
+      const islands = ImportSlice.sliceAlphaIslands(imgData, {
+        alphaThreshold: alphaThresh,
+        minIslandSize: minSize
+      });
+
+      importSliceState.frames = islands.map((r, i) => ({
+        name: `island_${String(i).padStart(3, '0')}`,
+        frame: r,
+        sourceSize: { w: r.w, h: r.h },
+        spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
+      }));
+    } else if (method === 'atlas') {
+      if (importSliceState.jsonAtlas) {
+        const plan = ImportSlice.parseAtlasJSON(importSliceState.jsonAtlas, {
+          width: importSliceState.image.width,
+          height: importSliceState.image.height
+        });
+        importSliceState.frames = plan.frames;
+      }
+    }
+
+    renderImportSliceView();
+  }
+
+  function commitImportSlicesToProject() {
+    if (!importSliceState.image || !importSliceState.frames || importSliceState.frames.length === 0) {
+      showToast('No slices to import', 'error');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = importSliceState.image.width;
+    canvas.height = importSliceState.image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(importSliceState.image, 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const layerName = dom.inputSliceLayerName ? dom.inputSliceLayerName.value.trim() || 'Imported' : 'Imported';
+    const autoAnimate = dom.chkSliceAutoAnimate ? dom.chkSliceAutoAnimate.checked : true;
+
+    try {
+      state.beginStroke(`Import ${importSliceState.frames.length} Slices`);
+      ImportSlice.importFramesToDoc(state.doc, importSliceState.frames, imgData, {
+        layerName: layerName,
+        createAnimations: autoAnimate
+      });
+      state.endStroke(`Import ${importSliceState.frames.length} Slices`);
+      triggerEventAutosave();
+      state.activeTabId = 'tab-grid-overview';
+      refreshAll();
+      showToast(`Imported ${importSliceState.frames.length} frames into project!`, 'success');
+    } catch (err) {
+      showToast(`Import error: ${err.message}`, 'error');
+    }
+  }
+
+  function handleSingleFileToImportSlice(file) {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.png')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          importSliceState.image = img;
+          if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
+          if (dom.importSliceFileName) dom.importSliceFileName.textContent = file.name;
+          if (dom.importSliceImgDims) dom.importSliceImgDims.textContent = `${img.width}×${img.height}`;
+          state.activeTabId = 'tab-import-slice';
+          refreshAll();
+          updateImportSlices();
+          showToast(`Loaded ${file.name} for slicing!`);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    } else if (name.endsWith('.json')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          importSliceState.jsonAtlas = parsed;
+          if (dom.selectSliceMethod) dom.selectSliceMethod.value = 'atlas';
+          if (dom.atlasDetectedInfo) {
+            dom.atlasDetectedInfo.innerHTML = `<span class="text-success"><i class="fa-solid fa-check"></i> Loaded Atlas JSON: ${escapeHTML(file.name)}</span>`;
+          }
+          state.activeTabId = 'tab-import-slice';
+          refreshAll();
+          updateImportSlices();
+          showToast(`Loaded Atlas JSON: ${file.name}`);
+        } catch (err) {
+          showToast(`Invalid JSON file: ${err.message}`, 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  function handlePairDropToImportSlice(pngFile, jsonFile) {
+    const jsonReader = new FileReader();
+    jsonReader.onload = (je) => {
+      try {
+        const parsed = JSON.parse(je.target.result);
+        importSliceState.jsonAtlas = parsed;
+        if (dom.selectSliceMethod) dom.selectSliceMethod.value = 'atlas';
+        if (dom.atlasDetectedInfo) {
+          dom.atlasDetectedInfo.innerHTML = `<span class="text-success"><i class="fa-solid fa-check"></i> Paired Atlas JSON: ${escapeHTML(jsonFile.name)}</span>`;
+        }
+
+        const pngReader = new FileReader();
+        pngReader.onload = (pe) => {
+          const img = new Image();
+          img.onload = () => {
+            importSliceState.image = img;
+            if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
+            if (dom.importSliceFileName) dom.importSliceFileName.textContent = pngFile.name;
+            if (dom.importSliceImgDims) dom.importSliceImgDims.textContent = `${img.width}×${img.height}`;
+            state.activeTabId = 'tab-import-slice';
+            refreshAll();
+            updateImportSlices();
+            showToast(`Paired ${pngFile.name} + ${jsonFile.name} loaded into Atlas Slicer!`, 'success');
+          };
+          img.src = pe.target.result;
+        };
+        pngReader.readAsDataURL(pngFile);
+      } catch (err) {
+        showToast(`Invalid Atlas JSON: ${err.message}`, 'error');
+      }
+    };
+    jsonReader.readAsText(jsonFile);
+  }
+
   function assignRowToAnimation(rowIdx, animKey, customDisplayName) {
     if (!state.doc) return;
     const doc = state.doc;
@@ -3197,7 +3681,12 @@
   // ACTION & DIRECTION TEMPLATE GENERATOR MODAL LOGIC
   // ===========================================================================
 
-  let currentTemplateMode = 4; // 4 or 8
+  let currentTemplateMode = 4; // 2, 4 or 8
+
+  const DIRECTIONS_2 = [
+    { id: 'right', label: 'Right' },
+    { id: 'left', label: 'Left' }
+  ];
 
   const DIRECTIONS_4 = [
     { id: 'down', label: 'Down' },
@@ -3219,8 +3708,9 @@
 
   function openActionTemplateModal(mode = 4) {
     if (!dom.modalActionTemplate) return;
-    currentTemplateMode = (mode === 8) ? 8 : 4;
+    currentTemplateMode = (mode === 8) ? 8 : ((mode === 2) ? 2 : 4);
 
+    if (dom.btnMode2dir) dom.btnMode2dir.classList.toggle('active', currentTemplateMode === 2);
     if (dom.btnMode4dir) dom.btnMode4dir.classList.toggle('active', currentTemplateMode === 4);
     if (dom.btnMode8dir) dom.btnMode8dir.classList.toggle('active', currentTemplateMode === 8);
 
@@ -3275,7 +3765,7 @@
     const actionRaw = dom.templateActionInput ? dom.templateActionInput.value.trim() : 'idle';
     const action = (actionRaw || 'action').toLowerCase().replace(/\s+/g, '_');
     const actionTitle = action.charAt(0).toUpperCase() + action.slice(1);
-    const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : DIRECTIONS_4;
+    const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : ((currentTemplateMode === 2) ? DIRECTIONS_2 : DIRECTIONS_4);
     const cols = Math.max(1, parseInt(dom.templateColsInput?.value, 10) || 4);
     const fps = Math.max(1, parseInt(dom.templateFpsInput?.value, 10) || 6);
     const startRow = Math.max(0, parseInt(dom.templateStartRow?.value, 10) || 0);
@@ -3345,7 +3835,7 @@
     const safeAction = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(actionRaw.toLowerCase().replace(/\s+/g, '_'), 'idle') : actionRaw.toLowerCase().replace(/\s+/g, '_');
     const action = safeAction;
     const actionTitle = action.charAt(0).toUpperCase() + action.slice(1);
-    const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : DIRECTIONS_4;
+    const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : ((currentTemplateMode === 2) ? DIRECTIONS_2 : DIRECTIONS_4);
     const cols = Math.max(1, parseInt(dom.templateColsInput?.value, 10) || 4);
     const fps = Math.max(1, parseInt(dom.templateFpsInput?.value, 10) || 6);
     const startRow = Math.max(0, parseInt(dom.templateStartRow?.value, 10) || 0);
@@ -3386,6 +3876,8 @@
       state.doc.animations[clipKey] = {
         name: clipName,
         direction: d.id,
+        action: action,
+        template: (currentTemplateMode === 2) ? 'platformer_2dir' : ((currentTemplateMode === 8) ? '8dir' : '4dir'),
         frames: frameList,
         fps: fps,
         loop: true,
@@ -3673,10 +4165,41 @@
     }
 
     // 2. Draw non-transparent pixels
-    for (const coord in cell.pixels) {
-      const [x, y] = coord.split(',').map(Number);
-      ctx.fillStyle = cell.pixels[coord];
-      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+    if (state.isolatedNodeId && cell.layers && cell.layers.length > 0) {
+      const match = state.findNode(cell.id, state.isolatedNodeId);
+      const isoPixels = {};
+      if (match && match.node) {
+        const collectPixels = (n) => {
+          if (n.type === 'region' && n.pixels) {
+            for (const k in n.pixels) isoPixels[k] = n.pixels[k];
+          }
+          if (n.children) n.children.forEach(collectPixels);
+        };
+        collectPixels(match.node);
+      }
+
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      for (const coord in cell.pixels) {
+        if (!isoPixels[coord]) {
+          const [x, y] = coord.split(',').map(Number);
+          ctx.fillStyle = cell.pixels[coord];
+          ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+        }
+      }
+      ctx.restore();
+
+      for (const coord in isoPixels) {
+        const [x, y] = coord.split(',').map(Number);
+        ctx.fillStyle = isoPixels[coord];
+        ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+      }
+    } else {
+      for (const coord in cell.pixels) {
+        const [x, y] = coord.split(',').map(Number);
+        ctx.fillStyle = cell.pixels[coord];
+        ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+      }
     }
 
     // 3. Grid lines
@@ -4121,9 +4644,70 @@
       state.endStroke('Paint Bucket Fill');
       triggerEventAutosave();
       refreshAll();
+    } else if (tool === 'region-select') {
+      if (cell.layers && cell.layers.length > 0) {
+        let hitRegion = null;
+        const findHit = (nodes) => {
+          if (!nodes || hitRegion) return;
+          for (let i = nodes.length - 1; i >= 0; i--) {
+            const n = nodes[i];
+            if (n.type === 'region' && n.visible !== false && n.pixels && n.pixels[`${coords.x},${coords.y}`]) {
+              hitRegion = n;
+              return;
+            }
+            if (n.children) findHit(n.children);
+          }
+        };
+        findHit(cell.layers);
+
+        if (hitRegion) {
+          state.activeRegionId = hitRegion.id;
+          renderStructureLayersTree();
+          renderRegionOverlay(hitRegion);
+          showToast(`Selected Region: "${hitRegion.name || hitRegion.id}"`);
+        }
+      }
+      return;
     } else if (tool === 'line' || tool === 'rect' || tool === 'select') {
       renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color);
     }
+  }
+
+  function renderRegionOverlay(region) {
+    if (!dom.cellOverlay || !region || !region.pixels) return;
+    const ctx = dom.cellOverlay.getContext('2d');
+    const zoom = state.cellZoom;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let count = 0;
+    for (const k in region.pixels) {
+      const [x, y] = k.split(',').map(Number);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      count++;
+    }
+    if (count === 0) return;
+
+    ctx.save();
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    const rx = minX * zoom;
+    const ry = minY * zoom;
+    const rw = (maxX - minX + 1) * zoom;
+    const rh = (maxY - minY + 1) * zoom;
+    ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh);
+
+    const name = region.name || region.id;
+    ctx.fillStyle = '#6366f1';
+    ctx.font = 'bold 11px sans-serif';
+    const textW = ctx.measureText(name).width;
+    ctx.fillRect(rx, Math.max(0, ry - 18), textW + 8, 18);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(name, rx + 4, Math.max(0, ry - 18) + 13);
+    ctx.restore();
   }
 
   function handleCellMouseMove(e) {
@@ -4132,6 +4716,31 @@
 
     if (state.currentTool === 'pan') {
       dom.cellOverlay.style.cursor = 'grab';
+      return;
+    }
+
+    if (state.currentTool === 'region-select' && !isPointerDown) {
+      dom.cellOverlay.style.cursor = 'crosshair';
+      const cell = state.getActiveCell();
+      if (coords && cell && cell.layers) {
+        let hitRegion = null;
+        const findHit = (nodes) => {
+          if (!nodes || hitRegion) return;
+          for (let i = nodes.length - 1; i >= 0; i--) {
+            const n = nodes[i];
+            if (n.type === 'region' && n.visible !== false && n.pixels && n.pixels[`${coords.x},${coords.y}`]) {
+              hitRegion = n;
+              return;
+            }
+            if (n.children) findHit(n.children);
+          }
+        };
+        findHit(cell.layers);
+        renderCellOverlay();
+        if (hitRegion) {
+          renderRegionOverlay(hitRegion);
+        }
+      }
       return;
     }
 
@@ -7387,6 +7996,37 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     dom.cellOverlay.addEventListener('mousedown', handleCellMouseDown);
     window.addEventListener('mousemove', handleCellMouseMove);
     window.addEventListener('mouseup', handleCellMouseUp);
+    dom.cellOverlay.addEventListener('dblclick', (e) => {
+      if (state.currentTool === 'region-select') {
+        const coords = getPixelCoords(e);
+        const cell = state.getActiveCell();
+        if (coords && cell && cell.layers) {
+          let hitRegion = null;
+          const findHit = (nodes) => {
+            if (!nodes || hitRegion) return;
+            for (let i = nodes.length - 1; i >= 0; i--) {
+              const n = nodes[i];
+              if (n.type === 'region' && n.visible !== false && n.pixels && n.pixels[`${coords.x},${coords.y}`]) {
+                hitRegion = n;
+                return;
+              }
+              if (n.children) findHit(n.children);
+            }
+          };
+          findHit(cell.layers);
+          if (hitRegion) {
+            const newIso = (state.isolatedNodeId === hitRegion.id) ? null : hitRegion.id;
+            state.setIsolation(cell.id, newIso);
+            refreshAll();
+            showToast(newIso ? `Isolated Region: "${hitRegion.name || hitRegion.id}"` : 'Exited Isolation Mode');
+          } else if (state.isolatedNodeId) {
+            state.setIsolation(cell.id, null);
+            refreshAll();
+            showToast('Exited Isolation Mode');
+          }
+        }
+      }
+    });
     dom.cellOverlay.addEventListener('mouseleave', () => {
       renderCellOverlay(null, null);
       updateStatusBarCoords(null, null);
@@ -7785,9 +8425,24 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         }
       }
 
-      // 2. Standard HTML5 Drag & Drop fallback
+      // 2. Multi-Format Drag & Drop Routing (PIX2 1.1 Ingestion & Session Manager)
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleFileOpen(e.dataTransfer.files[0]);
+        const files = Array.from(e.dataTransfer.files);
+        const pngFile = files.find(f => f.name.toLowerCase().endsWith('.png'));
+        const jsonFile = files.find(f => f.name.toLowerCase().endsWith('.json'));
+        const pix2File = files.find(f => f.name.toLowerCase().endsWith('.pix2') || f.name.toLowerCase().endsWith('.txt'));
+
+        if (pngFile && jsonFile) {
+          handlePairDropToImportSlice(pngFile, jsonFile);
+        } else if (pngFile) {
+          handleSingleFileToImportSlice(pngFile);
+        } else if (jsonFile) {
+          handleSingleFileToImportSlice(jsonFile);
+        } else if (pix2File) {
+          handleFileOpen(pix2File);
+        } else {
+          handleFileOpen(files[0]);
+        }
       }
     });
 
@@ -7874,17 +8529,27 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     dom.btnQuick4dir?.addEventListener('click', () => openActionTemplateModal(4));
     dom.btnQuick8dir?.addEventListener('click', () => openActionTemplateModal(8));
 
-    // Action Template Modal Event Handlers
+    // Action Template Modal Event Handlers (2-Dir Platformer, 4-Dir, 8-Dir)
+    dom.btnMode2dir?.addEventListener('click', () => {
+      currentTemplateMode = 2;
+      dom.btnMode2dir?.classList.add('active');
+      dom.btnMode4dir?.classList.remove('active');
+      dom.btnMode8dir?.classList.remove('active');
+      renderTemplateLivePreview();
+    });
+
     dom.btnMode4dir?.addEventListener('click', () => {
       currentTemplateMode = 4;
       dom.btnMode4dir.classList.add('active');
-      dom.btnMode8dir.classList.remove('active');
+      dom.btnMode2dir?.classList.remove('active');
+      dom.btnMode8dir?.classList.remove('active');
       renderTemplateLivePreview();
     });
 
     dom.btnMode8dir?.addEventListener('click', () => {
       currentTemplateMode = 8;
       dom.btnMode8dir.classList.add('active');
+      dom.btnMode2dir?.classList.remove('active');
       dom.btnMode4dir.classList.remove('active');
       renderTemplateLivePreview();
     });
@@ -7916,6 +8581,117 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         closeActionTemplateModal();
       }
     });
+
+    // Structure & Layers Card Event Handlers (PIX2 1.1)
+    dom.btnAddLayer?.addEventListener('click', () => {
+      const cell = state.getActiveCell();
+      if (!cell) return;
+      const count = (cell.layers ? cell.layers.length : 0) + 1;
+      const name = prompt('Enter Layer Name:', `Layer ${count}`);
+      if (name) {
+        state.addLayer(cell.id, name);
+        refreshAll();
+      }
+    });
+
+    dom.btnAddGroup?.addEventListener('click', () => {
+      const cell = state.getActiveCell();
+      if (!cell) return;
+      if (!cell.layers || cell.layers.length === 0) {
+        state.addLayer(cell.id, 'Layer 1');
+      }
+      const parentId = state.activeGroupId || state.activeLayerId || (cell.layers[0] ? cell.layers[0].id : null);
+      if (!parentId) return;
+      const name = prompt('Enter Group Name:', 'New Group');
+      if (name) {
+        state.addGroup(cell.id, parentId, name);
+        refreshAll();
+      }
+    });
+
+    dom.btnAddRegion?.addEventListener('click', () => {
+      const cell = state.getActiveCell();
+      if (!cell) return;
+      if (!cell.layers || cell.layers.length === 0) {
+        state.addLayer(cell.id, 'Layer 1');
+      }
+      const parentId = state.activeGroupId || state.activeLayerId || (cell.layers[0] ? cell.layers[0].id : null);
+      if (!parentId) return;
+      const name = prompt('Enter Region Name:', 'New Region');
+      if (name) {
+        state.addRegion(cell.id, parentId, name);
+        refreshAll();
+      }
+    });
+
+    dom.btnExitIsolation?.addEventListener('click', () => {
+      const cell = state.getActiveCell();
+      if (cell) state.setIsolation(cell.id, null);
+      else state.isolatedNodeId = null;
+      refreshAll();
+    });
+
+    // Import & Slice Studio Event Handlers (PIX2 1.1)
+    dom.importSliceDropzone?.addEventListener('click', () => {
+      dom.inputImportSliceFile?.click();
+    });
+
+    dom.importSliceDropzone?.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dom.importSliceDropzone.style.borderColor = 'var(--accent-primary)';
+    });
+
+    dom.importSliceDropzone?.addEventListener('dragleave', () => {
+      dom.importSliceDropzone.style.borderColor = 'var(--border-subtle)';
+    });
+
+    dom.importSliceDropzone?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dom.importSliceDropzone.style.borderColor = 'var(--border-subtle)';
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files);
+        const png = files.find(f => f.name.toLowerCase().endsWith('.png'));
+        const json = files.find(f => f.name.toLowerCase().endsWith('.json'));
+        if (png && json) {
+          handlePairDropToImportSlice(png, json);
+        } else if (png) {
+          handleSingleFileToImportSlice(png);
+        } else if (json) {
+          handleSingleFileToImportSlice(json);
+        }
+      }
+    });
+
+    dom.inputImportSliceFile?.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        const files = Array.from(e.target.files);
+        const png = files.find(f => f.name.toLowerCase().endsWith('.png'));
+        const json = files.find(f => f.name.toLowerCase().endsWith('.json'));
+        if (png && json) {
+          handlePairDropToImportSlice(png, json);
+        } else if (png) {
+          handleSingleFileToImportSlice(png);
+        } else if (json) {
+          handleSingleFileToImportSlice(json);
+        }
+      }
+    });
+
+    dom.selectSliceMethod?.addEventListener('change', () => {
+      const method = dom.selectSliceMethod.value;
+      if (dom.sliceOptsGrid) dom.sliceOptsGrid.style.display = (method === 'grid') ? 'flex' : 'none';
+      if (dom.sliceOptsAlpha) dom.sliceOptsAlpha.style.display = (method === 'alpha') ? 'flex' : 'none';
+      if (dom.sliceOptsAtlas) dom.sliceOptsAtlas.style.display = (method === 'atlas') ? 'flex' : 'none';
+      updateImportSlices();
+    });
+
+    [dom.inputSliceCellW, dom.inputSliceCellH, dom.inputSliceCols, dom.inputSliceRows,
+     dom.inputSliceSpacing, dom.inputSliceMargin, dom.inputSliceAlphaThresh, dom.inputSliceMinSize].forEach(input => {
+      input?.addEventListener('input', updateImportSlices);
+    });
+
+    dom.btnRunSlicePreview?.addEventListener('click', updateImportSlices);
+    dom.btnImportSliceCommit?.addEventListener('click', commitImportSlicesToProject);
 
     // Game Export Studio Modal Event Handlers
     dom.exportFormatOptions?.addEventListener('click', (e) => {
@@ -7996,6 +8772,19 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (dom.newFileRows && rows) dom.newFileRows.value = rows;
       if (dom.newFileCellW && cw) dom.newFileCellW.value = cw;
       if (dom.newFileCellH && ch) dom.newFileCellH.value = ch;
+    });
+
+    const resPresets = document.getElementById('new-file-res-presets');
+    resPresets?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.chip-btn');
+      if (!btn) return;
+      resPresets.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const res = parseInt(btn.dataset.res, 10);
+      if (res && dom.newFileCellW && dom.newFileCellH) {
+        dom.newFileCellW.value = res;
+        dom.newFileCellH.value = res;
+      }
     });
 
     // Import PIX2 Code Modal Events
@@ -9356,6 +10145,14 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       // Deselect (Ctrl + D) or (Escape)
       if (((e.ctrlKey || e.metaKey) && key === 'd') || e.key === 'Escape') {
         e.preventDefault();
+        if (e.key === 'Escape' && state.isolatedNodeId) {
+          const activeCell = state.getActiveCell();
+          if (activeCell) state.setIsolation(activeCell.id, null);
+          else state.isolatedNodeId = null;
+          showToast('Exited Isolation Mode');
+          refreshAll();
+          return;
+        }
         executeDeselect();
         closeContextMenu();
         closeGridContextMenu();
@@ -9405,7 +10202,13 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         else if (key === 'u') selectTool('rect');
         else if (key === 'v' || key === 'm') selectTool('select');
         else if (key === 'h') selectTool('pan');
-        else if (key === 'r') executeSelectionRotate();
+        else if (key === 'r') {
+          if (state.selection) {
+            executeSelectionRotate();
+          } else {
+            selectTool('region-select');
+          }
+        }
         else if (key === 's') {
           const symBtn = document.getElementById('btn-symmetry-toggle');
           if (symBtn) symBtn.click();

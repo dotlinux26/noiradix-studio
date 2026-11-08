@@ -293,6 +293,28 @@ class EditorState {
       };
     }
 
+    // In isolation mode: target the isolated node
+    if (this.isolatedNodeId) {
+      const match = this.findNode(cell.id, this.isolatedNodeId);
+      if (match && match.node) {
+        if (match.node.type === 'region') return match.node;
+        if (match.node.children) {
+          function findInNode(nodes) {
+            for (const n of nodes || []) {
+              if (n.type === 'region' && n.visible !== false && !n.locked) return n;
+              if (n.children) {
+                const sub = findInNode(n.children);
+                if (sub) return sub;
+              }
+            }
+            return null;
+          }
+          const res = findInNode(match.node.children);
+          if (res) return res;
+        }
+      }
+    }
+
     // If explicit active region is selected
     if (this.activeRegionId) {
       const match = this.findNode(cell.id, this.activeRegionId);
@@ -492,8 +514,12 @@ class EditorState {
     return true;
   }
 
-  // Toggle or exit isolation mode
-  setIsolation(nodeId = null) {
+  // Toggle or exit isolation mode (supports both setIsolation(nodeId) and setIsolation(cellId, nodeId))
+  setIsolation(arg1 = null, arg2 = null) {
+    let nodeId = arg1;
+    if (arg2 !== null || (arg1 && this.doc && this.doc.cells && this.doc.cells[arg1])) {
+      nodeId = arg2;
+    }
     if (this.isolatedNodeId === nodeId) {
       this.isolatedNodeId = null;
     } else {

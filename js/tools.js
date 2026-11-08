@@ -40,25 +40,78 @@ const Tools = (function () {
     }
   }
 
+  // ===========================================================================
+  // PIX2 1.1 STRUCTURAL TARGET RESOLUTION HELPERS
+  // ===========================================================================
+
+  function getTargetForPlot(cell) {
+    if (!cell) return null;
+    if (cell.layers && cell.layers.length > 0) {
+      const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
+      if (activeState && typeof activeState.getActiveRegion === 'function') {
+        const reg = activeState.getActiveRegion(cell.id);
+        if (reg) {
+          if (reg.locked || reg.visible === false) return null;
+          return reg;
+        }
+      }
+    }
+    return cell;
+  }
+
+  function getTargetsForTransform(cell) {
+    if (!cell) return [];
+    if (!cell.layers || cell.layers.length === 0) return [cell];
+    const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
+    if (activeState && activeState.activeRegionId) {
+      const found = activeState.findNode(cell.id, activeState.activeRegionId);
+      if (found && found.node.type === 'region' && !found.node.locked && found.node.visible !== false) {
+        return [found.node];
+      }
+    }
+    const list = [];
+    function collect(nodes) {
+      for (const n of nodes || []) {
+        if (n.type === 'region' && !n.locked && n.visible !== false) list.push(n);
+        if (n.children) collect(n.children);
+      }
+    }
+    collect(cell.layers);
+    return list.length > 0 ? list : [cell];
+  }
+
+  function syncCompositeIfStructured(cell) {
+    if (cell && cell.layers && cell.layers.length > 0) {
+      const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
+      if (activeState && typeof activeState.syncCellComposite === 'function') {
+        activeState.syncCellComposite(cell.id);
+      }
+    }
+  }
+
   // Single pixel plot with optional symmetry
   function plotPixel(cell, x, y, color, symmetry = false, cellWidth = 16) {
-    if (!cell) return;
-    if (!cell.pixels) cell.pixels = {};
-    cell.pixels[`${x},${y}`] = color;
+    const target = getTargetForPlot(cell);
+    if (!target) return;
+    if (!target.pixels) target.pixels = {};
+    target.pixels[`${x},${y}`] = color;
     if (symmetry) {
       const symX = cellWidth - 1 - x;
-      cell.pixels[`${symX},${y}`] = color;
+      target.pixels[`${symX},${y}`] = color;
     }
+    syncCompositeIfStructured(cell);
   }
 
   // Single pixel erase with optional symmetry
   function erasePixel(cell, x, y, symmetry = false, cellWidth = 16) {
-    if (!cell || !cell.pixels) return;
-    delete cell.pixels[`${x},${y}`];
+    const target = getTargetForPlot(cell);
+    if (!target || !target.pixels) return;
+    delete target.pixels[`${x},${y}`];
     if (symmetry) {
       const symX = cellWidth - 1 - x;
-      delete cell.pixels[`${symX},${y}`];
+      delete target.pixels[`${symX},${y}`];
     }
+    syncCompositeIfStructured(cell);
   }
 
   // Plot line with Bresenham algorithm
@@ -91,7 +144,9 @@ const Tools = (function () {
   // 4-way flood fill (supports both signatures)
   function floodFill(cell, startX, startY, arg4, arg5, arg6, arg7) {
     if (!cell) return;
-    if (!cell.pixels) cell.pixels = {};
+    const target = getTargetForPlot(cell);
+    if (!target) return;
+    if (!target.pixels) target.pixels = {};
 
     let targetColor, replacementColor, w, h;
     if (typeof arg4 === 'string' && typeof arg5 === 'string') {
@@ -104,7 +159,7 @@ const Tools = (function () {
       const sizeObj = arg5 || {};
       w = sizeObj.w || cell.size?.w || 16;
       h = sizeObj.h || cell.size?.h || 16;
-      targetColor = cell.pixels[`${startX},${startY}`] || null;
+      targetColor = target.pixels[`${startX},${startY}`] || null;
     }
 
     if (startX < 0 || startX >= w || startY < 0 || startY >= h) return;
@@ -129,12 +184,12 @@ const Tools = (function () {
       const cy = (idx / w) | 0;
       const key = `${cx},${cy}`;
 
-      const curColor = cell.pixels[key] || null;
+      const curColor = target.pixels[key] || null;
       if (curColor === targetColor) {
         if (replacementColor === null) {
-          delete cell.pixels[key];
+          delete target.pixels[key];
         } else {
-          cell.pixels[key] = replacementColor;
+          target.pixels[key] = replacementColor;
         }
 
         if (cx > 0 && !visited[idx - 1]) {
@@ -155,99 +210,124 @@ const Tools = (function () {
         }
       }
     }
+    syncCompositeIfStructured(cell);
   }
 
   // Align drawn contents to center
   function alignCenter(cell, w, h, axis = 'both') {
-    const coords = Object.keys(cell.pixels).map(k => k.split(',').map(Number));
-    if (coords.length === 0) return;
+    const targets = getTargetsForTransform(cell);
+    for (const target of targets) {
+      if (!target.pixels) continue;
+      const coords = Object.keys(target.pixels).map(k => k.split(',').map(Number));
+      if (coords.length === 0) continue;
 
-    let minX = w, maxX = 0, minY = h, maxY = 0;
-    coords.forEach(([x, y]) => {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    });
+      let minX = w, maxX = 0, minY = h, maxY = 0;
+      coords.forEach(([x, y]) => {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      });
 
-    const boxW = maxX - minX + 1;
-    const boxH = maxY - minY + 1;
+      const boxW = maxX - minX + 1;
+      const boxH = maxY - minY + 1;
 
-    let shiftX = 0;
-    let shiftY = 0;
+      let shiftX = 0;
+      let shiftY = 0;
 
-    if (axis === 'both' || axis === 'x') {
-      const targetLeft = Math.floor((w - boxW) / 2);
-      shiftX = targetLeft - minX;
-    }
-    if (axis === 'both' || axis === 'y') {
-      const targetTop = Math.floor((h - boxH) / 2);
-      shiftY = targetTop - minY;
-    }
-
-    if (shiftX === 0 && shiftY === 0) return;
-
-    const newPixels = {};
-    for (const k in cell.pixels) {
-      const [x, y] = k.split(',').map(Number);
-      const nx = x + shiftX;
-      const ny = y + shiftY;
-      if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-        newPixels[`${nx},${ny}`] = cell.pixels[k];
+      if (axis === 'both' || axis === 'x') {
+        const targetLeft = Math.floor((w - boxW) / 2);
+        shiftX = targetLeft - minX;
       }
+      if (axis === 'both' || axis === 'y') {
+        const targetTop = Math.floor((h - boxH) / 2);
+        shiftY = targetTop - minY;
+      }
+
+      if (shiftX === 0 && shiftY === 0) continue;
+
+      const newPixels = {};
+      for (const k in target.pixels) {
+        const [x, y] = k.split(',').map(Number);
+        const nx = x + shiftX;
+        const ny = y + shiftY;
+        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+          newPixels[`${nx},${ny}`] = target.pixels[k];
+        }
+      }
+      target.pixels = newPixels;
     }
-    cell.pixels = newPixels;
+    syncCompositeIfStructured(cell);
   }
 
   // Flip horizontally
   function flipHorizontal(cell, w) {
-    const newPixels = {};
-    for (const k in cell.pixels) {
-      const [x, y] = k.split(',').map(Number);
-      const nx = w - 1 - x;
-      newPixels[`${nx},${y}`] = cell.pixels[k];
+    const targets = getTargetsForTransform(cell);
+    for (const target of targets) {
+      if (!target.pixels) continue;
+      const newPixels = {};
+      for (const k in target.pixels) {
+        const [x, y] = k.split(',').map(Number);
+        const nx = w - 1 - x;
+        newPixels[`${nx},${y}`] = target.pixels[k];
+      }
+      target.pixels = newPixels;
     }
-    cell.pixels = newPixels;
+    syncCompositeIfStructured(cell);
   }
 
   // Flip vertically
   function flipVertical(cell, h) {
-    const newPixels = {};
-    for (const k in cell.pixels) {
-      const [x, y] = k.split(',').map(Number);
-      const ny = h - 1 - y;
-      newPixels[`${x},${ny}`] = cell.pixels[k];
+    const targets = getTargetsForTransform(cell);
+    for (const target of targets) {
+      if (!target.pixels) continue;
+      const newPixels = {};
+      for (const k in target.pixels) {
+        const [x, y] = k.split(',').map(Number);
+        const ny = h - 1 - y;
+        newPixels[`${x},${ny}`] = target.pixels[k];
+      }
+      target.pixels = newPixels;
     }
-    cell.pixels = newPixels;
+    syncCompositeIfStructured(cell);
   }
 
   // Rotate 90 degrees clockwise
   function rotate90Clockwise(cell, w, h) {
-    const newPixels = {};
-    for (const k in cell.pixels) {
-      const [x, y] = k.split(',').map(Number);
-      // (x, y) -> (h - 1 - y, x)
-      const nx = h - 1 - y;
-      const ny = x;
-      if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-        newPixels[`${nx},${ny}`] = cell.pixels[k];
+    const targets = getTargetsForTransform(cell);
+    for (const target of targets) {
+      if (!target.pixels) continue;
+      const newPixels = {};
+      for (const k in target.pixels) {
+        const [x, y] = k.split(',').map(Number);
+        const nx = h - 1 - y;
+        const ny = x;
+        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+          newPixels[`${nx},${ny}`] = target.pixels[k];
+        }
       }
+      target.pixels = newPixels;
     }
-    cell.pixels = newPixels;
+    syncCompositeIfStructured(cell);
   }
 
   // Nudge pixels
   function nudge(cell, dx, dy, w, h) {
-    const newPixels = {};
-    for (const k in cell.pixels) {
-      const [x, y] = k.split(',').map(Number);
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-        newPixels[`${nx},${ny}`] = cell.pixels[k];
+    const targets = getTargetsForTransform(cell);
+    for (const target of targets) {
+      if (!target.pixels) continue;
+      const newPixels = {};
+      for (const k in target.pixels) {
+        const [x, y] = k.split(',').map(Number);
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+          newPixels[`${nx},${ny}`] = target.pixels[k];
+        }
       }
+      target.pixels = newPixels;
     }
-    cell.pixels = newPixels;
+    syncCompositeIfStructured(cell);
   }
 
   return {
@@ -267,3 +347,10 @@ const Tools = (function () {
     plotRect
   };
 })();
+
+if (typeof window !== 'undefined') {
+  window.Tools = Tools;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Tools;
+}

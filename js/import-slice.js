@@ -239,18 +239,39 @@
    * @param {Object} frame - Normalized frame metadata
    * @returns {{ pixels: Object, width: number, height: number }}
    */
-  function extractFramePixels(getPixelRgba, frame) {
-    const pixels = {};
-    const outW = frame.sourceW || frame.w;
-    const outH = frame.sourceH || frame.h;
+  function extractFramePixels(sampler, frame) {
+    let getPixelRgba = sampler;
+    if (typeof sampler === 'object' && sampler && sampler.data && sampler.width) {
+      const { width, height, data } = sampler;
+      getPixelRgba = (x, y) => {
+        if (x < 0 || x >= width || y < 0 || y >= height) return { r: 0, g: 0, b: 0, a: 0 };
+        const idx = (y * width + x) * 4;
+        return {
+          r: data[idx],
+          g: data[idx + 1],
+          b: data[idx + 2],
+          a: data[idx + 3]
+        };
+      };
+    }
 
-    const fw = frame.w;
-    const fh = frame.h;
+    const pixels = {};
+    const fr = frame.frame || frame;
+    const fw = fr.w !== undefined ? fr.w : frame.w;
+    const fh = fr.h !== undefined ? fr.h : frame.h;
+    const fx_pos = fr.x !== undefined ? fr.x : (frame.x || 0);
+    const fy_pos = fr.y !== undefined ? fr.y : (frame.y || 0);
+
+    const outW = (frame.sourceSize && frame.sourceSize.w) || frame.sourceW || fw;
+    const outH = (frame.sourceSize && frame.sourceSize.h) || frame.sourceH || fh;
+
+    const trimX = (frame.spriteSourceSize && frame.spriteSourceSize.x !== undefined) ? frame.spriteSourceSize.x : (frame.trimX || 0);
+    const trimY = (frame.spriteSourceSize && frame.spriteSourceSize.y !== undefined) ? frame.spriteSourceSize.y : (frame.trimY || 0);
 
     for (let fy = 0; fy < fh; fy++) {
       for (let fx = 0; fx < fw; fx++) {
-        const atlasX = frame.x + fx;
-        const atlasY = frame.y + fy;
+        const atlasX = fx_pos + fx;
+        const atlasY = fy_pos + fy;
         const rgba = getPixelRgba(atlasX, atlasY);
         if (!rgba || rgba.a === 0) continue;
 
@@ -258,11 +279,11 @@
         if (frame.rotated) {
           // TexturePacker rotates 90 deg clockwise in atlas
           // Unrotate 90 deg CCW: destX = fy, destY = (fw - 1) - fx
-          destX = frame.trimX + fy;
-          destY = frame.trimY + (fw - 1 - fx);
+          destX = trimX + fy;
+          destY = trimY + (fw - 1 - fx);
         } else {
-          destX = frame.trimX + fx;
-          destY = frame.trimY + fy;
+          destX = trimX + fx;
+          destY = trimY + fy;
         }
 
         if (destX >= 0 && destX < outW && destY >= 0 && destY < outH) {
@@ -388,3 +409,4 @@
     importFramesToDoc
   };
 });
+

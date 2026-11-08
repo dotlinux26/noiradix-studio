@@ -31,9 +31,14 @@ class AnimationPlayer {
       { id: 'left', name: 'Left (A)', row: 3 }
     ];
 
+    this.directions2 = [
+      { id: 'right', name: 'Right (D)', row: 0 },
+      { id: 'left', name: 'Left (A)', row: 1 }
+    ];
+
     this.activeAnimationName = null; // null means auto-detect via direction
     this.currentDirection = 'down';
-    this.currentMode = '4dir'; // '4dir' | '8dir'
+    this.currentMode = '4dir'; // '4dir' | '8dir' | 'platformer_2dir'
     this.fps = 6;
     this.isPlaying = true;
     this.scale = 8; // 8x preview (crisp & large default)
@@ -146,6 +151,10 @@ class AnimationPlayer {
       if (d8 && d8.fallback4) {
         this.currentDirection = d8.fallback4;
       }
+    } else if (mode === 'platformer_2dir') {
+      if (this.currentDirection !== 'left' && this.currentDirection !== 'right') {
+        this.currentDirection = 'right';
+      }
     }
     this.render();
   }
@@ -160,23 +169,80 @@ class AnimationPlayer {
     return this.onionSkin;
   }
 
+  getState() {
+    if (typeof window !== 'undefined' && window.state) return window.state;
+    if (typeof global !== 'undefined') {
+      if (global.window && global.window.state) return global.window.state;
+      if (global.state) return global.state;
+    }
+    return null;
+  }
+
+  getMissingClipDiagnostics() {
+    const state = this.getState();
+    if (!state || !state.doc) return [];
+    const doc = state.doc;
+    const anims = doc.animations || {};
+    const missing = [];
+
+    if (this.currentMode === 'platformer_2dir') {
+      const required = ['idle_left', 'idle_right', 'run_left', 'run_right'];
+      for (const clip of required) {
+        if (!anims[clip] || !anims[clip].frames || anims[clip].frames.length === 0) {
+          missing.push(clip);
+        }
+      }
+    } else if (this.currentMode === '4dir') {
+      const required = ['walk_down', 'walk_up', 'walk_right', 'walk_left'];
+      for (const clip of required) {
+        if (!anims[clip] || !anims[clip].frames || anims[clip].frames.length === 0) {
+          missing.push(clip);
+        }
+      }
+    }
+    return missing;
+  }
+
   getActiveAnimationObj() {
-    if (!window.state || !window.state.doc || !window.state.doc.animations) return null;
-    const anims = window.state.doc.animations;
+    const state = this.getState();
+    if (!state || !state.doc || !state.doc.animations) return null;
+    const anims = state.doc.animations;
 
     if (this.activeAnimationName && anims[this.activeAnimationName]) {
       return anims[this.activeAnimationName];
     }
 
-    const possibleNames = [
-      `walk_${this.currentDirection}`,
-      `idle_${this.currentDirection}`,
-      this.currentDirection
-    ];
+    if (this.currentMode === 'platformer_2dir') {
+      const possibleNames = [
+        `run_${this.currentDirection}`,
+        `walk_${this.currentDirection}`,
+        `idle_${this.currentDirection}`,
+        `jump_${this.currentDirection}`,
+        `fall_${this.currentDirection}`,
+        this.currentDirection
+      ];
+      for (const name of possibleNames) {
+        if (anims[name] && anims[name].frames && anims[name].frames.length > 0) {
+          return anims[name];
+        }
+      }
+      for (const name in anims) {
+        const a = anims[name];
+        if (a && a.direction === this.currentDirection && a.frames && a.frames.length > 0) {
+          return a;
+        }
+      }
+    } else {
+      const possibleNames = [
+        `walk_${this.currentDirection}`,
+        `idle_${this.currentDirection}`,
+        this.currentDirection
+      ];
 
-    for (const name of possibleNames) {
-      if (anims[name] && anims[name].frames && anims[name].frames.length > 0) {
-        return anims[name];
+      for (const name of possibleNames) {
+        if (anims[name] && anims[name].frames && anims[name].frames.length > 0) {
+          return anims[name];
+        }
       }
     }
 
@@ -186,8 +252,9 @@ class AnimationPlayer {
   }
 
   getActiveFrames() {
-    if (!window.state || !window.state.doc) return [];
-    const doc = window.state.doc;
+    const state = this.getState();
+    if (!state || !state.doc) return [];
+    const doc = state.doc;
 
     // 1. If explicit animation is selected
     if (this.activeAnimationName && doc.animations && doc.animations[this.activeAnimationName]) {
@@ -201,6 +268,17 @@ class AnimationPlayer {
     }
 
     // 3. Fallback: Map direction to row
+    if (this.currentMode === 'platformer_2dir') {
+      const d2 = this.directions2.find(d => d.id === this.currentDirection);
+      const targetRow = (d2 && d2.row < doc.meta.grid.rows) ? d2.row : 0;
+      const rowCells = [];
+      for (let c = 0; c < doc.meta.grid.cols; c++) {
+        const cid = `cell_${targetRow}_${c}`;
+        if (doc.cells[cid]) rowCells.push(cid);
+      }
+      return rowCells;
+    }
+
     const d8 = this.directions8.find(d => d.id === this.currentDirection);
     let targetRow = 0;
     if (doc.meta.grid.rows >= 8 && d8 && d8.row < doc.meta.grid.rows) {
@@ -220,12 +298,13 @@ class AnimationPlayer {
   }
 
   render() {
-    if (!this.canvas || !this.ctx || !window.state || !window.state.doc) return;
+    const state = this.getState();
+    if (!this.canvas || !this.ctx || !state || !state.doc) return;
     // Skip rendering if canvas is hidden to conserve GPU/CPU cycles
     if (this.canvas.offsetWidth === 0 && this.canvas.offsetHeight === 0 && typeof this.canvas.getClientRects === 'function' && !this.canvas.getClientRects().length) {
       return;
     }
-    const doc = window.state.doc;
+    const doc = state.doc;
     const cw = doc.meta.cellSize.w;
     const ch = doc.meta.cellSize.h;
 
