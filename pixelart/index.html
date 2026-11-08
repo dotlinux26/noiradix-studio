@@ -27,6 +27,10 @@
         <span class="pa-brand-name">NOIRADIX</span>
         <span class="pa-app-badge">PixelArt</span>
       </div>
+      <!-- Project Sessions Tab Strip -->
+      <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions" style="max-width: 320px; margin-left: 8px;">
+        <!-- [artwork.pix2] [+] -->
+      </div>
       <div class="pa-doc-info">
         <input type="text" id="pa-doc-title" class="pa-title-input" value="Pixel Artwork" title="Click to rename artwork" aria-label="Artwork Title">
         <span id="pa-header-dirty-dot" class="pa-dirty-dot" title="Unsaved changes (Ctrl+S to save)">●</span>
@@ -130,6 +134,9 @@
       <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (V or M) — Drag to move selection">
         <i class="fa-solid fa-crop-simple"></i>
       </button>
+      <button class="pa-tool-btn" data-tool="region-select" id="btn-pa-tool-region-select" title="Region Select Tool (R) — Inspect, select, and isolate structural regions">
+        <i class="fa-solid fa-object-group"></i>
+      </button>
       <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I) — Sample color">
         <i class="fa-solid fa-eye-dropper"></i>
       </button>
@@ -215,6 +222,18 @@
           <button id="btn-restore-backup" class="pa-btn-xs pa-btn-accent"><i class="fa-solid fa-rotate-left"></i> Restore</button>
           <button id="btn-dismiss-backup" class="pa-btn-xs pa-btn-subtle"><i class="fa-solid fa-xmark"></i> Dismiss</button>
         </div>
+      </div>
+
+      <!-- Isolation Mode Breadcrumb Banner -->
+      <div id="pa-isolation-banner" class="pa-isolation-banner hidden" style="background: rgba(99, 102, 241, 0.15); border-bottom: 1px solid rgba(99, 102, 241, 0.4); padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; z-index: 10;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-bullseye text-accent"></i>
+          <span style="color: var(--text-muted, #94a3b8);">Isolation Mode:</span>
+          <strong id="pa-isolation-breadcrumb" style="color: #818cf8;">Character / Head / Left Eye</strong>
+        </div>
+        <button id="btn-pa-exit-isolation" class="pa-btn-xs pa-btn-accent" title="Exit Isolation Mode (Esc)">
+          <i class="fa-solid fa-arrow-left"></i> Exit Isolation (Esc)
+        </button>
       </div>
 
       <div class="pa-canvas-viewport" id="pa-canvas-viewport">
@@ -318,9 +337,11 @@
     <!-- RIGHT PIX2 SOURCE CODE PANE -->
     <section class="pa-code-pane" id="pa-code-pane">
       <header class="pa-code-header" id="pa-code-header">
-        <div class="pa-code-title">
-          <i class="fa-solid fa-file-code text-accent"></i>
-          <span class="pa-code-title-text">PIX2 Code</span>
+        <div class="pa-code-title" style="display: flex; align-items: center; gap: 8px;">
+          <div class="pa-side-tab-toggle" style="display: flex; gap: 4px; background: rgba(0,0,0,0.25); border-radius: 4px; padding: 2px;">
+            <button id="btn-pa-side-layers" class="pa-btn-xs" title="Layers &amp; Structure"><i class="fa-solid fa-layer-group"></i> Layers</button>
+            <button id="btn-pa-side-code" class="pa-btn-xs active" title="PIX2 Source Code"><i class="fa-solid fa-code"></i> Code</button>
+          </div>
           <span class="pa-sync-badge synced" id="pa-sync-badge">
             <i class="fa-solid fa-circle"></i> Synced
           </span>
@@ -351,7 +372,21 @@
         </div>
       </header>
 
-      <div class="pa-code-body">
+      <!-- Structure & Layers View -->
+      <div id="pa-layers-view" class="pa-layers-container hidden" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 12px; gap: 10px; background: rgba(0,0,0,0.15);">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim, #94a3b8);"><i class="fa-solid fa-layer-group"></i> Artwork Layers</span>
+          <div style="display: flex; gap: 4px;">
+            <button id="btn-pa-add-layer" class="pa-btn-xs pa-btn-accent" title="Add New Layer"><i class="fa-solid fa-plus"></i> Layer</button>
+            <button id="btn-pa-add-group" class="pa-btn-xs" title="Add Group"><i class="fa-solid fa-folder-plus"></i> Group</button>
+          </div>
+        </div>
+        <div id="pa-layers-tree" style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+          <!-- Dynamically populated layers & regions -->
+        </div>
+      </div>
+
+      <div class="pa-code-body" id="pa-code-body">
         <div class="pa-code-gutter" id="pa-code-gutter" aria-hidden="true"></div>
         <textarea id="pa-code-editor" class="pa-code-editor" readonly spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="PIX2 code appears here (Click 'Edit' to unlock manual editing)..."></textarea>
       </div>
@@ -801,6 +836,8 @@
 
   <!-- Core PIX2 Reference Engine (Reused from parent) -->
   <script src="../js/pix2-format.js"></script>
+  <script src="../js/selection-transform.js"></script>
+  <script src="../js/editor-state.js"></script>
 
   <!-- Tools Algorithm Library (Reused from parent) -->
   <script src="../js/tools.js"></script>

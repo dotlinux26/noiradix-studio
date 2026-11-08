@@ -35,3 +35,4 @@
     canonicalDomain: 'https://noiradix.me'
   };
 });
+

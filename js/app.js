@@ -274,6 +274,7 @@
 
   function initDomCache() {
     dom.tabsContainer = document.getElementById('tabs-container');
+    dom.projectTabsStrip = document.getElementById('project-tabs-strip');
     dom.views = {
       grid: document.getElementById('view-grid-overview'),
       anim: document.getElementById('view-anim-studio'),
@@ -510,6 +511,164 @@
     dom.modalAboutStudio = document.getElementById('modal-about-studio');
     dom.btnCloseAboutModal = document.getElementById('btn-close-about-modal');
     dom.btnAboutCloseDone = document.getElementById('btn-about-close-done');
+  }
+
+  // ===========================================================================
+  // STUDIO MULTI-DOCUMENT PROJECT SESSIONS MANAGER
+  // ===========================================================================
+  let projectSessions = [];
+  let activeProjectId = null;
+
+  class ProjectSession {
+    constructor(id, title, doc, fileHandle = null, fileName = null, filePath = null) {
+      this.id = id || ('proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      this.title = title || (doc && doc.meta && doc.meta.title) || 'Untitled.pix2';
+      this.doc = doc;
+      this.fileHandle = fileHandle;
+      this.fileName = fileName || this.title;
+      this.filePath = filePath || this.fileName;
+      this.isDirty = false;
+      this.revision = 0;
+      this.lastSavedRevision = 0;
+      this.lastSavedContent = '';
+      this.history = [];
+      this.historyIndex = -1;
+      this.openCellTabs = ['grid_overview'];
+      this.activeTabId = 'grid_overview';
+      this.selection = null;
+    }
+  }
+
+  function getActiveSession() {
+    return projectSessions.find(p => p.id === activeProjectId) || projectSessions[0] || null;
+  }
+
+  function saveCurrentSessionState() {
+    const cur = getActiveSession();
+    if (!cur) return;
+    cur.doc = state.doc;
+    cur.fileHandle = currentFileHandle;
+    cur.fileName = currentFileName;
+    cur.filePath = currentFilePath;
+    cur.isDirty = isDocumentDirty;
+    cur.revision = documentRevision;
+    cur.lastSavedRevision = lastSavedRevision;
+    cur.lastSavedContent = lastSavedContent;
+    cur.openCellTabs = state.openCellTabs ? [...state.openCellTabs] : ['grid_overview'];
+    cur.activeTabId = state.activeTabId || 'grid_overview';
+    cur.history = state.history ? [...state.history] : [];
+    cur.historyIndex = state.historyIndex;
+    cur.selection = state.selection ? { ...state.selection } : null;
+  }
+
+  function renderProjectTabs() {
+    if (!dom.projectTabsStrip) return;
+    dom.projectTabsStrip.innerHTML = '';
+
+    projectSessions.forEach(session => {
+      const tab = document.createElement('div');
+      tab.className = `project-tab ${session.id === activeProjectId ? 'active' : ''}`;
+      tab.title = session.filePath || session.title;
+
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = session.fileName || session.title;
+      tab.appendChild(titleSpan);
+
+      if (session.isDirty) {
+        const dot = document.createElement('span');
+        dot.className = 'project-tab-dirty-dot';
+        dot.textContent = '●';
+        tab.appendChild(dot);
+      }
+
+      // Close button
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'project-tab-close';
+      closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      closeBtn.title = 'Close project session';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeProjectSession(session.id);
+      });
+      tab.appendChild(closeBtn);
+
+      tab.addEventListener('click', () => {
+        if (session.id !== activeProjectId) {
+          switchProjectSession(session.id);
+        }
+      });
+
+      dom.projectTabsStrip.appendChild(tab);
+    });
+
+    // Add [+] New Project Tab Button
+    const newBtn = document.createElement('button');
+    newBtn.className = 'project-tab-new';
+    newBtn.title = 'New Project Tab';
+    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    newBtn.addEventListener('click', () => {
+      openNewFileModal();
+    });
+    dom.projectTabsStrip.appendChild(newBtn);
+  }
+
+  function switchProjectSession(sessionId) {
+    const target = projectSessions.find(p => p.id === sessionId);
+    if (!target) return;
+
+    saveCurrentSessionState();
+    activeProjectId = sessionId;
+
+    state.setDocument(target.doc);
+    currentFileHandle = target.fileHandle;
+    currentFileName = target.fileName;
+    currentFilePath = target.filePath;
+    isDocumentDirty = target.isDirty;
+    documentRevision = target.revision || 0;
+    lastSavedRevision = target.lastSavedRevision || 0;
+    lastSavedContent = target.lastSavedContent || '';
+    if (target.openCellTabs && target.openCellTabs.length > 0) {
+      state.openCellTabs = [...target.openCellTabs];
+    }
+    state.activeTabId = target.activeTabId || 'grid_overview';
+    state.history = target.history || [];
+    state.historyIndex = target.historyIndex || -1;
+    state.selection = target.selection ? { ...target.selection } : null;
+
+    setDirty(target.isDirty);
+    renderProjectTabs();
+    refreshAll();
+  }
+
+  function createProjectSession(doc, title = 'Untitled.pix2', fileHandle = null) {
+    saveCurrentSessionState();
+    const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const session = new ProjectSession(newId, title, doc, fileHandle, title, title);
+    projectSessions.push(session);
+    switchProjectSession(newId);
+    return session;
+  }
+
+  function closeProjectSession(sessionId) {
+    const session = projectSessions.find(p => p.id === sessionId);
+    if (!session) return;
+
+    if (session.isDirty) {
+      const confirmDiscard = confirm(`Project "${session.fileName || session.title}" has unsaved changes. Discard and close?`);
+      if (!confirmDiscard) return;
+    }
+
+    const idx = projectSessions.findIndex(p => p.id === sessionId);
+    if (idx !== -1) {
+      projectSessions.splice(idx, 1);
+    }
+
+    if (projectSessions.length === 0) {
+      loadDefaultProject();
+    } else {
+      const nextSession = projectSessions[Math.min(idx, projectSessions.length - 1)];
+      switchProjectSession(nextSession.id);
+    }
   }
 
   // ===========================================================================
@@ -4496,6 +4655,39 @@
   let floatingCurrentX = 0;
   let floatingCurrentY = 0;
 
+  // Selection Transform Engine (Scaling & Free Rotation)
+  let isScalingSelection = false;
+  let activeScaleHandle = null;
+  let scaleOriginalSel = null;
+  let scaleOriginalPixels = null;
+  let isRotatingSelection = false;
+  let rotationCenter = null;
+  let rotationStartAngle = 0;
+  let rotationCurrentAngle = 0;
+  let rotationBaseFloatingPixels = null;
+  let rotationBaseSel = null;
+
+  function ensureFloatingSelection() {
+    if (floatingSelectionPixels && floatingOriginalSel) return;
+    const cell = state.getActiveCell();
+    if (!cell || !state.selection) return;
+    floatingOriginalSel = { ...state.selection };
+    floatingCurrentX = floatingOriginalSel.x;
+    floatingCurrentY = floatingOriginalSel.y;
+    floatingSelectionPixels = {};
+    state.beginStroke();
+    for (let py = 0; py < floatingOriginalSel.h; py++) {
+      for (let px = 0; px < floatingOriginalSel.w; px++) {
+        const key = `${floatingOriginalSel.x + px},${floatingOriginalSel.y + py}`;
+        if (cell.pixels && cell.pixels[key]) {
+          floatingSelectionPixels[`${px},${py}`] = cell.pixels[key];
+          delete cell.pixels[key];
+        }
+      }
+    }
+    renderCellEditor();
+  }
+
   function commitFloatingSelection() {
     if (!floatingSelectionPixels || !floatingOriginalSel) return;
     const cell = state.getActiveCell();
@@ -4573,6 +4765,40 @@
     const cell = state.getActiveCell();
     if (!cell) return;
     const tool = state.currentTool;
+
+    // Check if clicking on selection transform handles (Rotation or Scale)
+    if (state.selection && typeof SelectionTransform !== 'undefined') {
+      const rect = dom.cellOverlay.getBoundingClientRect();
+      const mouseCanvasX = e.clientX - rect.left;
+      const mouseCanvasY = e.clientY - rect.top;
+      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.zoom);
+
+      if (hit === 'rot') {
+        isRotatingSelection = true;
+        isPointerDown = true;
+        ensureFloatingSelection();
+        rotationBaseFloatingPixels = { ...floatingSelectionPixels };
+        rotationBaseSel = { ...state.selection };
+        const cx = state.selection.x + state.selection.w / 2;
+        const cy = state.selection.y + state.selection.h / 2;
+        const screenCenterX = rect.left + cx * state.zoom;
+        const screenCenterY = rect.top + cy * state.zoom;
+        rotationCenter = { x: screenCenterX, y: screenCenterY, cx, cy };
+        rotationStartAngle = Math.atan2(e.clientY - screenCenterY, e.clientX - screenCenterX);
+        rotationCurrentAngle = 0;
+        return;
+      }
+
+      if (hit && hit !== 'body') {
+        isScalingSelection = true;
+        activeScaleHandle = hit;
+        isPointerDown = true;
+        ensureFloatingSelection();
+        scaleOriginalPixels = { ...floatingSelectionPixels };
+        scaleOriginalSel = { ...state.selection };
+        return;
+      }
+    }
 
     // Check if clicking inside active selection
     if (state.selection && coords.x >= state.selection.x && coords.x < state.selection.x + state.selection.w &&
@@ -4744,8 +4970,28 @@
       return;
     }
 
-    // Hover cursor update: inside selection -> move cursor
-    if (coords && state.selection && !isPointerDown) {
+    // Hover cursor update: inside selection -> move cursor or handle resize cursor
+    if (state.selection && !isPointerDown && typeof SelectionTransform !== 'undefined') {
+      const rect = dom.cellOverlay.getBoundingClientRect();
+      const mouseCanvasX = e.clientX - rect.left;
+      const mouseCanvasY = e.clientY - rect.top;
+      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.zoom);
+      if (hit === 'rot') {
+        dom.cellOverlay.style.cursor = 'grab';
+      } else if (hit === 'nw' || hit === 'se') {
+        dom.cellOverlay.style.cursor = 'nwse-resize';
+      } else if (hit === 'ne' || hit === 'sw') {
+        dom.cellOverlay.style.cursor = 'nesw-resize';
+      } else if (hit === 'n' || hit === 's') {
+        dom.cellOverlay.style.cursor = 'ns-resize';
+      } else if (hit === 'e' || hit === 'w') {
+        dom.cellOverlay.style.cursor = 'ew-resize';
+      } else if (hit === 'body') {
+        dom.cellOverlay.style.cursor = 'move';
+      } else {
+        dom.cellOverlay.style.cursor = (state.currentTool === 'picker') ? 'crosshair' : 'default';
+      }
+    } else if (coords && state.selection && !isPointerDown) {
       if (coords.x >= state.selection.x && coords.x < state.selection.x + state.selection.w &&
           coords.y >= state.selection.y && coords.y < state.selection.y + state.selection.h) {
         dom.cellOverlay.style.cursor = 'move';
@@ -4760,6 +5006,48 @@
     }
 
     if (!coords) return;
+
+    if (isScalingSelection && scaleOriginalSel && typeof SelectionTransform !== 'undefined') {
+      const scaled = SelectionTransform.computeScaledBounds(
+        scaleOriginalSel,
+        activeScaleHandle,
+        coords.x,
+        coords.y,
+        e.shiftKey
+      );
+      state.selection = { ...scaled };
+      floatingCurrentX = scaled.x;
+      floatingCurrentY = scaled.y;
+      floatingOriginalSel = { ...scaled };
+      floatingSelectionPixels = SelectionTransform.scalePixelsNearestNeighbor(
+        scaleOriginalPixels,
+        scaleOriginalSel.w,
+        scaleOriginalSel.h,
+        scaled.w,
+        scaled.h
+      );
+      renderMovingSelectionOverlay();
+      return;
+    }
+
+    if (isRotatingSelection && rotationCenter && typeof SelectionTransform !== 'undefined') {
+      const curAngle = Math.atan2(e.clientY - rotationCenter.y, e.clientX - rotationCenter.x);
+      let deltaAngle = curAngle - rotationStartAngle;
+      if (e.shiftKey) {
+        const step = (15 * Math.PI) / 180;
+        deltaAngle = Math.round(deltaAngle / step) * step;
+      }
+      rotationCurrentAngle = deltaAngle;
+      const rotated = SelectionTransform.rotatePixelsNearestNeighbor(
+        rotationBaseFloatingPixels,
+        rotationBaseSel.w,
+        rotationBaseSel.h,
+        deltaAngle
+      );
+      floatingSelectionPixels = rotated.pixels;
+      renderMovingSelectionOverlay();
+      return;
+    }
 
     if (isMovingSelection && floatingOriginalSel) {
       const dx = coords.x - moveStartX;
@@ -4799,6 +5087,21 @@
   function handleCellMouseUp(e) {
     if (!isPointerDown) return;
     isPointerDown = false;
+
+    if (isScalingSelection) {
+      isScalingSelection = false;
+      scaleOriginalSel = null;
+      scaleOriginalPixels = null;
+      renderCellOverlay();
+      return;
+    }
+
+    if (isRotatingSelection) {
+      isRotatingSelection = false;
+      rotationCenter = null;
+      renderCellOverlay();
+      return;
+    }
 
     if (isMovingSelection) {
       isMovingSelection = false;
@@ -4907,13 +5210,46 @@
         ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
         ctx.setLineDash([]);
 
-        // 4 Corner grip handles
-        const handleSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
-        ctx.fillStyle = '#6366f1';
-        ctx.fillRect(sx - handleSize/2, sy - handleSize/2, handleSize, handleSize);
-        ctx.fillRect(sx + sw - handleSize/2, sy - handleSize/2, handleSize, handleSize);
-        ctx.fillRect(sx - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
-        ctx.fillRect(sx + sw - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
+        // 8 Grip handles + Rotation Stem using SelectionTransform
+        if (typeof SelectionTransform !== 'undefined' && state.selection.w > 1 && state.selection.h > 1) {
+          const handles = SelectionTransform.getSelectionHandles(state.selection, zoom);
+          if (handles) {
+            // Draw rotation stem + knob
+            const rotY = handles.rot.y;
+            ctx.beginPath();
+            ctx.moveTo(handles.rot.x, sy);
+            ctx.lineTo(handles.rot.x, rotY);
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(handles.rot.x, rotY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 8 Scale handle squares
+            ctx.fillStyle = '#6366f1';
+            const hSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
+            for (const k of ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w']) {
+              const pt = handles[k];
+              if (pt) {
+                ctx.fillRect(Math.round(pt.x - hSize / 2), Math.round(pt.y - hSize / 2), hSize, hSize);
+              }
+            }
+          }
+        } else {
+          // 4 Corner grip handles fallback
+          const handleSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
+          ctx.fillStyle = '#6366f1';
+          ctx.fillRect(sx - handleSize/2, sy - handleSize/2, handleSize, handleSize);
+          ctx.fillRect(sx + sw - handleSize/2, sy - handleSize/2, handleSize, handleSize);
+          ctx.fillRect(sx - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
+          ctx.fillRect(sx + sw - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
+        }
       }
     }
 
@@ -6963,8 +7299,14 @@ ${serialized}
     if (dom.btnExecuteExportLabel) {
       if (currentExportFormat === 'unity') dom.btnExecuteExportLabel.textContent = 'Export Unity 2D Package (.ZIP)';
       else if (currentExportFormat === 'texturepacker') dom.btnExecuteExportLabel.textContent = 'Export TexturePacker (.ZIP)';
+      else if (currentExportFormat === 'modular-components') dom.btnExecuteExportLabel.textContent = 'Export Modular Components (.ZIP)';
       else if (currentExportFormat === 'png-only') dom.btnExecuteExportLabel.textContent = 'Export PNG Atlas';
       else if (currentExportFormat === 'zip-frames') dom.btnExecuteExportLabel.textContent = 'Export Frames (.ZIP)';
+    }
+
+    const modOpts = document.getElementById('modular-export-options-group');
+    if (modOpts) {
+      modOpts.classList.toggle('hidden', currentExportFormat !== 'modular-components');
     }
   }
 
@@ -7271,6 +7613,23 @@ ${serialized}
         closeGameExportModal();
       });
       return;
+    }
+
+    if (currentExportFormat === 'modular-components') {
+      if (typeof ModularExport !== 'undefined') {
+        const isTrimmed = Boolean(document.getElementById('export-trimmed-bounds-checkbox')?.checked);
+        const result = ModularExport.exportModularComponents(state.doc, {
+          mode: 'modular',
+          trimmed: isTrimmed
+        });
+        const zipBlob = (result.zip instanceof Blob)
+          ? result.zip
+          : new Blob([result.zip], { type: 'application/zip' });
+        downloadBlob(zipBlob, `${baseName}_modular_package.zip`);
+        showToast(`Exported Modular Component Package (${result.files.length} assets)!`, 'success');
+        closeGameExportModal();
+        return;
+      }
     }
 
     if (currentExportFormat === 'unity') {
@@ -8430,7 +8789,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         const files = Array.from(e.dataTransfer.files);
         const pngFile = files.find(f => f.name.toLowerCase().endsWith('.png'));
         const jsonFile = files.find(f => f.name.toLowerCase().endsWith('.json'));
-        const pix2File = files.find(f => f.name.toLowerCase().endsWith('.pix2') || f.name.toLowerCase().endsWith('.txt'));
+        const pix2Files = files.filter(f => f.name.toLowerCase().endsWith('.pix2') || f.name.toLowerCase().endsWith('.txt'));
 
         if (pngFile && jsonFile) {
           handlePairDropToImportSlice(pngFile, jsonFile);
@@ -8438,8 +8797,17 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           handleSingleFileToImportSlice(pngFile);
         } else if (jsonFile) {
           handleSingleFileToImportSlice(jsonFile);
-        } else if (pix2File) {
-          handleFileOpen(pix2File);
+        } else if (pix2Files.length > 0) {
+          for (const pf of pix2Files) {
+            const text = await pf.text();
+            try {
+              const doc = PIX2.parse(text);
+              createProjectSession(doc, pf.name, null);
+              showToast(`Opened ${pf.name} as project tab!`, 'success');
+            } catch (pErr) {
+              showToast(`Error parsing ${pf.name}: ${pErr.message}`, 'error');
+            }
+          }
         } else {
           handleFileOpen(files[0]);
         }
@@ -10151,6 +10519,15 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           else state.isolatedNodeId = null;
           showToast('Exited Isolation Mode');
           refreshAll();
+          return;
+        }
+        if (e.key === 'Escape' && (isScalingSelection || isRotatingSelection)) {
+          isScalingSelection = false;
+          isRotatingSelection = false;
+          scaleOriginalSel = null;
+          scaleOriginalPixels = null;
+          rotationCenter = null;
+          renderCellOverlay();
           return;
         }
         executeDeselect();

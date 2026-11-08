@@ -44,10 +44,28 @@ const Tools = (function () {
   // PIX2 1.1 STRUCTURAL TARGET RESOLUTION HELPERS
   // ===========================================================================
 
-  function getTargetForPlot(cell) {
+  function getTargetForPlot(cell, explicitTargetId) {
     if (!cell) return null;
     if (cell.layers && cell.layers.length > 0) {
-      const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
+      if (explicitTargetId) {
+        const targetId = (typeof explicitTargetId === 'object' && explicitTargetId !== null) ? explicitTargetId.id : explicitTargetId;
+        for (const layer of cell.layers) {
+          function findInNode(n) {
+            if (n.id === targetId) return n;
+            for (const c of (n.children || [])) {
+              const res = findInNode(c);
+              if (res) return res;
+            }
+            return null;
+          }
+          const found = findInNode(layer);
+          if (found) {
+            if (found.locked || found.visible === false) return null;
+            return found;
+          }
+        }
+      }
+      const activeState = (typeof window !== 'undefined' && window.state) ? window.state : (typeof global !== 'undefined' && global.state) ? global.state : null;
       if (activeState && typeof activeState.getActiveRegion === 'function') {
         const reg = activeState.getActiveRegion(cell.id);
         if (reg) {
@@ -90,8 +108,8 @@ const Tools = (function () {
   }
 
   // Single pixel plot with optional symmetry
-  function plotPixel(cell, x, y, color, symmetry = false, cellWidth = 16) {
-    const target = getTargetForPlot(cell);
+  function plotPixel(cell, x, y, color, symmetry = false, cellWidth = 16, explicitTargetId = null) {
+    const target = getTargetForPlot(cell, explicitTargetId);
     if (!target) return;
     if (!target.pixels) target.pixels = {};
     target.pixels[`${x},${y}`] = color;
@@ -103,8 +121,8 @@ const Tools = (function () {
   }
 
   // Single pixel erase with optional symmetry
-  function erasePixel(cell, x, y, symmetry = false, cellWidth = 16) {
-    const target = getTargetForPlot(cell);
+  function erasePixel(cell, x, y, symmetry = false, cellWidth = 16, explicitTargetId = null) {
+    const target = getTargetForPlot(cell, explicitTargetId);
     if (!target || !target.pixels) return;
     delete target.pixels[`${x},${y}`];
     if (symmetry) {
@@ -344,7 +362,10 @@ const Tools = (function () {
     erasePixel,
     plotLine,
     eraseLine,
-    plotRect
+    plotRect,
+    getTargetForPlot,
+    getTargetsForTransform,
+    syncCompositeIfStructured
   };
 })();
 

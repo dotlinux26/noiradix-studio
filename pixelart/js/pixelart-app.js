@@ -305,6 +305,17 @@
     rotationCurrentAngle: 0,
     rotationCenter: null,
 
+    // Selection Scaling State (Unified SelectionTransform Engine)
+    isScalingSelection: false,
+    activeScaleHandle: null,
+    scaleOriginalSel: null,
+    scaleOriginalPixels: null,
+
+    // Structural Graphics & PIX2 1.1 Support
+    isolatedNodeId: null,
+    activeLayerId: null,
+    activeRegionId: null,
+
     // Document Dirty & Disk Link State
     isDirty: false,
 
@@ -444,6 +455,341 @@
     _checkerPatternCache = ctx.createPattern(patCanvas, 'repeat');
     _lastCheckerKey = key;
     return _checkerPatternCache;
+  }
+
+  // ===========================================================================
+  // PIXELART MULTI-DOCUMENT PROJECT SESSIONS & STRUCTURE ENGINE (PIX2 1.1)
+  // ===========================================================================
+  let paProjectSessions = [];
+  let activePaProjectId = null;
+
+  class PaProjectSession {
+    constructor(id, title, doc, fileHandle = null, fileName = null) {
+      this.id = id || ('pa_proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      this.title = title || 'Pixel Artwork';
+      this.doc = doc;
+      this.fileHandle = fileHandle;
+      this.fileName = fileName || (title ? `${title}.pix2` : 'untitled.pix2');
+      this.w = 64;
+      this.h = 64;
+      this.isDirty = false;
+      this.revision = 0;
+      this.lastSavedRevision = 0;
+      this.history = [];
+      this.historyIndex = -1;
+      this.lastHistoryPixels = null;
+      this.selection = null;
+      this.isolatedNodeId = null;
+    }
+  }
+
+  function renderPaProjectTabs() {
+    if (!_hasDocument) return;
+    const strip = document.getElementById('pa-project-tabs-strip');
+    if (!strip) return;
+    strip.innerHTML = '';
+
+    paProjectSessions.forEach(session => {
+      const tab = document.createElement('div');
+      tab.className = `project-tab ${session.id === activePaProjectId ? 'active' : ''}`;
+      tab.title = session.fileName || session.title;
+
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = session.fileName || session.title;
+      tab.appendChild(titleSpan);
+
+      if (session.isDirty) {
+        const dot = document.createElement('span');
+        dot.className = 'project-tab-dirty-dot';
+        dot.textContent = '●';
+        tab.appendChild(dot);
+      }
+
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'project-tab-close';
+      closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      closeBtn.title = 'Close artwork session';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closePaProjectSession(session.id);
+      });
+      tab.appendChild(closeBtn);
+
+      tab.addEventListener('click', () => {
+        if (session.id !== activePaProjectId) {
+          switchPaProjectSession(session.id);
+        }
+      });
+
+      strip.appendChild(tab);
+    });
+
+    const newBtn = document.createElement('button');
+    newBtn.className = 'project-tab-new';
+    newBtn.title = 'New Artwork Tab';
+    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    newBtn.addEventListener('click', () => {
+      if (dom.modalNew) {
+        dom.modalNew.classList.remove('hidden');
+      }
+    });
+    strip.appendChild(newBtn);
+  }
+
+  function saveCurrentPaSession() {
+    const cur = paProjectSessions.find(p => p.id === activePaProjectId);
+    if (!cur) return;
+    cur.doc = state.doc;
+    cur.fileHandle = currentFileHandle;
+    cur.fileName = currentFileName;
+    cur.title = state.title;
+    cur.w = state.w;
+    cur.h = state.h;
+    cur.isDirty = state.isDirty;
+    cur.revision = documentRevision;
+    cur.lastSavedRevision = lastSavedRevision;
+    cur.history = [...state.history];
+    cur.historyIndex = state.historyIndex;
+    cur.lastHistoryPixels = state.lastHistoryPixels ? { ...state.lastHistoryPixels } : null;
+    cur.selection = state.selection ? { ...state.selection } : null;
+    cur.isolatedNodeId = state.isolatedNodeId;
+  }
+
+  function switchPaProjectSession(sessionId) {
+    const target = paProjectSessions.find(p => p.id === sessionId);
+    if (!target) return;
+
+    saveCurrentPaSession();
+    activePaProjectId = sessionId;
+
+    state.doc = target.doc;
+    currentFileHandle = target.fileHandle;
+    currentFileName = target.fileName;
+    state.title = target.title || 'Pixel Artwork';
+    state.w = target.w || 64;
+    state.h = target.h || 64;
+    state.isDirty = target.isDirty || false;
+    documentRevision = target.revision || 0;
+    lastSavedRevision = target.lastSavedRevision || 0;
+    state.history = target.history ? [...target.history] : [];
+    state.historyIndex = target.historyIndex;
+    state.lastHistoryPixels = target.lastHistoryPixels ? { ...target.lastHistoryPixels } : null;
+    state.selection = target.selection ? { ...target.selection } : null;
+    state.isolatedNodeId = target.isolatedNodeId || null;
+
+    if (dom.docTitle) dom.docTitle.value = state.title;
+    if (dom.dimBadge) dom.dimBadge.textContent = `${state.w}×${state.h}`;
+
+    setDirty(target.isDirty);
+    resizeCanvasesToZoom();
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderRulers();
+    renderPaProjectTabs();
+    renderPaLayersTree();
+    updateIsolationBannerUI();
+  }
+
+  function createPaProjectSession(title, doc, fileHandle = null) {
+    saveCurrentPaSession();
+    const newId = 'pa_proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const session = new PaProjectSession(newId, title, doc, fileHandle);
+    session.w = state.w;
+    session.h = state.h;
+    paProjectSessions.push(session);
+    switchPaProjectSession(newId);
+    return session;
+  }
+
+  function closePaProjectSession(sessionId) {
+    const session = paProjectSessions.find(p => p.id === sessionId);
+    if (!session) return;
+
+    if (session.isDirty) {
+      const confirmDiscard = confirm(`Artwork "${session.fileName || session.title}" has unsaved changes. Discard and close?`);
+      if (!confirmDiscard) return;
+    }
+
+    const idx = paProjectSessions.findIndex(p => p.id === sessionId);
+    if (idx !== -1) {
+      paProjectSessions.splice(idx, 1);
+    }
+
+    if (paProjectSessions.length === 0) {
+      createNewDocument(64, 64, 'Pixel Artwork');
+    } else {
+      const nextSession = paProjectSessions[Math.min(idx, paProjectSessions.length - 1)];
+      switchPaProjectSession(nextSession.id);
+    }
+  }
+
+  function enterIsolationMode(nodeId, breadcrumb) {
+    state.isolatedNodeId = nodeId;
+    updateIsolationBannerUI(breadcrumb);
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderSelectionMarquee();
+    if (typeof showToast === 'function') showToast(`Entered isolation mode: ${breadcrumb || nodeId}`);
+  }
+
+  function exitIsolationMode() {
+    if (!state.isolatedNodeId) return;
+    state.isolatedNodeId = null;
+    updateIsolationBannerUI();
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    renderSelectionMarquee();
+    if (typeof showToast === 'function') showToast('Exited isolation mode');
+  }
+
+  function updateIsolationBannerUI(breadcrumb = '') {
+    if (!_hasDocument) return;
+    const banner = document.getElementById('pa-isolation-banner');
+    const bcElem = document.getElementById('pa-isolation-breadcrumb');
+    if (!banner) return;
+    if (state.isolatedNodeId) {
+      banner.classList.remove('hidden');
+      if (bcElem) bcElem.textContent = breadcrumb || state.isolatedNodeId;
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
+
+  function findRegionAt(cell, x, y) {
+    if (!cell || !cell.layers) return null;
+    for (let i = cell.layers.length - 1; i >= 0; i--) {
+      const layer = cell.layers[i];
+      if (layer.visible === false) continue;
+      function searchNodes(nodes) {
+        for (let j = (nodes || []).length - 1; j >= 0; j--) {
+          const n = nodes[j];
+          if (n.type === 'region' && n.pixels) {
+            if (n.pixels[`${x},${y}`]) return n;
+          } else if (n.type === 'group') {
+            const found = searchNodes(n.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+      const found = searchNodes(layer.children);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function findNodeById(cell, nodeId) {
+    if (!cell || !cell.layers || !nodeId) return null;
+    function search(nodes) {
+      for (const n of (nodes || [])) {
+        if (n.id === nodeId) return n;
+        if (n.children) {
+          const res = search(n.children);
+          if (res) return res;
+        }
+      }
+      return null;
+    }
+    for (const l of cell.layers) {
+      if (l.id === nodeId) return l;
+      const res = search(l.children);
+      if (res) return res;
+    }
+    return null;
+  }
+
+  function renderPaLayersTree() {
+    if (!_hasDocument) return;
+    const container = document.getElementById('pa-layers-tree');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const cell = getArtworkCell();
+    if (!cell) return;
+
+    if (!cell.layers || cell.layers.length === 0) {
+      container.innerHTML = '<div style="font-size: 11px; color: var(--text-dim, #94a3b8); padding: 8px 4px;">No structural layers. Drawing in flat root mode. Click "+ Layer" above to create layers.</div>';
+      return;
+    }
+
+    cell.layers.forEach((layer) => {
+      const layerEl = document.createElement('div');
+      layerEl.className = 'pa-layer-item';
+      layerEl.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
+
+      const header = document.createElement('div');
+      header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; font-size: 11.5px;';
+
+      const nameRow = document.createElement('div');
+      nameRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer;';
+      nameRow.innerHTML = `<i class="fa-solid fa-layer-group text-accent"></i> <span>${escapeHtml(layer.name || layer.id)}</span>`;
+      nameRow.addEventListener('click', () => {
+        state.activeLayerId = layer.id;
+        renderPaLayersTree();
+      });
+
+      const actionsRow = document.createElement('div');
+      actionsRow.style.cssText = 'display: flex; align-items: center; gap: 4px;';
+
+      const visBtn = document.createElement('button');
+      visBtn.className = 'pa-btn-icon-xs';
+      visBtn.innerHTML = layer.visible !== false ? '<i class="fa-solid fa-eye"></i>' : '<i class="fa-solid fa-eye-slash" style="opacity:0.4;"></i>';
+      visBtn.title = layer.visible !== false ? 'Hide Layer' : 'Show Layer';
+      visBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        layer.visible = layer.visible === false;
+        rebuildArtworkBuffer();
+        repaintCanvas();
+        renderPaLayersTree();
+      });
+      actionsRow.appendChild(visBtn);
+
+      const lockBtn = document.createElement('button');
+      lockBtn.className = 'pa-btn-icon-xs';
+      lockBtn.innerHTML = layer.locked ? '<i class="fa-solid fa-lock text-accent"></i>' : '<i class="fa-solid fa-lock-open" style="opacity:0.4;"></i>';
+      lockBtn.title = layer.locked ? 'Unlock Layer' : 'Lock Layer';
+      lockBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        layer.locked = !layer.locked;
+        renderPaLayersTree();
+      });
+      actionsRow.appendChild(lockBtn);
+
+      header.appendChild(nameRow);
+      header.appendChild(actionsRow);
+      layerEl.appendChild(header);
+
+      const childrenCont = document.createElement('div');
+      childrenCont.style.cssText = 'display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 2px solid rgba(99,102,241,0.25); margin-top: 4px;';
+
+      (layer.children || []).forEach(child => {
+        const itemEl = document.createElement('div');
+        const isIsolated = state.isolatedNodeId === child.id;
+        itemEl.style.cssText = `display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 4px 6px; border-radius: 4px; cursor: pointer; ${isIsolated ? 'background: rgba(99,102,241,0.2); border: 1px solid #6366f1;' : 'background: rgba(0,0,0,0.15);'}`;
+
+        const itemTitle = document.createElement('div');
+        itemTitle.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+        const icon = child.type === 'group' ? 'fa-folder' : 'fa-vector-square';
+        itemTitle.innerHTML = `<i class="fa-solid ${icon}" style="color: #818cf8; font-size: 10px;"></i> <span>${escapeHtml(child.name || child.id)}</span>`;
+
+        itemEl.appendChild(itemTitle);
+
+        itemEl.addEventListener('click', () => {
+          state.activeRegionId = child.id;
+          renderPaLayersTree();
+        });
+
+        itemEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          enterIsolationMode(child.id, `${layer.name || layer.id} / ${child.name || child.id}`);
+        });
+
+        childrenCont.appendChild(itemEl);
+      });
+
+      layerEl.appendChild(childrenCont);
+      container.appendChild(layerEl);
+    });
   }
 
   // DOM Elements Cache
@@ -587,6 +933,22 @@
     updateCanvasBgUi();
     updateAiPromptView();
     updateDocumentTitle();
+
+    // Initialize PaProjectSession for current document
+    if (paProjectSessions.length === 0) {
+      const initialSession = new PaProjectSession('pa_initial', state.title || 'Pixel Artwork', state.doc, currentFileHandle, currentFileName);
+      initialSession.w = state.w;
+      initialSession.h = state.h;
+      initialSession.isDirty = state.isDirty;
+      initialSession.revision = documentRevision;
+      initialSession.lastSavedRevision = lastSavedRevision;
+      initialSession.history = [...state.history];
+      initialSession.historyIndex = state.historyIndex;
+      paProjectSessions.push(initialSession);
+      activePaProjectId = initialSession.id;
+    }
+    renderPaProjectTabs();
+    renderPaLayersTree();
 
     // Responsive Drag & Mouse-Wheel Horizontal Scroll across all horizontal bars
     enableHorizontalDragScroll(document.querySelector('.pa-header'));
@@ -764,6 +1126,20 @@
     dom.codePixelsCount = document.getElementById('pa-code-pixels-count');
     dom.diagnosticPill = document.getElementById('pa-diagnostic-pill');
 
+    // Multi-Document Project Tabs & Structure Panel (PIX2 1.1)
+    dom.paProjectTabsStrip = document.getElementById('pa-project-tabs-strip');
+    dom.btnPaSideLayers = document.getElementById('btn-pa-side-layers');
+    dom.btnPaSideCode = document.getElementById('btn-pa-side-code');
+    dom.paLayersView = document.getElementById('pa-layers-view');
+    dom.paCodeBody = document.getElementById('pa-code-body');
+    dom.paLayersTree = document.getElementById('pa-layers-tree');
+    dom.btnPaAddLayer = document.getElementById('btn-pa-add-layer');
+    dom.btnPaAddGroup = document.getElementById('btn-pa-add-group');
+    dom.paIsolationBanner = document.getElementById('pa-isolation-banner');
+    dom.paIsolationBreadcrumb = document.getElementById('pa-isolation-breadcrumb');
+    dom.btnPaExitIsolation = document.getElementById('btn-pa-exit-isolation');
+    dom.btnPaToolRegionSelect = document.getElementById('btn-pa-tool-region-select');
+
     // Color Deck
     dom.colorPrimaryPreview = document.getElementById('pa-color-primary-preview');
     dom.colorSecondaryPreview = document.getElementById('pa-color-secondary-preview');
@@ -874,16 +1250,67 @@
     const actx = state.artworkCtx;
     actx.clearRect(0, 0, state.w, state.h);
     const cell = getArtworkCell();
-    if (cell && cell.pixels) {
-      for (const key in cell.pixels) {
-        const commaIdx = key.indexOf(',');
-        if (commaIdx === -1) continue;
-        const px = Number(key.substring(0, commaIdx));
-        const py = Number(key.substring(commaIdx + 1));
-        const color = cell.pixels[key];
-        if (px >= 0 && px < state.w && py >= 0 && py < state.h && color) {
-          actx.fillStyle = color;
-          actx.fillRect(px, py, 1, 1);
+    if (!cell) return;
+
+    if (cell.layers && cell.layers.length > 0 && typeof PIX2 !== 'undefined' && typeof PIX2.compositeCellLayers === 'function') {
+      cell.pixels = PIX2.compositeCellLayers(cell, { w: state.w, h: state.h });
+    }
+
+    if (cell.pixels) {
+      if (state.isolatedNodeId && cell.layers && cell.layers.length > 0) {
+        const isoNode = findNodeById(cell, state.isolatedNodeId);
+        const isoPixels = {};
+        if (isoNode) {
+          const collect = (n) => {
+            if (n.type === 'region' && n.pixels) {
+              for (const k in n.pixels) isoPixels[k] = n.pixels[k];
+            }
+            if (n.children) n.children.forEach(collect);
+          };
+          collect(isoNode);
+        }
+
+        // Draw non-isolated pixels with 0.22 dimming
+        actx.save();
+        actx.globalAlpha = 0.22;
+        for (const key in cell.pixels) {
+          if (!isoPixels[key]) {
+            const commaIdx = key.indexOf(',');
+            if (commaIdx === -1) continue;
+            const px = Number(key.substring(0, commaIdx));
+            const py = Number(key.substring(commaIdx + 1));
+            const color = cell.pixels[key];
+            if (px >= 0 && px < state.w && py >= 0 && py < state.h && color) {
+              actx.fillStyle = color;
+              actx.fillRect(px, py, 1, 1);
+            }
+          }
+        }
+        actx.restore();
+
+        // Draw isolated pixels at full opacity 1.0
+        for (const key in isoPixels) {
+          const commaIdx = key.indexOf(',');
+          if (commaIdx === -1) continue;
+          const px = Number(key.substring(0, commaIdx));
+          const py = Number(key.substring(commaIdx + 1));
+          const color = isoPixels[key];
+          if (px >= 0 && px < state.w && py >= 0 && py < state.h && color) {
+            actx.fillStyle = color;
+            actx.fillRect(px, py, 1, 1);
+          }
+        }
+      } else {
+        for (const key in cell.pixels) {
+          const commaIdx = key.indexOf(',');
+          if (commaIdx === -1) continue;
+          const px = Number(key.substring(0, commaIdx));
+          const py = Number(key.substring(commaIdx + 1));
+          const color = cell.pixels[key];
+          if (px >= 0 && px < state.w && py >= 0 && py < state.h && color) {
+            actx.fillStyle = color;
+            actx.fillRect(px, py, 1, 1);
+          }
         }
       }
     }
@@ -1485,6 +1912,30 @@
     dom.ctxPreview.clearRect(rx, ry, rw, rh);
   }
 
+  function ensureFloatingSelection() {
+    if (!state.selection) return;
+    const cell = getArtworkCell();
+    if (!cell) return;
+    if (!state.floatingPixels) {
+      state.floatingOriginalSel = { ...state.selection };
+      state.floatingCurrentX = state.selection.x;
+      state.floatingCurrentY = state.selection.y;
+      state.floatingPixels = {};
+      for (let py = 0; py < state.selection.h; py++) {
+        for (let px = 0; px < state.selection.w; px++) {
+          const key = `${state.selection.x + px},${state.selection.y + py}`;
+          if (cell.pixels && cell.pixels[key]) {
+            state.floatingPixels[`${px},${py}`] = cell.pixels[key];
+            delete cell.pixels[key];
+          }
+        }
+      }
+      rebuildArtworkBuffer();
+      rebuildFloatingBuffer();
+      repaintCanvas();
+    }
+  }
+
   function renderSelectionMarquee() {
     clearPreviewCanvas();
     if (!state.selection) return;
@@ -1610,8 +2061,22 @@
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
 
-      // Corner handles if large enough
-      if (sw >= 16 && sh >= 16) {
+      // Selection Scaling Handles (Unified SelectionTransform Engine)
+      if (typeof SelectionTransform !== 'undefined' && (sw >= 16 || sh >= 16)) {
+        const handles = SelectionTransform.getSelectionHandles(state.selection, zoom);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#4f46e5';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        const handleKeys = ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'];
+        handleKeys.forEach(k => {
+          const h = handles[k];
+          if (h) {
+            ctx.fillRect(h.x, h.y, h.w, h.h);
+            ctx.strokeRect(h.x + 0.5, h.y + 0.5, h.w - 1, h.h - 1);
+          }
+        });
+      } else if (sw >= 16 && sh >= 16) {
         const handleSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
         ctx.fillStyle = '#6366f1';
         ctx.setLineDash([]);
@@ -2068,6 +2533,10 @@
     const w = state.w;
     const h = state.h;
 
+    const targetNode = (cell.layers && cell.layers.length > 0 && typeof Tools !== 'undefined' && typeof Tools.getTargetForPlot === 'function')
+      ? Tools.getTargetForPlot(cell, state.isolatedNodeId || state.activeRegionId)
+      : null;
+
     const plotSingle = (px, py) => {
       const key = `${px},${py}`;
       const oldVal = (cell.pixels && cell.pixels[key]) ? cell.pixels[key] : null;
@@ -2081,9 +2550,15 @@
       }
       if (color === null) {
         delete cell.pixels[key];
+        if (targetNode && targetNode.pixels) {
+          delete targetNode.pixels[key];
+        }
         plotPixelOnBuffer(px, py, null);
       } else {
         cell.pixels[key] = color;
+        if (targetNode && targetNode.pixels) {
+          targetNode.pixels[key] = color;
+        }
         plotPixelOnBuffer(px, py, color);
       }
       renderPixelDirect(px, py, color);
@@ -2093,6 +2568,10 @@
     if (state.symH) plotSingle(w - 1 - x, y);
     if (state.symV) plotSingle(x, h - 1 - y);
     if (state.symH && state.symV) plotSingle(w - 1 - x, h - 1 - y);
+
+    if (targetNode && typeof Tools !== 'undefined' && typeof Tools.syncCompositeIfStructured === 'function') {
+      Tools.syncCompositeIfStructured(cell, { w: state.w, h: state.h });
+    }
   }
 
   function onPointerDown(e) {
@@ -2140,28 +2619,45 @@
 
     const activeColor = state.primaryColor;
 
-    // Check if clicking on Rotation Handle of active selection
-    if (state.selection && isOverRotationHandle(e)) {
+    // Check if clicking on SelectionTransform handles (Rotation or Scale)
+    if (state.selection && typeof SelectionTransform !== 'undefined') {
+      const rect = state.cachedCanvasRect || dom.canvasMain.getBoundingClientRect();
+      const mouseCanvasX = e.clientX - rect.left;
+      const mouseCanvasY = e.clientY - rect.top;
+      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.zoom);
+
+      if (hit === 'rot') {
+        state.isRotatingSelection = true;
+        state.isDrawing = false;
+        ensureFloatingSelection();
+        state.rotationBaseFloatingPixels = { ...state.floatingPixels };
+        state.rotationBaseSel = { ...state.selection };
+
+        const cx = state.selection.x + state.selection.w / 2;
+        const cy = state.selection.y + state.selection.h / 2;
+        const screenCenterX = rect.left + cx * state.zoom;
+        const screenCenterY = rect.top + cy * state.zoom;
+        state.rotationCenter = { x: screenCenterX, y: screenCenterY, cx, cy };
+        state.rotationStartAngle = Math.atan2(e.clientY - screenCenterY, e.clientX - screenCenterX);
+        state.rotationCurrentAngle = 0;
+        dom.viewport.style.cursor = 'grabbing';
+        return;
+      }
+
+      if (hit && hit !== 'body') {
+        state.isScalingSelection = true;
+        state.activeScaleHandle = hit;
+        state.isDrawing = false;
+        ensureFloatingSelection();
+        state.scaleOriginalPixels = { ...state.floatingPixels };
+        state.scaleOriginalSel = { ...state.selection };
+        dom.viewport.style.cursor = `${hit}-resize`;
+        return;
+      }
+    } else if (state.selection && isOverRotationHandle(e)) {
       state.isRotatingSelection = true;
       state.isDrawing = false;
-      if (!state.floatingPixels) {
-        state.floatingOriginalSel = { ...state.selection };
-        state.floatingCurrentX = state.selection.x;
-        state.floatingCurrentY = state.selection.y;
-        state.floatingPixels = {};
-        for (let py = 0; py < state.selection.h; py++) {
-          for (let px = 0; px < state.selection.w; px++) {
-            const key = `${state.selection.x + px},${state.selection.y + py}`;
-            if (cell.pixels && cell.pixels[key]) {
-              state.floatingPixels[`${px},${py}`] = cell.pixels[key];
-              delete cell.pixels[key];
-            }
-          }
-        }
-        rebuildArtworkBuffer();
-        rebuildFloatingBuffer();
-        repaintCanvas();
-      }
+      ensureFloatingSelection();
       state.rotationBaseFloatingPixels = { ...state.floatingPixels };
       state.rotationBaseSel = { ...state.selection };
 
@@ -2177,6 +2673,28 @@
       return;
     }
 
+    // Region Select Tool Handling
+    if (state.currentTool === 'region-select') {
+      state.isDrawing = false;
+      const hit = findRegionAt(cell, x, y);
+      if (hit) {
+        state.activeRegionId = hit.id;
+        renderPaLayersTree();
+        const now = performance.now();
+        if (state.lastRegionClickTime && (now - state.lastRegionClickTime < 350) && state.lastRegionClickId === hit.id) {
+          enterIsolationMode(hit.id, hit.name || hit.id);
+        }
+        state.lastRegionClickTime = now;
+        state.lastRegionClickId = hit.id;
+        showToast(`Selected region: ${hit.name || hit.id}`);
+      } else {
+        if (state.isolatedNodeId) {
+          exitIsolationMode();
+        }
+      }
+      return;
+    }
+
     // Selection Tool Handling
     if (state.currentTool === 'select') {
       // Check if clicking inside active selection -> Move / Drag it!
@@ -2186,24 +2704,7 @@
         state.isMovingSelection = true;
         state.moveStartX = x;
         state.moveStartY = y;
-        if (!state.floatingPixels) {
-          state.floatingOriginalSel = { ...state.selection };
-          state.floatingCurrentX = state.selection.x;
-          state.floatingCurrentY = state.selection.y;
-          state.floatingPixels = {};
-          for (let py = 0; py < state.selection.h; py++) {
-            for (let px = 0; px < state.selection.w; px++) {
-              const key = `${state.selection.x + px},${state.selection.y + py}`;
-              if (cell.pixels && cell.pixels[key]) {
-                state.floatingPixels[`${px},${py}`] = cell.pixels[key];
-                delete cell.pixels[key];
-              }
-            }
-          }
-          rebuildArtworkBuffer();
-          rebuildFloatingBuffer();
-          repaintCanvas();
-        }
+        ensureFloatingSelection();
         renderSelectionMarquee();
         return;
       }
@@ -2328,10 +2829,55 @@
       return;
     }
 
-    // Rotation Handle Hover Cursor
-    if (isOverRotationHandle(e)) {
+    // Scaling active selection (Nearest-neighbor scaling with Shift uniform aspect preservation)
+    if (state.isScalingSelection && state.scaleOriginalSel && typeof SelectionTransform !== 'undefined') {
+      const scaled = SelectionTransform.computeScaledBounds(
+        state.scaleOriginalSel,
+        state.activeScaleHandle,
+        x,
+        y,
+        e.shiftKey
+      );
+      state.selection = { ...scaled };
+      state.floatingCurrentX = scaled.x;
+      state.floatingCurrentY = scaled.y;
+      state.floatingOriginalSel = { ...scaled };
+      state.floatingPixels = SelectionTransform.scalePixelsNearestNeighbor(
+        state.scaleOriginalPixels,
+        state.scaleOriginalSel.w,
+        state.scaleOriginalSel.h,
+        scaled.w,
+        scaled.h
+      );
+      rebuildFloatingBuffer();
+      renderSelectionMarquee();
+      return;
+    }
+
+    // Selection Handles Hover Cursor
+    if (state.selection && !state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection && !state.isScalingSelection && typeof SelectionTransform !== 'undefined') {
+      const rect = state.cachedCanvasRect || dom.canvasMain.getBoundingClientRect();
+      const mouseCanvasX = e.clientX - rect.left;
+      const mouseCanvasY = e.clientY - rect.top;
+      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.zoom);
+      if (hit === 'rot') {
+        dom.viewport.style.cursor = 'grab';
+      } else if (hit === 'nw' || hit === 'se') {
+        dom.viewport.style.cursor = 'nwse-resize';
+      } else if (hit === 'ne' || hit === 'sw') {
+        dom.viewport.style.cursor = 'nesw-resize';
+      } else if (hit === 'n' || hit === 's') {
+        dom.viewport.style.cursor = 'ns-resize';
+      } else if (hit === 'e' || hit === 'w') {
+        dom.viewport.style.cursor = 'ew-resize';
+      } else if (hit === 'body') {
+        dom.viewport.style.cursor = 'move';
+      } else {
+        dom.viewport.style.cursor = (state.currentTool === 'pan') ? 'grab' : (state.currentTool === 'picker' ? 'crosshair' : 'default');
+      }
+    } else if (isOverRotationHandle(e)) {
       dom.viewport.style.cursor = 'grab';
-    } else if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection) {
+    } else if (!state.isDrawing && !state.isPanning && !state.isMovingSelection && !state.isRotatingSelection && !state.isScalingSelection) {
       dom.viewport.style.cursor = (state.currentTool === 'pan') ? 'grab' : 'crosshair';
     }
 
@@ -2391,6 +2937,16 @@
       state.isPanning = false;
       dom.viewport.style.cursor = state.isSpaceDown ? 'grab' : (state.currentTool === 'pan' ? 'grab' : 'crosshair');
       renderRulers();
+      return;
+    }
+
+    if (state.isScalingSelection) {
+      state.isScalingSelection = false;
+      state.scaleOriginalSel = null;
+      state.scaleOriginalPixels = null;
+      dom.viewport.style.cursor = 'crosshair';
+      rebuildFloatingBuffer();
+      renderSelectionMarquee();
       return;
     }
 
@@ -5191,6 +5747,77 @@ Do not include conversational greetings or postscripts.`;
       });
     }
 
+    // Structure & Layers Pane Toggle & Actions (PIX2 1.1)
+    if (dom.btnPaSideLayers) {
+      dom.btnPaSideLayers.addEventListener('click', () => {
+        if (dom.paLayersView) dom.paLayersView.classList.remove('hidden');
+        if (dom.paCodeBody) dom.paCodeBody.classList.add('hidden');
+        dom.btnPaSideLayers.classList.add('active');
+        if (dom.btnPaSideCode) dom.btnPaSideCode.classList.remove('active');
+        renderPaLayersTree();
+      });
+    }
+    if (dom.btnPaSideCode) {
+      dom.btnPaSideCode.addEventListener('click', () => {
+        if (dom.paLayersView) dom.paLayersView.classList.add('hidden');
+        if (dom.paCodeBody) dom.paCodeBody.classList.remove('hidden');
+        dom.btnPaSideCode.classList.add('active');
+        if (dom.btnPaSideLayers) dom.btnPaSideLayers.classList.remove('active');
+      });
+    }
+
+    if (dom.btnPaAddLayer) {
+      dom.btnPaAddLayer.addEventListener('click', () => {
+        const cell = getArtworkCell();
+        if (!cell) return;
+        if (!cell.layers) cell.layers = [];
+        const layerNum = cell.layers.length + 1;
+        const name = prompt('Enter Layer Name:', `Layer ${layerNum}`);
+        if (!name) return;
+        const newLayer = {
+          type: 'layer',
+          id: 'layer_' + Date.now().toString(36),
+          cell: cell.id,
+          name: name.trim(),
+          visible: true,
+          opacity: 1.0,
+          blend: 'normal',
+          children: []
+        };
+        cell.layers.push(newLayer);
+        state.activeLayerId = newLayer.id;
+        renderPaLayersTree();
+        setDirty(true);
+      });
+    }
+
+    if (dom.btnPaAddGroup) {
+      dom.btnPaAddGroup.addEventListener('click', () => {
+        const cell = getArtworkCell();
+        if (!cell || !cell.layers || cell.layers.length === 0) return;
+        const groupName = prompt('Enter Group Name:', 'New Group');
+        if (!groupName) return;
+        const parentLayer = cell.layers.find(l => l.id === state.activeLayerId) || cell.layers[0];
+        if (!parentLayer.children) parentLayer.children = [];
+        const newGroup = {
+          type: 'group',
+          id: 'grp_' + Date.now().toString(36),
+          cell: cell.id,
+          parent: parentLayer.id,
+          name: groupName.trim(),
+          visible: true,
+          children: []
+        };
+        parentLayer.children.push(newGroup);
+        renderPaLayersTree();
+        setDirty(true);
+      });
+    }
+
+    if (dom.btnPaExitIsolation) {
+      dom.btnPaExitIsolation.addEventListener('click', exitIsolationMode);
+    }
+
     // Alignment Guide Controls
     if (dom.btnToggleGuideCenter) {
       dom.btnToggleGuideCenter.addEventListener('click', () => {
@@ -5642,6 +6269,10 @@ Do not include conversational greetings or postscripts.`;
       } else if (e.key === 'r' || e.key === 'R') {
         rotateArtwork();
       } else if (e.key === 'Escape') {
+        if (state.isolatedNodeId) {
+          exitIsolationMode();
+          return;
+        }
         closeContextMenu();
         commitFloatingSelection();
         state.selection = null;
@@ -5705,6 +6336,37 @@ Do not include conversational greetings or postscripts.`;
       if (state.isPanning) {
         state.isPanning = false;
         if (dom.viewport) dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+      }
+    });
+
+    // Multi-File Drag & Drop Tabs Router (.pix2)
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+
+    window.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+      const files = Array.from(e.dataTransfer.files);
+      const pix2Files = files.filter(f => f.name.toLowerCase().endsWith('.pix2') || f.name.toLowerCase().endsWith('.txt'));
+
+      if (pix2Files.length > 0) {
+        for (const pf of pix2Files) {
+          try {
+            const text = await pf.text();
+            const doc = PIX2.parse(text);
+            const session = createPaProjectSession(pf.name.replace(/\.[^/.]+$/, ''), doc, null);
+            session.fileName = pf.name;
+            renderPaProjectTabs();
+            showToast(`Opened ${pf.name} as tab!`, 'success');
+          } catch (err) {
+            showToast(`Error parsing ${pf.name}: ${err.message}`, 'error');
+          }
+        }
       }
     });
   }
@@ -5804,7 +6466,16 @@ Do not include conversational greetings or postscripts.`;
       setRulerStaticLeft: (v) => { rulerStaticLeft = v; },
       getLastSavedContent: () => lastSavedContent,
       getLastKnownFileModified: () => lastKnownFileModified,
-      setLastKnownFileModified: (t) => { lastKnownFileModified = t; }
+      setLastKnownFileModified: (t) => { lastKnownFileModified = t; },
+      enterIsolationMode,
+      exitIsolationMode,
+      findRegionAt,
+      findNodeById,
+      createPaProjectSession,
+      switchPaProjectSession,
+      closePaProjectSession,
+      renderPaLayersTree,
+      renderPaProjectTabs
     };
   }
 })();

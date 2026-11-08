@@ -18,9 +18,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1. CI Test Suite: Syntax integrity & 190 automated unit tests across 10 suites
+  # 1. CI Test Suite: Syntax integrity & 203 automated unit tests across 12 suites
   test:
-    name: Run Automated Test Suites (190 Tests)
+    name: Run Automated Test Suites (203 Tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -36,6 +36,7 @@ jobs:
           node --check js/version.js
           node --check js/app.js
           node --check js/pix2-format.js
+          node --check js/selection-transform.js
           node --check js/editor-state.js
           node --check js/animation-player.js
           node --check js/tools.js
@@ -70,6 +71,12 @@ jobs:
 
       - name: Run Studio 2.0 Integration Tests (5 Tests)
         run: node tests/test-studio-v2.js
+
+      - name: Run Selection Transform Engine Tests (6 Tests)
+        run: node tests/test-selection-transform.js
+
+      - name: Run PixelArt 2.0 & Multi-Track Integration Tests (7 Tests)
+        run: node tests/test-pixelart-v2.js
 
       - name: Run Audit Data Integrity & Regression Tests
         run: node tests/test-audit-integrity.js

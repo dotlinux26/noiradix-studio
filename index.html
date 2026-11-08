@@ -95,6 +95,11 @@
         <span class="brand-ver">v2.0.0</span>
       </div>
 
+      <!-- Project Sessions Tab Strip -->
+      <div class="project-tabs-strip" id="project-tabs-strip" title="Open Project Sessions">
+        <!-- Rendered dynamically by app.js: [player.pix2] [boss.pix2] [+] -->
+      </div>
+
       <!-- Professional File Document Header Widget -->
       <div class="header-file-widget" id="header-file-widget" title="Active Project File. Click or press Enter to rename.">
         <i class="fa-regular fa-file-code file-badge-icon"></i>
@@ -1356,6 +1361,14 @@
                   </div>
                 </label>
 
+                <label class="format-option-card" data-format="modular-components">
+                  <input type="radio" name="export-format-radio" value="modular-components">
+                  <div class="format-card-info">
+                    <div class="format-title"><i class="fa-solid fa-layer-group text-accent"></i> Modular Component Package (.ZIP)</div>
+                    <div class="format-desc">Export independent layers &amp; groups with transparent alignment, engine-neutral manifest.json, and component animations!</div>
+                  </div>
+                </label>
+
                 <label class="format-option-card" data-format="zip-frames">
                   <input type="radio" name="export-format-radio" value="zip-frames">
                   <div class="format-card-info">
@@ -1363,6 +1376,20 @@
                     <div class="format-desc">Export each animation frame as a separate numbered PNG file packed in a zip.</div>
                   </div>
                 </label>
+              </div>
+
+              <!-- Modular Component Options -->
+              <div id="modular-export-options-group" class="export-section hidden" style="margin-top: 12px; border-top: 1px solid var(--border-subtle); padding-top: 10px;">
+                <div class="export-section-title">
+                  <i class="fa-solid fa-sliders text-accent"></i>
+                  <span>Modular Export Mode</span>
+                </div>
+                <div class="checkbox-row">
+                  <label class="checkbox-label" for="export-trimmed-bounds-checkbox">
+                    <input type="checkbox" id="export-trimmed-bounds-checkbox">
+                    <span><strong>Trim Transparent Bounds</strong> (Saves tight-cropped PNGs with offset metadata in manifest.json)</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -1708,6 +1735,7 @@
   <script src="js/version.js?v=2.0.0"></script>
   <script src="js/default-sample.js?v=2.0.0"></script>
   <script src="js/pix2-format.js?v=2.0.0"></script>
+  <script src="js/selection-transform.js?v=2.0.0"></script>
   <script src="js/editor-state.js?v=2.0.0"></script>
   <script src="js/tools.js?v=2.0.0"></script>
   <script src="js/modular-export.js?v=2.0.0"></script>
