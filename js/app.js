@@ -5647,11 +5647,6 @@
       alert(`Error parsing PIX2 code:\n${err.message}`);
     }
   }
-      showToast('PIX2 Code parsed & applied to canvas successfully!', 'success');
-    } catch (err) {
-      alert(`Error parsing PIX2 code:\n${err.message}`);
-    }
-  }
 
   // ===========================================================================
   // AI SPECIFICATION & CONTEXTUAL PROMPT STUDIO
