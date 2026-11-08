@@ -318,9 +318,37 @@
     }, 2800);
   }
 
+  // ===========================================================================
+  // REVISION & DIRTY STATE TRACKER (Centralized Mutation Control)
+  // ===========================================================================
+  let documentRevision = 0;
+  let lastSavedRevision = 0;
+
+  function markDocumentMutation(action = 'edit') {
+    documentRevision++;
+    setDirty(documentRevision !== lastSavedRevision);
+  }
+
+  function markDocumentSaved() {
+    lastSavedRevision = documentRevision;
+    setDirty(false);
+  }
+
+  async function confirmDiscardUnsavedChanges(actionDesc = 'proceed') {
+    if (!state.isDirty) return true;
+    const name = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || state.title || 'Untitled Artwork';
+    const msg = `Artwork "${name}" has unsaved changes.\n\nDiscard unsaved changes and ${actionDesc}?`;
+    return window.confirm(msg);
+  }
+
   // Dirty State Tracker & Desktop Status Synchronizer
   function setDirty(dirty) {
     state.isDirty = dirty;
+    if (!dirty) {
+      lastSavedRevision = documentRevision;
+    } else if (documentRevision === lastSavedRevision) {
+      documentRevision++;
+    }
     const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || `${sanitizeFilename(state.title)}.pix2`;
     const isLinked = Boolean(currentFileHandle);
 
@@ -944,44 +972,6 @@
     return { minX, maxX, minY, maxY };
   }
 
-  function getVisibleCanvasBounds() {
-    const zoom = state.zoom;
-    if (!dom.canvasMain || !dom.viewport) {
-      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
-    }
-
-    // At low zoom (<= 2x), always render the full canvas for 100% complete overview without culling
-    if (zoom <= 2) {
-      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
-    }
-
-    const cRect = dom.canvasMain.getBoundingClientRect();
-    const vRect = dom.viewport.getBoundingClientRect();
-
-    if (cRect.width <= 0 || cRect.height <= 0 || vRect.width <= 0 || vRect.height <= 0) {
-      return { minX: 0, maxX: state.w, minY: 0, maxY: state.h };
-    }
-
-    // Canvas position relative to viewport (in screen pixels)
-    const canvasLeftInVp = cRect.left - vRect.left;
-    const canvasTopInVp = cRect.top - vRect.top;
-
-    // Viewport window mapped into canvas coordinates
-    // Generous pad margin (300px) ensures rapid panning / wheel zooming never shows blank edges
-    const pad = 300;
-    const vpLeftOnCanvas = -canvasLeftInVp - pad;
-    const vpTopOnCanvas = -canvasTopInVp - pad;
-    const vpRightOnCanvas = -canvasLeftInVp + vRect.width + pad;
-    const vpBottomOnCanvas = -canvasTopInVp + vRect.height + pad;
-
-    const minX = Math.max(0, Math.floor(vpLeftOnCanvas / zoom));
-    const maxX = Math.min(state.w, Math.ceil(vpRightOnCanvas / zoom));
-    const minY = Math.max(0, Math.floor(vpTopOnCanvas / zoom));
-    const maxY = Math.min(state.h, Math.ceil(vpBottomOnCanvas / zoom));
-
-    return { minX, maxX, minY, maxY };
-  }
-
   function repaintCanvas() {
     const ctx = dom.ctxMain;
     const zoom = state.zoom;
@@ -1193,6 +1183,8 @@
     state._rulerInterval = interval;
 
     const { minX, maxX, minY, maxY } = getVisibleCanvasBounds();
+    const startX = Math.max(0, Math.floor((minX - interval) / interval) * interval);
+    const endX = Math.min(cw, Math.ceil((maxX + interval) / interval) * interval);
 
     // 1. RENDER TOP RULER
     ctxT.fillStyle = bgColor;
@@ -1211,12 +1203,14 @@
     ctxT.font = '9px "JetBrains Mono", monospace';
     ctxT.textBaseline = 'top';
 
-    // Sub-pixel tick marks when zoom >= 6
+    // Sub-pixel tick marks when zoom >= 6 (viewport culled)
     if (zoom >= 6) {
       ctxT.strokeStyle = subTickColor;
       ctxT.lineWidth = 1;
       ctxT.beginPath();
-      for (let x = 0; x < cw; x++) {
+      const subStart = Math.max(0, minX - 2);
+      const subEnd = Math.min(cw, maxX + 2);
+      for (let x = subStart; x < subEnd; x++) {
         if (x % interval !== 0) {
           const posX = Math.floor(x * zoom) + 0.5;
           ctxT.moveTo(posX, 16);
@@ -1230,18 +1224,18 @@
     ctxT.strokeStyle = tickColor;
     ctxT.lineWidth = 1;
     ctxT.beginPath();
-    for (let x = 0; x <= cw; x += interval) {
+    for (let x = startX; x <= endX; x += interval) {
       const posX = Math.floor(x * zoom) + 0.5;
       ctxT.moveTo(posX, 10);
       ctxT.lineTo(posX, 24);
     }
-    const endX = Math.floor(cw * zoom) + 0.5;
-    ctxT.moveTo(endX, 6);
-    ctxT.lineTo(endX, 24);
+    const endEdgeX = Math.floor(cw * zoom) + 0.5;
+    ctxT.moveTo(endEdgeX, 6);
+    ctxT.lineTo(endEdgeX, 24);
     ctxT.stroke();
 
     // Numbers (placed precisely at start of pixel index)
-    for (let x = 0; x < cw; x += interval) {
+    for (let x = startX; x <= endX; x += interval) {
       const posX = Math.floor(x * zoom);
       const isHighlighted = (state._hoverX !== null && state._hoverX >= x && state._hoverX < x + interval);
       ctxT.fillStyle = isHighlighted ? '#6366f1' : textColor;
@@ -1249,6 +1243,9 @@
     }
 
     // 2. RENDER LEFT RULER
+    const startY = Math.max(0, Math.floor((minY - interval) / interval) * interval);
+    const endY = Math.min(ch, Math.ceil((maxY + interval) / interval) * interval);
+
     ctxL.fillStyle = bgColor;
     ctxL.fillRect(0, 0, 24, totalH);
 
@@ -1265,12 +1262,14 @@
     ctxL.font = '9px "JetBrains Mono", monospace';
     ctxL.textBaseline = 'top';
 
-    // Sub-pixel tick marks when zoom >= 6
+    // Sub-pixel tick marks when zoom >= 6 (viewport culled)
     if (zoom >= 6) {
       ctxL.strokeStyle = subTickColor;
       ctxL.lineWidth = 1;
       ctxL.beginPath();
-      for (let y = 0; y < ch; y++) {
+      const subStart = Math.max(0, minY - 2);
+      const subEnd = Math.min(ch, maxY + 2);
+      for (let y = subStart; y < subEnd; y++) {
         if (y % interval !== 0) {
           const posY = Math.floor(y * zoom) + 0.5;
           ctxL.moveTo(16, posY);
@@ -1284,18 +1283,18 @@
     ctxL.strokeStyle = tickColor;
     ctxL.lineWidth = 1;
     ctxL.beginPath();
-    for (let y = 0; y <= ch; y += interval) {
+    for (let y = startY; y <= endY; y += interval) {
       const posY = Math.floor(y * zoom) + 0.5;
       ctxL.moveTo(10, posY);
       ctxL.lineTo(24, posY);
     }
-    const endY = Math.floor(ch * zoom) + 0.5;
-    ctxL.moveTo(6, endY);
-    ctxL.lineTo(24, endY);
+    const endEdgeY = Math.floor(ch * zoom) + 0.5;
+    ctxL.moveTo(6, endEdgeY);
+    ctxL.lineTo(24, endEdgeY);
     ctxL.stroke();
 
     // Numbers
-    for (let y = 0; y < ch; y += interval) {
+    for (let y = startY; y <= endY; y += interval) {
       const posY = Math.floor(y * zoom);
       const isHighlighted = (state._hoverY !== null && state._hoverY >= y && state._hoverY < y + interval);
       ctxL.fillStyle = isHighlighted ? '#6366f1' : textColor;
@@ -1303,12 +1302,18 @@
     }
   }
 
+  let rulerRafId = null;
   function updateRulerHighlight(px, py) {
     if (!state.showRulers) return;
     if (state._hoverX === px && state._hoverY === py) return;
     state._hoverX = px;
     state._hoverY = py;
-    renderRulers();
+    if (rulerRafId === null) {
+      rulerRafId = requestAnimationFrame(() => {
+        rulerRafId = null;
+        renderRulers();
+      });
+    }
   }
 
   function clearPreviewCanvas() {
@@ -1600,7 +1605,8 @@
       // If cell has large pixel count (> 30,000), prevent 1,000,000 line textarea DOM layout freezes
       const numPixels = cell.pixels ? Object.keys(cell.pixels).length : 0;
       if (numPixels > 30000 && !force) {
-        dom.codeEditor.value = `@pix2 1.0\n@meta\n  title: "${state.doc.meta.title || 'Artwork'}"\n  size: ${state.w}x${state.h}\n\n@cell artwork\n  size: ${state.w}x${state.h}\n  ; [Trạng thái: ${numPixels.toLocaleString()} pixels - Tạm ẩn mã nguồn để giao diện mượt mà tuyệt đối]\n  ; [Mọi dữ liệu vẽ, lưu file và xuất PNG vẫn nguyên vẹn 100%]\n`;
+        state.sourcePaneMode = 'summary';
+        dom.codeEditor.value = `@pix2 1.0\n@meta\n  title: "${state.doc.meta.title || 'Artwork'}"\n  size: ${state.w}x${state.h}\n\n@cell artwork\n  size: ${state.w}x${state.h}\n  ; [Status: ${numPixels.toLocaleString()} pixels - Full code hidden for maximum UI responsiveness]\n  ; [Artwork data, saving, and PNG export remain 100% intact]\n`;
         updateCodeGutter();
         updatePixelCount();
         dom.syncBadge.className = 'pa-sync-badge synced';
@@ -1609,6 +1615,7 @@
         dom.diagnosticPill.innerHTML = '<i class="fa-solid fa-check"></i> Standard v1.0';
         return;
       }
+      state.sourcePaneMode = 'full';
 
       // Serialize canonical PIX2
       let serialized = _PIX2.serialize(state.doc);
@@ -1632,10 +1639,28 @@
   }
 
   function flushSourceCode() {
-    if (state.isSourceDirty || state.viewMode === 'canvas') {
-      syncCanvasToSource(true);
+    // If the user is actively editing code in unlocked editor (and not in summary mode), return editor text
+    if (state.isCodeEditingUnlocked && dom.codeEditor.value && state.sourcePaneMode !== 'summary') {
+      return dom.codeEditor.value;
     }
-    return dom.codeEditor.value || _PIX2.serialize(state.doc);
+
+    // Ensure cell size metadata is up-to-date before serializing
+    const cell = getArtworkCell();
+    if (cell) {
+      cell.size = { w: state.w, h: state.h };
+      if (state.doc && state.doc.meta) {
+        state.doc.meta.cell_size = { w: state.w, h: state.h };
+        state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${state.w}x${state.h}` };
+      }
+    }
+
+    // ALWAYS serialize from authoritative canonical state.doc!
+    let serialized = _PIX2.serialize(state.doc);
+    if (state.canvasBgMode && state.canvasBgMode !== 'transparent') {
+      const bgVal = state.canvasBgMode === 'white' ? '#ffffff' : (state.canvasBgMode === 'black' ? '#000000' : state.canvasBgColor);
+      serialized = serialized.replace(/background:\s*none/, `background: ${bgVal}`);
+    }
+    return serialized;
   }
 
   // 2. Source -> Canvas (Debounced 200ms)
@@ -1654,7 +1679,7 @@
   function applySourceCodeToCanvas() {
     state.isSyncingFromSource = true;
     const source = dom.codeEditor.value;
-    if (!source || !source.trim()) {
+    if (!source || !source.trim() || state.sourcePaneMode === 'summary') {
       state.isSyncingFromSource = false;
       return false;
     }
@@ -2928,11 +2953,14 @@
     const cell = getArtworkCell();
     if (!cell) return;
 
+    markDocumentMutation('history-step');
+
     // Snapshot of pixels
     const snapshot = {
       w: state.w,
       h: state.h,
       title: state.title,
+      revision: documentRevision,
       pixels: { ...cell.pixels }
     };
 
@@ -2966,6 +2994,13 @@
     state.w = snapshot.w;
     state.h = snapshot.h;
     state.title = snapshot.title;
+
+    if (snapshot.revision !== undefined) {
+      documentRevision = snapshot.revision;
+      setDirty(documentRevision !== lastSavedRevision);
+    } else {
+      markDocumentMutation('undo-redo');
+    }
 
     const cell = getArtworkCell();
     if (cell) {
@@ -3194,6 +3229,7 @@
   // PNG EXPORT ENGINE
   // ===========================================================================
   function openExportModal() {
+    commitFloatingSelection();
     if (dom.exportIncludeBg) {
       dom.exportIncludeBg.checked = state.exportIncludeBg;
     }
@@ -3229,6 +3265,7 @@
   }
 
   function downloadExportedPng() {
+    commitFloatingSelection();
     const scale = state.exportScale;
     const offscreen = document.createElement('canvas');
     offscreen.width = state.w * scale;
@@ -3586,6 +3623,8 @@ Do not include conversational greetings or postscripts.`;
   }
 
   async function openFileNative() {
+    if (!await confirmDiscardUnsavedChanges('open another file')) return;
+
     if ('showOpenFilePicker' in window) {
       try {
         const [handle] = await window.showOpenFilePicker({
@@ -3603,6 +3642,16 @@ Do not include conversational greetings or postscripts.`;
         const file = await handle.getFile();
         if (file.name.endsWith('.pix2') || file.name.endsWith('.txt')) {
           const text = await file.text();
+          // Transactional validation before replacing active document
+          try {
+            const parsed = _PIX2.parse(text, { profile: 'pixelart' });
+            if (!parsed || !parsed.cells) throw new Error('Missing cells in PIX2 document.');
+            const val = _PIX2.validate(parsed, { profile: 'pixelart', strict: false });
+            if (!val.valid) throw new Error((val.errors && val.errors[0]) || 'Invalid PIX2 format.');
+          } catch (valErr) {
+            showToast(`Cannot open file: ${valErr.message}`, 'error');
+            return;
+          }
           dom.codeEditor.value = text;
           applySourceCodeToCanvas();
           currentFileHandle = handle;
@@ -3621,8 +3670,8 @@ Do not include conversational greetings or postscripts.`;
           localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
           localStorage.setItem('pix2_last_saved_content', text);
           localStorage.setItem('pix2_last_saved_time', String(file.lastModified));
+          markDocumentSaved();
           triggerAutosave(true);
-          setDirty(false);
           showToast(`Opened ${file.name} from disk!`);
           return;
         } else if (file.type.startsWith('image/')) {
@@ -3635,7 +3684,7 @@ Do not include conversational greetings or postscripts.`;
           lastSavedContent = '';
           pendingExternalConflict = null;
           await clearPersistedFileHandle();
-          setDirty(true);
+          markDocumentMutation('import-image');
           return;
         }
       } catch (err) {
@@ -3776,15 +3825,31 @@ Do not include conversational greetings or postscripts.`;
     if (contextMenu) contextMenu.classList.add('hidden');
   }
 
-  function handleFileSelected(e) {
+  async function handleFileSelected(e) {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (!await confirmDiscardUnsavedChanges('open another file')) {
+      e.target.value = '';
+      return;
+    }
 
     if (file.name.endsWith('.pix2') || file.name.endsWith('.txt')) {
       const reader = new FileReader();
       reader.onload = (evt) => {
-        dom.codeEditor.value = evt.target.result;
+        const text = evt.target.result;
+        try {
+          const parsed = _PIX2.parse(text, { profile: 'pixelart' });
+          if (!parsed || !parsed.cells) throw new Error('Missing cells in PIX2 document.');
+          const val = _PIX2.validate(parsed, { profile: 'pixelart', strict: false });
+          if (!val.valid) throw new Error((val.errors && val.errors[0]) || 'Invalid PIX2 format.');
+        } catch (valErr) {
+          showToast(`Cannot open file: ${valErr.message}`, 'error');
+          return;
+        }
+        dom.codeEditor.value = text;
         applySourceCodeToCanvas();
+        markDocumentSaved();
       };
       reader.readAsText(file);
     } else if (file.type.startsWith('image/')) {
@@ -3798,9 +3863,10 @@ Do not include conversational greetings or postscripts.`;
     reader.onload = (evt) => {
       const img = new Image();
       img.onload = () => {
-        // Create canvas sized to image (capped at 1024)
-        const targetW = Math.min(1024, img.width);
-        const targetH = Math.min(1024, img.height);
+        // Create canvas sized to image (capped at 1024, aspect ratio preserved)
+        const scale = Math.min(1, 1024 / img.width, 1024 / img.height);
+        const targetW = Math.max(1, Math.round(img.width * scale));
+        const targetH = Math.max(1, Math.round(img.height * scale));
         createNewDocument(targetW, targetH, file.name.replace(/\.[^/.]+$/, ''));
 
         const tempCanvas = document.createElement('canvas');
@@ -4153,6 +4219,10 @@ Do not include conversational greetings or postscripts.`;
 
     // Code Editor Lock & Edit Controls (Auto-locks on Apply, No separate Lock button)
     function unlockCodeEditor() {
+      // If code editor is currently displaying summary placeholder, regenerate full source before unlocking
+      if (state.sourcePaneMode === 'summary') {
+        syncCanvasToSource(true);
+      }
       state.isCodeEditingUnlocked = true;
       dom.codeEditor.readOnly = false;
       if (dom.codeModeBadge) {

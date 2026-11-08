@@ -1271,6 +1271,9 @@
   // ===========================================================================
 
   function openImportCodeModal() {
+    if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
+      return;
+    }
     if (isDocumentDirty) {
       if (!confirm('You have unsaved changes. Discard and import new code?')) {
         return;
@@ -5052,6 +5055,9 @@
   // ===========================================================================
 
   async function openFileNative() {
+    if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
+      return;
+    }
     if (isDocumentDirty) {
       const confirmDiscard = confirm('You have unsaved changes in current project. Discard changes and open new file?');
       if (!confirmDiscard) return;

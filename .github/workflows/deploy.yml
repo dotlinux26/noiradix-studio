@@ -52,6 +52,9 @@ jobs:
       - name: Run Normative Test Vector Conformance Tests (11 Tests)
         run: node tests/test-vectors-conformance.js
 
+      - name: Run Audit Data Integrity & Regression Tests
+        run: node tests/test-audit-integrity.js
+
   # 2. CD Deployment: Deploy static web application to GitHub Pages
   deploy:
     name: Deploy to GitHub Pages

@@ -3713,6 +3713,10 @@ body.dark-theme .export-preview-viewport {
   box-shadow: 0 4px 12px rgba(255, 95, 95, 0.35);
 }
 
+.social-pill-btn .text-discord {
+  color: #5865f2;
+}
+
 .social-pill-btn .text-linkedin {
   color: #0077b5;
 }
