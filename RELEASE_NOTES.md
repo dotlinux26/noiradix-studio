@@ -102,3 +102,4 @@ NOIRADIX Studio 2.0 is fully backward compatible with all `.pix2` v1.0 files:
 - Simply open your existing `.pix2` file via native File Open or Drag & Drop.
 - The editor will seamlessly parse and display your sprite frames.
 - Adding structural layers or regions will automatically migrate the file to PIX2 1.1 format upon save.
+
