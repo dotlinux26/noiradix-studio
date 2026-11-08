@@ -39,6 +39,7 @@ class AnimationPlayer {
     this.activeAnimationName = null; // null means auto-detect via direction
     this.currentDirection = 'down';
     this.currentMode = '4dir'; // '4dir' | '8dir' | 'platformer_2dir'
+    this.currentAction = null; // optional explicit action filter (e.g. 'idle', 'run', 'jump')
     this.fps = 6;
     this.isPlaying = true;
     this.scale = 8; // 8x preview (crisp & large default)
@@ -163,6 +164,13 @@ class AnimationPlayer {
     this.fps = Math.max(1, Math.min(30, fps));
   }
 
+  setAction(action) {
+    this.currentAction = action ? String(action).toLowerCase().trim() : null;
+    this.currentFrameIdx = 0;
+    this.notifyFrameChange();
+    this.render();
+  }
+
   toggleOnionSkin() {
     this.onionSkin = !this.onionSkin;
     this.render();
@@ -187,6 +195,9 @@ class AnimationPlayer {
 
     if (this.currentMode === 'platformer_2dir') {
       const required = ['idle_left', 'idle_right', 'run_left', 'run_right'];
+      if (this.currentAction && !['idle', 'run'].includes(this.currentAction)) {
+        required.push(`${this.currentAction}_left`, `${this.currentAction}_right`);
+      }
       for (const clip of required) {
         if (!anims[clip] || !anims[clip].frames || anims[clip].frames.length === 0) {
           missing.push(clip);
@@ -213,6 +224,15 @@ class AnimationPlayer {
     }
 
     if (this.currentMode === 'platformer_2dir') {
+      if (this.currentAction) {
+        const actionClip = `${this.currentAction}_${this.currentDirection}`;
+        if (anims[actionClip] && anims[actionClip].frames && anims[actionClip].frames.length > 0) {
+          return anims[actionClip];
+        }
+        // If an explicit action was requested but missing in platformer mode, return null to avoid silent wrong clip fallback
+        return null;
+      }
+
       const possibleNames = [
         `run_${this.currentDirection}`,
         `walk_${this.currentDirection}`,
@@ -265,6 +285,11 @@ class AnimationPlayer {
     const anim = this.getActiveAnimationObj();
     if (anim && anim.frames && anim.frames.length > 0) {
       return anim.frames;
+    }
+
+    // If explicit platformer action was missing, return empty frames instead of wrong row fallback
+    if (this.currentMode === 'platformer_2dir' && this.currentAction) {
+      return [];
     }
 
     // 3. Fallback: Map direction to row
@@ -363,7 +388,7 @@ class AnimationPlayer {
   }
 
   drawCheckerboard(w, h) {
-    const isDark = document.body && document.body.classList.contains('dark-theme');
+    const isDark = typeof document !== 'undefined' && document.body && document.body.classList.contains('dark-theme');
     const c1 = isDark ? '#1f202e' : '#ffffff';
     const c2 = isDark ? '#171822' : '#e2e8f0';
     const size = 6;

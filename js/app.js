@@ -493,6 +493,20 @@
     dom.btnCloseNewFileModal = document.getElementById('btn-close-new-file-modal');
     dom.btnCancelNewFile = document.getElementById('btn-cancel-new-file');
     dom.btnConfirmNewFile = document.getElementById('btn-confirm-new-file');
+    dom.newFileSummaryCard = document.getElementById('new-file-summary-card');
+    dom.newFileSummarySize = document.getElementById('new-file-summary-size');
+    dom.newFileSummaryCells = document.getElementById('new-file-summary-cells');
+    dom.newFileSummaryTemplate = document.getElementById('new-file-summary-template');
+
+    // Resize Frame Modal elements
+    dom.btnResizeFrame = document.getElementById('btn-resize-frame');
+    dom.modalResizeFrame = document.getElementById('modal-resize-frame');
+    dom.resizeFrameW = document.getElementById('resize-frame-w');
+    dom.resizeFrameH = document.getElementById('resize-frame-h');
+    dom.resizeFramePresets = document.getElementById('resize-frame-presets');
+    dom.btnCloseResizeFrameModal = document.getElementById('btn-close-resize-frame-modal');
+    dom.btnCancelResizeFrame = document.getElementById('btn-cancel-resize-frame');
+    dom.btnConfirmResizeFrame = document.getElementById('btn-confirm-resize-frame');
 
     // Import Code Modal elements
     dom.modalImportCode = document.getElementById('modal-import-code');
@@ -1441,6 +1455,7 @@
       });
     }
 
+    updateNewFileSummary();
     dom.modalNewFile.classList.remove('hidden');
 
     setTimeout(() => {
@@ -1454,6 +1469,74 @@
         }
       }
     }, 50);
+  }
+
+  function updateNewFileSummary() {
+    if (!dom.newFileSummaryCard) return;
+    const cols = dom.newFileCols ? (parseInt(dom.newFileCols.value, 10) || 4) : 4;
+    const rows = dom.newFileRows ? (parseInt(dom.newFileRows.value, 10) || 4) : 4;
+    const cw = dom.newFileCellW ? Math.min(512, Math.max(1, parseInt(dom.newFileCellW.value, 10) || 16)) : 16;
+    const ch = dom.newFileCellH ? Math.min(512, Math.max(1, parseInt(dom.newFileCellH.value, 10) || 16)) : 16;
+    const totalCells = cols * rows;
+    const pixelsPerFrame = cw * ch;
+
+    const activePreset = dom.newFilePresets?.querySelector('.chip-btn.active');
+    const templateName = activePreset ? (activePreset.dataset.template || 'custom') : 'custom';
+    let templateLabel = 'Custom Layout';
+    if (templateName === '4dir') templateLabel = '4-Direction Locomotion (Down, Up, Right, Left)';
+    else if (templateName === 'platformer_2dir') templateLabel = 'Platformer 2D (Idle/Run Right, Left)';
+    else if (templateName === '8dir') templateLabel = '8-Direction Locomotion (Full Compass)';
+
+    if (dom.newFileSummarySize) {
+      dom.newFileSummarySize.textContent = `${cw} × ${ch} px (${pixelsPerFrame.toLocaleString()} px/frame)`;
+    }
+    if (dom.newFileSummaryCells) {
+      dom.newFileSummaryCells.textContent = `${cols} cols × ${rows} rows (${totalCells} cells total)`;
+    }
+    if (dom.newFileSummaryTemplate) {
+      dom.newFileSummaryTemplate.textContent = templateLabel;
+    }
+  }
+
+  function openResizeFrameModal() {
+    if (!state.doc || !state.doc.meta) return;
+    if (!dom.modalResizeFrame) return;
+
+    const curW = state.doc.meta.cellSize ? state.doc.meta.cellSize.w : 16;
+    const curH = state.doc.meta.cellSize ? state.doc.meta.cellSize.h : 16;
+
+    if (dom.resizeFrameW) dom.resizeFrameW.value = curW;
+    if (dom.resizeFrameH) dom.resizeFrameH.value = curH;
+
+    if (dom.resizeFramePresets) {
+      dom.resizeFramePresets.querySelectorAll('.chip-btn').forEach(btn => {
+        const bw = parseInt(btn.dataset.w, 10);
+        const bh = parseInt(btn.dataset.h, 10);
+        btn.classList.toggle('active', bw === curW && bh === curH);
+      });
+    }
+
+    dom.modalResizeFrame.classList.remove('hidden');
+    setTimeout(() => {
+      if (dom.resizeFrameW) {
+        dom.resizeFrameW.focus();
+        dom.resizeFrameW.select();
+      }
+    }, 50);
+  }
+
+  function closeResizeFrameModal() {
+    if (dom.modalResizeFrame) {
+      dom.modalResizeFrame.classList.add('hidden');
+    }
+  }
+
+  function confirmResizeFrame() {
+    if (!state.doc) return;
+    const newW = dom.resizeFrameW ? Math.min(512, Math.max(1, parseInt(dom.resizeFrameW.value, 10) || 16)) : 16;
+    const newH = dom.resizeFrameH ? Math.min(512, Math.max(1, parseInt(dom.resizeFrameH.value, 10) || 16)) : 16;
+    closeResizeFrameModal();
+    setResolution(newW, newH);
   }
 
   function closeNewFileModal() {
@@ -9140,6 +9223,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (dom.newFileRows && rows) dom.newFileRows.value = rows;
       if (dom.newFileCellW && cw) dom.newFileCellW.value = cw;
       if (dom.newFileCellH && ch) dom.newFileCellH.value = ch;
+      updateNewFileSummary();
     });
 
     const resPresets = document.getElementById('new-file-res-presets');
@@ -9148,12 +9232,46 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (!btn) return;
       resPresets.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const res = parseInt(btn.dataset.res, 10);
-      if (res && dom.newFileCellW && dom.newFileCellH) {
-        dom.newFileCellW.value = res;
-        dom.newFileCellH.value = res;
-      }
+      const w = parseInt(btn.dataset.w || btn.dataset.res, 10);
+      const h = parseInt(btn.dataset.h || btn.dataset.res, 10);
+      if (w && dom.newFileCellW) dom.newFileCellW.value = w;
+      if (h && dom.newFileCellH) dom.newFileCellH.value = h;
+      updateNewFileSummary();
     });
+
+    dom.newFileCols?.addEventListener('input', updateNewFileSummary);
+    dom.newFileRows?.addEventListener('input', updateNewFileSummary);
+    dom.newFileCellW?.addEventListener('input', updateNewFileSummary);
+    dom.newFileCellH?.addEventListener('input', updateNewFileSummary);
+
+    // Resize Frame Modal Events
+    dom.btnResizeFrame?.addEventListener('click', openResizeFrameModal);
+    dom.btnCloseResizeFrameModal?.addEventListener('click', closeResizeFrameModal);
+    dom.btnCancelResizeFrame?.addEventListener('click', closeResizeFrameModal);
+    dom.btnConfirmResizeFrame?.addEventListener('click', confirmResizeFrame);
+
+    dom.resizeFramePresets?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.chip-btn');
+      if (!btn) return;
+      dom.resizeFramePresets.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const w = parseInt(btn.dataset.w, 10);
+      const h = parseInt(btn.dataset.h, 10);
+      if (dom.resizeFrameW && w) dom.resizeFrameW.value = w;
+      if (dom.resizeFrameH && h) dom.resizeFrameH.value = h;
+    });
+
+    const onResizeFrameKeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmResizeFrame();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeResizeFrameModal();
+      }
+    };
+    dom.resizeFrameW?.addEventListener('keydown', onResizeFrameKeydown);
+    dom.resizeFrameH?.addEventListener('keydown', onResizeFrameKeydown);
 
     // Import PIX2 Code Modal Events
     dom.btnCloseImportModal?.addEventListener('click', closeImportCodeModal);

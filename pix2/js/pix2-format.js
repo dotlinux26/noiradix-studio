@@ -1591,33 +1591,35 @@ const PIX2 = (function () {
         effectiveNodeOpacity *= dimFactor;
       }
 
-      if (node.type === 'layer') {
-        const layerOpacity = (node.opacity !== undefined ? node.opacity : 1.0) * effectiveNodeOpacity;
-        for (const child of node.children || []) {
-          renderNode(child, isVisible, layerOpacity, isIsolated);
-        }
-      } else if (node.type === 'group') {
-        for (const child of node.children || []) {
-          renderNode(child, isVisible, effectiveNodeOpacity, isIsolated);
-        }
-      } else if (node.type === 'region') {
-        if (isolatedId && !isIsolated && dimFactor <= 0.0) return;
-        for (const coord in node.pixels) {
-          const hex = node.pixels[coord];
-          if (!hex) continue;
-          if (effectiveNodeOpacity >= 1.0) {
-            resultPixels[coord] = hex;
-          } else if (effectiveNodeOpacity <= 0.0) {
-            // invisible
-          } else {
-            const rgba = hexToRgba(hex);
-            if (rgba) {
-              const blendedA = Math.round(rgba.a * effectiveNodeOpacity);
-              resultPixels[coord] = rgbaToHex(rgba.r, rgba.g, rgba.b, blendedA);
-            } else {
+      if (node.pixels) {
+        if (isolatedId && !isIsolated && dimFactor <= 0.0) {
+          // dimmed out completely
+        } else {
+          for (const coord in node.pixels) {
+            const hex = node.pixels[coord];
+            if (!hex) continue;
+            if (effectiveNodeOpacity >= 1.0) {
               resultPixels[coord] = hex;
+            } else if (effectiveNodeOpacity <= 0.0) {
+              // invisible
+            } else {
+              const rgba = hexToRgba(hex);
+              if (rgba) {
+                const blendedA = Math.round(rgba.a * effectiveNodeOpacity);
+                resultPixels[coord] = rgbaToHex(rgba.r, rgba.g, rgba.b, blendedA);
+              } else {
+                resultPixels[coord] = hex;
+              }
             }
           }
+        }
+      }
+
+      const childList = node.children || node.layers;
+      if (childList && Array.isArray(childList)) {
+        const nextOpacity = (node.type === 'layer' ? (node.opacity !== undefined ? node.opacity : 1.0) : 1.0) * effectiveNodeOpacity;
+        for (const child of childList) {
+          renderNode(child, isVisible, nextOpacity, isIsolated);
         }
       }
     }
@@ -1625,6 +1627,7 @@ const PIX2 = (function () {
     for (const layer of cell.layers) {
       renderNode(layer, true, 1.0, false);
     }
+    cell.pixels = resultPixels;
     return resultPixels;
   }
 
@@ -1938,6 +1941,45 @@ const PIX2 = (function () {
     const scaleX = newW / oldW;
     const scaleY = newH / oldH;
 
+    function resizeNodePixels(node) {
+      if (!node) return;
+      if (node.pixels) {
+        const nodeNewPixels = {};
+        if (mode === 'scale') {
+          for (let ny = 0; ny < newH; ny++) {
+            for (let nx = 0; nx < newW; nx++) {
+              const srcX = Math.floor(nx / scaleX);
+              const srcY = Math.floor(ny / scaleY);
+              const color = node.pixels[`${srcX},${srcY}`];
+              if (color) {
+                nodeNewPixels[`${nx},${ny}`] = color;
+              }
+            }
+          }
+        } else {
+          for (const coord in node.pixels) {
+            const parsed = parseCoordinate(coord);
+            if (!parsed) continue;
+            const [x, y] = parsed;
+            if (x < newW && y < newH) {
+              nodeNewPixels[coord] = node.pixels[coord];
+            }
+          }
+        }
+        node.pixels = nodeNewPixels;
+      }
+      if (node.layers && Array.isArray(node.layers)) {
+        for (const child of node.layers) {
+          resizeNodePixels(child);
+        }
+      }
+      if (node.children && Array.isArray(node.children)) {
+        for (const child of node.children) {
+          resizeNodePixels(child);
+        }
+      }
+    }
+
     for (const cid in doc.cells) {
       const cell = doc.cells[cid];
       const newPixels = {};
@@ -1966,8 +2008,13 @@ const PIX2 = (function () {
       }
 
       cell.pixels = newPixels;
-      if (cell.size) {
-        cell.size = { w: newW, h: newH };
+      cell.size = { w: newW, h: newH };
+
+      if (cell.layers && Array.isArray(cell.layers) && cell.layers.length > 0) {
+        for (const l of cell.layers) {
+          resizeNodePixels(l);
+        }
+        compositeCellLayers(cell);
       }
     }
 

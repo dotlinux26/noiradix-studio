@@ -1,9 +1,9 @@
-# PIX2 SPECIFICATION v1.0
-## The AI-Native Pixel Art & Sprite Language
+# PIX2 SPECIFICATION v1.1
+## The AI-Native Pixel Art & Structural Sprite Language
 
-> **Document Version:** 1.0.0  
+> **Document Version:** 1.1.0  
 > **Target Audience:** AI Models (LLMs), Game Developers, Pixel Artists, Tool Authors  
-> **Core Concept:** Human-readable & AI-writable text format representing 2D pixel art and sprite sheets with mathematical coordinate precision, zero diffusion hallucinations, and pure transparency by default.
+> **Core Concept:** Human-readable & AI-writable text format representing 2D pixel art and sprite sheets with mathematical coordinate precision, zero diffusion hallucinations, and pure transparency by default. PIX2 1.1 introduces first-class structural layers, semantic region isolation, and platformer 2-direction locomotion.
 
 ---
 
@@ -286,15 +286,126 @@ USER TASK:
 
 ---
 
+## 4. PIX2 1.1 Structural Graphics Architecture
+
+PIX2 1.1 evolves the standard from flat pixel arrays into a structured, hierarchical document object model designed for semantic AI reasoning, non-destructive editing, and modular asset pipelines.
+
+```
+@cell <id>
+  ├── @layer <id> (z-order, opacity, blend mode)
+  │     ├── @group <id> (organizational container)
+  │     │     └── @region <id> (named semantic pixel cluster)
+  │     └── @region <id> (direct child region)
+  └── [direct legacy/flat pixels for backwards compatibility]
+```
+
+### 4.1 Structural Primitives: `@layer`, `@group`, and `@region`
+
+#### 4.1.1 The `@layer` Directive
+A top-level visual stratum within a cell. Layers are evaluated in document order (or explicit `z_index`) using standard alpha compositing.
+```pix2
+@cell cell_0_0
+  @layer base_body
+    name: "Body & Silhouette"
+    visible: true
+    opacity: 1.0
+    z_index: 0
+    @region skin
+      name: "Skin"
+      p 7,6 #ffccaa
+      p 8,6 #ffccaa
+```
+* **Properties:**
+  - `name: <string>` — Human-readable display label.
+  - `visible: <boolean>` — Visibility toggle (default: `true`).
+  - `opacity: <float>` — Floating-point alpha multiplier between `0.0` and `1.0` (default: `1.0`).
+  - `blend: <string>` — Compositing blend mode (`normal`).
+  - `z_index: <integer>` — Explicit layer rendering depth (default: document pre-order).
+
+#### 4.1.2 The `@group` Directive
+A hierarchical organizational folder inside a layer or parent group. Groups inherit parent visibility and opacity.
+```pix2
+    @group equipment
+      name: "Armor & Weapons"
+      visible: true
+      opacity: 1.0
+      collapsed: false
+      @region chestplate
+        name: "Steel Chestplate"
+        p 6,8 #8899aa
+```
+* **Properties:**
+  - `name: <string>` — Human-readable folder name.
+  - `visible: <boolean>` — Cascading visibility flag.
+  - `opacity: <float>` — Cascading opacity multiplier.
+  - `collapsed: <boolean>` — Editor tree fold state.
+
+#### 4.1.3 The `@region` Directive (Semantic Isolation)
+A named, isolated pixel partition representing an individual anatomical feature, garment, or accessory (e.g., `left_eye`, `visor`, `cape`).
+```pix2
+      @region left_eye
+        name: "Left Eye"
+        visible: true
+        opacity: 1.0
+        color: #38bdf8
+        tags: ["face", "eyes"]
+        p 6,5 #38bdf8
+```
+* **Properties:**
+  - `name: <string>` — Human-readable semantic name.
+  - `visible: <boolean>` — Visibility flag.
+  - `opacity: <float>` — Local opacity multiplier.
+  - `color: <hex>` — Swatch accent color in the editor UI.
+  - `tags: [<string>, ...]` — Optional query tags for AI reasoning.
+  - `p <x,y> <color>` — Local cell-anchored pixel coordinates.
+
+### 4.2 Semantic Isolation & Zero Cross-Region Mutation Invariant
+
+In traditional flat pixel art formats, sprites are an undifferentiated bag of coordinates. When an AI model or artist attempts to edit a specific feature (such as changing eye color or adjusting hair length), coordinates belonging to adjacent features (skin, eyebrows, hat) are frequently corrupted or overwritten.
+
+**PIX2 1.1 Semantic Isolation solves this:**
+1. **Isolated Paint Target:** Drawing tools (pen, eraser, line, fill) write strictly into the active `@region`.
+2. **Zero Cross-Region Mutation:** Pixels belonging to sibling or parent regions remain strictly immutable during edit transactions.
+3. **Editor Focus & Dimming:** In Isolation Mode, non-isolated regions are dimmed to `0.22` opacity, providing clear visual focus while retaining context.
+
+### 4.3 Compositing, Z-Order & Alpha Blending
+
+Cells composite structural nodes using standard Porter-Duff source-over normal alpha blending:
+$$\alpha_{\text{out}} = \alpha_A + \alpha_B (1 - \alpha_A)$$
+$$C_{\text{out}} = \frac{C_A \alpha_A + C_B \alpha_B (1 - \alpha_A)}{\alpha_{\text{out}}}$$
+
+Evaluation proceeds in depth pre-order: lower layers render first, followed by child groups and regions, composited over the transparent background.
+
+### 4.4 Platformer 2-Direction Locomotion Template
+
+PIX2 1.1 formalizes the **Platformer 2D (Left/Right)** animation template, catering to sidescrollers, metroidvanias, and action platformers:
+- **Direction Tags:** `right` (primary facing), `left` (mirrored or asymmetric facing).
+- **Core Action States:**
+  - `idle_right`, `idle_left`
+  - `run_right`, `run_left` (or `walk_right`, `walk_left`)
+  - Optional: `jump_right`, `jump_left`, `fall_right`, `fall_left`, `attack_right`, `attack_left`
+- **Standard Sheet Layout:** `4×2` (4 frames, 2 tracks) or `6×2` (6 frames, 2 tracks) with `32×32` or `48×48` cell resolutions.
+
+### 4.5 Backward Compatibility & Migration
+
+- **100% Backward Compatible:** Any PIX2 1.0 flat document loads seamlessly in PIX2 1.1 editors without modification.
+- **Lossless Upgrade:** Flat cells are automatically wrapped into an implicit root layer upon structural mutation (`PIX2.upgradeV10ToV11`).
+- **Deterministic Downgrade:** Structural hierarchies flatten losslessly into standard PIX2 1.0 cells (`PIX2.flattenV11ToV10`) by baking composite layers into direct pixel records.
+
+---
+
 ## Appendix A: Formal EBNF Grammar & Directive Categorization
 
 ### Directive Categorization
-* **Canonical Directives (v1.0 Standard):**
-  - `@pix2 <version>` — Mandatory file header directive.
+* **Canonical Directives (v1.1 Standard):**
+  - `@pix2 <version>` — Mandatory file header directive (`1.0` or `1.1`).
   - `@meta` — Document metadata section.
   - `@grid` — Layout atlas dimensions.
   - `@palette` — Indexed color palette.
   - `@cell <id>` — Frame pixel and primitive container.
+  - `@layer <id>` — Structural layer container (v1.1).
+  - `@group <id>` — Hierarchical grouping folder (v1.1).
+  - `@region <id>` — Named semantic pixel region (v1.1).
   - `@animation <id>` — Multi-line directional animation clip.
   - `@end` — Explicit document termination marker.
 * **Accepted Legacy Directives (Supported for backwards compatibility by readers):**
@@ -308,7 +419,7 @@ USER TASK:
 PIX2Document       ::= HeaderSection MetaSection GridSection PaletteSection CellSection* AnimationSection* EndMarker?
 
 HeaderSection      ::= "@pix2" WS+ Version EOL
-Version            ::= "1.0"
+Version            ::= "1.0" | "1.1"
 
 MetaSection        ::= "@meta" EOL (MetaProperty EOL)+
 MetaProperty       ::= WS* "title:" WS* StringLiteral
@@ -329,12 +440,34 @@ GridProperty       ::= WS* ("columns" | "cols") ":" WS* Integer
 PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
 PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?
 
-CellSection        ::= ("@cell" | "@frame") WS+ Identifier EOL (CellProperty | PixelLine | VectorPrimitive)*
+CellSection        ::= ("@cell" | "@frame") WS+ Identifier EOL (CellProperty | PixelLine | VectorPrimitive | LayerSection)*
 CellProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
                      | WS* "frame:" WS* Integer EOL
                      | WS* "size:" WS* Dimension EOL
                      | WS* "grid_pos:" WS* Integer "," Integer EOL
+
+LayerSection       ::= WS* "@layer" WS+ Identifier EOL (LayerProperty | GroupSection | RegionSection | PixelLine | VectorPrimitive)*
+LayerProperty      ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "visible:" WS* Boolean EOL
+                     | WS* "opacity:" WS* Float EOL
+                     | WS* "blend:" WS* StringLiteral EOL
+                     | WS* "z_index:" WS* Integer EOL
+
+GroupSection       ::= WS* "@group" WS+ Identifier EOL (GroupProperty | GroupSection | RegionSection | PixelLine | VectorPrimitive)*
+GroupProperty      ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "visible:" WS* Boolean EOL
+                     | WS* "opacity:" WS* Float EOL
+                     | WS* "collapsed:" WS* Boolean EOL
+
+RegionSection      ::= WS* "@region" WS+ Identifier EOL (RegionProperty | PixelLine | VectorPrimitive)*
+RegionProperty     ::= WS* "name:" WS* StringLiteral EOL
+                     | WS* "visible:" WS* Boolean EOL
+                     | WS* "opacity:" WS* Float EOL
+                     | WS* "color:" WS* HexColor EOL
+                     | WS* "tags:" WS* TagList EOL
+
+TagList            ::= "[" WS* (StringLiteral (WS* "," WS* StringLiteral)*)? WS* "]"
 
 DirectionEnum      ::= "down" | "up" | "right" | "left"
                      | "down_right" | "down_left" | "up_right" | "up_left"

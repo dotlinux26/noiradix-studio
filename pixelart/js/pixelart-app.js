@@ -1139,6 +1139,8 @@
     dom.paIsolationBreadcrumb = document.getElementById('pa-isolation-breadcrumb');
     dom.btnPaExitIsolation = document.getElementById('btn-pa-exit-isolation');
     dom.btnPaToolRegionSelect = document.getElementById('btn-pa-tool-region-select');
+    dom.paAppVersionBadge = document.getElementById('pa-app-version-badge');
+    dom.modalAboutPa = document.getElementById('modal-about-pa');
 
     // Color Deck
     dom.colorPrimaryPreview = document.getElementById('pa-color-primary-preview');
@@ -2118,6 +2120,46 @@
     ctx.restore();
   }
 
+  function renderRegionOverlay(region) {
+    if (!dom.ctxPreview || !region || !region.pixels) return;
+    const ctx = dom.ctxPreview;
+    const zoom = state.zoom;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let count = 0;
+    for (const k in region.pixels) {
+      const commaIdx = k.indexOf(',');
+      if (commaIdx === -1) continue;
+      const x = Number(k.substring(0, commaIdx));
+      const y = Number(k.substring(commaIdx + 1));
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      count++;
+    }
+    if (count === 0) return;
+
+    ctx.save();
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    const rx = minX * zoom;
+    const ry = minY * zoom;
+    const rw = (maxX - minX + 1) * zoom;
+    const rh = (maxY - minY + 1) * zoom;
+    ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh);
+
+    const name = region.name || region.id;
+    ctx.fillStyle = '#6366f1';
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    const textW = ctx.measureText(name).width;
+    ctx.fillRect(rx, Math.max(0, ry - 18), textW + 8, 18);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(name, rx + 4, Math.max(0, ry - 18) + 13);
+    ctx.restore();
+  }
+
   function isOverRotationHandle(e) {
     if (!state.selection || (state.selection.w <= 1 && state.selection.h <= 1)) return false;
     const rect = state.cachedCanvasRect || dom.canvasMain.getBoundingClientRect();
@@ -2683,14 +2725,22 @@
         const now = performance.now();
         if (state.lastRegionClickTime && (now - state.lastRegionClickTime < 350) && state.lastRegionClickId === hit.id) {
           enterIsolationMode(hit.id, hit.name || hit.id);
+        } else {
+          clearPreviewCanvas();
+          renderRegionOverlay(hit);
         }
         state.lastRegionClickTime = now;
         state.lastRegionClickId = hit.id;
         showToast(`Selected region: ${hit.name || hit.id}`);
       } else {
         if (state.isolatedNodeId) {
-          exitIsolationMode();
+          const now = performance.now();
+          if (state.lastOutsideClickTime && (now - state.lastOutsideClickTime < 350)) {
+            exitIsolationMode();
+          }
+          state.lastOutsideClickTime = now;
         }
+        clearPreviewCanvas();
       }
       return;
     }
@@ -2814,6 +2864,22 @@
       }
       state.rotationCurrentAngle = deltaAngle;
       renderSelectionMarquee();
+      return;
+    }
+
+    // Region Select Hover Overlay
+    if (state.currentTool === 'region-select' && !state.isDrawing && !state.isPanning) {
+      const cell = getArtworkCell();
+      if (cell && x !== null && y !== null) {
+        const hit = findRegionAt(cell, x, y);
+        clearPreviewCanvas();
+        if (hit) {
+          renderRegionOverlay(hit);
+          dom.viewport.style.cursor = 'pointer';
+        } else {
+          dom.viewport.style.cursor = 'crosshair';
+        }
+      }
       return;
     }
 
@@ -5657,6 +5723,12 @@ Do not include conversational greetings or postscripts.`;
     document.getElementById('btn-help-modal').addEventListener('click', () => {
       dom.modalHelp.classList.remove('hidden');
     });
+
+    if (dom.paAppVersionBadge) {
+      dom.paAppVersionBadge.addEventListener('click', () => {
+        if (dom.modalAboutPa) dom.modalAboutPa.classList.remove('hidden');
+      });
+    }
 
     // View Mode Toggles
     const btnSplit = document.getElementById('btn-view-split');

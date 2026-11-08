@@ -223,6 +223,101 @@ console.log('\nTest 5: Import & Slice Ingestion Pipeline');
   pass('Import & Slice pipeline ingests frames and auto-assembles animations cleanly');
 }
 
+// -----------------------------------------------------------------------------
+// Test 6: Non-Destructive Frame Resize with Structural Layers
+// -----------------------------------------------------------------------------
+console.log('\nTest 6: Non-Destructive Frame Resize with Structural Layers');
+{
+  const doc = PIX2.createDocument('Resize Test Project', 1, 1, 16, 16);
+  const cell = doc.cells['cell_0_0'];
+
+  // Add layer and region
+  const layer = {
+    id: 'layer_base',
+    type: 'layer',
+    name: 'Base Layer',
+    visible: true,
+    opacity: 1,
+    pixels: { '2,2': '#112233', '15,15': '#445566' }
+  };
+  cell.layers = [layer];
+  PIX2.compositeCellLayers(cell);
+
+  assert.strictEqual(cell.pixels['2,2'], '#112233');
+  assert.strictEqual(cell.pixels['15,15'], '#445566');
+
+  // Resize bounds to 32x32 (expand)
+  PIX2.resizeCells(doc, 32, 32, 'expand');
+  assert.strictEqual(doc.meta.cellSize.w, 32);
+  assert.strictEqual(doc.meta.cellSize.h, 32);
+  assert.strictEqual(cell.size.w, 32);
+  assert.strictEqual(cell.size.h, 32);
+  assert.strictEqual(layer.pixels['2,2'], '#112233', 'Existing pixels preserved in layer');
+  assert.strictEqual(layer.pixels['15,15'], '#445566', 'Existing pixels preserved in layer');
+  assert.strictEqual(cell.pixels['2,2'], '#112233', 'Composite retains pixel at (2,2)');
+  assert.strictEqual(cell.pixels['15,15'], '#445566', 'Composite retains pixel at (15,15)');
+
+  // Resize bounds down to 10x10 (crop)
+  PIX2.resizeCells(doc, 10, 10, 'expand');
+  assert.strictEqual(doc.meta.cellSize.w, 10);
+  assert.strictEqual(cell.size.w, 10);
+  assert.strictEqual(layer.pixels['2,2'], '#112233', 'Pixel within (10,10) retained');
+  assert.strictEqual(layer.pixels['15,15'], undefined, 'Pixel outside bounds pruned');
+  assert.strictEqual(cell.pixels['15,15'], undefined, 'Composite pixel outside bounds pruned');
+
+  pass('PIX2.resizeCells preserves structural layers and re-composites cleanly on expand/crop');
+}
+
+// -----------------------------------------------------------------------------
+// Test 7: AnimationPlayer Explicit Platformer Action Diagnostics
+// -----------------------------------------------------------------------------
+console.log('\nTest 7: AnimationPlayer Platformer Action Diagnostics & Clip Resolution');
+{
+  const mockCanvas = {
+    getContext: () => ({ imageSmoothingEnabled: false, clearRect: () => {}, fillRect: () => {}, drawImage: () => {} })
+  };
+  const player = new AnimationPlayer(mockCanvas);
+  player.setMode('platformer_2dir');
+  player.setDirection('left');
+
+  // Mock state with only idle_right and idle_left
+  global.window.state = {
+    doc: {
+      meta: { cellSize: { w: 16, h: 16 }, grid: { rows: 2, cols: 4 } },
+      cells: {
+        'cell_0_0': { id: 'cell_0_0', pixels: {} },
+        'cell_1_0': { id: 'cell_1_0', pixels: {} }
+      },
+      animations: {
+        idle_left: { name: 'Idle Left', direction: 'left', frames: ['cell_1_0'] },
+        idle_right: { name: 'Idle Right', direction: 'right', frames: ['cell_0_0'] }
+      }
+    }
+  };
+
+  // 1. Without explicit action, resolves idle_left
+  let anim = player.getActiveAnimationObj();
+  assert.strictEqual(anim.name, 'Idle Left');
+
+  // 2. Set explicit action to 'jump' (missing)
+  player.setAction('jump');
+  anim = player.getActiveAnimationObj();
+  assert.strictEqual(anim, null, 'Must return null instead of silently falling back to idle or run');
+  const frames = player.getActiveFrames();
+  assert.deepStrictEqual(frames, [], 'Must return empty frames when explicit action is missing');
+
+  // 3. Diagnostics reports missing jump clips
+  const missing = player.getMissingClipDiagnostics();
+  assert(missing.includes('jump_left'), 'Must report jump_left missing');
+  assert(missing.includes('jump_right'), 'Must report jump_right missing');
+
+  // Reset action
+  player.setAction(null);
+  assert.strictEqual(player.currentAction, null);
+
+  pass('AnimationPlayer action scoping, missing clip diagnostics, and null fallback verified');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

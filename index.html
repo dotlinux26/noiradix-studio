@@ -203,6 +203,7 @@
               <button id="btn-grid-remove-row" class="btn btn-sm btn-secondary" title="Delete Selected Row"><i class="fa-solid fa-minus"></i> Row</button>
               <button id="btn-grid-add-col" class="btn btn-sm btn-secondary" title="Add Column to Sheet"><i class="fa-solid fa-plus"></i> Col</button>
               <button id="btn-grid-remove-col" class="btn btn-sm btn-secondary" title="Delete Selected Column"><i class="fa-solid fa-minus"></i> Col</button>
+              <button id="btn-resize-frame" class="btn btn-sm btn-secondary" title="Resize Frame Dimensions (W × H)"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Resize Frame</button>
             </div>
 
             <div class="bar-separator"></div>
@@ -1475,17 +1476,35 @@
           </div>
         </div>
 
-        <!-- 3b. Resolution Quick Select -->
+        <!-- 3b. Resolution Quick Select (Categorized Groups) -->
         <div class="template-section">
-          <label class="form-label">Frame Resolution Presets (Max: 512×512):</label>
-          <div class="action-chips-container" id="new-file-res-presets">
-            <button type="button" class="chip-btn active" data-res="16">16×16</button>
-            <button type="button" class="chip-btn" data-res="24">24×24</button>
-            <button type="button" class="chip-btn" data-res="32">32×32</button>
-            <button type="button" class="chip-btn" data-res="48">48×48</button>
-            <button type="button" class="chip-btn" data-res="64">64×64</button>
-            <button type="button" class="chip-btn" data-res="128">128×128</button>
-            <button type="button" class="chip-btn" data-res="256">256×256</button>
+          <label class="form-label">Frame Resolution Presets (Studio Profile: Max 512×512):</label>
+          <div style="display: flex; flex-direction: column; gap: 8px;" id="new-file-res-presets">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-dim, #94a3b8); min-width: 96px;">Micro:</span>
+              <button type="button" class="chip-btn active" data-w="16" data-h="16" data-res="16">16×16</button>
+              <button type="button" class="chip-btn" data-w="24" data-h="24" data-res="24">24×24</button>
+              <button type="button" class="chip-btn" data-w="32" data-h="32" data-res="32">32×32</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-dim, #94a3b8); min-width: 96px;">Standard:</span>
+              <button type="button" class="chip-btn" data-w="48" data-h="48" data-res="48">48×48</button>
+              <button type="button" class="chip-btn" data-w="64" data-h="64" data-res="64">64×64</button>
+              <button type="button" class="chip-btn" data-w="96" data-h="96" data-res="96">96×96</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-dim, #94a3b8); min-width: 96px;">Large:</span>
+              <button type="button" class="chip-btn" data-w="128" data-h="128" data-res="128">128×128</button>
+              <button type="button" class="chip-btn" data-w="192" data-h="192" data-res="192">192×192</button>
+              <button type="button" class="chip-btn" data-w="256" data-h="256" data-res="256">256×256</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-dim, #94a3b8); min-width: 96px;">Wide/Platform:</span>
+              <button type="button" class="chip-btn" data-w="192" data-h="108">192×108</button>
+              <button type="button" class="chip-btn" data-w="320" data-h="180">320×180</button>
+              <button type="button" class="chip-btn" data-w="512" data-h="288">512×288</button>
+              <button type="button" class="chip-btn" data-w="512" data-h="512" data-res="512">512×512</button>
+            </div>
           </div>
         </div>
 
@@ -1501,11 +1520,34 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="new-file-cell-w">Cell Width (px):</label>
-            <input type="number" id="new-file-cell-w" class="modern-input full-width" min="4" max="256" value="16">
+            <input type="number" id="new-file-cell-w" class="modern-input full-width" min="1" max="512" value="16">
           </div>
           <div class="form-group">
             <label class="form-label" for="new-file-cell-h">Cell Height (px):</label>
-            <input type="number" id="new-file-cell-h" class="modern-input full-width" min="4" max="256" value="16">
+            <input type="number" id="new-file-cell-h" class="modern-input full-width" min="1" max="512" value="16">
+          </div>
+        </div>
+
+        <!-- Pre-create Summary Card -->
+        <div id="new-file-summary-card" style="margin-top: 14px; padding: 12px 14px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)); border-radius: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+          <div style="font-weight: 600; color: var(--text-main, #f8fafc); margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-circle-info text-accent"></i> Project Specification Summary
+          </div>
+          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+            <span>Frame Resolution:</span>
+            <strong id="new-file-summary-size" style="color: var(--text-main, #f8fafc);">16 × 16 px (256 px/frame)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+            <span>Sheet Layout:</span>
+            <strong id="new-file-summary-cells" style="color: var(--text-main, #f8fafc);">4 cols × 4 rows (16 cells)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+            <span>Template &amp; Logic:</span>
+            <strong id="new-file-summary-template" style="color: var(--text-main, #f8fafc);">4-Direction Character (4 tracks)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+            <span>Resource Profile:</span>
+            <span style="color: #34d399; font-weight: 500;">Studio Standard (Max 512×512, 4096 cells)</span>
           </div>
         </div>
       </div>
@@ -1514,6 +1556,63 @@
         <button id="btn-cancel-new-file" class="btn btn-secondary">Cancel</button>
         <button id="btn-confirm-new-file" class="btn btn-accent">
           <i class="fa-solid fa-plus"></i> Create File
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= RESIZE FRAME MODAL ================= -->
+  <div id="modal-resize-frame" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="resize-frame-modal-title">
+    <div class="studio-modal-dialog" style="max-width: 480px;">
+      <div class="studio-modal-header">
+        <div class="modal-title" id="resize-frame-modal-title">
+          <i class="fa-solid fa-up-right-and-down-left-from-center text-accent"></i>
+          <span>Resize Frame Dimensions</span>
+        </div>
+        <button id="btn-close-resize-frame-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body">
+        <p style="margin-top: 0; margin-bottom: 12px; font-size: 12.5px; color: var(--text-dim, #94a3b8); line-height: 1.5;">
+          Adjust the width and height for all frames in the active project. Pixels and structural layers will be preserved without distortion.
+        </p>
+
+        <!-- Presets -->
+        <div class="template-section">
+          <label class="form-label">Preset Dimensions (Max: 512×512):</label>
+          <div class="action-chips-container" id="resize-frame-presets">
+            <button type="button" class="chip-btn" data-w="16" data-h="16">16×16</button>
+            <button type="button" class="chip-btn" data-w="24" data-h="24">24×24</button>
+            <button type="button" class="chip-btn" data-w="32" data-h="32">32×32</button>
+            <button type="button" class="chip-btn" data-w="48" data-h="48">48×48</button>
+            <button type="button" class="chip-btn" data-w="64" data-h="64">64×64</button>
+            <button type="button" class="chip-btn" data-w="128" data-h="128">128×128</button>
+            <button type="button" class="chip-btn" data-w="256" data-h="256">256×256</button>
+            <button type="button" class="chip-btn" data-w="512" data-h="512">512×512</button>
+          </div>
+        </div>
+
+        <div class="export-grid-2col" style="margin-top: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="resize-frame-w">Width (px):</label>
+            <input type="number" id="resize-frame-w" class="modern-input full-width" min="1" max="512" value="16">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="resize-frame-h">Height (px):</label>
+            <input type="number" id="resize-frame-h" class="modern-input full-width" min="1" max="512" value="16">
+          </div>
+        </div>
+
+        <div style="margin-top: 12px; font-size: 11.5px; color: var(--text-dim, #94a3b8); display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-shield-halved text-accent"></i>
+          <span>Existing pixels outside new bounds are trimmed; canvas is expanded from top-left anchor.</span>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-resize-frame" class="btn btn-secondary">Cancel</button>
+        <button id="btn-confirm-resize-frame" class="btn btn-accent">
+          <i class="fa-solid fa-check"></i> Apply Resize
         </button>
       </div>
     </div>
