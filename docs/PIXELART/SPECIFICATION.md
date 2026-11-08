@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — Functional & UI/UX Specification
 
 **Document ID:** `docs/PIXELART/SPECIFICATION.md`  
-**Version:** 1.5.0  
+**Version:** 1.6.0  
 **Date:** 2026-11-08  
 **Route:** `/pixelart/`  
 **License:** Apache-2.0  
@@ -129,53 +129,56 @@ The workspace follows a responsive split-view architecture:
 * **Auto-Synchronization:** Swatches automatically serialize into the `@palette` section of the `.pix2` document.
 * **Universal Drag-Scroll Architecture:** Smooth drag and wheel scrolling across colors and palette presets with hand grab/grabbing cursor feedback.
 
-### 2.7 Native File System Access API
+### 2.7 Native File System Access API & Zero-Data-Loss Persistence
 * **Direct File Handle Tracking (`currentFileHandle`):** Native `showOpenFilePicker()` and `showSaveFilePicker()` integration.
 * **Single-Keystroke Overwrite (`Ctrl+S`):** Directly writes back to the opened file without annoying save prompts when permissions are granted.
 * **Save As (`Ctrl+Shift+S`):** Prompts for new filename or location while maintaining session state.
-* **Automatic Title Sync:** Window title dynamically reflects the active filename (`artwork.pix2 — NOIRADIX PixelArt`).
+* **Automatic Title & Filename Sync:** Document title input (`#pa-doc-title`), file status pill (`#pa-file-path-text`), and browser window title dynamically synchronize in real time (`artwork.pix2 — NOIRADIX PixelArt`).
+* **IndexedDB File Handle Persistence:** The active file handle is safely persisted in IndexedDB (`pix2_pixelart_store`). When refreshing the browser (<kbd>F5</kbd> / <kbd>Ctrl+R</kbd>), the editor automatically restores directly from the physical disk file handle or cached content.
+* **Intelligent Crash & Reload Protection:** Prioritizes newer autosaved drafts if unsaved changes were made before reload, ensuring zero lost strokes.
 * **Universal Fallbacks:** Automatic fallback to standard `<input type="file">` and Blob downloads on unsupported platforms (e.g. mobile/older Safari).
 
 ---
 
 ## 3. Keyboard Shortcuts Reference
 
-| Shortcut | Action |
-| :--- | :--- |
-| `Right-Click` | Open Desktop Context Menu (Transform, Edit, Select) |
-| `Ctrl + A` | Select Entire Canvas |
-| `Escape` | Deselect / Dismiss Context Menu |
-| `B` | Pencil Tool |
-| `E` | Eraser Tool |
-| `G` | Flood Fill Tool |
-| `L` | Line Tool |
-| `U` | Rectangle Outline Tool |
-| `Shift + U` | Filled Rectangle Tool |
-| `C` | Circle / Ellipse Outline Tool |
-| `Shift + C` | Filled Circle / Ellipse Tool |
-| `Hold Shift` | Constrain 1:1 Aspect Ratio (Square / Circle) |
-| `Hold Alt` | Expand Shape from Center Point Outward |
-| `M` / `V` | Selection Marquee Tool (Drag inside to move) |
-| `I` | Eyedropper / Color Picker |
-| `P` | Hand / Pan Tool (or hold `Space`) |
-| `X` | Swap Primary & Secondary Colors |
-| `H` / `Shift + H` | Horizontal / Vertical Bilateral Symmetry |
-| `R` | Rotate 90° Clockwise (Selection or Canvas) |
-| `Arrows` | Nudge Pixels / Selection (1px Offset) |
-| `Ctrl + C` / `Ctrl + V` | Copy / Paste Selection (or Full Canvas) |
-| `Ctrl + X` | Cut Selection |
-| `Delete` / `Backspace` | Clear Selection / Delete Floating Pixels |
-| `F` | Fill Selection (or Canvas) with Primary Color |
-| `Enter` | Commit Floating Selection |
-| `Ctrl + Z` | Undo |
-| `Ctrl + Y` / `Ctrl + Shift + Z` | Redo |
-| `Ctrl + S` | Save File (Direct Disk Writeback or Download) |
-| `Ctrl + Shift + S` | Save As (File System Picker) |
-| `Ctrl + O` | Open File (`.pix2`, `.png`, `.jpg`) |
-| `Ctrl + N` | New Canvas Modal |
-| `Ctrl + O` | Open file |
-| `Ctrl + N` | New Canvas |
-| `Mouse Wheel` | Invariant Cursor-Centered Zoom |
+| Shortcut | Action | Notes |
+| :--- | :--- | :--- |
+| `Right-Click` | Open Desktop Context Menu | Transform, Edit, Select actions |
+| `Ctrl + A` | Select Entire Canvas | Full canvas marquee bounding box |
+| `Escape` | Deselect / Dismiss Context Menu | Clears selection or floating buffer |
+| `B` | Pencil Tool | Freehand continuous pixel drawing |
+| `E` | Eraser Tool | Erases pixels back to transparent |
+| `G` | Flood Fill Tool | 4-way contiguous region fill |
+| `L` | Line Tool | Normative Bresenham line with live preview |
+| `U` | Rectangle Outline Tool | Hold `Shift` for square, `Alt` for center expansion |
+| `Shift + U` | Filled Rectangle Tool | Solid rectangle |
+| `C` | Circle / Ellipse Outline Tool | Hold `Shift` for circle, `Alt` for center expansion |
+| `Shift + C` | Filled Circle / Ellipse Tool | Solid ellipse |
+| `Hold Shift` | Constrain 1:1 Aspect Ratio | For shapes & 15° rotation snapping |
+| `Hold Alt` | Expand Shape from Center Outward | For Rectangle and Circle tools |
+| `M` / `V` | Selection Marquee Tool | Drag to select; drag inside to move floating pixels |
+| `I` | Eyedropper / Color Picker | Samples canvas color to primary slot |
+| `H` (without Shift) | Hand / Pan Tool | Drags canvas view across viewport (or hold `Space`) |
+| `Shift + H` | Toggle Horizontal Symmetry | Mirrors across vertical center axis |
+| `Shift + V` | Toggle Vertical Symmetry | Mirrors across horizontal center axis |
+| `S` (without Ctrl) | Toggle Bilateral Symmetry | Quick shortcut for bilateral symmetry mode |
+| `R` | Rotate 90° Clockwise | Rotates selection if active, otherwise entire canvas |
+| `Drag Rotation Knob` | Free Multi-Angle Rotation | Drag stem knob at selection top; hold `Shift` for 15° snap |
+| `Arrows` | Nudge Pixels / Selection | 1px offset in arrow direction |
+| `Ctrl + C` / `Ctrl + V` | Copy / Paste Selection | Clipboard support |
+| `Ctrl + X` | Cut Selection | Copies and clears selection |
+| `Delete` / `Backspace` | Clear Selection / Delete Floating Pixels | Wipes selected region |
+| `F` | Fill Selection | Fills selection with primary color |
+| `Enter` | Commit Floating Selection | Stamps floating pixels down onto artwork |
+| `X` | Swap Primary & Secondary Colors | Immediate slot interchange |
+| `Ctrl + Z` | Undo | 50-level full document state history |
+| `Ctrl + Y` / `Ctrl + Shift + Z` | Redo | Forward history stack |
+| `Ctrl + S` | Save File | Direct disk writeback or download |
+| `Ctrl + Shift + S` | Save As | File System Access API picker |
+| `Ctrl + O` | Open File | Native picker for `.pix2`, `.png`, `.jpg` |
+| `Ctrl + N` | New Canvas Modal | Custom dimension setup |
+| `Mouse Wheel` | Invariant Cursor-Centered Zoom | 1x to 64x integer magnification |
 
 ---
 
@@ -225,24 +228,36 @@ To ensure optimal contrast and eye comfort across different art styles (e.g. bri
   * When $W > 1 \text{ or } H > 1$, rendering uses integer pixel alignment (`Math.floor(x * zoom) + 0.5`) with a 1px solid dark underlay, crisp dashed overlay (`[4, 4]`), and 4 corner grip handles.
 * **Select All (`Ctrl+A`):** Instantly bounds the entire canvas dimensions ($0, 0, W, H$).
 
-### 6.2 Selection Rotation (90° Clockwise)
-* Pressing `R` or clicking the Rotate 90° button transforms the active selection clockwise:
-  * Pixel coordinates map to $(H - 1 - Y, X)$.
-  * Bounding box width and height swap ($W' = H, H' = W$).
-  * The rotation automatically triggers history snapshot creation (`pushHistory()`), source code synchronization, and autosave.
-  * If no selection is active, rotating rotates the entire canvas/cell artwork.
+### 6.2 Selection Rotation (90° Clockwise & Free Multi-Angle)
+* **Clockwise 90° Keyboard Rotation (`R`):**
+  * Pressing `R` or clicking the Rotate button transforms the active selection:
+    * Pixel coordinates map to $(H - 1 - Y, X)$.
+    * Bounding box width and height swap ($W' = H, H' = W$).
+    * Automatically triggers history snapshot creation (`pushHistory()`), source code synchronization, and autosave.
+    * If no selection is active, rotating rotates the entire canvas artwork.
+* **Free Multi-Angle Rotation Handle (Stem + Circular Pivot):**
+  * Top-center of the marquee features a dedicated rotation stem and circular pivot knob.
+  * **Hover Feedback:** Hovering over the knob turns the cursor into `grab`.
+  * **Interactive Drag (60 FPS):** Dragging turns the cursor into `grabbing` and smoothly rotates floating pixels and the marquee box around the center in real-time.
+  * **Live Angle Readout:** Displays the exact rotation angle in degrees (e.g. `30°`, `45°`, `90°`) directly above the knob.
+  * **Angle Snapping (`Shift`):** Holding `Shift` snaps rotation to 15° increments (0°, 15°, 30°, 45°, 60°, 75°, 90°, etc.).
+  * **Nearest-Neighbor Inverse Sampling with Tight Bounding-Box Cropping:**
+    * When released (`pointerup`), the rotated pixels are rasterized using normative inverse rotation.
+    * If the rotation is near a 90° multiple, $W$ and $H$ strictly swap ($W \leftrightarrow H$) without floating-point inflation.
+    * The new selection bounds automatically **tight-crop to the actual non-empty pixels**, completely preventing repeated rotations from ballooning the bounding box with empty padding.
 
 ---
 
-## 7. Safe View Mode & Direct Code Editing Lock
+## 7. Safe View Mode & Auto-Lock on Apply
 
-To prevent accidental code erasure or loss of work when clicking in the code editor, the editor is protected by a dual-state locking mechanism:
+To prevent accidental code erasure when inspecting the code editor, the editor is protected by a streamlined, single-click locking mechanism:
 
-| State | Badge | Editor Attribute | Capabilities |
-| :--- | :--- | :--- | :--- |
-| **View Only (Default)** | `<i class="fa-solid fa-lock"></i> View Only` | `readonly` | Safe inspection, text selection, `Ctrl+C` copying, and downloading. Accidental typing or backspacing is completely blocked. |
-| **Editing Unlocked** | `<i class="fa-solid fa-pen"></i> Editing` | Not `readonly` | Direct source manipulation. Displays green **Apply** button to commit manual source code changes to the canvas artboard. |
+| State | Badge | Editor Attribute | Header Action | Capabilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **View Only (Default)** | `<i class="fa-solid fa-lock"></i> View Only` | `readonly` | Displays **`[ Edit ]`** button | Safe inspection, text selection, `Ctrl+C` copying, and downloading. Accidental typing or backspacing is completely blocked. |
+| **Editing Unlocked** | `<i class="fa-solid fa-pen"></i> Editing` | Not `readonly` | Displays **`[ Apply ]`** button (accent) | Direct source editing. Clicking `Apply` validates the PIX2 AST, updates canvas artwork, and **automatically locks the editor back to View Only** in one click (no redundant Lock button). |
 
+* **Non-Destructive Syntax Validation:** If manual edits contain syntax errors, the canvas remains completely intact and the status bar displays the exact error diagnostic pill (e.g. `● Syntax Error`).
 * **Fullscreen Code Expansion:** Switching to the Code-only view mode (`view-code-only`) automatically expands the editor pane to 100% of the viewport width, overriding split-pane inline pixel styles.
 
 ---
@@ -261,5 +276,45 @@ The canvas statusbar features dedicated alignment guideline toggles:
 
 * **Grab & Grabbing Interaction:** All horizontal bars across the interface—including `.pa-header`, `.pa-canvas-statusbar`, `.pa-palette-deck`, `.pa-swatches-scroll`, `.pa-code-header`, and `.pa-code-statusbar`—support smooth horizontal drag-scroll via mouse pointer drag or wheel tilt.
 * **Palette Save Button:** Styled as a clean, borderless bookmark icon (`fa-solid fa-bookmark`) whose height perfectly matches the 26px dropdown select element, avoiding bulky button backgrounds.
+
+---
+
+## 10. Real-Time File Watcher & Conflict Resolution System
+
+Faithfully reusing the proven external file-watcher architecture from **NOIRADIX Studio** (`js/app.js`), PixelArt maintains flawless synchronization between local disk files and the in-browser canvas/code editor when external tools (VS Code, external AI agents, scripts) modify the `.pix2` file on disk:
+
+```mermaid
+flowchart TD
+    Trigger["Watcher Trigger<br/>(Window Focus / Visibility Change / 1500ms Heartbeat)"] --> CheckHandle{"File Handle<br/>Linked?"}
+    CheckHandle -- No --> Idle["Idle Draft Mode"]
+    CheckHandle -- Yes --> CheckMod{"Disk Modified > Last Known<br/>AND Content != Last Saved?"}
+    CheckMod -- No --> UpdateTimestamp["Sync Timestamp & Idle"]
+    CheckMod -- Yes --> CheckDirty{"PixelArt Canvas/Editor<br/>Has Unsaved Edits?"}
+    CheckDirty -- "Clean (Not Dirty)" --> AutoReload["⚡ Auto-Reload File from Disk<br/>Parse PIX2 -> Repaint Canvas -> Update Editor"]
+    CheckDirty -- "Dirty (Unsaved Edits)" --> ConflictWarn["⚠️ Conflict Detected!<br/>Show Warning Toast + .pulse-warning on Reload Button"]
+    ConflictWarn --> UserChoice{"User Decision"}
+    UserChoice -- "Save (Ctrl+S)" --> OverwriteDisk["Overwrite Disk with Canvas Edits"]
+    UserChoice -- "Reload (Ctrl+Shift+R / Button)" --> ConfirmDiscard{"Confirm Discard<br/>Local Edits?"}
+    ConfirmDiscard -- Yes --> ForceReload["Discard Local Edits & Reload Disk Version"]
+    ConfirmDiscard -- No --> KeepEditing["Preserve Current Canvas Edits"]
+```
+
+### 10.1 Triple-Trigger Watcher Engine
+1. **Window Focus (`window.addEventListener('focus')`):** Instantly triggers a check the millisecond the artist switches from an external editor or AI chat back to the browser tab.
+2. **Tab Visibility (`document.addEventListener('visibilitychange')`):** Detects when the browser tab comes back into view.
+3. **Heartbeat Polling (`setInterval(1500ms)`):** Silently inspects file timestamps every 1.5 seconds if the document is active, enabling real-time collaboration across dual monitors without requiring window focus toggles.
+
+### 10.2 Conflict Detection & Visual Pulse Warning
+* **Safe Automatic Reload (Clean State):** If the artist has made no local unsaved edits, PixelArt immediately updates the code editor and canvas artwork without interrupting the workflow, displaying a toast notification: `⚡ Reloaded <file.name> from disk (external update detected)!`.
+* **Protective Conflict Warning (Dirty State):** If the canvas contains unsaved strokes, PixelArt **never** silently destroys user work. Instead:
+  * Triggers a warning toast: `⚠️ "<file.name>" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`.
+  * Activates an attention-grabbing amber glow animation (`.pulse-warning`) on the `#btn-reload-file` button.
+  * Preserves all local canvas and editor strokes until the user explicitly decides to overwrite (`Ctrl+S`) or reload (`Ctrl+Shift+R`).
+
+### 10.3 Manual Reload Confirmation
+* Clicking `#btn-reload-file` or pressing <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> checks whether local unsaved edits exist.
+* If dirty, displays a native modal confirmation explaining that current in-browser edits will be discarded in favor of the external disk version.
+* Upon confirming, clears the `.pulse-warning` class, reloads the disk content, and refreshes the canvas.
+
 
 

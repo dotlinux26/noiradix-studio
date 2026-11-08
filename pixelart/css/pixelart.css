@@ -362,6 +362,18 @@ html, body {
   color: var(--text-main);
 }
 
+.pulse-warning {
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+  animation: pulse-glow-warning 1.5s infinite;
+}
+
+@keyframes pulse-glow-warning {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
 .pa-save-status-badge {
   display: inline-flex;
   align-items: center;

@@ -442,7 +442,10 @@
               const ok = applySourceCodeToCanvas();
               if (ok) {
                 documentRestored = true;
+                lastSavedContent = text;
+                lastKnownFileModified = file.lastModified;
                 state.lastFileModified = file.lastModified;
+                pendingExternalConflict = null;
                 setDirty(false);
               }
             }
@@ -1561,11 +1564,30 @@
         const origX = state.rotationBaseSel.x;
         const origY = state.rotationBaseSel.y;
 
-        const cosT = Math.cos(theta);
-        const sinT = Math.sin(theta);
+        // Check if angle is a multiple of 90 degrees (pi/2)
+        const halfPi = Math.PI / 2;
+        const steps90 = Math.round(theta / halfPi);
+        const isNear90 = Math.abs(theta - steps90 * halfPi) < 0.05;
 
-        const newW = Math.max(1, Math.round(Math.abs(origW * cosT) + Math.abs(origH * sinT)));
-        const newH = Math.max(1, Math.round(Math.abs(origW * sinT) + Math.abs(origH * cosT)));
+        let newW, newH, cosT, sinT;
+        if (isNear90) {
+          const normSteps = ((steps90 % 4) + 4) % 4;
+          if (normSteps === 1 || normSteps === 3) {
+            newW = origH;
+            newH = origW;
+          } else {
+            newW = origW;
+            newH = origH;
+          }
+          const snappedAngle = steps90 * halfPi;
+          cosT = Math.round(Math.cos(snappedAngle));
+          sinT = Math.round(Math.sin(snappedAngle));
+        } else {
+          cosT = Math.cos(theta);
+          sinT = Math.sin(theta);
+          newW = Math.max(1, Math.round(Math.abs(origW * cosT) + Math.abs(origH * sinT)));
+          newH = Math.max(1, Math.round(Math.abs(origW * sinT) + Math.abs(origH * cosT)));
+        }
 
         const origCenterX = origW / 2;
         const origCenterY = origH / 2;
@@ -1589,13 +1611,43 @@
           }
         }
 
-        state.selection.x = Math.round(origX + (origW - newW) / 2);
-        state.selection.y = Math.round(origY + (origH - newH) / 2);
-        state.selection.w = newW;
-        state.selection.h = newH;
-        state.floatingPixels = rotatedPixels;
-        state.floatingCurrentX = state.selection.x;
-        state.floatingCurrentY = state.selection.y;
+        // Tight crop to actual rotated pixels to prevent bounding box from inflating
+        const keys = Object.keys(rotatedPixels);
+        if (keys.length > 0) {
+          let minX = Infinity, maxX = -Infinity;
+          let minY = Infinity, maxY = -Infinity;
+          for (const k of keys) {
+            const [px, py] = k.split(',').map(Number);
+            if (px < minX) minX = px;
+            if (px > maxX) maxX = px;
+            if (py < minY) minY = py;
+            if (py > maxY) maxY = py;
+          }
+
+          const tightW = maxX - minX + 1;
+          const tightH = maxY - minY + 1;
+          const trimmedPixels = {};
+          for (const k of keys) {
+            const [px, py] = k.split(',').map(Number);
+            trimmedPixels[`${px - minX},${py - minY}`] = rotatedPixels[k];
+          }
+
+          state.selection.x = Math.round(origX + (origW - newW) / 2 + minX);
+          state.selection.y = Math.round(origY + (origH - newH) / 2 + minY);
+          state.selection.w = tightW;
+          state.selection.h = tightH;
+          state.floatingPixels = trimmedPixels;
+          state.floatingCurrentX = state.selection.x;
+          state.floatingCurrentY = state.selection.y;
+        } else {
+          state.selection.x = Math.round(origX + (origW - newW) / 2);
+          state.selection.y = Math.round(origY + (origH - newH) / 2);
+          state.selection.w = newW;
+          state.selection.h = newH;
+          state.floatingPixels = rotatedPixels;
+          state.floatingCurrentX = state.selection.x;
+          state.floatingCurrentY = state.selection.y;
+        }
 
         const deg = Math.round((theta * 180) / Math.PI);
         showToast(`Rotated selection by ${deg}°`);
@@ -2783,6 +2835,11 @@ Do not include conversational greetings or postscripts.`;
 
   let currentFileHandle = null;
   let currentFileName = null;
+  let lastKnownFileModified = 0;
+  let lastSavedContent = '';
+  let isExternalReloading = false;
+  let pendingExternalConflict = null;
+  let fileWatcherHeartbeatTimer = null;
 
   function updateDocumentTitle() {
     const name = currentFileName || `${sanitizeFilename(state.title || 'Untitled')}.pix2`;
@@ -2817,6 +2874,14 @@ Do not include conversational greetings or postscripts.`;
           currentFileName = file.name;
           state.title = file.name.replace(/\.[^/.]+$/, '');
           dom.docTitle.value = state.title;
+          lastKnownFileModified = file.lastModified;
+          lastSavedContent = text;
+          pendingExternalConflict = null;
+          const btnReload = document.getElementById('btn-reload-file');
+          if (btnReload) {
+            btnReload.classList.remove('pulse-warning');
+            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+          }
           await persistFileHandle(handle);
           localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
           localStorage.setItem('pix2_last_saved_content', text);
@@ -2829,6 +2894,9 @@ Do not include conversational greetings or postscripts.`;
           currentFileName = file.name;
           state.title = file.name.replace(/\.[^/.]+$/, '');
           dom.docTitle.value = state.title;
+          lastKnownFileModified = 0;
+          lastSavedContent = '';
+          pendingExternalConflict = null;
           await clearPersistedFileHandle();
           setDirty(true);
           return;
@@ -2861,6 +2929,19 @@ Do not include conversational greetings or postscripts.`;
         const writable = await currentFileHandle.createWritable();
         await writable.write(text);
         await writable.close();
+        try {
+          const fresh = await currentFileHandle.getFile();
+          lastKnownFileModified = fresh.lastModified;
+        } catch (_) {
+          lastKnownFileModified = Date.now();
+        }
+        lastSavedContent = text;
+        pendingExternalConflict = null;
+        const btnReload = document.getElementById('btn-reload-file');
+        if (btnReload) {
+          btnReload.classList.remove('pulse-warning');
+          btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+        }
         await persistFileHandle(currentFileHandle);
         localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
         localStorage.setItem('pix2_last_saved_content', text);
@@ -2890,6 +2971,19 @@ Do not include conversational greetings or postscripts.`;
         currentFileName = handle.name;
         state.title = handle.name.replace(/\.[^/.]+$/, '');
         dom.docTitle.value = state.title;
+        try {
+          const fresh = await handle.getFile();
+          lastKnownFileModified = fresh.lastModified;
+        } catch (_) {
+          lastKnownFileModified = Date.now();
+        }
+        lastSavedContent = text;
+        pendingExternalConflict = null;
+        const btnReload = document.getElementById('btn-reload-file');
+        if (btnReload) {
+          btnReload.classList.remove('pulse-warning');
+          btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+        }
         await persistFileHandle(handle);
         localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
         localStorage.setItem('pix2_last_saved_content', text);
@@ -3572,27 +3666,133 @@ Do not include conversational greetings or postscripts.`;
       });
     }
 
-    const btnReloadFile = document.getElementById('btn-reload-file');
-    if (btnReloadFile) {
-      btnReloadFile.addEventListener('click', async () => {
-        if (!currentFileHandle) {
-          showToast('Artwork is an unsaved in-memory draft. Press Ctrl+S to save to disk first.', 'info');
+    // ===========================================================================
+    // REAL-TIME FILE WATCHER & LIVE HOT-RELOAD (External AI & Disk Collaboration)
+    // ===========================================================================
+    async function checkAndReloadExternalFileChanges(force = false) {
+      if (!currentFileHandle || isExternalReloading) return;
+      if (typeof currentFileHandle.getFile !== 'function') return;
+
+      try {
+        isExternalReloading = true;
+        const file = await currentFileHandle.getFile();
+        const currentModified = file.lastModified;
+
+        // Check if file modified time is newer than our recorded timestamp
+        if (!force && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified) {
+          isExternalReloading = false;
           return;
         }
-        try {
-          const file = await currentFileHandle.getFile();
-          const text = await file.text();
-          dom.codeEditor.value = text;
-          applySourceCodeToCanvas();
-          setDirty(false);
-          showToast(`Reloaded ${file.name} from disk!`);
-        } catch (err) {
-          showToast(`Reload failed: ${err.message}`, 'error');
+
+        const text = await file.text();
+        if (!text || !text.trim()) {
+          isExternalReloading = false;
+          return;
         }
-      });
+
+        // If content is identical to our last saved version, just sync timestamp
+        if (text === lastSavedContent) {
+          lastKnownFileModified = currentModified;
+          isExternalReloading = false;
+          return;
+        }
+
+        // External change detected!
+        if (state.isDirty && !force) {
+          // PixelArt has unsaved edits: do NOT overwrite silently!
+          showExternalConflictNotification(file, text, currentModified);
+          isExternalReloading = false;
+          return;
+        }
+
+        // Safe reload
+        dom.codeEditor.value = text;
+        const ok = applySourceCodeToCanvas();
+        if (ok) {
+          lastKnownFileModified = currentModified;
+          lastSavedContent = text;
+          localStorage.setItem('pix2_last_saved_content', text);
+          pendingExternalConflict = null;
+          setDirty(false);
+          const btnReload = document.getElementById('btn-reload-file');
+          if (btnReload) {
+            btnReload.classList.remove('pulse-warning');
+            btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+          }
+          showToast(`⚡ Reloaded ${file.name} from disk (external update detected)!`, 'info');
+        }
+      } catch (err) {
+        console.debug('External file check deferred:', err);
+      } finally {
+        isExternalReloading = false;
+      }
     }
 
-    // Real-time window focus & beforeunload watcher
+    function showExternalConflictNotification(file, newText, newModified) {
+      if (pendingExternalConflict && pendingExternalConflict.modified === newModified) return;
+      pendingExternalConflict = { file, text: newText, modified: newModified };
+
+      showToast(
+        `⚠️ "${file.name}" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`,
+        'warning',
+        6000
+      );
+
+      const btnReload = document.getElementById('btn-reload-file');
+      if (btnReload) {
+        btnReload.classList.add('pulse-warning');
+        btnReload.title = `External changes detected on ${file.name}! Click to reload from disk (Ctrl+Shift+R).`;
+      }
+    }
+
+    async function handleManualFileReload() {
+      if (!currentFileHandle) {
+        showToast('Artwork is an unsaved in-memory draft. Press Ctrl+S to save to disk first.', 'info');
+        return;
+      }
+      if (state.isDirty) {
+        const confirmDiscard = confirm(
+          `"${currentFileHandle.name}" has unsaved changes in NOIRADIX PixelArt.\n\nReloading from disk will discard your current editor edits and load the external disk version.\n\nDo you want to discard PixelArt edits and reload from disk?`
+        );
+        if (!confirmDiscard) return;
+      }
+      await checkAndReloadExternalFileChanges(true);
+      const btnReload = document.getElementById('btn-reload-file');
+      if (btnReload) {
+        btnReload.classList.remove('pulse-warning');
+        btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+      }
+      pendingExternalConflict = null;
+    }
+
+    function initFileWatcher() {
+      // 1. Focus listener: window gets active focus when switching from external editor/AI
+      window.addEventListener('focus', () => {
+        checkAndReloadExternalFileChanges(false);
+      });
+
+      // 2. Visibility change listener (tab becomes visible)
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          checkAndReloadExternalFileChanges(false);
+        }
+      });
+
+      // 3. Heartbeat polling (every 1500ms when document is active and no unsaved edits)
+      if (fileWatcherHeartbeatTimer) clearInterval(fileWatcherHeartbeatTimer);
+      fileWatcherHeartbeatTimer = setInterval(() => {
+        if (!document.hidden && currentFileHandle && !state.isDirty) {
+          checkAndReloadExternalFileChanges(false);
+        }
+      }, 1500);
+    }
+
+    const btnReloadFile = document.getElementById('btn-reload-file');
+    if (btnReloadFile) {
+      btnReloadFile.addEventListener('click', handleManualFileReload);
+    }
+
+    // Real-time window beforeunload watcher
     window.addEventListener('beforeunload', (e) => {
       if (state.isDirty || (!currentFileHandle && state.doc && Object.keys(getArtworkCell()?.pixels || {}).length > 0)) {
         e.preventDefault();
@@ -3600,23 +3800,7 @@ Do not include conversational greetings or postscripts.`;
       }
     });
 
-    window.addEventListener('focus', async () => {
-      if (currentFileHandle && !state.isDirty) {
-        try {
-          const file = await currentFileHandle.getFile();
-          if (file.lastModified > (state.lastFileModified || 0)) {
-            state.lastFileModified = file.lastModified;
-            const text = await file.text();
-            if (text !== dom.codeEditor.value) {
-              dom.codeEditor.value = text;
-              applySourceCodeToCanvas();
-              setDirty(false);
-              showToast(`Auto-reloaded changes from ${file.name}!`);
-            }
-          }
-        } catch (_) {}
-      }
-    });
+    initFileWatcher();
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
@@ -3650,6 +3834,9 @@ Do not include conversational greetings or postscripts.`;
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {
         e.preventDefault();
         openFileNative();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        handleManualFileReload();
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N')) {
         e.preventDefault();
         dom.modalNew.classList.remove('hidden');

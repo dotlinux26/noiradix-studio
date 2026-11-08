@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — System Architecture & Code Reuse Plan
 
 **Document ID:** `docs/PIXELART/ARCHITECTURE_AND_REUSE_PLAN.md`  
-**Version:** 1.2.0  
+**Version:** 1.3.0  
 **Author:** Nguyen Duc Canh (@dotlinux26) & Pair Assistant  
 **Date:** 2026-11-08  
 **Target URL:** `https://noiradix.me/pixelart/`  
@@ -100,11 +100,35 @@ To guarantee sustained 60fps drawing responsiveness — even on $1024 \times 102
 3. **Re-entrancy Lock (`isSyncing`):** Prevents recursive loops between the canvas and textarea.
 
 ### 4.2 Non-Destructive Source-to-Canvas Parsing
-When an artist or AI pastes code into the editor:
-* Input is debounced by 200ms.
-* `PIX2.validate()` checks token and structural validity.
-* **If valid:** The document AST updates, canvas dimensions adjust automatically, and the artboard repaints.
-* **If invalid:** The canvas maintains the last valid artwork without clearing or corrupting the drawing, while the status pill surfaces the exact error code (e.g. `PIX2_ERR_INVALID_COORD`).
+When an artist pastes code into the editor or edits directly:
+* Input is debounced by 200ms (or applied instantly when clicking **`[ Apply ]`**).
+* **Step 1 — Parse:** `PIX2.parse(source)` produces the structured AST document.
+* **Step 2 — Validate:** `PIX2.validate(parsedDoc, { strict: false })` inspects the AST object for syntax, token, and coordinate integrity.
+* **If valid:** The document AST updates active state, artwork dimensions adjust dynamically, palette swatches synchronize, canvas repaints, and the editor automatically locks back to View Only mode.
+* **If invalid:** The canvas maintains the last valid artwork without clearing or corrupting the drawing, while the status pill surfaces the exact error code (e.g. `[PIX2_ERR_INVALID_COORDINATE]`).
+
+### 4.3 Zero-Data-Loss Disk & Session Persistence Pipeline
+To eliminate any risk of artwork disappearance upon page reload:
+1. **Physical File Handle Retention:** Saving via Native File System Access API preserves `currentFileHandle` in IndexedDB (`pix2_pixelart_store`).
+2. **Reload Recovery Ladder:** On browser reload (<kbd>F5</kbd> / <kbd>Ctrl+R</kbd>), the editor checks:
+   * **Level 1 (Disk Handle):** Reads directly from `persisted.getFile()` and applies source code to canvas.
+   * **Level 2 (Disk Cache):** If permission is not yet re-granted, reads from `pix2_last_saved_content` in `localStorage`.
+   * **Level 3 (Newer Autosave):** If the user made unsaved strokes after saving to disk, restores the newer autosaved snapshot (`pix2_pixelart_autosave`) and flags `isDirty = true`.
+   * **Level 4 (Default):** Blank canvas if starting fresh.
+3. **Real-Time 2-Way Title Sync:** Changing the artwork title immediately updates the file status pill and window title in real time.
+
+### 4.4 Real-Time File Watcher & Conflict Engine (Studio Reuse)
+Faithfully ported and reused from NOIRADIX Studio (`js/app.js` lines 5220–5335):
+1. **Triple-Trigger Watcher Architecture:**
+   * `focus`: Triggers whenever window focus is restored from an external IDE (VS Code, Cursor) or AI generator.
+   * `visibilitychange`: Triggers when switching browser tabs.
+   * `setInterval(1500ms)`: Background heartbeat polling during active viewing sessions.
+2. **Conflict Resolution Strategy:**
+   * If local state is clean (`!state.isDirty`): Auto-reloads external changes from disk silently into the canvas and code editor, showing a confirmation toast `⚡ Reloaded <file.name> from disk (external update detected)!`.
+   * If local state is dirty (`state.isDirty`): Prevents destructive overwrite, displays warning toast `⚠️ "<file.name>" changed externally on disk! Click "Reload Disk" in status bar or Save to overwrite.`, and animates `#btn-reload-file` with `.pulse-warning`.
+3. **Explicit Manual Reload (<kbd>Ctrl+Shift+R</kbd>):**
+   * Prompts user with native `confirm()` before discarding unsaved canvas edits.
+   * Clears `.pulse-warning` glow and re-synchronizes timestamps on completion.
 
 ---
 
