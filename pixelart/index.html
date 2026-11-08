@@ -29,7 +29,27 @@
       </div>
       <div class="pa-doc-info">
         <input type="text" id="pa-doc-title" class="pa-title-input" value="Pixel Artwork" title="Click to rename artwork" aria-label="Artwork Title">
+        <span id="pa-header-dirty-dot" class="pa-dirty-dot" title="Unsaved changes (Ctrl+S to save)">●</span>
         <span class="pa-dim-badge" id="pa-dim-badge">64×64</span>
+        <div class="pa-file-status-group" id="pa-file-status-group">
+          <span id="pa-file-source-badge" class="pa-file-source-badge draft" title="File Source: In-Memory Draft. Press Ctrl+S to save to disk.">
+            <i class="fa-solid fa-clock-rotate-left"></i> <span id="pa-file-source-text">Draft</span>
+          </span>
+          <div id="pa-file-path-pill" class="pa-file-path-pill" title="Click to copy file name">
+            <span id="pa-file-path-text">untitled.pix2</span>
+            <i class="fa-regular fa-copy copy-icon"></i>
+          </div>
+          <button id="btn-reload-file" class="pa-btn-icon-xs" title="Reload from disk (Auto-checks external changes)">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+          <span id="pa-save-status-badge" class="pa-save-status-badge draft" title="Save Status">
+            <i class="fa-solid fa-triangle-exclamation"></i> <span id="pa-save-status-text">Unsaved to Disk</span>
+          </span>
+        </div>
+      </div>
+      <div id="pa-autosave-status-pill" class="pa-autosave-pill saved" title="Automatic Local Persistence &amp; Recovery Snapshot">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <span id="pa-autosave-status-text">Autosaved</span>
       </div>
     </div>
 
@@ -107,27 +127,27 @@
       <button class="pa-tool-btn" data-tool="circle-fill" title="Filled Circle / Ellipse Tool (Shift+C) [Hold Shift for 1:1 Circle, Alt for Center]">
         <i class="fa-solid fa-circle"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (M / V) — Drag to move selection">
+      <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (V or M) — Drag to move selection">
         <i class="fa-solid fa-crop-simple"></i>
       </button>
       <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I) — Sample color">
         <i class="fa-solid fa-eye-dropper"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="pan" title="Hand / Pan Tool (Space+Drag)">
+      <button class="pa-tool-btn" data-tool="pan" title="Hand / Pan Tool (H or Space+Drag)">
         <i class="fa-solid fa-hand"></i>
       </button>
 
       <div class="pa-tool-sep"></div>
 
       <!-- Symmetry Toggles (Custom Visual Mirror Axis SVGs) -->
-      <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Symmetry Guide (H) [Mirror Left ↔ Right across vertical center]">
+      <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Symmetry Guide (Shift+H) [Mirror Left ↔ Right across vertical center]">
         <svg class="pa-sym-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="3 3"/>
           <circle cx="6" cy="12" r="3" fill="currentColor"/>
           <circle cx="18" cy="12" r="3" fill="currentColor"/>
         </svg>
       </button>
-      <button id="btn-toggle-sym-v" class="pa-tool-btn" title="Vertical Symmetry Guide (Shift+H) [Mirror Top ↕ Bottom across horizontal center]">
+      <button id="btn-toggle-sym-v" class="pa-tool-btn" title="Vertical Symmetry Guide (Shift+V) [Mirror Top ↕ Bottom across horizontal center]">
         <svg class="pa-sym-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="3 3"/>
           <circle cx="12" cy="6" r="3" fill="currentColor"/>
@@ -243,17 +263,17 @@
 
           <div class="pa-status-divider" aria-hidden="true"></div>
 
-          <!-- Alignment Guides (Dóng dọc, dóng ngang, tâm giữa) -->
+          <!-- Alignment Guides -->
           <div class="pa-guides-group" role="group" aria-label="Alignment Guides">
-            <button id="btn-toggle-guide-center" class="pa-status-btn" title="Toggle Center Crosshair Guides (Trục dóng tâm giữa)">
+            <button id="btn-toggle-guide-center" class="pa-status-btn" title="Toggle Center Crosshair Guides">
               <i class="fa-solid fa-crosshairs"></i>
               <span>Center</span>
             </button>
-            <button id="btn-toggle-guide-v" class="pa-status-btn" title="Toggle Vertical Center Guide (Dóng dọc giữa)">
+            <button id="btn-toggle-guide-v" class="pa-status-btn" title="Toggle Vertical Center Guide">
               <i class="fa-solid fa-arrows-left-right"></i>
               <span>V-Guide</span>
             </button>
-            <button id="btn-toggle-guide-h" class="pa-status-btn" title="Toggle Horizontal Center Guide (Dóng ngang giữa)">
+            <button id="btn-toggle-guide-h" class="pa-status-btn" title="Toggle Horizontal Center Guide">
               <i class="fa-solid fa-arrows-up-down"></i>
               <span>H-Guide</span>
             </button>
@@ -277,7 +297,7 @@
 
     <!-- RIGHT PIX2 SOURCE CODE PANE -->
     <section class="pa-code-pane" id="pa-code-pane">
-      <header class="pa-code-header">
+      <header class="pa-code-header" id="pa-code-header">
         <div class="pa-code-title">
           <i class="fa-solid fa-file-code text-accent"></i>
           <span>PIX2 Source Code</span>
@@ -288,6 +308,8 @@
             <i class="fa-solid fa-lock"></i> View Only
           </span>
         </div>
+
+        <div class="pa-code-spacer" aria-hidden="true"></div>
 
         <div class="pa-code-actions">
           <button id="btn-toggle-code-lock" class="pa-btn-xs" title="Unlock to edit PIX2 code directly">
@@ -444,8 +466,9 @@
         <button class="pa-modal-close" data-close-modal><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="pa-modal-body">
-        <p class="pa-modal-hint">Select a standard pixel art dimension or specify a custom size up to 1024×1024.</p>
+        <p class="pa-modal-hint">Select a standard pixel art aspect ratio or specify custom dimensions up to 1024×1024.</p>
         
+        <div class="pa-preset-category-label">Square (1:1)</div>
         <div class="pa-presets-grid">
           <button class="pa-preset-chip" data-w="16" data-h="16">16 × 16</button>
           <button class="pa-preset-chip" data-w="24" data-h="24">24 × 24</button>
@@ -453,11 +476,28 @@
           <button class="pa-preset-chip" data-w="48" data-h="48">48 × 48</button>
           <button class="pa-preset-chip active" data-w="64" data-h="64">64 × 64</button>
           <button class="pa-preset-chip" data-w="128" data-h="128">128 × 128</button>
-          <button class="pa-preset-chip" data-w="192" data-h="108">192 × 108 (16:9)</button>
           <button class="pa-preset-chip" data-w="256" data-h="256">256 × 256</button>
-          <button class="pa-preset-chip" data-w="320" data-h="180">320 × 180 (16:9)</button>
           <button class="pa-preset-chip" data-w="512" data-h="512">512 × 512</button>
           <button class="pa-preset-chip" data-w="1024" data-h="1024">1024 × 1024</button>
+        </div>
+
+        <div class="pa-preset-category-label">Classic &amp; Handheld (4:3 &amp; 3:2)</div>
+        <div class="pa-presets-grid">
+          <button class="pa-preset-chip" data-w="32" data-h="24">32 × 24 (4:3)</button>
+          <button class="pa-preset-chip" data-w="64" data-h="48">64 × 48 (4:3)</button>
+          <button class="pa-preset-chip" data-w="160" data-h="120">160 × 120 (4:3)</button>
+          <button class="pa-preset-chip" data-w="320" data-h="240">320 × 240 (4:3)</button>
+          <button class="pa-preset-chip" data-w="48" data-h="32">48 × 32 (3:2)</button>
+          <button class="pa-preset-chip" data-w="240" data-h="160">240 × 160 (GBA 3:2)</button>
+        </div>
+
+        <div class="pa-preset-category-label">Widescreen &amp; Cinematic (16:9 &amp; 21:9)</div>
+        <div class="pa-presets-grid">
+          <button class="pa-preset-chip" data-w="64" data-h="36">64 × 36 (16:9)</button>
+          <button class="pa-preset-chip" data-w="192" data-h="108">192 × 108 (16:9)</button>
+          <button class="pa-preset-chip" data-w="320" data-h="180">320 × 180 (16:9)</button>
+          <button class="pa-preset-chip" data-w="640" data-h="360">640 × 360 (16:9)</button>
+          <button class="pa-preset-chip" data-w="256" data-h="110">256 × 110 (21:9)</button>
         </div>
 
         <div class="pa-custom-size-row">
@@ -531,13 +571,52 @@
       </div>
       <div class="pa-modal-body">
         <p class="pa-modal-hint">
-          Large Language Models (ChatGPT, Claude) can generate crisp 2D pixel art directly using the <strong>PIX2 v1.0 standard</strong> without diffusion blur. Select a prompt template below or paste generated code to inject it directly into your canvas!
+          Generate complete <strong>PIX2 v1.0 standard</strong> specifications with embedded grammar rules, coordinates, and color indexing for ChatGPT, Claude, and AI assistants.
         </p>
+
+        <!-- Interactive Dimension & Mode Controls -->
+        <div class="pa-ai-config-panel">
+          <div class="pa-ai-config-row">
+            <div class="pa-ai-config-item">
+              <label><i class="fa-solid fa-vector-square"></i> Dimensions:</label>
+              <div class="pa-ai-dim-inputs">
+                <input type="number" id="input-ai-w" class="pa-ai-num" value="64" min="1" max="1024">
+                <span>×</span>
+                <input type="number" id="input-ai-h" class="pa-ai-num" value="64" min="1" max="1024">
+                <button id="btn-ai-sync-dim" class="pa-btn-xs" title="Sync with current canvas dimensions">
+                  <i class="fa-solid fa-arrows-rotate"></i> Sync Canvas
+                </button>
+              </div>
+            </div>
+
+            <div class="pa-ai-config-item">
+              <label><i class="fa-solid fa-book"></i> Prompt Spec Mode:</label>
+              <select id="select-ai-spec-mode" class="pa-select">
+                <option value="comprehensive" selected>Comprehensive Standard (350+ lines full specification &amp; rules)</option>
+                <option value="compact">Compact Brief (Task &amp; canvas metadata)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pa-ai-aspect-row">
+            <span class="pa-ai-aspect-label">Quick Ratios:</span>
+            <button class="pa-ai-ratio-btn" data-w="16" data-h="16">16×16 (1:1)</button>
+            <button class="pa-ai-ratio-btn" data-w="32" data-h="32">32×32 (1:1)</button>
+            <button class="pa-ai-ratio-btn" data-w="48" data-h="48">48×48 (1:1)</button>
+            <button class="pa-ai-ratio-btn active" data-w="64" data-h="64">64×64 (1:1)</button>
+            <button class="pa-ai-ratio-btn" data-w="128" data-h="128">128×128 (1:1)</button>
+            <button class="pa-ai-ratio-btn" data-w="64" data-h="48">64×48 (4:3)</button>
+            <button class="pa-ai-ratio-btn" data-w="48" data-h="32">48×32 (3:2)</button>
+            <button class="pa-ai-ratio-btn" data-w="192" data-h="108">192×108 (16:9)</button>
+            <button class="pa-ai-ratio-btn" data-w="320" data-h="180">320×180 (16:9)</button>
+          </div>
+        </div>
 
         <div class="pa-ai-tabs">
           <button class="pa-ai-tab active" data-template="portrait">Character Portrait</button>
-          <button class="pa-ai-tab" data-template="item">Game Item / Icon</button>
-          <button class="pa-ai-tab" data-template="landscape">Scenery / Landscape</button>
+          <button class="pa-ai-tab" data-template="item">Game Item / Weapon / Icon</button>
+          <button class="pa-ai-tab" data-template="landscape">Scenery / Landscape / Backdrop</button>
+          <button class="pa-ai-tab" data-template="prop">Tileset / Building Kit / Prop</button>
           <button class="pa-ai-tab" data-template="inject">Inject PIX2 Code</button>
         </div>
 
@@ -547,7 +626,7 @@
             <button id="btn-copy-ai-prompt" class="pa-btn pa-btn-accent">
               <i class="fa-regular fa-copy"></i> Copy Prompt for LLM
             </button>
-            <span class="pa-ai-copy-hint">Paste this into ChatGPT, Claude or your AI agent.</span>
+            <span class="pa-ai-copy-hint">Paste this into ChatGPT, Claude, Gemini or your autonomous coding agent.</span>
           </div>
         </div>
 

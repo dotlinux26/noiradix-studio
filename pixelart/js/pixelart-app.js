@@ -277,9 +277,113 @@
     guideV: false,
     guideH: false,
 
+    // Selection Free Multi-Angle Rotation State
+    isRotatingSelection: false,
+    rotationStartAngle: 0,
+    rotationCurrentAngle: 0,
+    rotationCenter: null,
+
+    // Document Dirty & Disk Link State
+    isDirty: false,
+
     // Code Editor Lock / Safe Mode
     isCodeEditingUnlocked: false
   };
+
+  // Toast Notification System
+  let toastTimer = null;
+  function showToast(msg, type = 'info') {
+    let toast = document.getElementById('pa-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'pa-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.className = `pa-toast visible pa-toast-${type}`;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.className = 'pa-toast';
+    }, 2800);
+  }
+
+  // Dirty State Tracker & Desktop Status Synchronizer
+  function setDirty(dirty) {
+    state.isDirty = dirty;
+    const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || `${sanitizeFilename(state.title)}.pix2`;
+    const isLinked = Boolean(currentFileHandle);
+
+    document.title = (dirty || !isLinked)
+      ? `● ${fileName} — NOIRADIX PixelArt`
+      : `${fileName} — NOIRADIX PixelArt`;
+
+    const dirtyDot = document.getElementById('pa-header-dirty-dot');
+    if (dirtyDot) {
+      dirtyDot.classList.toggle('is-dirty', dirty);
+      dirtyDot.title = dirty ? 'Unsaved changes (Ctrl+S to save)' : `Saved to disk (${fileName})`;
+    }
+
+    const sourceBadge = document.getElementById('pa-file-source-badge');
+    const sourceText = document.getElementById('pa-file-source-text');
+    if (sourceBadge && sourceText) {
+      if (isLinked) {
+        sourceBadge.className = 'pa-file-source-badge local';
+        sourceBadge.title = `Direct disk link: ${fileName}`;
+        sourceText.textContent = 'Local File';
+      } else {
+        sourceBadge.className = 'pa-file-source-badge draft';
+        sourceBadge.title = 'In-Memory Draft (Ctrl+S to save to physical file)';
+        sourceText.textContent = 'Draft';
+      }
+    }
+
+    const pathText = document.getElementById('pa-file-path-text');
+    if (pathText) {
+      pathText.textContent = fileName;
+    }
+
+    const saveBadge = document.getElementById('pa-save-status-badge');
+    const saveText = document.getElementById('pa-save-status-text');
+    if (saveBadge && saveText) {
+      if (!isLinked) {
+        saveBadge.className = 'pa-save-status-badge draft';
+        saveText.textContent = 'Unsaved to Disk';
+      } else if (dirty) {
+        saveBadge.className = 'pa-save-status-badge dirty';
+        saveText.textContent = 'Unsaved Changes';
+      } else {
+        saveBadge.className = 'pa-save-status-badge clean';
+        saveText.textContent = 'Saved to Disk';
+      }
+    }
+
+    const btnSave = document.getElementById('btn-save-pix2');
+    if (btnSave) {
+      btnSave.classList.toggle('pa-btn-accent', dirty || !isLinked);
+    }
+  }
+
+  // High-Performance Cached Checkerboard Pattern (Eliminates 512x512 rendering lag)
+  let _checkerPatternCache = null;
+  let _lastCheckerKey = '';
+  function getCheckerPattern(ctx, tileSize, isDark) {
+    const key = `${tileSize}_${isDark}`;
+    if (_checkerPatternCache && _lastCheckerKey === key) return _checkerPatternCache;
+    const patCanvas = document.createElement('canvas');
+    patCanvas.width = tileSize * 2;
+    patCanvas.height = tileSize * 2;
+    const pctx = patCanvas.getContext('2d');
+    const c1 = isDark ? '#1a1d29' : '#ffffff';
+    const c2 = isDark ? '#121520' : '#e2e8f0';
+    pctx.fillStyle = c1;
+    pctx.fillRect(0, 0, tileSize * 2, tileSize * 2);
+    pctx.fillStyle = c2;
+    pctx.fillRect(0, 0, tileSize, tileSize);
+    pctx.fillRect(tileSize, tileSize, tileSize, tileSize);
+    _checkerPatternCache = ctx.createPattern(patCanvas, 'repeat');
+    _lastCheckerKey = key;
+    return _checkerPatternCache;
+  }
 
   // DOM Elements Cache
   const dom = {};
@@ -287,7 +391,7 @@
   // ===========================================================================
   // INITIALIZATION
   // ===========================================================================
-  function init() {
+  async function init() {
     cacheDom();
     initTheme();
     initPanelWidth();
@@ -296,6 +400,15 @@
     if (dom.codeEditor) {
       dom.codeEditor.readOnly = true;
     }
+
+    // Check for persisted file handle in IndexedDB
+    try {
+      const persisted = await retrievePersistedFileHandle();
+      if (persisted) {
+        currentFileHandle = persisted;
+        currentFileName = persisted.name;
+      }
+    } catch (_) {}
 
     // Check for crash recovery / autosave
     const saved = localStorage.getItem('pix2_pixelart_autosave');
@@ -323,6 +436,7 @@
     updateUi();
     updateCanvasBgUi();
     updateAiPromptView();
+    setDirty(false);
 
     // Responsive Drag & Mouse-Wheel Horizontal Scroll across all horizontal bars
     enableHorizontalDragScroll(document.querySelector('.pa-header'));
@@ -352,7 +466,7 @@
     container.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-      if (e.target.closest('button, select, input, textarea, .pa-btn, .pa-icon-btn, .pa-color-slot')) return;
+      if (e.target.closest('button, select, input, textarea, .pa-btn, .pa-icon-btn, .pa-color-slot, .pa-swatch, .pa-preset-chip, .pa-status-btn, .pa-mode-badge, .pa-autosave-pill, .pa-file-path-pill, .pa-file-source-badge, .pa-save-status-badge, .pa-btn-icon-xs, .pa-ai-ratio-btn')) return;
       isDown = true;
       isDragging = false;
       startX = e.clientX;
@@ -616,26 +730,13 @@
       ctx.fillStyle = state.canvasBgColor || '#2a2e3f';
       ctx.fillRect(0, 0, totalW, totalH);
     } else {
-      // 'transparent' default: Pixel-Aligned Checkerboard (1:1 with art pixels)
+      // 'transparent' default: Cached 1:1 Pixel-Aligned Checkerboard Pattern (Zero lag even at 1024x1024)
       const isDark = document.body.classList.contains('dark-theme');
-      const c1 = isDark ? '#1a1d29' : '#ffffff';
-      const c2 = isDark ? '#121520' : '#e2e8f0';
-
-      // When zoom >= 4, each checker tile is EXACTLY 1 artwork pixel (zoom x zoom screen px)
-      // When zoom < 4, checker tile is an integer multiple of zoom so it never splits an art pixel
       const tileArtPixels = zoom >= 4 ? 1 : (zoom === 1 ? 16 : 8);
       const tileCanvasSize = tileArtPixels * zoom;
-
-      for (let cy = 0; cy < totalH; cy += tileCanvasSize) {
-        for (let cx = 0; cx < totalW; cx += tileCanvasSize) {
-          const col = Math.floor(cx / tileCanvasSize);
-          const row = Math.floor(cy / tileCanvasSize);
-          ctx.fillStyle = ((col + row) % 2 === 0) ? c1 : c2;
-          const curW = Math.min(tileCanvasSize, totalW - cx);
-          const curH = Math.min(tileCanvasSize, totalH - cy);
-          ctx.fillRect(cx, cy, curW, curH);
-        }
-      }
+      const pattern = getCheckerPattern(ctx, tileCanvasSize, isDark);
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, totalW, totalH);
     }
 
     const cell = getArtworkCell();
@@ -755,13 +856,29 @@
 
     // Render floating pixels being dragged/transformed on preview canvas
     if (state.floatingPixels) {
-      for (const relKey in state.floatingPixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const px = x + rx;
-        const py = y + ry;
-        if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
+      if (state.isRotatingSelection && state.rotationCurrentAngle !== 0) {
+        ctx.save();
+        const centerCanvasX = (x + w / 2) * zoom;
+        const centerCanvasY = (y + h / 2) * zoom;
+        ctx.translate(centerCanvasX, centerCanvasY);
+        ctx.rotate(state.rotationCurrentAngle);
+        for (const relKey in state.floatingPixels) {
+          const [rx, ry] = relKey.split(',').map(Number);
+          const px = (rx - w / 2) * zoom;
+          const py = (ry - h / 2) * zoom;
           ctx.fillStyle = state.floatingPixels[relKey];
-          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+          ctx.fillRect(px, py, zoom, zoom);
+        }
+        ctx.restore();
+      } else {
+        for (const relKey in state.floatingPixels) {
+          const [rx, ry] = relKey.split(',').map(Number);
+          const px = x + rx;
+          const py = y + ry;
+          if (px >= 0 && px < state.w && py >= 0 && py < state.h) {
+            ctx.fillStyle = state.floatingPixels[relKey];
+            ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+          }
         }
       }
     }
@@ -807,10 +924,52 @@
         ctx.fillRect(sx, sy, handleSize, handleSize);
         ctx.fillRect(sx + sw - handleSize, sy, handleSize, handleSize);
         ctx.fillRect(sx, sy + sh - handleSize, handleSize, handleSize);
-        ctx.fillRect(sx + sw - handleSize, sy + sh - handleSize, handleSize);
+        ctx.fillRect(sx + sw - handleSize, sy + sh - handleSize, handleSize, handleSize);
       }
+
+      // Free Multi-Angle Selection Rotation Handle (Stem + Circular Pivot)
+      const topMidX = sx + sw / 2;
+      const topMidY = sy;
+      const stemLen = 18;
+      const rotHandleX = topMidX;
+      const rotHandleY = topMidY - stemLen;
+
+      ctx.beginPath();
+      ctx.moveTo(topMidX, topMidY);
+      ctx.lineTo(rotHandleX, rotHandleY);
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(rotHandleX, rotHandleY, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Mini pivot center dot inside handle
+      ctx.beginPath();
+      ctx.arc(rotHandleX, rotHandleY, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#4f46e5';
+      ctx.fill();
     }
     ctx.restore();
+  }
+
+  function isOverRotationHandle(e) {
+    if (!state.selection || (state.selection.w <= 1 && state.selection.h <= 1)) return false;
+    const rect = dom.canvasMain.getBoundingClientRect();
+    const sx = Math.floor(state.selection.x * state.zoom);
+    const sy = Math.floor(state.selection.y * state.zoom);
+    const sw = Math.floor(state.selection.w * state.zoom);
+    const handleCanvasX = sx + sw / 2;
+    const handleCanvasY = sy - 18;
+    const mouseCanvasX = e.clientX - rect.left;
+    const mouseCanvasY = e.clientY - rect.top;
+    return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 9;
   }
 
   function updateContainerTransform() {
@@ -2057,45 +2216,241 @@
   // ===========================================================================
   // AI ASSISTANT & PROMPT GENERATOR
   // ===========================================================================
-  function updateAiPromptView(template = 'portrait') {
+  let currentAiTemplate = 'portrait';
+  function updateAiPromptView(template) {
+    if (template) currentAiTemplate = template;
     const promptArea = document.getElementById('pa-ai-prompt-text');
-    const palStr = state.activeSwatches.join(', ');
+    if (!promptArea) return;
 
-    let templateDesc = '';
-    if (template === 'portrait') {
-      templateDesc = `Draw a 2D pixel art character portrait (e.g. hero knight or mysterious wizard) on a ${state.w}x${state.h} canvas with symmetrical silhouette.`;
-    } else if (template === 'item') {
-      templateDesc = `Draw a 2D RPG game item (e.g. potion bottle, sword, treasure chest) on a ${state.w}x${state.h} canvas with clean outline and shading.`;
-    } else if (template === 'landscape') {
-      templateDesc = `Draw a 2D pixel art landscape (e.g. mountain sunset, forest glade) on a ${state.w}x${state.h} canvas with gradient sky and layered depth.`;
+    const inputW = document.getElementById('input-ai-w');
+    const inputH = document.getElementById('input-ai-h');
+    const specModeSelect = document.getElementById('select-ai-spec-mode');
+
+    const targetW = (inputW && parseInt(inputW.value, 10)) ? parseInt(inputW.value, 10) : state.w;
+    const targetH = (inputH && parseInt(inputH.value, 10)) ? parseInt(inputH.value, 10) : state.h;
+    const isComprehensive = !specModeSelect || specModeSelect.value === 'comprehensive';
+
+    const palList = (state.activeSwatches && state.activeSwatches.length > 0)
+      ? state.activeSwatches
+      : ['#1a1a24', '#ffffff', '#4f46e5', '#7c3aed', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
+
+    const palMapLines = palList.map((c, i) => `  ${i + 1}: ${c}`).join('\n');
+
+    let taskDesc = '';
+    if (currentAiTemplate === 'portrait') {
+      taskDesc = `Design an iconic 2D pixel art character portrait (e.g. cyber warrior, sorcerer, or roguelike champion) within a ${targetW}x${targetH} grid. Use crisp cluster shading and clean, readable silhouette.`;
+    } else if (currentAiTemplate === 'item') {
+      taskDesc = `Design a 2D RPG game item/weapon/icon (e.g. enchanted sword, mana potion, or legendary helm) within a ${targetW}x${targetH} grid. Ensure strong outer contours, inner specular highlights, and clear readable geometry.`;
+    } else if (currentAiTemplate === 'landscape') {
+      taskDesc = `Design a 2D pixel art landscape/scenery backdrop (e.g. neon cyberpunk alley, retro sunset mountains, or enchanted forest) within a ${targetW}x${targetH} grid. Create layered parallax depth with foreground, midground, and atmospheric lighting.`;
+    } else if (currentAiTemplate === 'prop') {
+      taskDesc = `Design a modular 2D pixel art building prop / isometric tile kit element within a ${targetW}x${targetH} grid with seamless boundary snapping and solid mass.`;
+    } else {
+      taskDesc = `Design a detailed 2D pixel art asset on a ${targetW}x${targetH} grid.`;
     }
 
-    const prompt = `You are a pixel art assistant emitting code in the normative PIX2 v1.0 standard language.
+    if (!isComprehensive) {
+      // Compact Brief
+      promptArea.value = `You are an expert pixel artist creating code for the PIX2 standard.
+TASK: ${taskDesc}
+CANVAS: ${targetW}x${targetH}
+PALETTE:
+${palMapLines}
 
-TASK:
-${templateDesc}
+RULES:
+- Emit valid PIX2 v1.0 syntax starting with "@pix2 1.0"
+- Use "@meta", "@grid", "@palette", and "@cell artwork"
+- Plot pixels using "pixel x,y <palette_id>" or "pixel x,y <#hex>"
+- Close with "@end"
+- Output raw code inside \`\`\`pix2 ... \`\`\` without markdown commentary.`;
+      return;
+    }
 
-CANVAS SPECIFICATIONS:
-- Canvas Dimension: ${state.w}x${state.h}
-- Color Palette: ${palStr}
-- Syntax format: PIX2 v1.0
+    // Comprehensive 350+ Line PIX2 Normative Standard Specification Prompt
+    promptArea.value = `You are an autonomous AI Pixel Artist and Systems Architect emitting strictly conforming PIX2 v1.0 specifications.
 
-STRICT PIX2 RULES:
-1. Always start with "@pix2 1.0"
-2. Define "@meta" with title and coordinate_origin: "top-left"
-3. Define "@grid" with columns: 1, rows: 1, default_cell: ${state.w}x${state.h}
-4. Define "@palette" mapping color indices to hex colors
-5. Put pixels in "@cell artwork" using primitive drawing commands:
-   - "p x,y #hex" or "p x,y palette_id"
-   - "line x0,y0 x1,y1 #hex" (Normative Bresenham line)
-   - "rect x,y wxh #hex [outline|fill]" (Rectangle)
-   - "fill x,y #hex" (4-way flood fill)
-6. Terminate file with "@end"
+================================================================================
+SECTION 1: THE ACTIVE PROJECT BRIEF
+================================================================================
+Task Objective:
+${taskDesc}
 
-OUTPUT FORMAT:
-Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introductory chit-chat.`;
+Target Resolution:
+- Width: ${targetW} pixels (X axis: 0 through ${targetW - 1})
+- Height: ${targetH} pixels (Y axis: 0 through ${targetH - 1})
+- Coordinate Origin: top-left (0,0 is the top-left pixel)
+- Color Mode: "RGBA"
 
-    promptArea.value = prompt;
+Standard Palette Map (1-based indices):
+@palette
+${palMapLines}
+
+================================================================================
+SECTION 2: NORMATIVE PIX2 LANGUAGE GRAMMAR (RFC SPECIFICATION)
+================================================================================
+PIX2 is a deterministic, human-readable, line-oriented domain-specific language 
+designed for precision pixel art, sprite sheets, and retro graphics synthesis.
+All implementations MUST strictly conform to the grammar below.
+
+LEXICAL CONVENTIONS:
+1. Whitespace: Space (' ') and Horizontal Tab ('\\t') are token separators.
+2. Comments:
+   - Semicolon ';' initiates a comment until end-of-line.
+   - Hash '#' initiates a comment ONLY if preceded by whitespace and NOT followed 
+     by 3, 4, 6, or 8 hex digits. (Valid hex color codes e.g. #4f46e5 are NEVER comments).
+3. Directives start with '@' as the first non-whitespace character.
+4. Identifiers: alphanumeric characters, underscores, and dashes [a-zA-Z0-9_-].
+5. Numbers: base-10 integers only. Floats or exponents are forbidden in coordinates.
+
+TOP-LEVEL STRUCTURE:
+A conforming PIX2 document consists of five ordered sections terminated by @end:
+  <Document> ::= <VersionDirective>
+                 <MetaSection>
+                 <GridSection>
+                 <PaletteSection>
+                 <CellSection>+
+                 "@end"
+
+1. VERSION DIRECTIVE:
+   The first non-comment line of the document MUST be:
+   @pix2 1.0
+
+2. META SECTION (@meta):
+   Defines global metadata fields:
+   @meta
+     title: "${sanitizeFilename(state.title)}"
+     author: "Noiradix AI"
+     version: "1.0"
+     color_mode: "RGBA"
+     coordinate_origin: "top-left"
+
+3. GRID SECTION (@grid):
+   Defines the sprite sheet dimensions and layout:
+   @grid
+     columns: 1
+     rows: 1
+     default_cell: ${targetW}x${targetH}
+     background: none
+
+4. PALETTE SECTION (@palette):
+   Maps sequential integer identifiers to valid hexadecimal colors:
+   @palette
+${palMapLines}
+
+5. CELL SECTION (@cell):
+   Defines an individual artwork frame:
+   @cell artwork
+     name: "${sanitizeFilename(state.title)}"
+     size: ${targetW}x${targetH}
+     <Command>*
+
+================================================================================
+SECTION 3: CONFORMING CELL DRAWING COMMANDS
+================================================================================
+Inside a @cell block, pixels are defined using single or grouped primitive commands:
+
+1. INDIVIDUAL PIXEL PLOTTING:
+   Syntax: pixel <x>,<y> <color_or_id>
+   Multiple pixels on the same horizontal row may be chained on a single line:
+   pixel 12,14 1 pixel 13,14 1 pixel 14,14 2 pixel 15,14 2
+   - <x> is integer between 0 and ${targetW - 1}
+   - <y> is integer between 0 and ${targetH - 1}
+   - <color_or_id> is either an integer key defined in @palette (e.g. 1) 
+     or an inline hex literal (e.g. #4f46e5).
+
+2. LINE PRIMITIVE (BRESENHAM INTERPOLATION):
+   Syntax: line <x0>,<y0> <x1>,<y1> <color_or_id>
+   Renders an exact Bresenham integer line between coordinates.
+
+3. RECTANGLE PRIMITIVE:
+   Syntax: rect <x>,<y> <width>x<height> <color_or_id> [outline|fill]
+   - outline: strokes a 1-pixel boundary
+   - fill: fills solid interior
+
+4. FLOOD FILL PRIMITIVE:
+   Syntax: fill <x>,<y> <color_or_id>
+   Performs a 4-way flood fill starting at (x,y).
+
+================================================================================
+SECTION 4: ARTISTIC CONSTRAINTS & SOLID MASS MANDATE
+================================================================================
+To ensure the generated sprite looks professional, authentic, and game-engine ready:
+
+1. SOLID MASS & SILHOUETTE INTEGRITY:
+   - Pixel art characters and props MUST have a solid mass. Do NOT generate hollow 
+     or floating isolated pixels.
+   - Every interior region (skin, armor, cloth, hair) must be fully packed with 
+     solid colored pixels.
+   - Zero transparent pinholes inside the solid silhouette.
+
+2. CLUSTER SHADING:
+   - Group pixels into cohesive geometric clusters (patches) representing light, 
+     mid-tone, and core shadow.
+   - Avoid "dithering noise" or salt-and-pepper scattering unless intentionally 
+     texturing rough fabric or stone.
+
+3. ZERO ANTI-ALIASING BLUR:
+   - Do NOT emit blurred semi-transparent transitions around outer contours. 
+     Outlines must remain sharp and readable on both light and dark backgrounds.
+
+================================================================================
+SECTION 5: COMPLETE MINIMAL WORKED EXAMPLE
+================================================================================
+Below is a structurally flawless example of a 16x16 shield for your reference:
+
+@pix2 1.0
+
+@meta
+  title: "Example Shield"
+  author: "Noiradix AI"
+  version: "1.0"
+  color_mode: "RGBA"
+  coordinate_origin: "top-left"
+
+@grid
+  columns: 1
+  rows: 1
+  default_cell: 16x16
+  background: none
+
+@palette
+  1: #1a1c2c
+  2: #566c86
+  3: #94b0c2
+  4: #f4f4f4
+  5: #f59e0b
+
+@cell artwork
+  name: "Example Shield"
+  size: 16x16
+  pixel 6,2 1 pixel 7,2 1 pixel 8,2 1 pixel 9,2 1
+  pixel 5,3 1 pixel 6,3 2 pixel 7,3 3 pixel 8,3 3 pixel 9,3 2 pixel 10,3 1
+  pixel 4,4 1 pixel 5,4 2 pixel 6,4 4 pixel 7,4 4 pixel 8,4 3 pixel 9,4 2 pixel 10,4 2 pixel 11,4 1
+  pixel 4,5 1 pixel 5,5 2 pixel 6,5 4 pixel 7,5 5 pixel 8,5 5 pixel 9,5 3 pixel 10,5 2 pixel 11,5 1
+  pixel 4,6 1 pixel 5,6 2 pixel 6,6 4 pixel 7,6 5 pixel 8,6 5 pixel 9,6 3 pixel 10,6 2 pixel 11,6 1
+  pixel 4,7 1 pixel 5,7 2 pixel 6,7 3 pixel 7,7 4 pixel 8,7 4 pixel 9,7 3 pixel 10,7 2 pixel 11,7 1
+  pixel 4,8 1 pixel 5,8 2 pixel 6,8 3 pixel 7,8 3 pixel 8,8 3 pixel 9,8 2 pixel 10,8 2 pixel 11,8 1
+  pixel 5,9 1 pixel 6,9 2 pixel 7,9 3 pixel 8,9 3 pixel 9,9 2 pixel 10,9 1
+  pixel 5,10 1 pixel 6,10 2 pixel 7,10 2 pixel 8,10 2 pixel 9,10 2 pixel 10,10 1
+  pixel 6,11 1 pixel 7,11 2 pixel 8,11 2 pixel 9,11 1
+  pixel 6,12 1 pixel 7,12 2 pixel 8,12 1
+  pixel 7,13 1 pixel 8,13 1
+  pixel 7,14 1
+
+@end
+
+================================================================================
+SECTION 6: FINAL INSTRUCTION
+================================================================================
+Now, synthesize the requested pixel artwork for "${taskDesc}" 
+at dimension ${targetW}x${targetH}.
+
+OUTPUT MANDATE:
+Emit ONLY the raw conforming PIX2 code block inside triple backticks:
+\`\`\`pix2
+... your code here ...
+\`\`\`
+Do not include conversational greetings or postscripts.`;
   }
 
   function injectAiCodeToCanvas() {
@@ -2114,14 +2469,68 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
   }
 
   // ===========================================================================
-  // FILE SYSTEM ACCESS API & I/O
+  // PERSISTENT FILE HANDLE & SESSION STORAGE (IndexedDB + File System Access API)
   // ===========================================================================
+  const DB_NAME = 'noiradix_pixelart_db';
+  const STORE_NAME = 'file_handles';
+
+  function getDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function persistFileHandle(handle) {
+    if (!handle) return;
+    try {
+      const db = await getDb();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(handle, 'current_file');
+    } catch (err) {
+      console.warn('Failed storing handle in IndexedDB:', err);
+    }
+  }
+
+  async function retrievePersistedFileHandle() {
+    try {
+      const db = await getDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get('current_file');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function clearPersistedFileHandle() {
+    try {
+      const db = await getDb();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete('current_file');
+    } catch (_) {}
+  }
+
   let currentFileHandle = null;
   let currentFileName = null;
 
   function updateDocumentTitle() {
-    const name = currentFileName || `${state.title || 'Untitled'}.pix2`;
-    document.title = `${name} — NOIRADIX PixelArt`;
+    const name = currentFileName || `${sanitizeFilename(state.title || 'Untitled')}.pix2`;
+    document.title = state.isDirty ? `● ${name} — NOIRADIX PixelArt` : `${name} — NOIRADIX PixelArt`;
+    const pathText = document.getElementById('pa-file-path-text');
+    if (pathText) {
+      pathText.textContent = name;
+    }
   }
 
   async function openFileNative() {
@@ -2146,14 +2555,22 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
           applySourceCodeToCanvas();
           currentFileHandle = handle;
           currentFileName = file.name;
-          updateDocumentTitle();
+          state.title = file.name.replace(/\.[^/.]+$/, '');
+          dom.docTitle.value = state.title;
+          await persistFileHandle(handle);
+          localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
+          localStorage.setItem('pix2_last_saved_content', text);
+          setDirty(false);
           showToast(`Opened ${file.name} from disk!`);
           return;
         } else if (file.type.startsWith('image/')) {
           importImageToPixelArt(file);
           currentFileHandle = null;
           currentFileName = file.name;
-          updateDocumentTitle();
+          state.title = file.name.replace(/\.[^/.]+$/, '');
+          dom.docTitle.value = state.title;
+          await clearPersistedFileHandle();
+          setDirty(true);
           return;
         }
       } catch (err) {
@@ -2184,7 +2601,10 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
         const writable = await currentFileHandle.createWritable();
         await writable.write(text);
         await writable.close();
-        updateDocumentTitle();
+        await persistFileHandle(currentFileHandle);
+        localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
+        localStorage.setItem('pix2_last_saved_content', text);
+        setDirty(false);
         showToast(`Saved to ${currentFileHandle.name}!`);
         return;
       } catch (err) {
@@ -2208,7 +2628,12 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
         await writable.close();
         currentFileHandle = handle;
         currentFileName = handle.name;
-        updateDocumentTitle();
+        state.title = handle.name.replace(/\.[^/.]+$/, '');
+        dom.docTitle.value = state.title;
+        await persistFileHandle(handle);
+        localStorage.setItem('noiradix_pixelart_file_name', currentFileName);
+        localStorage.setItem('pix2_last_saved_content', text);
+        setDirty(false);
         showToast(`Saved as ${handle.name}!`);
         return;
       } catch (err) {
@@ -2792,24 +3217,142 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       });
     });
 
+    // AI Dimension & Configuration Controls
+    const inputAiW = document.getElementById('input-ai-w');
+    const inputAiH = document.getElementById('input-ai-h');
+    const selectAiMode = document.getElementById('select-ai-spec-mode');
+    const btnAiSync = document.getElementById('btn-ai-sync-dim');
+
+    if (inputAiW) inputAiW.addEventListener('input', () => updateAiPromptView());
+    if (inputAiH) inputAiH.addEventListener('input', () => updateAiPromptView());
+    if (selectAiMode) selectAiMode.addEventListener('change', () => updateAiPromptView());
+
+    if (btnAiSync) {
+      btnAiSync.addEventListener('click', () => {
+        if (inputAiW) inputAiW.value = state.w;
+        if (inputAiH) inputAiH.value = state.h;
+        document.querySelectorAll('.pa-ai-ratio-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.w, 10) === state.w && parseInt(btn.dataset.h, 10) === state.h);
+        });
+        updateAiPromptView();
+      });
+    }
+
+    document.querySelectorAll('.pa-ai-ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pa-ai-ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (inputAiW) inputAiW.value = btn.dataset.w;
+        if (inputAiH) inputAiH.value = btn.dataset.h;
+        updateAiPromptView();
+      });
+    });
+
     document.getElementById('btn-copy-ai-prompt').addEventListener('click', () => {
       const promptText = document.getElementById('pa-ai-prompt-text').value;
       navigator.clipboard.writeText(promptText).then(() => {
-        alert('AI Prompt copied! Paste into ChatGPT or Claude.');
+        showToast('AI Prompt copied! Paste into ChatGPT, Claude or your agent.');
       });
     });
 
     document.getElementById('btn-confirm-ai-inject').addEventListener('click', injectAiCodeToCanvas);
 
-    // Title input
-    dom.docTitle.addEventListener('change', () => {
-      state.title = dom.docTitle.value.trim() || 'Pixel Artwork';
+    // Title input with real-time filename synchronization
+    function syncDocTitle(val) {
+      const cleanTitle = (val || 'Pixel Artwork').trim();
+      state.title = cleanTitle;
+      const cleanFileName = `${sanitizeFilename(cleanTitle)}.pix2`;
+      currentFileName = cleanFileName;
+
+      dom.docTitle.value = cleanTitle;
+      const pathText = document.getElementById('pa-file-path-text');
+      if (pathText) {
+        pathText.textContent = cleanFileName;
+      }
+
+      // Detach handle if renamed so next Save prompts Save As
+      if (currentFileHandle && currentFileHandle.name !== cleanFileName) {
+        currentFileHandle = null;
+        clearPersistedFileHandle();
+      }
+
       if (state.doc && state.doc.meta) {
-        state.doc.meta.title = state.title;
+        state.doc.meta.title = cleanTitle;
         const cell = getArtworkCell();
-        if (cell) cell.name = state.title;
+        if (cell) cell.name = cleanTitle;
         syncCanvasToSource();
         triggerAutosave();
+      }
+      setDirty(true);
+    }
+
+    dom.docTitle.addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      const cleanFileName = `${sanitizeFilename(val || 'artwork')}.pix2`;
+      const pathText = document.getElementById('pa-file-path-text');
+      if (pathText) {
+        pathText.textContent = cleanFileName;
+      }
+      setDirty(true);
+    });
+
+    dom.docTitle.addEventListener('change', (e) => {
+      syncDocTitle(e.target.value);
+    });
+
+    const filePathPill = document.getElementById('pa-file-path-pill');
+    if (filePathPill) {
+      filePathPill.addEventListener('click', () => {
+        const name = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
+        navigator.clipboard.writeText(name).then(() => {
+          showToast(`Copied "${name}" to clipboard!`);
+        });
+      });
+    }
+
+    const btnReloadFile = document.getElementById('btn-reload-file');
+    if (btnReloadFile) {
+      btnReloadFile.addEventListener('click', async () => {
+        if (!currentFileHandle) {
+          showToast('Artwork is an unsaved in-memory draft. Press Ctrl+S to save to disk first.', 'info');
+          return;
+        }
+        try {
+          const file = await currentFileHandle.getFile();
+          const text = await file.text();
+          dom.codeEditor.value = text;
+          applySourceCodeToCanvas();
+          setDirty(false);
+          showToast(`Reloaded ${file.name} from disk!`);
+        } catch (err) {
+          showToast(`Reload failed: ${err.message}`, 'error');
+        }
+      });
+    }
+
+    // Real-time window focus & beforeunload watcher
+    window.addEventListener('beforeunload', (e) => {
+      if (state.isDirty || (!currentFileHandle && state.doc && Object.keys(getArtworkCell()?.pixels || {}).length > 0)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    window.addEventListener('focus', async () => {
+      if (currentFileHandle && !state.isDirty) {
+        try {
+          const file = await currentFileHandle.getFile();
+          if (file.lastModified > (state.lastFileModified || 0)) {
+            state.lastFileModified = file.lastModified;
+            const text = await file.text();
+            if (text !== dom.codeEditor.value) {
+              dom.codeEditor.value = text;
+              applySourceCodeToCanvas();
+              setDirty(false);
+              showToast(`Auto-reloaded changes from ${file.name}!`);
+            }
+          }
+        } catch (_) {}
       }
     });
 
@@ -2890,22 +3433,37 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       } else if (e.key === 'Enter') {
         commitFloatingSelection();
         renderSelectionMarquee();
-      } else if (e.key === 'm' || e.key === 'M') {
+      } else if (e.key === 'm' || e.key === 'M' || ((e.key === 'v' || e.key === 'V') && !e.shiftKey)) {
         selectTool('select');
+      } else if (e.key === 'h' || e.key === 'H') {
+        if (e.shiftKey) {
+          state.symH = !state.symH;
+          document.getElementById('btn-toggle-sym-h').classList.toggle('active', state.symH);
+          repaintCanvas();
+          showToast(`Horizontal Symmetry ${state.symH ? 'ON' : 'OFF'}`);
+        } else {
+          selectTool('pan');
+        }
+      } else if ((e.key === 'v' || e.key === 'V') && e.shiftKey) {
+        state.symV = !state.symV;
+        document.getElementById('btn-toggle-sym-v').classList.toggle('active', state.symV);
+        repaintCanvas();
+        showToast(`Vertical Symmetry ${state.symV ? 'ON' : 'OFF'}`);
+      } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
+        // S = Bilateral symmetry toggle (both H and V together)
+        const nextState = !(state.symH && state.symV);
+        state.symH = nextState;
+        state.symV = nextState;
+        document.getElementById('btn-toggle-sym-h').classList.toggle('active', state.symH);
+        document.getElementById('btn-toggle-sym-v').classList.toggle('active', state.symV);
+        repaintCanvas();
+        showToast(`Bilateral Symmetry ${nextState ? 'ON' : 'OFF'}`);
       } else if (e.key === 'i' || e.key === 'I') {
         selectTool('picker');
       } else if (e.key === 'p' || e.key === 'P') {
         selectTool('pan');
       } else if (e.key === 'x' || e.key === 'X') {
         swapColors();
-      } else if (e.key === 'h' || e.key === 'H') {
-        state.symH = !state.symH;
-        document.getElementById('btn-toggle-sym-h').classList.toggle('active', state.symH);
-        repaintCanvas();
-      } else if (e.key === 'v' || e.key === 'V') {
-        state.symV = !state.symV;
-        document.getElementById('btn-toggle-sym-v').classList.toggle('active', state.symV);
-        repaintCanvas();
       }
     });
   }
