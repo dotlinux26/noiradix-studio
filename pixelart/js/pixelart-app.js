@@ -270,7 +270,15 @@
     // Canvas Background Configuration
     canvasBgMode: localStorage.getItem('pix2_canvas_bg_mode') || 'transparent', // 'transparent' | 'white' | 'black' | 'custom'
     canvasBgColor: localStorage.getItem('pix2_canvas_bg_color') || '#2a2e3f',
-    exportIncludeBg: false
+    exportIncludeBg: false,
+
+    // Alignment Guidelines
+    guideCenter: false,
+    guideV: false,
+    guideH: false,
+
+    // Code Editor Lock / Safe Mode
+    isCodeEditingUnlocked: false
   };
 
   // DOM Elements Cache
@@ -284,6 +292,10 @@
     initTheme();
     initPanelWidth();
     bindEvents();
+
+    if (dom.codeEditor) {
+      dom.codeEditor.readOnly = true;
+    }
 
     // Check for crash recovery / autosave
     const saved = localStorage.getItem('pix2_pixelart_autosave');
@@ -312,11 +324,13 @@
     updateCanvasBgUi();
     updateAiPromptView();
 
-    // Responsive Drag & Mouse-Wheel Horizontal Scroll
+    // Responsive Drag & Mouse-Wheel Horizontal Scroll across all horizontal bars
     enableHorizontalDragScroll(document.querySelector('.pa-header'));
     enableHorizontalDragScroll(document.querySelector('.pa-canvas-statusbar'));
     enableHorizontalDragScroll(document.querySelector('.pa-palette-deck'));
     enableHorizontalDragScroll(document.querySelector('.pa-swatches-scroll'));
+    enableHorizontalDragScroll(document.querySelector('.pa-code-header'));
+    enableHorizontalDragScroll(document.querySelector('.pa-code-statusbar'));
 
     // Responsive Drag & Mouse-Wheel Vertical Scroll
     enableVerticalDragScroll(document.getElementById('pa-toolbar'));
@@ -457,12 +471,20 @@
     dom.bgCustomLabel = document.getElementById('pa-bg-custom-label');
     dom.exportIncludeBg = document.getElementById('pa-export-include-bg');
 
+    // Alignment Guide Buttons
+    dom.btnToggleGuideCenter = document.getElementById('btn-toggle-guide-center');
+    dom.btnToggleGuideV = document.getElementById('btn-toggle-guide-v');
+    dom.btnToggleGuideH = document.getElementById('btn-toggle-guide-h');
+
     // Splitter & Source Code Pane
     dom.splitResizer = document.getElementById('pa-split-resizer');
     dom.codePane = document.getElementById('pa-code-pane');
     dom.codeEditor = document.getElementById('pa-code-editor');
     dom.codeGutter = document.getElementById('pa-code-gutter');
     dom.syncBadge = document.getElementById('pa-sync-badge');
+    dom.codeModeBadge = document.getElementById('pa-code-mode-badge');
+    dom.btnToggleCodeLock = document.getElementById('btn-toggle-code-lock');
+    dom.btnApplyCode = document.getElementById('btn-apply-code');
     dom.codeLinesCount = document.getElementById('pa-code-lines-count');
     dom.codePixelsCount = document.getElementById('pa-code-pixels-count');
     dom.diagnosticPill = document.getElementById('pa-diagnostic-pill');
@@ -686,6 +708,39 @@
       ctx.setLineDash([]);
     }
 
+    // 5. Alignment Guidelines (Trục dóng dọc, dóng ngang, tâm giữa)
+    if (state.guideCenter || state.guideV) {
+      const gX = Math.floor((state.w / 2) * zoom) + 0.5;
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(gX, 0);
+      ctx.lineTo(gX, totalH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (state.guideCenter || state.guideH) {
+      const gY = Math.floor((state.h / 2) * zoom) + 0.5;
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(0, gY);
+      ctx.lineTo(totalW, gY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (state.guideCenter) {
+      const cX = Math.floor((state.w / 2) * zoom);
+      const cY = Math.floor((state.h / 2) * zoom);
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cX + 0.5, cY + 0.5, Math.min(8, Math.max(3, zoom / 2)), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     renderSelectionMarquee();
     updateContainerTransform();
   }
@@ -711,16 +766,50 @@
       }
     }
 
-    // Dashed Marquee Outline
-    ctx.save();
-    ctx.strokeStyle = '#4f46e5';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, w * zoom - 1, h * zoom - 1);
+    const sx = Math.floor(x * zoom);
+    const sy = Math.floor(y * zoom);
+    const sw = Math.floor(w * zoom);
+    const sh = Math.floor(h * zoom);
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineDashOffset = 4;
-    ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, w * zoom - 1, h * zoom - 1);
+    ctx.save();
+    // 1. Soft scrim inside selection
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.18)';
+    ctx.fillRect(sx, sy, sw, sh);
+
+    if (w === 1 && h === 1) {
+      // Single pixel cell: Draw ultra-crisp solid border + inner highlight (never looks broken/blurry)
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
+
+      if (zoom >= 8) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx + 1.5, sy + 1.5, sw - 3, sh - 3);
+      }
+    } else {
+      // Multi-pixel selection: Crisp solid dark underlay + high-contrast dashed overlay
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
+
+      // Corner handles if large enough
+      if (sw >= 16 && sh >= 16) {
+        const handleSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
+        ctx.fillStyle = '#6366f1';
+        ctx.setLineDash([]);
+        ctx.fillRect(sx, sy, handleSize, handleSize);
+        ctx.fillRect(sx + sw - handleSize, sy, handleSize, handleSize);
+        ctx.fillRect(sx, sy + sh - handleSize, handleSize, handleSize);
+        ctx.fillRect(sx + sw - handleSize, sy + sh - handleSize, handleSize);
+      }
+    }
     ctx.restore();
   }
 
@@ -1140,11 +1229,13 @@
     }
 
     renderSelectionMarquee();
-    pushHistory();
 
-    // Canvas -> Code sync strictly on Pointer Up for 60fps performance!
-    syncCanvasToSource();
-    triggerAutosave();
+    // Canvas -> Code sync and history push strictly on Pointer Up when artwork modified
+    if (state.currentTool !== 'select') {
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+    }
   }
 
   function computeShapeBounds(startX, startY, curX, curY, shiftKey, altKey) {
@@ -1533,6 +1624,10 @@
       }
       repaintCanvas();
       renderSelectionMarquee();
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+      showToast(`Rotated selection 90° CW (${state.selection.w}×${state.selection.h})`);
       return;
     }
 
@@ -1541,6 +1636,7 @@
     pushHistory();
     syncCanvasToSource();
     triggerAutosave();
+    showToast(`Rotated canvas 90° CW (${state.w}×${state.h})`);
   }
 
   function flipArtworkH() {
@@ -1559,6 +1655,10 @@
       state.floatingPixels = newFloating;
       repaintCanvas();
       renderSelectionMarquee();
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+      showToast(`Flipped selection Horizontally`);
       return;
     }
 
@@ -1567,6 +1667,7 @@
     pushHistory();
     syncCanvasToSource();
     triggerAutosave();
+    showToast(`Flipped canvas Horizontally`);
   }
 
   function flipArtworkV() {
@@ -1585,6 +1686,10 @@
       state.floatingPixels = newFloating;
       repaintCanvas();
       renderSelectionMarquee();
+      pushHistory();
+      syncCanvasToSource();
+      triggerAutosave();
+      showToast(`Flipped selection Vertically`);
       return;
     }
 
@@ -1593,6 +1698,7 @@
     pushHistory();
     syncCanvasToSource();
     triggerAutosave();
+    showToast(`Flipped canvas Vertically`);
   }
 
   function alignArtwork(direction = 'center') {
@@ -2480,17 +2586,91 @@ Emit ONLY the raw .pix2 code block inside \`\`\`pix2 ... \`\`\` with no introduc
       if (mode === 'canvas') {
         dom.workspace.classList.add('view-canvas-only');
         btnCanvas.classList.add('active');
+        dom.codePane.style.width = '';
       } else if (mode === 'code') {
         dom.workspace.classList.add('view-code-only');
         btnCode.classList.add('active');
+        dom.codePane.style.width = '100%';
       } else {
         btnSplit.classList.add('active');
+        dom.codePane.style.width = `${state.codePaneWidth}px`;
       }
     }
 
     btnSplit.addEventListener('click', () => setViewMode('split'));
     btnCanvas.addEventListener('click', () => setViewMode('canvas'));
     btnCode.addEventListener('click', () => setViewMode('code'));
+
+    // Code Editor Lock & Edit Controls
+    function toggleCodeLock() {
+      if (!state.isCodeEditingUnlocked) {
+        state.isCodeEditingUnlocked = true;
+        dom.codeEditor.readOnly = false;
+        if (dom.codeModeBadge) {
+          dom.codeModeBadge.className = 'pa-mode-badge editing';
+          dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-pen"></i> Editing';
+          dom.codeModeBadge.title = 'Direct editing unlocked. Click "Apply" to commit changes to canvas.';
+        }
+        if (dom.btnToggleCodeLock) {
+          dom.btnToggleCodeLock.innerHTML = '<i class="fa-solid fa-lock"></i> <span>Lock</span>';
+          dom.btnToggleCodeLock.title = 'Lock code and return to safe View Only mode';
+        }
+        if (dom.btnApplyCode) {
+          dom.btnApplyCode.classList.remove('hidden');
+        }
+        dom.codeEditor.focus();
+        showToast('Code editor unlocked for direct edits. Click "Apply" when done.');
+      } else {
+        state.isCodeEditingUnlocked = false;
+        dom.codeEditor.readOnly = true;
+        if (dom.codeModeBadge) {
+          dom.codeModeBadge.className = 'pa-mode-badge locked';
+          dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+          dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
+        }
+        if (dom.btnToggleCodeLock) {
+          dom.btnToggleCodeLock.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> <span>Edit</span>';
+          dom.btnToggleCodeLock.title = 'Unlock to edit PIX2 code directly';
+        }
+        if (dom.btnApplyCode) {
+          dom.btnApplyCode.classList.add('hidden');
+        }
+        showToast('Code locked in safe View Only mode.');
+      }
+    }
+
+    if (dom.btnToggleCodeLock) {
+      dom.btnToggleCodeLock.addEventListener('click', toggleCodeLock);
+    }
+    if (dom.btnApplyCode) {
+      dom.btnApplyCode.addEventListener('click', () => {
+        applySourceCodeToCanvas();
+        showToast('Applied code changes to canvas!');
+      });
+    }
+
+    // Alignment Guide Controls
+    if (dom.btnToggleGuideCenter) {
+      dom.btnToggleGuideCenter.addEventListener('click', () => {
+        state.guideCenter = !state.guideCenter;
+        dom.btnToggleGuideCenter.classList.toggle('active', state.guideCenter);
+        repaintCanvas();
+      });
+    }
+    if (dom.btnToggleGuideV) {
+      dom.btnToggleGuideV.addEventListener('click', () => {
+        state.guideV = !state.guideV;
+        dom.btnToggleGuideV.classList.toggle('active', state.guideV);
+        repaintCanvas();
+      });
+    }
+    if (dom.btnToggleGuideH) {
+      dom.btnToggleGuideH.addEventListener('click', () => {
+        state.guideH = !state.guideH;
+        dom.btnToggleGuideH.classList.toggle('active', state.guideH);
+        repaintCanvas();
+      });
+    }
 
     // Statusbar Controls
     dom.btnToggleGrid.addEventListener('click', () => {

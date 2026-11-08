@@ -4214,14 +4214,10 @@
       const maxX = Math.max(dragStartX, coords.x);
       const minY = Math.min(dragStartY, coords.y);
       const maxY = Math.max(dragStartY, coords.y);
-      if (minX === maxX && minY === maxY) {
-        state.selection = null; // Clicking single pixel deselects!
-        renderCellOverlay();
-      } else {
-        state.selection = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
-        renderCellOverlay();
-        showToast(`Selected region: ${state.selection.w}×${state.selection.h}`);
-      }
+      // Support selecting single cell or multi-cell regions reliably
+      state.selection = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+      renderCellOverlay();
+      showToast(`Selected region: ${state.selection.w}×${state.selection.h}`);
     } else if (tool === 'pen' || tool === 'eraser') {
       state.endStroke(tool === 'pen' ? 'Pencil Stroke' : 'Eraser Stroke');
       triggerEventAutosave();
@@ -4254,35 +4250,48 @@
 
     // 1. Draw Active Selection Marquee (Persistent across tool & tab switches)
     if (state.selection) {
-      const sx = state.selection.x * zoom;
-      const sy = state.selection.y * zoom;
-      const sw = state.selection.w * zoom;
-      const sh = state.selection.h * zoom;
+      const sx = Math.floor(state.selection.x * zoom);
+      const sy = Math.floor(state.selection.y * zoom);
+      const sw = Math.floor(state.selection.w * zoom);
+      const sh = Math.floor(state.selection.h * zoom);
 
       // Soft purple scrim inside selection
-      ctx.fillStyle = 'rgba(99, 102, 241, 0.16)';
+      ctx.fillStyle = 'rgba(99, 102, 241, 0.18)';
       ctx.fillRect(sx, sy, sw, sh);
 
-      // Base solid dark outline
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([]);
-      ctx.strokeRect(sx, sy, sw, sh);
+      if (state.selection.w === 1 && state.selection.h === 1) {
+        // Single cell: Solid crisp border without breaking into blurry dots
+        ctx.strokeStyle = '#4f46e5';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
+        if (zoom >= 8) {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(sx + 1.5, sy + 1.5, sw - 3, sh - 3);
+        }
+      } else {
+        // Base solid dark outline
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
 
-      // Foreground dashed bright accent
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.strokeRect(sx, sy, sw, sh);
-      ctx.setLineDash([]);
+        // Foreground dashed bright accent
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
+        ctx.setLineDash([]);
 
-      // 4 Corner grip handles
-      const handleSize = Math.max(3, Math.min(6, zoom / 3));
-      ctx.fillStyle = '#6366f1';
-      ctx.fillRect(sx - handleSize/2, sy - handleSize/2, handleSize, handleSize);
-      ctx.fillRect(sx + sw - handleSize/2, sy - handleSize/2, handleSize, handleSize);
-      ctx.fillRect(sx - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
-      ctx.fillRect(sx + sw - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
+        // 4 Corner grip handles
+        const handleSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
+        ctx.fillStyle = '#6366f1';
+        ctx.fillRect(sx - handleSize/2, sy - handleSize/2, handleSize, handleSize);
+        ctx.fillRect(sx + sw - handleSize/2, sy - handleSize/2, handleSize, handleSize);
+        ctx.fillRect(sx - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
+        ctx.fillRect(sx + sw - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
+      }
     }
 
     // 2. Draw Hover Preview (Pixel cursor)
@@ -4606,6 +4615,85 @@
     };
     renderCellOverlay();
     showToast(`Selected All (${cw}×${ch}) (Ctrl+A)`);
+  }
+
+  function executeSelectionRotate() {
+    const cell = state.getActiveCell();
+    if (!cell) return;
+
+    if (floatingSelectionPixels && floatingOriginalSel) {
+      const temp = { ...floatingSelectionPixels };
+      floatingSelectionPixels = {};
+      const oldW = floatingOriginalSel.w;
+      const oldH = floatingOriginalSel.h;
+      for (const relKey in temp) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const newRx = oldH - 1 - ry;
+        const newRy = rx;
+        floatingSelectionPixels[`${newRx},${newRy}`] = temp[relKey];
+      }
+      floatingOriginalSel.w = oldH;
+      floatingOriginalSel.h = oldW;
+      if (state.selection) {
+        state.selection.w = oldH;
+        state.selection.h = oldW;
+      }
+      renderMovingSelectionOverlay();
+      showToast(`Rotated selection 90° CW (${state.selection ? state.selection.w : oldH}×${state.selection ? state.selection.h : oldW})`);
+      return;
+    }
+
+    if (!state.selection) {
+      if (state.doc) {
+        const cw = (cell.size && cell.size.w) || state.doc.meta.cellSize.w;
+        const ch = (cell.size && cell.size.h) || state.doc.meta.cellSize.h;
+        Tools.rotate90CW(cell, cw, ch);
+        state.saveSnapshot('Rotate 90° Clockwise');
+        triggerEventAutosave();
+        refreshAll();
+        showToast('Rotated cell 90° CW (R)');
+      }
+      return;
+    }
+
+    // Active selection on canvas (or full canvas via Ctrl+A)
+    state.beginStroke();
+    const sel = state.selection;
+    const temp = {};
+    for (let py = 0; py < sel.h; py++) {
+      for (let px = 0; px < sel.w; px++) {
+        const key = `${sel.x + px},${sel.y + py}`;
+        if (cell.pixels && cell.pixels[key]) {
+          temp[`${px},${py}`] = cell.pixels[key];
+          delete cell.pixels[key];
+        }
+      }
+    }
+
+    const oldW = sel.w;
+    const oldH = sel.h;
+    sel.w = oldH;
+    sel.h = oldW;
+
+    const cellW = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
+    const cellH = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
+
+    for (const relKey in temp) {
+      const [rx, ry] = relKey.split(',').map(Number);
+      const newRx = oldH - 1 - ry;
+      const newRy = rx;
+      const destX = sel.x + newRx;
+      const destY = sel.y + newRy;
+      if (destX >= 0 && destX < cellW && destY >= 0 && destY < cellH) {
+        cell.pixels[`${destX},${destY}`] = temp[relKey];
+      }
+    }
+
+    state.endStroke('Rotate Selection 90° CW');
+    triggerEventAutosave();
+    refreshAll();
+    renderCellOverlay();
+    showToast(`Rotated selection 90° CW (${sel.w}×${sel.h}) (R)`);
   }
 
   function executeDeselect() {
@@ -8494,33 +8582,35 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     });
 
     bindAction('btn-flip-h', () => {
-      const cell = state.getActiveCell();
-      if (cell && state.doc) {
-        Tools.flipHorizontal(cell, state.doc.meta.cellSize.w);
-        state.saveSnapshot('Flip Cell Horizontal');
-        triggerEventAutosave();
-        refreshAll();
+      if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
+        flipSelection(true);
+      } else {
+        const cell = state.getActiveCell();
+        if (cell && state.doc) {
+          Tools.flipHorizontal(cell, state.doc.meta.cellSize.w);
+          state.saveSnapshot('Flip Cell Horizontal');
+          triggerEventAutosave();
+          refreshAll();
+        }
       }
     });
 
     bindAction('btn-flip-v', () => {
-      const cell = state.getActiveCell();
-      if (cell && state.doc) {
-        Tools.flipVertical(cell, state.doc.meta.cellSize.h);
-        state.saveSnapshot('Flip Cell Vertical');
-        triggerEventAutosave();
-        refreshAll();
+      if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
+        flipSelection(false);
+      } else {
+        const cell = state.getActiveCell();
+        if (cell && state.doc) {
+          Tools.flipVertical(cell, state.doc.meta.cellSize.h);
+          state.saveSnapshot('Flip Cell Vertical');
+          triggerEventAutosave();
+          refreshAll();
+        }
       }
     });
 
     bindAction('btn-rotate-90', () => {
-      const cell = state.getActiveCell();
-      if (cell && state.doc) {
-        Tools.rotate90CW(cell, state.doc.meta.cellSize.w, state.doc.meta.cellSize.h);
-        state.saveSnapshot('Rotate 90° Clockwise');
-        triggerEventAutosave();
-        refreshAll();
-      }
+      executeSelectionRotate();
     });
 
     bindAction('btn-sheet-flip-h', () => {
@@ -9275,6 +9365,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         else if (key === 'u') selectTool('rect');
         else if (key === 'v' || key === 'm') selectTool('select');
         else if (key === 'h') selectTool('pan');
+        else if (key === 'r') executeSelectionRotate();
         else if (key === 's') {
           const symBtn = document.getElementById('btn-symmetry-toggle');
           if (symBtn) symBtn.click();

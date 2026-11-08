@@ -18,10 +18,16 @@
 | **BUG-06** | **P1** | UI | Grid Overview canvas column titles collided and overlapped horizontally. | **RESOLVED & VERIFIED** (Centered badges, 24px cell gap) |
 | **BUG-07** | **P1** | Engine | Cell IDs rigidly hardcoded to `cell_r_c` preventing custom naming like `ghost_idle`. | **RESOLVED & VERIFIED** (Decoupled identity from grid pos) |
 | **BUG-08** | **P1** | Studio | Animation player locked to 4 directional walk rows only. | **RESOLVED & VERIFIED** (Supports arbitrary custom clips) |
+| **BUG-09** | **P1** | Studio | Single-cell selection (`1×1`) deselected immediately due to identical min/max check. | **RESOLVED & VERIFIED** (Single-pixel marquee retained) |
+| **BUG-10** | **P1** | UI | Selection marquee appeared jagged/blurry at high zoom due to subpixel dashes. | **RESOLVED & VERIFIED** (Crisp solid outline + inner glow) |
 | **FEAT-01**| **P1** | Studio | Dedicated Animation Studio Tab with visual timeline strip & Onion Skin. | **IMPLEMENTED** (`#view-anim-studio`) |
 | **FEAT-02**| **P1** | Engine | Anchor-centered zoom on mouse hover pixel / selection. | **IMPLEMENTED & VERIFIED** (Invariance math) |
 | **FEAT-03**| **P1** | File | Desktop-like File Management (File System Access API `Ctrl+S`, `Ctrl+O`). | **IMPLEMENTED & VERIFIED** (Native + Fallback) |
 | **FEAT-04**| **P1** | State | Dual Autosave (30s time + 1.5s event) with crash recovery snapshot. | **IMPLEMENTED & VERIFIED** (IndexedDB / LocalStorage) |
+| **FEAT-05**| **P1** | Tools | Marquee & Full-Canvas 90° Clockwise Rotation (`R` key and Rotate button). | **IMPLEMENTED & VERIFIED** (Studio & PixelArt) |
+| **FEAT-06**| **P1** | Editor | Safe View Only lock and direct code editing toggle with Apply button. | **IMPLEMENTED & VERIFIED** (ReadOnly protection) |
+| **FEAT-07**| **P1** | Canvas | Alignment guidelines (Center crosshairs, Vertical guide, Horizontal guide). | **IMPLEMENTED & VERIFIED** (Pixel-crisp cyan lines) |
+| **FEAT-08**| **P2** | UI | Universal horizontal drag-scroll across all horizontal toolbars and statusbars. | **IMPLEMENTED & VERIFIED** (Grabbing cursor interaction) |
 
 ---
 

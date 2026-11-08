@@ -1,7 +1,7 @@
 # NOIRADIX PixelArt — Functional & UI/UX Specification
 
 **Document ID:** `docs/PIXELART/SPECIFICATION.md`  
-**Version:** 1.4.0  
+**Version:** 1.5.0  
 **Date:** 2026-11-08  
 **Route:** `/pixelart/`  
 **License:** Apache-2.0  
@@ -213,4 +213,53 @@ To ensure optimal contrast and eye comfort across different art styles (e.g. bri
 ### 5.2 PNG Exporter Integration
 * **Pure Alpha Export (Default):** Generates transparent RGBA `.png` files suitable for game engines and sprite workflows.
 * **Canvas Background Option:** A dedicated checkbox in the PNG Export modal allows baking the chosen solid white, solid black, or custom background color directly into the final raster image.
+
+---
+
+## 6. Selection & Transformation System (Marquee & Rotation)
+
+### 6.1 Reliable Single-Cell & Multi-Cell Marquee
+* **Single-Pixel Selection:** Clicking on an individual canvas pixel reliably selects that exact 1-pixel cell (`w: 1, h: 1`) without prematurely deselecting or wiping out the marquee on pointer release.
+* **Crystal-Sharp Rendering (Zero Subpixel Blur):**
+  * When $W = 1 \text{ and } H = 1$, the marquee renders with a solid high-contrast `#4f46e5` border, soft purple scrim (`rgba(99, 102, 241, 0.18)`), and an interior highlight, completely eliminating fragmented/blurry dashes at high zoom.
+  * When $W > 1 \text{ or } H > 1$, rendering uses integer pixel alignment (`Math.floor(x * zoom) + 0.5`) with a 1px solid dark underlay, crisp dashed overlay (`[4, 4]`), and 4 corner grip handles.
+* **Select All (`Ctrl+A`):** Instantly bounds the entire canvas dimensions ($0, 0, W, H$).
+
+### 6.2 Selection Rotation (90° Clockwise)
+* Pressing `R` or clicking the Rotate 90° button transforms the active selection clockwise:
+  * Pixel coordinates map to $(H - 1 - Y, X)$.
+  * Bounding box width and height swap ($W' = H, H' = W$).
+  * The rotation automatically triggers history snapshot creation (`pushHistory()`), source code synchronization, and autosave.
+  * If no selection is active, rotating rotates the entire canvas/cell artwork.
+
+---
+
+## 7. Safe View Mode & Direct Code Editing Lock
+
+To prevent accidental code erasure or loss of work when clicking in the code editor, the editor is protected by a dual-state locking mechanism:
+
+| State | Badge | Editor Attribute | Capabilities |
+| :--- | :--- | :--- | :--- |
+| **View Only (Default)** | `<i class="fa-solid fa-lock"></i> View Only` | `readonly` | Safe inspection, text selection, `Ctrl+C` copying, and downloading. Accidental typing or backspacing is completely blocked. |
+| **Editing Unlocked** | `<i class="fa-solid fa-pen"></i> Editing` | Not `readonly` | Direct source manipulation. Displays green **Apply** button to commit manual source code changes to the canvas artboard. |
+
+* **Fullscreen Code Expansion:** Switching to the Code-only view mode (`view-code-only`) automatically expands the editor pane to 100% of the viewport width, overriding split-pane inline pixel styles.
+
+---
+
+## 8. Alignment Guidelines (Trục Dóng Tâm Giữa)
+
+The canvas statusbar features dedicated alignment guideline toggles:
+* **Center Crosshairs (`Center`):** Draws both horizontal ($Y = H/2$) and vertical ($X = W/2$) dashed cyan (`#06b6d4`) center lines with a central target reticle.
+* **Vertical Guide (`V-Guide`):** Draws a vertical centerline at $X = W/2$.
+* **Horizontal Guide (`H-Guide`):** Draws a horizontal centerline at $Y = H/2$.
+* Guidelines are rendered crisply on the canvas overlay, remaining independent of the active drawing layer and omitted from PNG exports.
+
+---
+
+## 9. Universal Horizontal Drag-Scroll & UI Refinement
+
+* **Grab & Grabbing Interaction:** All horizontal bars across the interface—including `.pa-header`, `.pa-canvas-statusbar`, `.pa-palette-deck`, `.pa-swatches-scroll`, `.pa-code-header`, and `.pa-code-statusbar`—support smooth horizontal drag-scroll via mouse pointer drag or wheel tilt.
+* **Palette Save Button:** Styled as a clean, borderless bookmark icon (`fa-solid fa-bookmark`) whose height perfectly matches the 26px dropdown select element, avoiding bulky button backgrounds.
+
 
