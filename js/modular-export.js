@@ -6,14 +6,16 @@
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     const PIX2 = require('./pix2-format.js');
-    module.exports = factory(PIX2);
+    let versionInfo = null;
+    try { versionInfo = require('./version.js'); } catch (_) {}
+    module.exports = factory(PIX2, versionInfo);
   } else {
-    root.ModularExport = factory(root.PIX2);
+    root.ModularExport = factory(root.PIX2, root.NOIRADIX_VERSION);
   }
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (PIX2) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (PIX2, versionInfo) {
   'use strict';
 
-  const CANONICAL_DOMAIN = 'https://noiradix.me';
+  const CANONICAL_DOMAIN = (versionInfo && versionInfo.canonicalDomain) || 'https://noiradix.me';
   const DEFAULT_SCHEMA_URI = `${CANONICAL_DOMAIN}/schemas/pix2-manifest-v1.json`;
 
   // CRC32 implementation for zero-dependency ZIP generation

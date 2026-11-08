@@ -318,6 +318,38 @@ console.log('\nTest 7: AnimationPlayer Platformer Action Diagnostics & Clip Reso
   pass('AnimationPlayer action scoping, missing clip diagnostics, and null fallback verified');
 }
 
+// -----------------------------------------------------------------------------
+// Test 8: Studio 2.0 Structure & Layers DOM Contract Verification
+// -----------------------------------------------------------------------------
+console.log('\nTest 8: Studio 2.0 Structure & Layers DOM Contract Verification');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+
+  const requiredIds = [
+    'btn-tool-region-select',
+    'isolation-banner',
+    'isolation-breadcrumb-text',
+    'btn-exit-isolation',
+    'structure-layers-card',
+    'structure-tree-container',
+    'btn-add-layer',
+    'btn-add-group',
+    'btn-add-region',
+    'btn-resize-frame',
+    'modal-resize-frame',
+    'modal-new-file',
+    'new-file-summary-card'
+  ];
+
+  for (const id of requiredIds) {
+    assert(indexHtml.includes(`id="${id}"`), `index.html must define DOM element #${id}`);
+  }
+
+  pass('Studio 2.0 Structure & Layers UI contract verified in production index.html');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');
