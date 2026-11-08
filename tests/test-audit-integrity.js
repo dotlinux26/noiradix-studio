@@ -280,30 +280,32 @@ console.log('\nTest 9: P1-07 Studio New Project Unapplied Code Guard');
 // -----------------------------------------------------------------------------
 console.log('\nTest 10: PART 2 Adaptive Zoom Safety Cap');
 {
-  const ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
   function getMaxAllowedZoom(w, h) {
-    const area = w * h;
-    const maxZoomFromArea = Math.max(1, Math.floor(Math.sqrt(16777216 / area)));
-    let allowed = 1;
-    for (const z of ZOOM_LADDER) {
-      if (z <= maxZoomFromArea) allowed = z;
-      else break;
+    const maxDim = Math.max(w, h);
+    if (maxDim >= 512) {
+      return 8;
     }
-    return Math.min(64, allowed);
+    if (maxDim >= 256) {
+      return 16;
+    }
+    if (maxDim >= 128) {
+      return 32;
+    }
+    return 64;
   }
 
-  // 1024 x 1024: Area 1,048,576 -> max 4x zoom (4096 x 4096 surface = 64MB)
-  assert.strictEqual(getMaxAllowedZoom(1024, 1024), 4, '1024x1024 must cap at 4x zoom');
-  // 512 x 512: Area 262,144 -> max 8x zoom
+  // 1024 x 1024: max 8x zoom (backing store: 8192px <= 16384px GPU texture limit)
+  assert.strictEqual(getMaxAllowedZoom(1024, 1024), 8, '1024x1024 must cap at 8x zoom');
+  // 512 x 512: max 8x zoom
   assert.strictEqual(getMaxAllowedZoom(512, 512), 8, '512x512 must cap at 8x zoom');
-  // 512 x 1024: Area 524,288 -> max 4x zoom
-  assert.strictEqual(getMaxAllowedZoom(512, 1024), 4, '512x1024 must cap at 4x zoom');
-  // 256 x 256: Area 65,536 -> max 16x zoom
+  // 512 x 1024: max 8x zoom
+  assert.strictEqual(getMaxAllowedZoom(512, 1024), 8, '512x1024 must cap at 8x zoom');
+  // 256 x 256: max 16x zoom
   assert.strictEqual(getMaxAllowedZoom(256, 256), 16, '256x256 must cap at 16x zoom');
   // 64 x 64: Area 4,096 -> deep zoom 64x
   assert.strictEqual(getMaxAllowedZoom(64, 64), 64, '64x64 must allow up to 64x deep zoom');
 
-  console.log('  [PASS] Adaptive zoom cap keeps backing canvas surfaces within 64MB budget across all resolutions');
+  console.log('  [PASS] Both 1024x1024 and 512x512 allow 8x zoom while capping within safe 8192px backing bounds');
 }
 
 // -----------------------------------------------------------------------------

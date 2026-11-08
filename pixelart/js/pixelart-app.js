@@ -915,7 +915,7 @@
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (dom.rulerTop) {
-      const rw = Math.round(totalW * dpr);
+      const rw = Math.min(16384, Math.round(totalW * dpr));
       const rh = Math.round(24 * dpr);
       if (dom.rulerTop.width !== rw) dom.rulerTop.width = rw;
       if (dom.rulerTop.height !== rh) dom.rulerTop.height = rh;
@@ -924,7 +924,7 @@
     }
     if (dom.rulerLeft) {
       const rw = Math.round(24 * dpr);
-      const rh = Math.round(totalH * dpr);
+      const rh = Math.min(16384, Math.round(totalH * dpr));
       if (dom.rulerLeft.width !== rw) dom.rulerLeft.width = rw;
       if (dom.rulerLeft.height !== rh) dom.rulerLeft.height = rh;
       dom.rulerLeft.style.width = '24px';
@@ -1520,16 +1520,19 @@
   const ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
 
   function getMaxAllowedZoom() {
-    const area = state.w * state.h;
-    // Backing surface budget: ~64MB per RGBA canvas (4096 x 4096 = 16,777,216 pixels)
-    // Combined with preview canvas: ~128MB max GPU backing budget across all canvas surfaces
-    const maxZoomFromArea = Math.max(1, Math.floor(Math.sqrt(16777216 / area)));
-    let allowed = 1;
-    for (const z of ZOOM_LADDER) {
-      if (z <= maxZoomFromArea) allowed = z;
-      else break;
+    const maxDim = Math.max(state.w, state.h);
+    // Large artworks (512x512 up to 1024x1024) both cap at 8x zoom for comfortable pixel detailing
+    // while keeping max backing dimension within 8192px (under the 16384px GPU texture limit)
+    if (maxDim >= 512) {
+      return 8;
     }
-    return Math.min(64, allowed);
+    if (maxDim >= 256) {
+      return 16;
+    }
+    if (maxDim >= 128) {
+      return 32;
+    }
+    return 64;
   }
 
   function getNextZoom(currentZoom, direction) {
