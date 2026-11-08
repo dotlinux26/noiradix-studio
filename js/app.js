@@ -1581,6 +1581,29 @@
         loop: true,
         mode: 'loop'
       };
+
+      if (cols >= 2) {
+        state.doc.animations['run_right'] = {
+          name: 'Run Right',
+          direction: 'right',
+          action: 'run',
+          template: 'platformer_2dir',
+          frames: Array.from({ length: cols }, (_, i) => `cell_0_${i}`),
+          fps: 8,
+          loop: true,
+          mode: 'loop'
+        };
+        state.doc.animations['run_left'] = {
+          name: 'Run Left',
+          direction: 'left',
+          action: 'run',
+          template: 'platformer_2dir',
+          frames: Array.from({ length: cols }, (_, i) => `cell_1_${i}`),
+          fps: 8,
+          loop: true,
+          mode: 'loop'
+        };
+      }
     }
 
     closeNewFileModal();
