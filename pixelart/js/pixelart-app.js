@@ -5565,6 +5565,22 @@ Do not include conversational greetings or postscripts.`;
       openContextMenu(e.clientX, e.clientY);
     });
 
+    // Native Double-Click Isolation Mode Router (Region Select parity with Studio)
+    dom.viewport.addEventListener('dblclick', (e) => {
+      if (state.currentTool === 'region-select') {
+        const coords = getPixelCoord(e);
+        const cell = getArtworkCell();
+        if (coords && cell && cell.layers) {
+          const hit = findRegionAt(cell, coords.x, coords.y);
+          if (hit) {
+            enterIsolationMode(hit.id, hit.name || hit.id);
+          } else if (state.isolatedNodeId) {
+            exitIsolationMode();
+          }
+        }
+      }
+    });
+
     // Wheel Zoom centered on cursor
     dom.viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
