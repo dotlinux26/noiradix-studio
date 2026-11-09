@@ -2497,7 +2497,13 @@ const PIX2 = (function () {
   };
 })();
 
-// Export for Node.js test environment or ES module
+// Export for browser globals, Node.js test environment, or ES module
+if (typeof globalThis !== 'undefined') {
+  globalThis.PIX2 = PIX2;
+}
+if (typeof window !== 'undefined') {
+  window.PIX2 = PIX2;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = PIX2;
 }

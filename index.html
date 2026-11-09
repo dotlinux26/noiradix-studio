@@ -1037,7 +1037,7 @@
             </div>
 
             <!-- Viewport Container -->
-            <div class="card-body" id="import-slice-viewport-container" style="position: relative; overflow: auto; background: var(--bg-canvas-area); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 220px; cursor: default; user-select: none;">
+            <div class="card-body" id="import-slice-viewport-container" style="position: relative; overflow: hidden; background: var(--bg-canvas-area); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 220px; cursor: default; user-select: none;">
               <div class="canvas-container-with-rulers" id="slice-container-with-rulers" style="display: none;">
                 <div class="ruler-corner" id="slice-ruler-corner">px</div>
                 <div id="slice-ruler-top" class="ruler-top-bar"></div>
@@ -1054,8 +1054,13 @@
               </div>
             </div>
 
+            <!-- Slices & Tagging Inspector Deck Resizer Bar -->
+            <div class="deck-resizer" id="import-slices-deck-resizer" title="Drag up or down to resize inspector height">
+              <div class="deck-resizer-handle"></div>
+            </div>
+
             <!-- Slices & Tagging Inspector Deck -->
-            <div class="import-slices-deck" id="import-slices-deck" style="border-top: 1px solid var(--border-subtle); background: var(--bg-card); display: flex; flex-direction: column; height: 260px; max-height: 40%; flex-shrink: 0;">
+            <div class="import-slices-deck" id="import-slices-deck" style="background: var(--bg-card); display: flex; flex-direction: column; height: 260px; min-height: 100px; max-height: 80%; flex-shrink: 0;">
               <!-- Inspector Header with Quick Tagging Tools (Single-line Horizontal Drag-Scroll) -->
               <div class="import-slices-header" id="import-slices-header">
                 <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
@@ -2063,6 +2068,7 @@
   <script src="js/animation-player.js?v=2.0.0"></script>
   <script src="js/tab-strip.js?v=2.0.0"></script>
   <script src="js/viewport-pan-zoom.js?v=2.0.0"></script>
+  <script src="js/maintenance-banner.js?v=2.0.0"></script>
   <script src="js/app.js?v=2.0.0"></script>
 
 

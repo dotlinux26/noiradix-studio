@@ -8,10 +8,27 @@
     const PIX2 = require('./pix2-format.js');
     module.exports = factory(PIX2);
   } else {
-    root.ImportSlice = factory(root.PIX2);
+    const resolvedPIX2 = (typeof PIX2 !== 'undefined' ? PIX2 : (root && root.PIX2 ? root.PIX2 : (typeof globalThis !== 'undefined' ? globalThis.PIX2 : null)));
+    root.ImportSlice = factory(resolvedPIX2);
   }
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (PIX2) {
+})(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (PIX2) {
   'use strict';
+
+  /**
+   * Safe RGBA to HEX helper with fallback
+   */
+  function toHexColor(r, g, b, a = 255) {
+    const resolved = (PIX2 && typeof PIX2.rgbaToHex === 'function') ? PIX2 : (typeof globalThis !== 'undefined' && globalThis.PIX2 ? globalThis.PIX2 : (typeof window !== 'undefined' && window.PIX2 ? window.PIX2 : null));
+    if (resolved && typeof resolved.rgbaToHex === 'function') {
+      return resolved.rgbaToHex(r, g, b, a);
+    }
+    const rH = Math.max(0, Math.min(255, Math.round(r))).toString(16).padStart(2, '0');
+    const gH = Math.max(0, Math.min(255, Math.round(g))).toString(16).padStart(2, '0');
+    const bH = Math.max(0, Math.min(255, Math.round(b))).toString(16).padStart(2, '0');
+    if (a === 255 || a === undefined) return `#${rH}${gH}${bH}`;
+    const aH = Math.max(0, Math.min(255, Math.round(a))).toString(16).padStart(2, '0');
+    return `#${rH}${gH}${bH}${aH}`;
+  }
 
   /**
    * Parse atlas JSON in NOIRADIX or TexturePacker (Hash or Array) format
@@ -306,7 +323,7 @@
         }
 
         if (destX >= 0 && destX < outW && destY >= 0 && destY < outH) {
-          pixels[`${destX},${destY}`] = PIX2.rgbaToHex(rgba.r, rgba.g, rgba.b, rgba.a);
+          pixels[`${destX},${destY}`] = toHexColor(rgba.r, rgba.g, rgba.b, rgba.a);
         }
       }
     }

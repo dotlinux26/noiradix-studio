@@ -544,7 +544,7 @@
       closeBtn.title = 'Close artwork session';
       closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closePaProjectSession(session.id);
+        closePaProjectSession(session);
       });
       tab.appendChild(closeBtn);
 
@@ -737,8 +737,10 @@
     return session;
   }
 
-  function closePaProjectSession(sessionId) {
-    const session = paProjectSessions.find(p => p.id === sessionId);
+  function closePaProjectSession(sessionOrId) {
+    const session = (typeof sessionOrId === 'object' && sessionOrId !== null)
+      ? sessionOrId
+      : paProjectSessions.find(p => p.id === sessionOrId);
     if (!session) return;
 
     if (session.isDirty) {
@@ -746,7 +748,8 @@
       if (!confirmDiscard) return;
     }
 
-    const idx = paProjectSessions.findIndex(p => p.id === sessionId);
+    const isClosingActive = (activePaProjectId === session.id);
+    const idx = paProjectSessions.indexOf(session);
     if (idx !== -1) {
       paProjectSessions.splice(idx, 1);
     }
@@ -791,9 +794,12 @@
       state.title = 'Pixel Artwork';
       renderPaProjectTabs();
       updatePaEmptyWorkspaceUI();
-    } else {
+    } else if (isClosingActive) {
+      activePaProjectId = null;
       const nextSession = paProjectSessions[Math.min(idx, paProjectSessions.length - 1)];
       switchPaProjectSession(nextSession.id);
+    } else {
+      renderPaProjectTabs();
     }
   }
 

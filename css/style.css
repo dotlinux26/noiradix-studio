@@ -3798,18 +3798,27 @@ body.dark-theme .export-preview-viewport {
 }
 
 .structure-action-group {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  width: 100%;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
 }
 
 .structure-create-btn {
-  height: 26px !important;
-  min-width: 0;
-  padding: 0 5px !important;
-  font-size: 10px !important;
-  line-height: 1;
+  flex: 1 1 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  height: 28px !important;
+  min-width: 0 !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  text-align: center !important;
 }
 
 .structure-card-body {
@@ -4219,6 +4228,35 @@ body.dark-theme .new-file-summary-card .summary-profile-badge {
   gap: 6px !important;
   flex-wrap: nowrap !important;
   flex-shrink: 0 !important;
+}
+
+/* Slices & Tagging Inspector Deck Resizer */
+.deck-resizer {
+  height: 6px;
+  background: var(--border-subtle);
+  cursor: row-resize;
+  position: relative;
+  transition: background 0.15s ease;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.deck-resizer:hover,
+.deck-resizer.is-dragging {
+  background: var(--accent-primary);
+}
+
+.deck-resizer-handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 2px;
 }
 
 .slice-viewport-toolbar .btn-group {

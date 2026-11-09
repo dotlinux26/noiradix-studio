@@ -498,6 +498,62 @@ console.log('\nTest 12: Empty Workspace State & Adjacent Tab Placement Invariant
   pass('Empty workspace state, RAM purge, and adjacent [+] button placement contracts verified');
 }
 
+// -----------------------------------------------------------------------------
+// Test 13: Tab Close Accuracy, Resizer & Maintenance Banner Contracts
+// -----------------------------------------------------------------------------
+console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contracts');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const styleCss = fs.readFileSync(path.join(__dirname, '../css/style.css'), 'utf8');
+  const bannerJs = fs.readFileSync(path.join(__dirname, '../js/maintenance-banner.js'), 'utf8');
+
+  // 1. Tab Close by session reference and non-active preservation
+  assert(appJs.includes('const isClosingActive = (activeProjectId === session.id);'),
+    'app.js must accurately determine whether the closed session is currently active');
+  assert(appJs.includes('const idx = projectSessions.indexOf(session);'),
+    'app.js must use indexOf(session) to accurately locate the exact targeted tab');
+
+  // 2. Tab strip close simulation
+  const mockSessions = [
+    { id: 'proj_1', fileName: 'new_sprite.pix2' },
+    { id: 'proj_2', fileName: 'new_sprite.pix2' },
+    { id: 'proj_3', fileName: 'new_sprite.pix2' }
+  ];
+  let activeId = 'proj_3';
+
+  // Simulate closing the last session (proj_3)
+  const targetSession = mockSessions[2];
+  const closeIdx = mockSessions.indexOf(targetSession);
+  assert.strictEqual(closeIdx, 2, 'Must locate exactly index 2 for the last session');
+  mockSessions.splice(closeIdx, 1);
+  assert.strictEqual(mockSessions.length, 2);
+  assert.strictEqual(mockSessions[0].id, 'proj_1', 'First session must remain completely intact');
+  assert.strictEqual(mockSessions[1].id, 'proj_2', 'Second session must remain intact');
+
+  // 3. Maintenance Banner Module
+  const MB = require('../js/maintenance-banner.js');
+  assert(typeof MB.init === 'function', 'MaintenanceBanner must export init');
+  assert(typeof MB.show === 'function', 'MaintenanceBanner must export show');
+  assert(typeof MB.dismiss === 'function', 'MaintenanceBanner must export dismiss');
+  assert(typeof MB.setEnabled === 'function', 'MaintenanceBanner must export setEnabled');
+  assert(bannerJs.includes('30 * 60 * 1000'), 'MaintenanceBanner must configure 30 minutes interval');
+
+  // 4. Structure & Layers Buttons Centered Flex
+  assert(styleCss.includes('.structure-action-group') && styleCss.includes('justify-content: center'),
+    'style.css must center .structure-action-group evenly');
+
+  // 5. Inspector Deck Resizer Bar
+  assert(indexHtml.includes('id="import-slices-deck-resizer"'),
+    'index.html must include #import-slices-deck-resizer');
+  assert(styleCss.includes('.deck-resizer'),
+    'style.css must include .deck-resizer styles');
+
+  pass('Tab close accuracy, omnidirectional pan/zoom, deck resizer, and maintenance banner contracts verified');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

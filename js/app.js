@@ -147,6 +147,7 @@
     bindKeyboardShortcuts();
     initCanvasPanningAndZoom();
     initImportSliceCanvasEvents();
+    initInspectorDeckResizer();
     initAutosave();
 
     // Populate custom palette presets library
@@ -666,7 +667,7 @@
   }
 
   function getActiveSession() {
-    return projectSessions.find(p => p.id === activeProjectId) || projectSessions[0] || null;
+    return activeProjectId ? (projectSessions.find(p => p.id === activeProjectId) || null) : null;
   }
 
   function saveCurrentSessionState() {
@@ -747,7 +748,7 @@
       closeBtn.title = 'Close project session';
       closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeProjectSession(session.id);
+        closeProjectSession(session);
       });
       tab.appendChild(closeBtn);
 
@@ -820,10 +821,7 @@
     const path = filePath || currentFilePath || name;
     const title = (doc.meta && doc.meta.title) || name;
 
-    let session = projectSessions.find(p => p.id === activeProjectId && (p.fileName === name || p.filePath === path));
-    if (!session) {
-      session = projectSessions.find(p => (p.filePath && p.filePath === path) || (p.fileName && p.fileName === name));
-    }
+    let session = projectSessions.find(p => p.id === activeProjectId);
 
     if (!session) {
       if (activeProjectId) {
@@ -849,8 +847,10 @@
     return session;
   }
 
-  function closeProjectSession(sessionId) {
-    const session = projectSessions.find(p => p.id === sessionId);
+  function closeProjectSession(sessionOrId) {
+    const session = (typeof sessionOrId === 'object' && sessionOrId !== null)
+      ? sessionOrId
+      : projectSessions.find(p => p.id === sessionOrId);
     if (!session) return;
 
     if (session.isDirty) {
@@ -858,7 +858,8 @@
       if (!confirmDiscard) return;
     }
 
-    const idx = projectSessions.findIndex(p => p.id === sessionId);
+    const isClosingActive = (activeProjectId === session.id);
+    const idx = projectSessions.indexOf(session);
     if (idx !== -1) {
       projectSessions.splice(idx, 1);
     }
@@ -908,9 +909,13 @@
       persistAllProjectSessions();
       renderProjectTabs();
       refreshAll();
-    } else {
+    } else if (isClosingActive) {
+      activeProjectId = null;
       const nextSession = projectSessions[Math.min(idx, projectSessions.length - 1)];
       switchProjectSession(nextSession.id);
+      persistAllProjectSessions();
+    } else {
+      renderProjectTabs();
       persistAllProjectSessions();
     }
   }
@@ -1728,11 +1733,22 @@
     }
     if (!dom.modalNewFile) return;
 
+    const existingNames = new Set(projectSessions.map(s => (s.fileName || '').toLowerCase()));
+    let defaultFileName = 'new_sprite.pix2';
+    if (existingNames.has(defaultFileName.toLowerCase())) {
+      let counter = 1;
+      while (existingNames.has(`new_sprite_${counter}.pix2`)) {
+        counter++;
+      }
+      defaultFileName = `new_sprite_${counter}.pix2`;
+    }
+    const derivedTitle = defaultFileName.replace(/\.pix2$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
     if (dom.newFileNameInput) {
-      dom.newFileNameInput.value = 'new_sprite.pix2';
+      dom.newFileNameInput.value = defaultFileName;
     }
     if (dom.newFileTitleInput) {
-      dom.newFileTitleInput.value = 'New Sprite';
+      dom.newFileTitleInput.value = derivedTitle;
     }
     if (dom.newFileCols) dom.newFileCols.value = '4';
     if (dom.newFileRows) dom.newFileRows.value = '4';
@@ -2025,24 +2041,46 @@
       targetFileName = sanitizeSafeFilename(targetFileName, '.pix2', 'imported_sprite');
     }
 
+    // 1. Save state of current session first so existing tabs and work are preserved
+    if (activeProjectId) {
+      saveCurrentSessionState();
+    }
+
+    // 2. Always create a new project session for the imported document
+    const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const session = new ProjectSession(newId, parsedDoc.meta?.title || targetFileName, parsedDoc, null, targetFileName, targetFileName);
+    session.lastSavedContent = rawCode;
+    session.isDirty = false;
+    session.activeTabId = 'tab-grid-overview';
+    session.openCellTabs = [];
+    projectSessions.push(session);
+
+    // 3. Switch active pointer to new session
+    activeProjectId = newId;
     currentFileHandle = null;
     clearPersistedFileHandle();
     currentFileName = targetFileName;
     currentFilePath = targetFileName;
     lastSavedContent = rawCode;
-    lastKnownFileModified = Date.now();
+    documentRevision = 0;
+    lastSavedRevision = 0;
 
     state.setDocument(parsedDoc, false);
     state.activeTabId = 'tab-grid-overview';
+    state.openCellTabs = [];
+    state.history = [];
+    state.historyIndex = -1;
+    state.selection = null;
+    setDirty(false);
 
     centerCellCanvas();
     centerGridCanvas();
     closeImportCodeModal();
-    setDirty(true);
-    triggerEventAutosave();
+    renderProjectTabs();
     refreshAll();
+    persistAllProjectSessions();
 
-    showToast(`Successfully imported "${targetFileName}" (${parsedDoc.cells.size} frames)!`, 'success');
+    showToast(`Successfully imported "${targetFileName}" as new project tab (${parsedDoc.cells.size} frames)!`, 'success');
   }
 
   function refreshAll() {
@@ -3995,7 +4033,14 @@
     const clamped = Math.max(0.25, Math.min(32, Math.round(newZoom * 100) / 100));
     importSliceState.zoom = clamped;
     applySliceZoom();
+    updateSliceTransform();
     renderImportSliceView();
+  }
+
+  function updateSliceTransform() {
+    const el = document.getElementById('slice-container-with-rulers');
+    if (!el) return;
+    el.style.transform = `translate(${importSliceState.panX || 0}px, ${importSliceState.panY || 0}px)`;
   }
 
   function applySliceZoom() {
@@ -4037,6 +4082,8 @@
     } else {
       fitScale = Math.max(0.25, Math.round(fitScale * 100) / 100);
     }
+    importSliceState.panX = 0;
+    importSliceState.panY = 0;
     setSliceZoom(Math.max(0.25, fitScale));
   }
 
@@ -4480,7 +4527,7 @@
     }
 
     let html = `
-      <div style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; padding: 4px 10px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; min-width: 580px;">
+      <div style="display: grid; grid-template-columns: 32px 36px minmax(120px, 1.4fr) minmax(120px, 1.4fr) minmax(70px, 85px) minmax(150px, 180px) 52px; gap: 8px; padding: 5px 12px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; min-width: 620px;">
         <span>#</span>
         <span>Thumb</span>
         <span>Slice Name</span>
@@ -4495,7 +4542,7 @@
       const isSel = (idx === importSliceState.selectedSliceIndex);
       const colVal = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : 0);
       html += `
-        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}" style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; align-items: center; padding: 4px 10px; min-width: 580px;">
+        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}" style="display: grid; grid-template-columns: 32px 36px minmax(120px, 1.4fr) minmax(120px, 1.4fr) minmax(70px, 85px) minmax(150px, 180px) 52px; gap: 8px; align-items: center; padding: 4px 12px; min-width: 620px;">
           <span style="font-weight: 600; color: var(--text-dim);">${idx + 1}</span>
           <canvas class="slice-thumb-canvas" id="slice-thumb-${idx}" width="24" height="24"></canvas>
           <input type="text" class="slice-input-sm slice-name-input" data-slice-idx="${idx}" value="${escapeHTML(f.name)}" placeholder="Frame Name">
@@ -4605,12 +4652,14 @@
         const idx = parseInt(btn.dataset.sliceIdx, 10);
         importSliceState.selectedSliceIndex = idx;
         const f = importSliceState.frames[idx];
-        if (f && dom.importSliceViewportContainer) {
+        if (f && dom.importSliceViewportContainer && importSliceState.image) {
           const z = importSliceState.zoom || 1;
-          const targetX = (f.frame.x + f.frame.w / 2) * z;
-          const targetY = (f.frame.y + f.frame.h / 2) * z;
-          dom.importSliceViewportContainer.scrollLeft = targetX - dom.importSliceViewportContainer.clientWidth / 2;
-          dom.importSliceViewportContainer.scrollTop = targetY - dom.importSliceViewportContainer.clientHeight / 2;
+          const img = importSliceState.image;
+          const sliceCenterX = (f.frame.x + f.frame.w / 2) * z;
+          const sliceCenterY = (f.frame.y + f.frame.h / 2) * z;
+          importSliceState.panX = Math.round((img.width * z / 2) - sliceCenterX);
+          importSliceState.panY = Math.round((img.height * z / 2) - sliceCenterY);
+          updateSliceTransform();
         }
         renderImportSliceView();
       });
@@ -4636,12 +4685,52 @@
     }
   }
 
+  function initInspectorDeckResizer() {
+    const resizer = document.getElementById('import-slices-deck-resizer');
+    const deck = document.getElementById('import-slices-deck');
+    const mainArea = document.querySelector('.import-slice-main-area');
+    if (!resizer || !deck) return;
+
+    let isDragging = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizer.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      startY = e.clientY;
+      startHeight = deck.getBoundingClientRect().height;
+      resizer.classList.add('is-dragging');
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dy = startY - e.clientY; // dragging up increases deck height
+      const parentH = mainArea ? mainArea.getBoundingClientRect().height : window.innerHeight;
+      const maxH = Math.round(parentH * 0.75);
+      const newHeight = Math.max(100, Math.min(maxH, Math.round(startHeight + dy)));
+      deck.style.height = `${newHeight}px`;
+      deck.style.maxHeight = '80%';
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (isDragging) {
+        isDragging = false;
+        resizer.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+  }
+
   function initImportSliceCanvasEvents() {
     const canvas = dom.importSliceCanvas;
     const container = dom.importSliceViewportContainer;
     if (!canvas || !container) return;
 
-    // Zoom on wheel (Anchor-centered on cursor)
+    // Zoom on wheel (Anchor-centered on cursor via NoiraViewport)
     container.addEventListener('wheel', (e) => {
       if (!importSliceState.image) return;
       e.preventDefault();
@@ -4656,26 +4745,41 @@
       const unscaledX = mx / oldZoom;
       const unscaledY = my / oldZoom;
 
-      setSliceZoom(newZoom);
+      if (typeof NoiraViewport !== 'undefined' && NoiraViewport.computeAnchorZoomPan) {
+        const { panX, panY } = NoiraViewport.computeAnchorZoomPan(
+          importSliceState.panX || 0,
+          importSliceState.panY || 0,
+          oldZoom,
+          newZoom,
+          unscaledX,
+          unscaledY,
+          importSliceState.image.width,
+          importSliceState.image.height
+        );
+        importSliceState.panX = panX;
+        importSliceState.panY = panY;
+      }
 
-      const newMx = unscaledX * newZoom;
-      const newMy = unscaledY * newZoom;
-      container.scrollLeft += (newMx - mx);
-      container.scrollTop += (newMy - my);
+      setSliceZoom(newZoom);
     }, { passive: false });
 
-    // Pointer down on container for panning (middle click or hand tool)
+    const startSlicePan = (e) => {
+      importSliceState.isPanning = true;
+      importSliceState.panStartX = e.clientX;
+      importSliceState.panStartY = e.clientY;
+      importSliceState.dragStartPanX = importSliceState.panX || 0;
+      importSliceState.dragStartPanY = importSliceState.panY || 0;
+      container.style.cursor = 'grabbing';
+      document.body.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+
+    // Pointer down on container for panning (middle click or hand tool or background)
     container.addEventListener('pointerdown', (e) => {
       if (!importSliceState.image) return;
       const isHand = (importSliceState.activeTool === 'hand') || e.button === 1 || isSpacebarHeld;
-      if (isHand) {
-        importSliceState.isPanning = true;
-        importSliceState.panStartX = e.clientX;
-        importSliceState.panStartY = e.clientY;
-        importSliceState.scrollStartX = container.scrollLeft;
-        importSliceState.scrollStartY = container.scrollTop;
-        container.style.cursor = 'grabbing';
-        e.preventDefault();
+      if (isHand || e.target === container) {
+        startSlicePan(e);
         return;
       }
     });
@@ -4685,13 +4789,7 @@
       if (!importSliceState.image) return;
       const isHand = (importSliceState.activeTool === 'hand') || e.button === 1 || isSpacebarHeld;
       if (isHand) {
-        importSliceState.isPanning = true;
-        importSliceState.panStartX = e.clientX;
-        importSliceState.panStartY = e.clientY;
-        importSliceState.scrollStartX = container.scrollLeft;
-        importSliceState.scrollStartY = container.scrollTop;
-        container.style.cursor = 'grabbing';
-        e.preventDefault();
+        startSlicePan(e);
         return;
       }
 
@@ -4759,8 +4857,9 @@
       if (importSliceState.isPanning) {
         const dx = e.clientX - importSliceState.panStartX;
         const dy = e.clientY - importSliceState.panStartY;
-        container.scrollLeft = importSliceState.scrollStartX - dx;
-        container.scrollTop = importSliceState.scrollStartY - dy;
+        importSliceState.panX = Math.round((importSliceState.dragStartPanX || 0) + dx);
+        importSliceState.panY = Math.round((importSliceState.dragStartPanY || 0) + dy);
+        updateSliceTransform();
         return;
       }
 
@@ -4875,6 +4974,7 @@
       if (importSliceState.isPanning) {
         importSliceState.isPanning = false;
         container.style.cursor = (importSliceState.activeTool === 'hand' || isSpacebarHeld) ? 'grab' : 'default';
+        document.body.style.cursor = '';
       }
 
       if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
@@ -5053,6 +5153,9 @@
     const autoAnimate = dom.chkSliceAutoAnimate ? dom.chkSliceAutoAnimate.checked : true;
 
     try {
+      if (!state.doc) {
+        createBlankProject('imported_sprites.pix2', 'Imported Sprites', 4, 4, 16, 16);
+      }
       state.beginStroke(`Import ${importSliceState.frames.length} Slices`);
       ImportSlice.importFramesToDoc(state.doc, importSliceState.frames, imgData, {
         layerName: layerName,
