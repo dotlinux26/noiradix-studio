@@ -8400,7 +8400,8 @@ const outText = PIX2.serialize(doc);</code></pre>
     const prompt = Pix2AiPrompt.build({
       brief, source: PIX2.serialize(state.doc), version,
       width: cellSize.w, height: cellSize.h, cols: grid.cols, rows: grid.rows,
-      detailed: mode !== 'compact'
+      detailed: mode !== 'compact',
+      mode
     });
     navigator.clipboard.writeText(prompt).then(() => showToast('Copied PIX2 AI prompt', 'success'))
       .catch(() => showToast('Clipboard unavailable', 'error'));
