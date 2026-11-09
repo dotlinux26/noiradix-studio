@@ -99,7 +99,7 @@ Maps integer IDs to 6-character or 8-character Hex colors:
   4: #ffb0bc  # Blush Pink
   5: #46435c  # Pupil Dark Purple
 ```
-*Note:* Transparency is **never** added to the palette. Any coordinate not assigned a color is automatically fully transparent.
+*Note:* Transparency is **never** added to the palette. Any coordinate not assigned a color is automatically fully transparent. Comments can be placed on standalone lines or inline following hex values using `#` or `;` delimiters; parsers robustly isolate the color token.
 
 ### 3.3 Section: `@animation <id>` (Canonical)
 Defines directional animation clips with frame sequences, playback speed, and loop mode:
@@ -144,11 +144,11 @@ When an AI drafts or modifies a cell, it can write **either** sparse coordinates
 | **Plot Pixel** | `p x,y <col>` | Sets single pixel at `(x, y)` | `p 7,8 5` |
 | **Dot** | `dot x,y <col>` | Synonym for single pixel | `dot 7,8 #ffffff` |
 | **Line** | `line x1,y1 x2,y2 <col>` | Bresenham straight line | `line 2,2 13,2 2` |
-| **Rectangle** | `rect x,y w,h <col> [mode]` | Box (`outline` or `fill`) | `rect 3,2 10,12 1 fill` |
+| **Rectangle** | `rect x,y dims <col> [mode]` | Box (`outline` or `fill`). Dimension `dims` accepts both `w,h` and `WxH`. | `rect 3,2 10,12 1 fill` |
 | **Flood Fill** | `fill x,y <col>` | 4-way flood fill contiguous area | `fill 7,7 1` |
 | **Symmetric Dot** | `sym_dot x,y axisX <col>` | Plots `(x,y)` and mirrors across axis | `sym_dot 4,7 7.5 5` |
 
-`<col>` can be an integer palette ID (e.g. `1`, `2`) or a direct hex color (e.g. `#ffffff`).
+`<col>` can be an integer palette ID (e.g. `1`, `2`) or a direct hex color (e.g. `#ffffff`). `dims` accepts either comma delimiter (`10,12`) or 'x' delimiter (`10x12`).
 
 ---
 
@@ -486,6 +486,6 @@ AnimProperty       ::= WS* "name:" WS* StringLiteral EOL
 
 FrameList          ::= "[" WS* (Identifier (WS* "," WS* Identifier)*)? WS* "]"
 Boolean            ::= "true" | "false"
-Dimension          ::= Integer "x" Integer
+Dimension          ::= Integer ("x" | "X" | ",") Integer
 EndMarker          ::= "@end" EOL?
 ```

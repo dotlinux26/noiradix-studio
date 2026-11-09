@@ -455,6 +455,88 @@ assert(testEditor.activeTabId === 'cell_0_1', 'Undo accurately restored historic
 testEditor.redo(); // Redoes to History index 2
 assert(testEditor.activeTabId === 'tab-grid-overview', 'Redo accurately restored historical activeTabId tab-grid-overview');
 
+// TEST 13: AI Argon 4.0 Compatibility: Delimiter-Agnostic Rect Primitives & Palette Comment Disambiguation
+console.log('\nTest 13: AI Argon 4.0 Parser Compatibility (RFC-PARSER-01 & RFC-PARSER-02)');
+const argonDocText = `@pix2 1.1
+@meta
+  title: "Argon Field Test"
+  grid: 1x1
+  cell_size: 48x48
+
+@palette
+  # Whole-line comment starting with hex-like word
+  #dead code section
+  #beef up the color list
+  1: #07080d # Dark Slate Outline
+  2: #121524#Dark Slate Shadow without space
+  3: #2b2d42 #beef stew comment with hex word
+  4: #8d99ae #dead body comment with hex word
+  5: #edf2f4 #fade to white
+  6: #f4a261 #face details
+  7: #d90429 ; Standard semicolon comment
+  8: #38bdf880 # Semi-transparent Soulfire
+
+@cell cell_0_0
+  name: "Argon Reaper"
+  direction: down
+  frame: 0
+  grid_pos: 0,0
+  @layer body
+    cell: cell_0_0
+    name: "Body"
+    opacity: 1.0
+    blend: normal
+    @region torso
+      id: torso
+      cell: cell_0_0
+      name: "Torso"
+      rect 12,6 8,7 1 fill
+      rect 24,6 8x7 2 fill
+      rect 12,20 8X7 3 fill
+      rect 4,4 4,4 7 outline
+      p 10,10 #ffffff#comment attached to direct hex
+      sym_dot 20,10 23.5 8
+@animation walk_down
+  name: "Walk Down"
+  direction: down
+  frames: [cell_0_0]
+  fps: 6
+  loop: true
+  mode: loop
+
+@end
+`;
+
+const parsedArgon = PIX2.parse(argonDocText);
+const valArgon = PIX2.validate(parsedArgon);
+
+assert(valArgon.valid === true, 'Argon compatibility document is strictly valid');
+assert(valArgon.errors.length === 0, 'Zero validation errors on Argon compatibility document');
+assert(parsedArgon.palette['1'] === '#07080d', 'Palette 1 resolved cleanly with hash comment');
+assert(parsedArgon.palette['2'] === '#121524', 'Palette 2 resolved cleanly without space before hash');
+assert(parsedArgon.palette['3'] === '#2b2d42', 'Palette 3 resolved cleanly despite "#beef" comment word');
+assert(parsedArgon.palette['4'] === '#8d99ae', 'Palette 4 resolved cleanly despite "#dead" comment word');
+assert(parsedArgon.palette['5'] === '#edf2f4', 'Palette 5 resolved cleanly despite "#fade" comment word');
+assert(parsedArgon.palette['6'] === '#f4a261', 'Palette 6 resolved cleanly despite "#face" comment word');
+assert(parsedArgon.palette['7'] === '#d90429', 'Palette 7 resolved cleanly with semicolon comment');
+assert(parsedArgon.palette['8'] === '#38bdf880', 'Palette 8 8-digit RGBA hex preserved');
+
+// Verify rect with comma delimiter drew pixels
+const argonPixels = parsedArgon.cells['cell_0_0'].pixels;
+assert(argonPixels['12,6'] === '#07080d', 'Rect with comma delimiter "8,7" correctly plotted fill pixels');
+assert(argonPixels['19,12'] === '#07080d', 'Rect with comma delimiter covers bottom-right corner (12+8-1, 6+7-1)');
+assert(argonPixels['24,6'] === '#121524', 'Rect with "x" delimiter "8x7" correctly plotted fill pixels');
+assert(argonPixels['12,20'] === '#2b2d42', 'Rect with "X" delimiter "8X7" correctly plotted fill pixels');
+assert(argonPixels['4,4'] === '#d90429', 'Rect outline with comma delimiter correctly plotted corner');
+assert(argonPixels['10,10'] === '#ffffff', 'Direct hex pixel with attached "#comment" correctly plotted');
+
+// Verify parseDimension directly
+assert(JSON.stringify(PIX2.parseDimension('16x16')) === '[16,16]', 'parseDimension handles "16x16"');
+assert(JSON.stringify(PIX2.parseDimension('16X16')) === '[16,16]', 'parseDimension handles "16X16"');
+assert(JSON.stringify(PIX2.parseDimension('16,16')) === '[16,16]', 'parseDimension handles "16,16"');
+assert(JSON.stringify(PIX2.parseDimension(' 16 , 16 ')) === '[16,16]', 'parseDimension handles " 16 , 16 "');
+assert(PIX2.parseDimension('invalid') === null, 'parseDimension rejects invalid strings');
+
 console.log(`\n====================================================`);
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
 console.log(`====================================================\n`);

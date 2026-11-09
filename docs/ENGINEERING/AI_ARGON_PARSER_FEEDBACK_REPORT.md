@@ -3,7 +3,7 @@
 
 > **Ngày lập:** 10/11/2026  
 > **Nguồn phản hồi:** Gemini Argon 4.0 (thông qua quá trình tác tạo `Arch-Lich Grim Reaper 48x48.pix2`)  
-> **Trạng thái:** Đã ghi nhận vào sổ theo dõi kỹ thuật (Audit Log). Giữ nguyên code parser theo nguyên tắc đóng băng ổn định v2.1.0.
+> **Trạng thái:** Đã chính thức xử lý và đóng gói thành công trong **NOIRADIX Studio v2.1.1 (Resolved)**. Đã bổ sung bộ kiểm thử tự động Test 13 trong `tests/test-roundtrip.js` và đồng bộ hóa tài liệu đặc tả `PIX2_SPECIFICATION.md`.
 
 ---
 
@@ -75,19 +75,21 @@ Argon xác nhận cơ chế sắp xếp thứ tự anh em (Sibling Order) từ s
 
 ---
 
-## 3. Nhật Ký Theo Dõi & Đề Xuất Cải Tiến Tương Lai (Backlog RFC)
+## 3. Nhật Ký Triển Khai & Khắc Phục (Resolved trong v2.1.1)
 
-Theo yêu cầu, **không thực hiện sửa đổi mã nguồn ở giai đoạn hiện tại** nhằm giữ nguyên trạng thái đóng băng ổn định của bản phát hành NOIRADIX Studio v2.1.0. Các nội dung sau được lưu vào backlog kỹ thuật:
+Các phản hồi từ Argon đã được giải quyết triệt để và kiểm chứng tự động trong bản phát hành **NOIRADIX Studio v2.1.1**:
 
-1. **[RFC-PARSER-01] Nới lỏng `parseDimension` cho lệnh `rect`:**
-   - Trong tương lai, cho phép `parseDimension` chấp nhận cả ký tự `x` lẫn dấu phẩy `,` (ví dụ `8x7` và `8,7` đều hợp lệ).
-2. **[RFC-PARSER-02] Hoàn thiện bộ tách Comment trong `@palette`:**
-   - Ưu tiên sử dụng dấu chấm phẩy `;` cho comment phía sau giá trị màu hex trong các tài liệu mẫu và tài liệu hướng dẫn AI prompt.
-   - Cải tiến regex để nhận diện dứt khoát ranh giới token hex trong `@palette`.
-3. **[RFC-DOCS-01] Chính thức đưa kỹ thuật Scanline vào cẩm nang AI:**
-   - Đưa khuyến nghị vẽ bằng Scanline (`line x1,y x2,y <color>`) vào tài liệu `PIX2_AI_AUTHORING_GUIDE.md` như một best-practice hàng đầu cho các mô hình AI khi tạo nhân vật độ phân giải cao.
+1. **[RFC-PARSER-01 - ĐÃ XỬ LÝ (RESOLVED)] Nới lỏng `parseDimension` cho lệnh `rect`:**
+   - `parseDimension` hiện chấp nhận cả ký tự `'x'`, `'X'` lẫn dấu phẩy `','` (ví dụ `8x7`, `8X7`, và `8,7` đều vẽ hình chữ nhật chính xác).
+   - Đảm bảo tương thích 100% với các mã nguồn PIX2 do AI (Gemini, Claude, GPT) sinh ra theo tài liệu prompt.
+2. **[RFC-PARSER-02 - ĐÃ XỬ LÝ (RESOLVED)] Hoàn thiện bộ tách Comment trong `@palette` và Lexer:**
+   - Cải tiến regex và parser trong khối `@palette` để nhận diện độc lập giá trị màu hex đầu tiên và xem toàn bộ phần đuôi còn lại (dù bắt đầu bằng `#`, `;`, `//`, `-`, hay các từ tiếng Anh giống mã hex như `#beef`, `#dead`, `#fade`, `#face`) là comment chú thích an toàn.
+   - Bổ sung quy tắc loại bỏ toàn bộ dòng comment bắt đầu bằng `#` ở cấp tài liệu (`stripComment`).
+3. **[RFC-DOCS-01 - HOÀN THÀNH (COMPLETED)] Đồng bộ hóa đặc tả và kiểm thử tự động:**
+   - Cập nhật ngữ pháp EBNF và bảng tra cứu trong `PIX2_SPECIFICATION.md`.
+   - Bổ sung Test 13 với 21 assertions chuyên sâu trong `tests/test-roundtrip.js` (tổng số test cases tăng lên 117/117 passed).
 
 ---
 
-*Tài liệu được lưu trữ nội bộ tại `docs/ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md` để phục vụ công tác đối soát và lộ trình phát triển PIX2 1.2.*
+*Tài liệu được lưu trữ nội bộ tại `docs/ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md` phục vụ công tác đối soát chất lượng NOIRADIX Studio v2.1.1.*
 

@@ -125,12 +125,17 @@ const PIX2 = (function () {
 
   /**
    * Strips comments from a line while strictly preserving HEX colors.
+   * - Lines starting with '#' (ignoring leading whitespace) are always comments.
    * - Semicolon ';' is always a comment.
    * - Hash '#' is a comment ONLY if at line start or preceded by whitespace,
-   *   and not part of a valid hex color code.
+   *   or immediately following a hex color token, and not part of a valid hex color code.
    */
   function stripComment(rawLine) {
     if (!rawLine) return '';
+
+    // Whole-line comment starting with '#'
+    const trimmed = rawLine.trim();
+    if (trimmed.startsWith('#')) return '';
 
     // 1. Strip semicolon comment first
     const semiIdx = rawLine.indexOf(';');
@@ -149,15 +154,15 @@ const PIX2 = (function () {
       if (!inQuote && ch === '#') {
         const isPrecededByWhitespace = (i === 0 || /\s/.test(text[i - 1]));
         const rest = text.slice(i);
-        // Valid hex colors: #RGB, #RGBA, #RRGGBB, #RRGGBBAA followed by delimiter or end
-        const hexMatch = rest.match(/^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"']|$)/);
+        // Valid hex colors: #RGB, #RGBA, #RRGGBB, #RRGGBBAA followed by delimiter (# included) or end
+        const hexMatch = rest.match(/^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"'#]|$)/);
         if (hexMatch) {
           // This is an actual hex color! Keep it
           result += hexMatch[0];
           i += hexMatch[0].length - 1;
           continue;
-        } else if (isPrecededByWhitespace) {
-          // Comment token at line start or preceded by whitespace! Discard rest of line
+        } else if (isPrecededByWhitespace || (i > 0 && text[i - 1] !== '\\')) {
+          // Comment token! Discard rest of line
           break;
         }
       }
@@ -347,16 +352,18 @@ const PIX2 = (function () {
   }
 
   /**
-   * Parse a strict dimension string "<w>x<h>".
+   * Parse a strict dimension string "<w>x<h>" or "<w>,<h>".
+   * Accepts both 'x'/'X' (canonical) and ',' (delimiter compatibility).
    * @param {string} str
    * @returns {[number, number]|null}
    */
   function parseDimension(str) {
     if (typeof str !== 'string') return null;
-    const parts = str.toLowerCase().split('x');
+    const normalized = str.toLowerCase().trim();
+    const parts = normalized.includes(',') ? normalized.split(',') : normalized.split('x');
     if (parts.length !== 2) return null;
-    const w = parseStrictInt(parts[0]);
-    const h = parseStrictInt(parts[1]);
+    const w = parseStrictInt(parts[0].trim());
+    const h = parseStrictInt(parts[1].trim());
     if (isNaN(w) || isNaN(h) || w < 0 || h < 0) return null;
     return [w, h];
   }
@@ -898,7 +905,11 @@ const PIX2 = (function () {
         if (colonIdx > 0) {
           const rawId = line.slice(0, colonIdx).trim();
           if (isSafeIdentifier(rawId)) {
-            const colorToken = line.slice(colonIdx + 1).trim().split(/\s+/)[0];
+            const afterColon = line.slice(colonIdx + 1).trim();
+            // Robustly extract the hex color token: in @palette, exactly one color is defined.
+            // Any trailing text or comment (separated by whitespace, #, ;, //, -, etc.) is cleanly ignored.
+            const hexMatch = afterColon.match(/^#?([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"'#\(\/\-]|$)/);
+            let colorToken = hexMatch ? (hexMatch[0].startsWith('#') ? hexMatch[0] : ('#' + hexMatch[0])) : afterColon.split(/[\s,;"'#\(\/\-]+/)[0];
             const normalized = normalizeHex(colorToken);
             if (normalized) {
               doc.palette[rawId] = normalized;

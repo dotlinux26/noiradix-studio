@@ -15,10 +15,10 @@
 ## 3. GitHub Language Statistic Bar
 - GitHub uses the `github/linguist` gem to calculate language percentages. Because `.pix2` is a newly formalized DSL, it does not yet appear in GitHub's official global `languages.yml` database. Repository badges and TextMate YAML grammar provide immediate syntax highlighting and branding.
 
-## 4. AI Generator Parsing Nuances (Field Observation by Gemini Argon 4.0)
+## 4. AI Generator Parsing Nuances (Resolved in v2.1.1)
 - **`rect` Primitive Dimension Delimiter:**
-  - `parseDimension` strictly expects `WxH` (separated by `x`, e.g. `8x7`). Using comma separators (`8,7`) in `rect` commands causes coordinate rejection. AI models are advised to use Scanline Rendering (`line x1,y x2,y <col>`) or strict `WxH` format.
+  - Resolved in v2.1.1: `parseDimension` now accepts both canonical `WxH` (e.g. `8x7`, `8X7`) and comma delimiter `W,H` (e.g. `8,7`), guaranteeing full compatibility with AI prompt generators and previous specification drafts.
 - **Palette Inline Comment Characters:**
-  - In `@palette`, semicolon `;` is strongly recommended over `#` for inline comments to avoid lexical collision with hexadecimal color codes.
+  - Resolved in v2.1.1: `@palette` parser and lexer disambiguate hexadecimal colors from inline comments (both `#` and `;` delimiters). Hex-like English words in comments (e.g. `#beef`, `#dead`, `#fade`, `#face`) are safely stripped without polluting palette color mappings.
   - See full root-cause analysis in [`AI_ARGON_PARSER_FEEDBACK_REPORT.md`](AI_ARGON_PARSER_FEEDBACK_REPORT.md).
 
