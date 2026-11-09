@@ -2,7 +2,7 @@ name: CI & GitHub Pages Deployment
 
 on:
   push:
-    branches: [ main, 'codex/editor-stabilization' ]
+    branches: [ main, rc ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
