@@ -212,7 +212,10 @@
             <i class="fa-solid fa-folder-open"></i> Open from Computer
           </button>
           <button type="button" class="btn btn-secondary" id="btn-empty-load-sample">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Load Sample Ghost
+            <i class="fa-solid fa-ghost"></i> Load Ghost (16×16)
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-empty-load-reaper">
+            <i class="fa-solid fa-skull"></i> Load Arch-Lich (48×48)
           </button>
         </div>
         <div class="empty-workspace-shortcuts">
@@ -1616,6 +1619,7 @@
             <button type="button" class="chip-btn" data-cols="4" data-rows="2" data-cw="32" data-ch="32" data-template="platformer_2dir">Platformer 2D (4x2, 32px)</button>
             <button type="button" class="chip-btn" data-cols="8" data-rows="4" data-cw="16" data-ch="16" data-template="8dir">8-Direction (8x4, 16px)</button>
             <button type="button" class="chip-btn" data-cols="6" data-rows="1" data-cw="24" data-ch="24" data-template="custom">Action Strip (6x1, 24px)</button>
+            <button type="button" class="chip-btn" data-cols="4" data-rows="4" data-cw="48" data-ch="48" data-template="4dir">Arch-Lich Boss (4x4, 48px)</button>
             <button type="button" class="chip-btn" data-cols="1" data-rows="1" data-cw="32" data-ch="32" data-template="custom">Single Frame (1x1, 32px)</button>
           </div>
         </div>
@@ -1819,6 +1823,73 @@
     </div>
   </div>
 
+  <!-- ================= DEMO / REFERENCE TEMPLATE CHOOSER MODAL ================= -->
+  <div id="modal-demo-chooser" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="demo-chooser-modal-title">
+    <div class="studio-modal-dialog" style="max-width: 680px;">
+      <div class="studio-modal-header">
+        <div class="modal-title" id="demo-chooser-modal-title">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Choose Official AI Reference Template</span>
+        </div>
+        <button id="btn-close-demo-chooser" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="studio-modal-body" style="padding: 16px;">
+        <p class="modal-desc" style="margin-bottom: 16px; color: var(--text-secondary); font-size: 13px;">
+          Select an official, production-ready AI reference template to test directional walk animations, inspect PIX2 structural layers, or export directly into game engines.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <!-- Card 1: Noiradix Ghost -->
+          <div class="demo-card" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; background: var(--bg-surface); display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-ghost" style="color: #8b5cf6;"></i> Noiradix Ghost
+              </span>
+              <span class="badge badge-accent">16×16 Micro</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              Classic friendly ghost mascot. 4-direction walk cycle with bilateral symmetry and compact 7-color palette. Synthesized by <strong>Gemini 3.8 Flash</strong>.
+            </p>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px;">
+              <span>• Grid: 4 cols × 4 rows (16 cells)</span>
+              <span>• Animations: 4 directional walk clips</span>
+              <span>• Format: Standard PIX2 1.1</span>
+            </div>
+            <button id="btn-load-demo-ghost" class="btn btn-sm btn-secondary" style="margin-top: auto;">
+              <i class="fa-solid fa-play"></i> Load Ghost Template
+            </button>
+          </div>
+
+          <!-- Card 2: Arch-Lich Grim Reaper -->
+          <div class="demo-card" style="border: 1px solid var(--border-accent, #6366f1); border-radius: 8px; padding: 14px; background: var(--bg-surface); display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-skull" style="color: #ec4899;"></i> Arch-Lich Reaper
+              </span>
+              <span class="badge badge-primary">48×48 Boss</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              Epic dark fantasy boss with floating soulfire aura (opacity 0.9), gothic tattered cloak, and multi-layer structural hierarchy. Synthesized by <strong>Gemini Argon 4.0</strong>.
+            </p>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px;">
+              <span>• Grid: 4 cols × 4 rows (16 cells)</span>
+              <span>• Hierarchy: @layer aura, @group cloak, @region robe</span>
+              <span>• Format: Full PIX2 1.1 Structural</span>
+            </div>
+            <button id="btn-load-demo-reaper" class="btn btn-sm btn-primary" style="margin-top: auto;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Load Arch-Lich Template
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-demo-chooser" class="btn btn-sm btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= ABOUT NOIRADIX STUDIO MODAL ================= -->
   <div id="modal-about-studio" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
     <div class="studio-modal-dialog about-modal-dialog">
@@ -1984,6 +2055,7 @@
   <!-- ================= SCRIPTS ================= -->
   <script src="js/version.js?v=2.1.0-title.1"></script>
   <script src="js/default-sample.js?v=2.1.0"></script>
+  <script src="js/sample-reaper.js?v=2.1.0"></script>
   <script src="js/pix2-format.js?v=2.1.0"></script>
   <script src="js/selection-transform.js?v=2.1.0"></script>
   <script src="js/structure-operations.js?v=2.1.0"></script>

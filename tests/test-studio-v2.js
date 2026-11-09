@@ -7,6 +7,8 @@
  * 4. Product & Format Version Manifest Integrity
  */
 
+const fs = require('fs');
+const path = require('path');
 const assert = require('assert');
 const PIX2 = require('../js/pix2-format.js');
 const Tools = require('../js/tools.js');
@@ -554,6 +556,43 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
     'style.css must include .deck-resizer styles');
 
   pass('Tab close accuracy, omnidirectional pan/zoom, deck resizer, and maintenance banner contracts verified');
+}
+
+// ---------------------------------------------------------------------------
+// Test 14: Arch-Lich Grim Reaper 48x48 Template & Demo Chooser Contracts
+// ---------------------------------------------------------------------------
+{
+  console.log('\nTest 14: Arch-Lich Grim Reaper 48x48 Template & Demo Chooser Contracts');
+
+  const reaperPix2 = require('../js/sample-reaper.js');
+  assert(typeof reaperPix2 === 'string' && reaperPix2.length > 10000,
+    'js/sample-reaper.js must export string payload');
+
+  const doc = PIX2.parse(reaperPix2);
+  assert.strictEqual(doc.meta.title, 'Arch-Lich Grim Reaper 48x48');
+  assert.strictEqual(doc.meta.version, '1.1');
+  assert.strictEqual(doc.meta.cellSize.w, 48);
+  assert.strictEqual(doc.meta.cellSize.h, 48);
+  assert.strictEqual(doc.meta.grid.cols, 4);
+  assert.strictEqual(doc.meta.grid.rows, 4);
+  assert.strictEqual(Object.keys(doc.cells).length, 16);
+  assert.strictEqual(Object.keys(doc.animations).length, 4);
+
+  // Verify structural layers in cell_0_0
+  const c0 = doc.cells['cell_0_0'];
+  assert(c0.layers && Object.keys(c0.layers).length >= 2,
+    'Arch-Lich cell_0_0 must contain multiple structural layers (aura, body)');
+
+  // Verify index.html contracts
+  const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert(indexHtml.includes('id="modal-demo-chooser"'),
+    'index.html must contain #modal-demo-chooser');
+  assert(indexHtml.includes('id="btn-empty-load-reaper"'),
+    'index.html must contain #btn-empty-load-reaper');
+  assert(indexHtml.includes('js/sample-reaper.js'),
+    'index.html must load js/sample-reaper.js');
+
+  pass('Arch-Lich Grim Reaper 48x48 PIX2 1.1 template and Demo Chooser UI verified');
 }
 
 console.log('\n====================================================');

@@ -377,6 +377,14 @@ PIX2 1.1 formalizes the **Platformer 2D (Left/Right)** animation template, cater
 - **Lossless Upgrade:** Flat cells are automatically wrapped into an implicit root layer upon structural mutation (`PIX2.upgradeV10ToV11`).
 - **Deterministic Downgrade:** Structural hierarchies flatten losslessly into standard PIX2 1.0 cells (`PIX2.flattenV11ToV10`) by baking composite layers into direct pixel records.
 
+### 8.6 Flagship PIX2 1.1 Structural Reference: `Arch-Lich Grim Reaper 48x48.pix2` (Synthesized by Gemini Argon 4.0)
+
+The flagship PIX2 1.1 structural reference sprite sheet [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) was **entirely synthesized by AI (Gemini Argon 4.0)** to validate high-resolution structural game asset generation. It implements 16 cells in a 4×4 grid at 48×48 resolution with 4-directional locomotion:
+- **Hierarchical Decomposition:** Each cell defines `@layer aura_X_Y` ("Spectral Soulfire", `opacity: 0.9`, `@region reg_aura_X_Y`, `tags: [aura, fx]`) and `@layer body_X_Y` ("Reaper Body", `@group grp_cloak_X_Y`, `@region reg_robe_X_Y`).
+- **Porter-Duff Compositing:** Semi-translucent floating soulfire wisps blend smoothly over dark tattered gothic robes and background transparency without manual pixel baking.
+- **29-Color Cohesive Palette:** Gothic shadows, bone highlights, crimson accents, and glowing cyan/blue soulfire.
+- **4-Direction Locomotion:** `walk_down`, `walk_up`, `walk_right`, `walk_left` with floating soulfire wisps lagging 1 frame behind body movement.
+
 ---
 
 ## Appendix A: Formal EBNF Grammar & Directive Categorization

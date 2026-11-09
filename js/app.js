@@ -641,6 +641,7 @@
     dom.modalAboutStudio = document.getElementById('modal-about-studio');
     dom.btnCloseAboutModal = document.getElementById('btn-close-about-modal');
     dom.btnAboutCloseDone = document.getElementById('btn-about-close-done');
+    dom.modalDemoChooser = document.getElementById('modal-demo-chooser');
   }
 
   // ===========================================================================
@@ -1002,6 +1003,18 @@
   function closeAboutModal() {
     if (dom.modalAboutStudio) {
       dom.modalAboutStudio.classList.add('hidden');
+    }
+  }
+
+  function openDemoChooserModal() {
+    if (dom.modalDemoChooser) {
+      dom.modalDemoChooser.classList.remove('hidden');
+    }
+  }
+
+  function closeDemoChooserModal() {
+    if (dom.modalDemoChooser) {
+      dom.modalDemoChooser.classList.add('hidden');
     }
   }
 
@@ -1566,22 +1579,56 @@
   // PROJECT LOADING & SAMPLE DATA
   // ===========================================================================
 
-  function loadDefaultProject() {
-    if (window.DEFAULT_SAMPLE_PIX2) {
+  function loadSampleProject(sampleKey = 'ghost') {
+    let source = window.DEFAULT_SAMPLE_PIX2;
+    let fileName = 'noiradix_ghost.pix2';
+    let fileTitle = 'Noiradix Ghost';
+    let cellDim = 16;
+
+    if (sampleKey === 'reaper') {
+      source = window.SAMPLE_REAPER_PIX2 || null;
+      fileName = 'arch_lich_reaper_48x48.pix2';
+      fileTitle = 'Arch-Lich Grim Reaper 48x48';
+      cellDim = 48;
+    }
+
+    if (source) {
       try {
-        const doc = PIX2.parse(window.DEFAULT_SAMPLE_PIX2);
+        const doc = PIX2.parse(source);
+        const active = getActiveSession();
+        if (active && (active.isDirty || (active.fileName !== 'noiradix_ghost.pix2' && active.fileName !== 'new_sprite.pix2'))) {
+          const newId = 'session_' + Date.now();
+          const session = {
+            id: newId,
+            doc,
+            fileName,
+            filePath: fileName,
+            fileHandle: null,
+            isDirty: false,
+            openCellTabs: ['cell_0_0'],
+            activeCellTabId: 'cell_0_0',
+            history: [],
+            historyIndex: -1,
+            savedRevision: 0,
+            currentRevision: 0
+          };
+          projectSessions.push(session);
+          switchProjectSession(newId);
+          showToast('Loaded ' + fileTitle + ' in new tab', 'success');
+          return;
+        }
         state.setDocument(doc);
       } catch (err) {
-        console.error('Failed parsing DEFAULT_SAMPLE_PIX2:', err);
-        createBlankProject('noiradix_ghost.pix2', 'Noiradix Ghost', 4, 4, 16, 16);
+        console.error('Failed parsing sample:', err);
+        createBlankProject(fileName, fileTitle, 4, 4, cellDim, cellDim);
       }
     } else {
-      createBlankProject('noiradix_ghost.pix2', 'Noiradix Ghost', 4, 4, 16, 16);
+      createBlankProject(fileName, fileTitle, 4, 4, cellDim, cellDim);
     }
     currentFileHandle = null;
     clearPersistedFileHandle();
-    currentFileName = 'noiradix_ghost.pix2';
-    currentFilePath = 'noiradix_ghost.pix2';
+    currentFileName = fileName;
+    currentFilePath = fileName;
     localStorage.setItem('noiradix_session_type', 'draft');
     localStorage.setItem('noiradix_active_file_name', currentFileName);
     localStorage.setItem('noiradix_active_file_path', currentFilePath);
@@ -1591,6 +1638,11 @@
     setDirty(false);
     syncOrRegisterProjectSession(state.doc, currentFileName, null, currentFilePath);
     refreshAll();
+    showToast('Loaded ' + fileTitle, 'success');
+  }
+
+  function loadDefaultProject() {
+    loadSampleProject('ghost');
   }
 
   function createBlankProject(fileNameOrTitle, maybeTitleOrCols, cols = 4, rows = 4, cellW = 16, cellH = 16) {
@@ -11210,7 +11262,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     // Empty Workspace Actions
     bindAction('btn-empty-new-project', openNewFileModal);
     bindAction('btn-empty-open-file', openFileNative);
-    bindAction('btn-empty-load-sample', () => loadDefaultProject());
+    bindAction('btn-empty-load-sample', () => loadSampleProject('ghost'));
+    bindAction('btn-empty-load-reaper', () => loadSampleProject('reaper'));
 
     const studioEmptyDropzone = document.getElementById('studio-empty-dropzone');
     if (studioEmptyDropzone) {
@@ -11477,7 +11530,20 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     document.querySelectorAll('.view-sub-toolbar').forEach(tb => enableHorizontalDragScroll(tb));
 
     bindAction('btn-export-atlas', exportAtlasPng);
-    bindAction('btn-load-demo', loadDefaultProject);
+    bindAction('btn-load-demo', openDemoChooserModal);
+    bindAction('btn-load-demo-ghost', () => {
+      loadSampleProject('ghost');
+      closeDemoChooserModal();
+    });
+    bindAction('btn-load-demo-reaper', () => {
+      loadSampleProject('reaper');
+      closeDemoChooserModal();
+    });
+    bindAction('btn-close-demo-chooser', closeDemoChooserModal);
+    bindAction('btn-cancel-demo-chooser', closeDemoChooserModal);
+    dom.modalDemoChooser?.addEventListener('click', (e) => {
+      if (e.target === dom.modalDemoChooser) closeDemoChooserModal();
+    });
     bindAction('btn-import-code', openImportCodeModal);
 
     // Code Editor Buttons
@@ -11817,6 +11883,13 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (e.key === 'Escape' && dom.modalAboutStudio && !dom.modalAboutStudio.classList.contains('hidden')) {
         e.preventDefault();
         closeAboutModal();
+        return;
+      }
+
+      // Close Demo Chooser Modal on Escape
+      if (e.key === 'Escape' && dom.modalDemoChooser && !dom.modalDemoChooser.classList.contains('hidden')) {
+        e.preventDefault();
+        closeDemoChooserModal();
         return;
       }
       if (e.key === 'Escape' && state.activeTabId === 'tab-import-slice') return;

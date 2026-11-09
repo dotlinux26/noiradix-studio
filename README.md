@@ -116,27 +116,33 @@ https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
 
 ---
 
-### 1. Sprite Sheet Matrix & Multi-Frame Layout
-![Sprite Sheet Matrix Overview](docs/noiradix-grid-overview.png)
-*Multi-cell matrix with row-level animation states, column frame sequences, cell resolution presets (16×16 to 64×64), and interactive Inspector panel.*
+### 1. PIX2 1.1 Structural Graphics Studio Environment
+![NOIRADIX Studio PIX2 1.1 Interface](docs/noiradix-pix2-1.1.png)
+*The complete NOIRADIX Studio v2.1.0 environment: Multi-layer structural Scene Graph, dynamic directional animation controls, and live coordinate-addressed pixel canvas.*
 
 ---
 
-### 2. Directional Animation Studio (Real-Time Playback)
+### 2. Sprite Sheet Matrix & Boss Locomotion Layout (48×48 Arch-Lich Grim Reaper)
+![Sprite Sheet Matrix Overview - 48x48 Arch-Lich Grim Reaper](docs/noiradix-grid-overview-pix2-1.1.png)
+*Multi-cell 4×4 matrix featuring the 48×48 Arch-Lich Grim Reaper boss with 4 directional tracks (Down, Up, Right, Left), frame sequences, and real-time Inspector.*
+
+---
+
+### 3. Precision Pixel Editor with Structure & Layers Hierarchy Deck
+![Precision Pixel Editor with Structure & Layers](docs/noiradix-editor-pix2-1.1.png)
+*First-class structural graphics: Structure & Layers deck (`+ Layer`, `📁 Group`, `⛶ Region`), Region semantic tags, active cell view, and non-destructive Porter-Duff alpha compositing.*
+
+---
+
+### 4. Directional Animation Studio (Real-Time Playback)
 ![Directional Animation Studio](docs/noiradix-grid-animation.png)
-*Floating real-time playback player supporting 4-direction and 8-direction compass previews, variable FPS slider, and loop controls.*
+*Floating real-time playback player supporting 4-direction, Platformer 2D, and 8-direction compass previews, variable FPS slider, and loop controls.*
 
 ---
 
-### 3. Precision Pixel Editor with Rulers & Symmetry
-![Precision Pixel Editor](docs/noiradix-editor.png)
-*Bilateral symmetry mirror axis (`sym_dot`), 4× to 64× anchor-centered zoom, dynamic pixel rulers, discrete drawing tools, and palette swatches.*
-
----
-
-### 4. AI-Native PIX2 Code & 1-Click Prompt Studio
+### 5. AI-Native PIX2 Code & 1-Click Prompt Studio
 ![AI Code & Prompt Generator](docs/noiradix-COPYFORAI.png)
-*1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, live syntax highlighting with swatch preview, safe View-Only mode, and real-time disk hot-reload.*
+*1-Click "Copy for AI Prompt" with 600–800 line cognitive guide, token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, live syntax highlighting with swatch preview, safe View-Only mode, and real-time disk hot-reload.*
 
 ---
 
@@ -367,18 +373,87 @@ Press **Play Game** and watch your character animate with crisp point filtering 
 
 ---
 
-## 👻 Official Reference Template: Authored by AI (Gemini 3.8 Flash)
+## 🎨 Official AI Reference Templates & Breakthrough Case Studies
 
-NOIRADIX Studio includes an official reference character template: [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2).
+NOIRADIX Studio provides two flagship, production-ready reference character templates synthesized entirely by AI assistants, demonstrating the dramatic leap in fidelity and structural capability from `.pix2` v1.0 to v1.1:
 
-This complete 4-direction, 16-frame walking sprite sheet was **entirely authored and drawn by AI (specifically Gemini 3.8 Flash)** using the deterministic `.pix2` language specification:
+| Template | File | Synthesized By | Resolution | Grid Layout | Target Gameplay | Format Standard |
+| :--- | :--- | :---: | :---: | :---: | :--- | :---: |
+| **NOIRADIX Ghost** | [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2) | **Gemini 3.8 Flash** | 16×16 px | 4×4 (16 cells) | Retro / Micro RPG Protagonist | PIX2 1.0 / 1.1 |
+| **Arch-Lich Grim Reaper** | [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) | **Gemini Argon 4.0** | 48×48 px | 4×4 (16 cells) | Dark Fantasy Boss / Action RPG | **PIX2 1.1 Structural** |
+
+---
+
+### 👻 Template 1: NOIRADIX Ghost (16×16 Micro RPG Mascot)
+*Entirely authored and drawn by **Gemini 3.8 Flash** using the deterministic `.pix2` specification.*
 * **Faithful Mascot Silhouette:** Features the official NOIRADIX Ghost mascot with raised friendly arms and expressive eyes based on [`noiradix-studio-logo.svg`](noiradix-studio-logo.svg).
 * **4-Directional Locomotion (16 Cells, 4×4 Grid, 16×16 px):**
   * `walk_down`: Frontal perspective with bilateral symmetry (`sym_dot`), dark purple eyes (`#46435c`), blush cheeks (`#ffb0bc`), and waving ghost sleeves.
   * `walk_up`: Back perspective showing cowl fold lines and undulating tail (strictly zero eyes or blush).
   * `walk_right` & `walk_left`: 3/4 side profiles featuring trailing wisps and forward-reaching arms.
-* **Compact 7-Color Palette:** `#57546f` (outline), `#ffffff` (body primary), `#dde8ef` (shadow), `#ffb0bc` (blush), `#46435c` (eyes), `#ffd700` (gold sparkles), `#fff275` (glow).
+* **Compact 7-Color Palette:** `#57546f` (outline), `#f8f7fb` (body primary), `#dde8ef` (shadow), `#ffb0bc` (blush), `#ffd0d8` (highlight), `#48b8e8` (magic sparkles).
 * **Production-Ready Walk Cycles:** All 4 animation strips are pre-wired at `6 fps` loop and instantly playable in the Animation Studio.
+
+---
+
+### 💀 Template 2: Arch-Lich Grim Reaper (48×48 Boss — PIX2 1.1 Structural Showcase)
+*Synthesized by **Gemini Argon 4.0** leveraging PIX2 1.1 Hierarchical Scene Graph & SaaD architecture.*
+
+The **Arch-Lich Grim Reaper** [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) is a massive 3,000+ line structural document demonstrating the true industrial power of PIX2 1.1 for complex, high-resolution boss characters:
+* **Boss-Scale Resolution (48×48 px):** 16 frames in a 4×4 atlas layout (2,304 pixels per frame, 36,864 pixels total across the sheet).
+* **Rich 29-Color Dark Fantasy Palette:**
+  * Spectral soulfire blues and glowing cyans: `#00ffcc`, `#00aaff`, `#0044aa`, `#d4e4f7`, `#01e6b9`.
+  * Deep gothic shadow slates: `#07080d`, `#121524`, `#1e243b`, `#2e3859`, `#465582`.
+  * Crimson cowl & phylactery accents: `#38122e`, `#691b4c`, `#a32668`, `#ff1144`.
+  * Bone / skull highlights: `#ffffff`, `#e3dac9`, `#b5a893`, `#786c5c`.
+* **Multi-Layer Structural Hierarchy per Frame:**
+  * `@layer aura_X_Y`: "Spectral Soulfire" with declared `opacity: 0.9` and `@region reg_aura_X_Y` (`tags: [aura, fx]`) containing floating ethereal wisps.
+  * `@layer body_X_Y`: "Reaper Body" (`opacity: 1.0`, `blend: normal`) housing `@group grp_cloak_X_Y` ("Gothic Tattered Shroud", `tags: [cloth, cloak]`) and `@region reg_robe_X_Y` ("Sculpted Robe & Tatters", `tags: [cloth, robe]`).
+* **Synchronized 4-Direction Walk/Hover Cycles:**
+  * `walk_down`: Frontal floating stance with skull cowl, hollow soulfire eyes, tattered hem swaying rhythmically, and soulfire particles orbiting the lich.
+  * `walk_up`: Back view with deep sculpted cowl hood folds, billowing shroud ribbons, and floating soul wisps.
+  * `walk_right` & `walk_left`: Profile hovering pose with outstretched skeletal hand, scythe shaft alignment, and trailing cape wisps.
+
+---
+
+## 🧠 Breakthrough Case Study & Lesson: High-Fidelity Character Synthesis with Gemini Argon 4.0 & PIX2 1.1
+
+The synthesis of the **Arch-Lich Grim Reaper 48×48** marked a major breakthrough for NOIRADIX Studio and generative AI in game asset production:
+
+### Why 48×48 Pixel Art Previously Broke Generative AI
+In 16×16 sprites, a canvas has 256 pixels per frame. An LLM can handle a flat pixel list with moderate success. But scaling to **48×48 (2,304 pixels per frame, 36,864 pixels per sheet)** breaks flat formats completely:
+1. **Context Drift & Spatial Confusion:** Without structural hierarchy, the AI loses track of which coordinates belong to the scythe, which belong to the face, and which belong to the floating aura.
+2. **Color Clashing & Diffusion Bleed:** Flat coordinate models accidentally blend translucent aura effects into solid robe pixels, creating noisy, anti-aliased mud and dirty borders.
+3. **Locomotion Desynchronization:** Across 16 frames, floating limbs jitter and change size by 4-5 pixels, destroying the visual cohesion of the character.
+
+### How PIX2 1.1 & Gemini Argon 4.0 Solved This (The 3 Core Lessons)
+
+#### 1. Semantic Hierarchy Acts as Cognitive Scaffolding for AI
+Instead of dumping 36,000 raw pixels into a flat array, PIX2 1.1 gave **Gemini Argon 4.0** a clear mental model:
+```
+@cell cell_0_0
+  ├── @layer aura_0_0 (Spectral Soulfire, opacity: 0.9)
+  │     └── @region reg_aura_0_0 (tags: [aura, fx])
+  └── @layer body_0_0 (Reaper Body)
+        └── @group grp_cloak_0_0 (tags: [cloth, cloak])
+              └── @region reg_robe_0_0 (tags: [cloth, robe])
+```
+Because the model synthesizes each node separately, it reasons about the **skull and shroud anatomy independently from the magical soulfire FX**. Zero cross-region corruption occurred!
+
+#### 2. Declarative Layer Opacity Eliminates Manual Alpha Math
+In traditional flat pixel art, creating a glowing ethereal aura requires manually calculating blended RGB values for every single pixel over every possible background.  
+In PIX2 1.1, Gemini Argon 4.0 simply declared:
+```pix2
+@layer aura_0_0
+  opacity: 0.9
+  blend: normal
+```
+The **NOIRADIX Studio Porter-Duff compositing engine** handles the compound alpha math automatically at runtime. The AI simply plotted the raw soulfire colors (`#00ffcc`, `#00aaff`), and the engine produced flawless semi-translucent floating wisps!
+
+#### 3. Row-Anchored Coordinate Invariants for Flawless Walk Cycles
+By establishing discrete Y-anchors across rows (e.g. cowl baseline at Y=19, cloak hem at Y=44) and applying a 1-pixel vertical bob formula with a 1-frame lag on trailing cloth tatters, Gemini Argon 4.0 generated an eerily smooth, undulating hovering animation that looks like it was hand-crafted by a professional pixel animator over multiple days.
+
+> **Takeaway:** PIX2 1.1 proves that **Sprite-as-Structured-Data (SaaD)** scales cleanly from tiny 16×16 retro characters to massive 48×48 boss monsters with production-ready structural fidelity.
 
 ---
 
