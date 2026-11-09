@@ -119,8 +119,9 @@ const Pix2AiPrompt = (() => {
       '    * `3: #8d99ae` ; 3: Shadow / Ambient Occlusion',
       '    * `4: #f4a261` ; 4: Highlight / Warm Skin',
       '    * `5: #e76f51` ; 5: Accent / Eye Glow / Cloth Trim',
-      '    * Comments start with `#` or `;` and can be placed after color values or on separate lines.',
+      '    * Comments start with `#`, `;`, or `//` and can be placed after color values or on separate lines.',
       '    * Both 6-digit (`#RRGGBB`) and 8-digit (`#RRGGBBAA`) hex formats are supported.',
+      '    * Natural language words in comments (e.g. `#beef`, `#dead`, `#fade`, `#face`) are cleanly stripped.',
       ''
     );
 
@@ -272,6 +273,7 @@ const Pix2AiPrompt = (() => {
       '- Chained pixel records: Multiple pixel operations may be written on the same line separated by spaces:',
       '  `p 4,2 1 p 5,2 2 p 6,2 2 p 7,2 2 p 8,2 1`',
       '- Primitives (`line`, `rect`, `fill`): Must appear on their own dedicated line within the region.',
+      '- Rectangle dimensions: Delimiter is flexible; supports both comma `w,h` (`8,7`) and `wxh`/`wxH` (`8x7`, `8X7`). Optional mode: `fill` or `outline` (default).',
       '- Clipping & Boundary Invariant: Any coordinate with x < 0, y < 0, x >= ' + width + ', or y >= ' + height + ' is',
       '  strictly out of bounds and triggers a diagnostic validation error.',
       ''
