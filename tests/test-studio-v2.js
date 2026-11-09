@@ -350,6 +350,43 @@ console.log('\nTest 8: Studio 2.0 Structure & Layers DOM Contract Verification')
   pass('Studio 2.0 Structure & Layers UI contract verified in production index.html');
 }
 
+// -----------------------------------------------------------------------------
+// Test 9: Studio Multi-Project Tabs & Primary Workspace Tab Invariants
+// -----------------------------------------------------------------------------
+console.log('\nTest 9: Studio Multi-Project Tabs & Primary Tab Strip Invariants');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+
+  // A. Primary Workspace Tabs invariant: The 4 core tabs must be rendered first, in order inside renderTabs()
+  const renderTabsStart = appJs.indexOf('function renderTabs() {');
+  const renderTabsEnd = appJs.indexOf('function createTabElement(', renderTabsStart);
+  assert(renderTabsStart !== -1 && renderTabsEnd !== -1, 'renderTabs() must be defined');
+  const renderTabsBody = appJs.slice(renderTabsStart, renderTabsEnd);
+
+  const gridIdx = renderTabsBody.indexOf("'tab-grid-overview'");
+  const animIdx = renderTabsBody.indexOf("'tab-anim-studio'");
+  const sliceIdx = renderTabsBody.indexOf("'tab-import-slice'");
+  const codeIdx = renderTabsBody.indexOf("'tab-pix2-code'");
+  const openCellTabsIdx = renderTabsBody.indexOf('state.openCellTabs.forEach');
+
+  assert(gridIdx !== -1 && animIdx !== -1 && sliceIdx !== -1 && codeIdx !== -1, 'All 4 primary tabs must exist');
+  assert(gridIdx < animIdx, 'Grid Overview must precede Animation Studio');
+  assert(animIdx < sliceIdx, 'Animation Studio must precede Import & Slice');
+  assert(sliceIdx < codeIdx, 'Import & Slice must precede PIX2 Code & AI');
+  assert(codeIdx < openCellTabsIdx, 'Cell editor tabs must be appended strictly after the 4 primary tabs');
+
+  // B. Multi-project tabs contract
+  assert(indexHtml.includes('id="project-tabs-strip"'), 'index.html must include #project-tabs-strip');
+  assert(indexHtml.includes('id="btn-project-new-tab"'), 'index.html must include #btn-project-new-tab');
+  assert(appJs.includes('persistAllProjectSessions'), 'app.js must implement persistAllProjectSessions()');
+  assert(appJs.includes('noiradix_open_project_sessions'), 'app.js must persist sessions to localStorage');
+
+  pass('Studio primary tab priority order and multi-project sessions invariants verified');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

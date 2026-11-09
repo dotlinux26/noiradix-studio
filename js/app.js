@@ -223,6 +223,41 @@
   }
 
   async function initAppSession() {
+    // 0. Restore multi-document project sessions if saved
+    const savedSessionsJson = localStorage.getItem('noiradix_open_project_sessions');
+    if (savedSessionsJson) {
+      try {
+        const data = JSON.parse(savedSessionsJson);
+        if (data && Array.isArray(data.sessions) && data.sessions.length > 0) {
+          projectSessions = [];
+          for (const item of data.sessions) {
+            try {
+              if (item.content && item.content.trim()) {
+                const doc = PIX2.parse(item.content);
+                const session = new ProjectSession(item.id, item.title, doc, null, item.fileName, item.filePath);
+                session.isDirty = Boolean(item.isDirty);
+                session.lastSavedContent = item.content;
+                session.activeTabId = item.activeTabId || 'tab-grid-overview';
+                session.openCellTabs = Array.isArray(item.openCellTabs) ? item.openCellTabs : [];
+                projectSessions.push(session);
+              }
+            } catch (pErr) {
+              console.warn('Failed restoring project session:', item.fileName, pErr);
+            }
+          }
+          if (projectSessions.length > 0) {
+            const activeId = data.activeId && projectSessions.some(p => p.id === data.activeId)
+              ? data.activeId
+              : projectSessions[0].id;
+            switchProjectSession(activeId);
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed reading noiradix_open_project_sessions:', err);
+      }
+    }
+
     const sessionType = localStorage.getItem('noiradix_session_type') || 'disk';
     const activeFileName = localStorage.getItem('noiradix_active_file_name');
 
@@ -615,8 +650,8 @@
       this.lastSavedContent = '';
       this.history = [];
       this.historyIndex = -1;
-      this.openCellTabs = ['grid_overview'];
-      this.activeTabId = 'grid_overview';
+      this.openCellTabs = [];
+      this.activeTabId = 'tab-grid-overview';
       this.selection = null;
     }
   }
@@ -636,11 +671,33 @@
     cur.revision = documentRevision;
     cur.lastSavedRevision = lastSavedRevision;
     cur.lastSavedContent = lastSavedContent;
-    cur.openCellTabs = state.openCellTabs ? [...state.openCellTabs] : ['grid_overview'];
-    cur.activeTabId = state.activeTabId || 'grid_overview';
+    cur.openCellTabs = state.openCellTabs ? [...state.openCellTabs] : [];
+    cur.activeTabId = state.activeTabId || 'tab-grid-overview';
     cur.history = state.history ? [...state.history] : [];
     cur.historyIndex = state.historyIndex;
     cur.selection = state.selection ? { ...state.selection } : null;
+  }
+
+  function persistAllProjectSessions() {
+    try {
+      saveCurrentSessionState();
+      const payload = projectSessions.map(s => ({
+        id: s.id,
+        title: s.title,
+        fileName: s.fileName,
+        filePath: s.filePath,
+        isDirty: Boolean(s.isDirty),
+        activeTabId: s.activeTabId,
+        openCellTabs: s.openCellTabs,
+        content: (typeof PIX2 !== 'undefined' && s.doc) ? PIX2.serialize(s.doc) : (s.lastSavedContent || '')
+      }));
+      localStorage.setItem('noiradix_open_project_sessions', JSON.stringify({
+        activeId: activeProjectId,
+        sessions: payload
+      }));
+    } catch (err) {
+      console.warn('Failed to persist project sessions to localStorage:', err);
+    }
   }
 
   function reorderProjectSessions(orderedIds) {
@@ -649,6 +706,7 @@
     if (ordered.length !== projectSessions.length) return;
     projectSessions = ordered;
     renderProjectTabs();
+    persistAllProjectSessions();
   }
 
   function renderProjectTabs() {
@@ -708,7 +766,9 @@
     const target = projectSessions.find(p => p.id === sessionId);
     if (!target) return;
 
-    saveCurrentSessionState();
+    if (activeProjectId && activeProjectId !== sessionId) {
+      saveCurrentSessionState();
+    }
     activeProjectId = sessionId;
 
     state.setDocument(target.doc);
@@ -719,10 +779,12 @@
     documentRevision = target.revision || 0;
     lastSavedRevision = target.lastSavedRevision || 0;
     lastSavedContent = target.lastSavedContent || '';
-    if (target.openCellTabs && target.openCellTabs.length > 0) {
+    if (target.openCellTabs && Array.isArray(target.openCellTabs)) {
       state.openCellTabs = [...target.openCellTabs];
+    } else {
+      state.openCellTabs = [];
     }
-    state.activeTabId = target.activeTabId || 'grid_overview';
+    state.activeTabId = target.activeTabId || 'tab-grid-overview';
     state.history = target.history || [];
     state.historyIndex = target.historyIndex || -1;
     state.selection = target.selection ? { ...target.selection } : null;
@@ -736,8 +798,10 @@
     saveCurrentSessionState();
     const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const session = new ProjectSession(newId, title, doc, fileHandle, title, title);
+    session.lastSavedContent = (typeof PIX2 !== 'undefined' && doc) ? PIX2.serialize(doc) : '';
     projectSessions.push(session);
     switchProjectSession(newId);
+    persistAllProjectSessions();
     return session;
   }
 
@@ -747,10 +811,7 @@
     const path = filePath || currentFilePath || name;
     const title = (doc.meta && doc.meta.title) || name;
 
-    // Check if the currently active session is the one being synced
     let session = projectSessions.find(p => p.id === activeProjectId && (p.fileName === name || p.filePath === path));
-    
-    // Otherwise look for any open session matching this file/path
     if (!session) {
       session = projectSessions.find(p => (p.filePath && p.filePath === path) || (p.fileName && p.fileName === name));
     }
@@ -775,6 +836,7 @@
     }
 
     renderProjectTabs();
+    persistAllProjectSessions();
     return session;
   }
 
@@ -798,6 +860,7 @@
       const nextSession = projectSessions[Math.min(idx, projectSessions.length - 1)];
       switchProjectSession(nextSession.id);
     }
+    persistAllProjectSessions();
   }
 
   // ===========================================================================
@@ -1528,19 +1591,44 @@
     }
 
     const cleanFileName = sanitizeSafeFilename(fileName, '.pix2', 'new_sprite');
-    const doc = PIX2.createDocument(title, actualCols, actualRows, actualW, actualH);
+    const derivedTitle = title || cleanFileName.replace(/\.pix2$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const doc = PIX2.createDocument(derivedTitle, actualCols, actualRows, actualW, actualH);
+
+    // 1. Save state of current session first so existing tabs and work are preserved
+    saveCurrentSessionState();
+
+    // 2. Create independent new project session and activate it
+    const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const session = new ProjectSession(newId, derivedTitle, doc, null, cleanFileName, cleanFileName);
+    session.lastSavedContent = (typeof PIX2 !== 'undefined') ? PIX2.serialize(doc) : '';
+    session.isDirty = false;
+    session.activeTabId = 'tab-grid-overview';
+    session.openCellTabs = [];
+    projectSessions.push(session);
+
+    // 3. Switch active pointer to the new session
+    activeProjectId = newId;
     state.setDocument(doc);
     currentFileHandle = null;
     clearPersistedFileHandle();
     currentFileName = cleanFileName;
     currentFilePath = cleanFileName;
+    lastSavedContent = session.lastSavedContent;
+    documentRevision = 0;
+    lastSavedRevision = 0;
+    state.openCellTabs = [];
+    state.activeTabId = 'tab-grid-overview';
+    state.history = [];
+    state.historyIndex = -1;
+    state.selection = null;
+    setDirty(false);
+
     centerCellCanvas();
     centerGridCanvas();
-    setDirty(false);
-    lastSavedContent = PIX2.serialize(doc);
+
     const snapshot = {
       timestamp: Date.now(),
-      title: doc.meta.title || 'Untitled',
+      title: doc.meta.title || derivedTitle,
       fileName: currentFileName,
       data: lastSavedContent
     };
@@ -1550,7 +1638,11 @@
     localStorage.setItem('noiradix_session_type', 'draft');
     localStorage.setItem('noiradix_active_file_name', currentFileName);
     localStorage.setItem('noiradix_active_file_path', currentFilePath);
-    syncOrRegisterProjectSession(doc, currentFileName, null, currentFilePath);
+
+    renderProjectTabs();
+    refreshAll();
+    persistAllProjectSessions();
+    return session;
   }
 
   function openNewFileModal() {
@@ -2111,25 +2203,52 @@
 
   const GRID_ZOOM_LEVELS = [1, 2, 3, 4, 6, 8, 12, 16];
 
-  function setGridZoom(newZoom) {
+  function setGridZoom(newZoom, clientX, clientY) {
     const clamped = Math.max(1, Math.min(16, Math.round(newZoom)));
+    if (clamped === GRID_LAYOUT.zoom) return;
+
+    const oldZoom = GRID_LAYOUT.zoom || 4;
     GRID_LAYOUT.zoom = clamped;
     if (dom.gridZoomLevel) {
       dom.gridZoomLevel.textContent = `${clamped}×`;
     }
+
+    if (clientX !== undefined && clientY !== undefined && dom.gridCanvas) {
+      const rect = dom.gridCanvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
+        const unscaledX = mx / oldZoom;
+        const unscaledY = my / oldZoom;
+        const cw = rect.width / oldZoom;
+        const ch = rect.height / oldZoom;
+        if (typeof NoiraViewport !== 'undefined' && NoiraViewport.computeAnchorZoomPan) {
+          const res = NoiraViewport.computeAnchorZoomPan(gridPanX, gridPanY, oldZoom, clamped, unscaledX, unscaledY, cw, ch);
+          gridPanX = res.panX;
+          gridPanY = res.panY;
+        } else {
+          const deltaW = (cw * (clamped - oldZoom)) / 2;
+          const deltaH = (ch * (clamped - oldZoom)) / 2;
+          gridPanX = Math.round(gridPanX + (deltaW - unscaledX * (clamped - oldZoom)));
+          gridPanY = Math.round(gridPanY + (deltaH - unscaledY * (clamped - oldZoom)));
+        }
+        applyGridPan();
+      }
+    }
+
     renderGridOverview();
   }
 
-  function zoomGridIn() {
+  function zoomGridIn(clientX, clientY) {
     const cur = GRID_LAYOUT.zoom || 4;
     const next = GRID_ZOOM_LEVELS.find(z => z > cur) || 16;
-    setGridZoom(next);
+    setGridZoom(next, clientX, clientY);
   }
 
-  function zoomGridOut() {
+  function zoomGridOut(clientX, clientY) {
     const cur = GRID_LAYOUT.zoom || 4;
     const prev = [...GRID_ZOOM_LEVELS].reverse().find(z => z < cur) || 1;
-    setGridZoom(prev);
+    setGridZoom(prev, clientX, clientY);
   }
 
   let gridRowDeleteButtons = [];
@@ -4386,12 +4505,27 @@
     const container = dom.importSliceViewportContainer;
     if (!canvas || !container) return;
 
-    // Zoom on wheel
+    // Zoom on wheel (Anchor-centered on cursor)
     container.addEventListener('wheel', (e) => {
       if (!importSliceState.image) return;
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.25 : 0.8;
-      setSliceZoom(importSliceState.zoom * zoomFactor);
+      const oldZoom = importSliceState.zoom || 1;
+      const newZoom = Math.max(0.25, Math.min(32, Math.round(oldZoom * zoomFactor * 100) / 100));
+      if (newZoom === oldZoom) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const unscaledX = mx / oldZoom;
+      const unscaledY = my / oldZoom;
+
+      setSliceZoom(newZoom);
+
+      const newMx = unscaledX * newZoom;
+      const newMy = unscaledY * newZoom;
+      container.scrollLeft += (newMx - mx);
+      container.scrollTop += (newMy - my);
     }, { passive: false });
 
     // Pointer down on container for panning (middle click or hand tool)
@@ -9454,6 +9588,15 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (name.endsWith('.pix2') || name.endsWith('.txt')) {
         const text = await file.text();
         const doc = PIX2.parse(text);
+
+        const existing = projectSessions.find(p => p.fileName === file.name || p.filePath === file.name);
+        if (existing) {
+          existing.fileHandle = handle;
+          switchProjectSession(existing.id);
+          showToast(`Switched to open tab "${file.name}"`, 'info');
+          return;
+        }
+
         saveCurrentSessionState();
         currentFileHandle = handle;
         currentFileName = file.name;
@@ -9465,11 +9608,16 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
         localStorage.setItem('pix2_last_saved_content', text);
-        state.setDocument(doc);
-        syncOrRegisterProjectSession(doc, file.name, handle, file.name);
-        setDirty(false);
-        renderProjectTabs();
-        refreshAll();
+
+        const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        const session = new ProjectSession(newId, file.name, doc, handle, file.name, file.name);
+        session.lastSavedContent = text;
+        session.isDirty = false;
+        session.activeTabId = 'tab-grid-overview';
+        session.openCellTabs = [];
+        projectSessions.push(session);
+        switchProjectSession(newId);
+        persistAllProjectSessions();
         showToast(`Linked & opened ${file.name} in tab!`, 'success');
         return;
       } else if (file.type.startsWith('image/')) {
@@ -9505,8 +9653,15 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         try {
           const content = e.target.result;
           const doc = PIX2.parse(content);
+
+          const existing = projectSessions.find(p => p.fileName === file.name || p.filePath === file.name);
+          if (existing) {
+            switchProjectSession(existing.id);
+            showToast(`Switched to open tab "${file.name}"`, 'info');
+            return;
+          }
+
           saveCurrentSessionState();
-          state.setDocument(doc);
           currentFileHandle = null;
           currentFileName = file.name;
           currentFilePath = file.name;
@@ -9516,10 +9671,16 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           localStorage.setItem('noiradix_active_file_name', currentFileName);
           localStorage.setItem('noiradix_active_file_path', currentFilePath);
           localStorage.setItem('pix2_last_saved_content', content);
-          syncOrRegisterProjectSession(doc, file.name, null, file.name);
-          setDirty(false);
-          renderProjectTabs();
-          refreshAll();
+
+          const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+          const session = new ProjectSession(newId, file.name, doc, null, file.name, file.name);
+          session.lastSavedContent = content;
+          session.isDirty = false;
+          session.activeTabId = 'tab-grid-overview';
+          session.openCellTabs = [];
+          projectSessions.push(session);
+          switchProjectSession(newId);
+          persistAllProjectSessions();
           showToast(`Opened ${file.name} in tab!`, 'success');
         } catch (err) {
           alert(`Error reading .pix2 file:\n${err.message}`);
@@ -9815,14 +9976,14 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         }
       });
 
-      // Mouse wheel zoom on Grid Viewport
+      // Mouse wheel zoom on Grid Viewport (Anchor-centered on cursor)
       gridViewport.addEventListener('wheel', (e) => {
         if (state.activeTabId === 'tab-grid-overview') {
           e.preventDefault();
           if (e.deltaY < 0) {
-            zoomGridIn();
+            zoomGridIn(e.clientX, e.clientY);
           } else {
-            zoomGridOut();
+            zoomGridOut(e.clientX, e.clientY);
           }
         }
       }, { passive: false });
