@@ -275,6 +275,10 @@
   function initDomCache() {
     dom.tabsContainer = document.getElementById('tabs-container');
     dom.projectTabsStrip = document.getElementById('project-tabs-strip');
+    dom.btnProjectNewTab = document.getElementById('btn-project-new-tab');
+    if (dom.btnProjectNewTab) {
+      dom.btnProjectNewTab.addEventListener('click', () => openNewFileModal());
+    }
     dom.views = {
       grid: document.getElementById('view-grid-overview'),
       anim: document.getElementById('view-anim-studio'),
@@ -586,20 +590,6 @@
   function renderProjectTabs() {
     if (!dom.projectTabsStrip) return;
     dom.projectTabsStrip.innerHTML = '';
-
-    // The native "new tab" action is pinned first. Document tabs can only be
-    // reordered after it, which keeps the create entry point discoverable at
-    // any scroll position.
-    const newBtn = document.createElement('button');
-    newBtn.className = 'project-tab-new';
-    newBtn.type = 'button';
-    newBtn.title = 'New Project Tab';
-    newBtn.setAttribute('aria-label', 'New project tab');
-    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-    newBtn.addEventListener('click', () => {
-      openNewFileModal();
-    });
-    dom.projectTabsStrip.appendChild(newBtn);
 
     projectSessions.forEach(session => {
       const tab = document.createElement('div');

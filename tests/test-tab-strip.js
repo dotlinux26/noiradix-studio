@@ -77,13 +77,10 @@ for (const file of ['js/app.js', 'pixelart/js/pixelart-app.js']) {
   const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   assert.ok(source.includes('tab.dataset.tabId = session.id'), `${file} exposes stable tab IDs`);
   assert.ok(source.includes('window.NoiraTabStrip.attach'), `${file} attaches the shared controller`);
-  assert.ok(
-    /const newBtn = document\.createElement\('button'\);[\s\S]{0,700}?strip\.appendChild\(newBtn\);[\s\S]{0,1200}?forEach\(session =>/.test(source) ||
-    /const newBtn = document\.createElement\('button'\);[\s\S]{0,700}?dom\.projectTabsStrip\.appendChild\(newBtn\);[\s\S]{0,1200}?forEach\(session =>/.test(source),
-    `${file} appends the pinned new-tab action before document tabs`
-  );
+  // New-tab button is now in HTML (pinned outside the strip). Render only iterates sessions.
+  assert.ok(!source.includes('const newBtn = document.createElement'), `${file} no longer creates new-tab button in JS`);
 }
-console.log('  [PASS] both adapters pin the new-tab action first and expose reorder IDs');
+console.log('  [PASS] both adapters pin the new-tab action in HTML and expose reorder IDs');
 
 console.log('\n====================================================');
 console.log('ALL TAB STRIP ORDERING TESTS PASSED (10/10)');

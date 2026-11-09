@@ -520,21 +520,6 @@
     if (!strip) return;
     strip.innerHTML = '';
 
-    // Pinned first: creating a new artwork is always reachable, even while
-    // the document tabs are scrolled or reordered.
-    const newBtn = document.createElement('button');
-    newBtn.className = 'project-tab-new';
-    newBtn.type = 'button';
-    newBtn.title = 'New Artwork Tab';
-    newBtn.setAttribute('aria-label', 'New artwork tab');
-    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-    newBtn.addEventListener('click', () => {
-      if (dom.modalNew) {
-        dom.modalNew.classList.remove('hidden');
-      }
-    });
-    strip.appendChild(newBtn);
-
     paProjectSessions.forEach(session => {
       const tab = document.createElement('div');
       tab.className = `project-tab ${session.id === activePaProjectId ? 'active' : ''}`;
@@ -1263,6 +1248,12 @@
 
     // Multi-Document Project Tabs & Structure Panel (PIX2 1.1)
     dom.paProjectTabsStrip = document.getElementById('pa-project-tabs-strip');
+    dom.btnPaProjectNewTab = document.getElementById('pa-btn-project-new-tab');
+    if (dom.btnPaProjectNewTab) {
+      dom.btnPaProjectNewTab.addEventListener('click', () => {
+        if (dom.modalNew) dom.modalNew.classList.remove('hidden');
+      });
+    }
     dom.btnPaSideLayers = document.getElementById('btn-pa-side-layers');
     dom.btnPaSideCode = document.getElementById('btn-pa-side-code');
     dom.paLayersView = document.getElementById('pa-layers-view');

@@ -225,6 +225,7 @@ body {
    ========================================================================== */
 .studio-header {
   height: 52px;
+  flex: 0 0 52px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -3929,19 +3930,33 @@ body.dark-theme .export-preview-viewport {
   white-space: nowrap;
 }
 
+/* ================= DOCUMENT BAR (independent row under the header) ================= */
+.studio-docbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0 12px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
 /* ================= MULTI-DOCUMENT PROJECT TABS STRIP ================= */
 .project-tabs-strip {
   position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
-  width: max-content;
-  max-width: min(220px, 24vw);
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  padding: 2px 4px;
+  padding: 2px 0;
   touch-action: pan-y;
   overscroll-behavior-x: contain;
 }
@@ -4039,23 +4054,23 @@ body.dark-theme .export-preview-viewport {
   color: #ef4444;
 }
 .project-tab-new {
-  position: sticky;
-  left: 0;
-  z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 24px;
   width: 24px;
   height: 24px;
+  padding: 0;
   border-radius: 4px;
-  background: var(--bg-secondary);
+  background: transparent;
   color: var(--text-dim);
   cursor: pointer;
   border: 1px dashed var(--border-subtle);
   font-size: 11px;
   transition: all 0.12s ease;
-  box-shadow: 3px 0 5px -4px rgba(0, 0, 0, 0.45);
+}
+.studio-docbar .project-tab-new {
+  background: var(--bg-secondary);
 }
 .project-tab-new:hover {
   color: var(--accent-primary);

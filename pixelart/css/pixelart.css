@@ -71,12 +71,14 @@ body.dark-theme {
 
 html, body {
   width: 100%;
-  height: 100%;
+  height: 100vh;
   overflow: hidden;
   font-family: var(--font-family);
   background-color: var(--bg-primary);
   color: var(--text-main);
   user-select: none;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ================= HEADER ================= */
@@ -125,6 +127,7 @@ html, body {
 
 .pa-header {
   height: 48px;
+  flex: 0 0 48px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -581,7 +584,8 @@ button.pa-dim-badge:focus-visible,
 /* ================= MAIN WORKSPACE ================= */
 .pa-workspace {
   display: flex;
-  height: calc(100vh - 48px - 64px);
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100vw;
   overflow: hidden;
   position: relative;
@@ -1248,20 +1252,33 @@ button.pa-dim-badge:focus-visible,
   line-height: 1.45;
 }
 
+/* ================= DOCUMENT BAR (independent row under the header) ================= */
+.pa-docbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0 12px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
 /* ================= MULTI-DOCUMENT PROJECT TABS ================= */
 .project-tabs-strip {
   position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
-  width: max-content;
-  max-width: min(200px, 22vw);
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  padding: 2px 4px;
-  margin-left: 8px;
+  padding: 2px 0;
   touch-action: pan-y;
   overscroll-behavior-x: contain;
 }
@@ -1331,15 +1348,13 @@ button.pa-dim-badge:focus-visible,
 }
 .project-tab-close:hover { opacity: 1; background: rgba(239, 68, 68, 0.18); color: var(--danger-color); }
 .project-tab-new {
-  position: sticky;
-  left: 0;
-  z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
   flex: 0 0 24px;
+  padding: 0;
   border-radius: 4px;
   background: var(--bg-secondary);
   color: var(--text-dim);
@@ -1458,6 +1473,7 @@ button.pa-dim-badge:focus-visible,
 /* ================= BOTTOM PALETTE DECK ================= */
 .pa-palette-deck {
   height: 64px;
+  flex: 0 0 64px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-subtle);
   display: flex;

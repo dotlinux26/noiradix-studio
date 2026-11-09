@@ -28,10 +28,6 @@
         <span class="pa-app-badge">PixelArt</span>
         <span class="pa-app-version-badge" id="pa-app-version-badge" title="Click to view About &amp; Release Info" style="font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); cursor: pointer; margin-left: 4px;">v2.0.0</span>
       </div>
-      <!-- Project Sessions Tab Strip -->
-      <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions">
-        <!-- [artwork.pix2] [+] -->
-      </div>
       <div class="pa-doc-info">
         <input type="text" id="pa-doc-title" class="pa-title-input" value="Pixel Artwork" title="Click to rename artwork" aria-label="Artwork Title">
         <span id="pa-header-dirty-dot" class="pa-dirty-dot" title="Unsaved changes (Ctrl+S to save)">●</span>
@@ -102,6 +98,16 @@
       </button>
     </div>
   </header>
+
+  <!-- ================= DOCUMENT BAR (artwork sessions) ================= -->
+  <div class="pa-docbar" id="pa-docbar">
+    <button type="button" id="pa-btn-project-new-tab" class="project-tab-new" aria-label="New artwork tab" title="New Artwork Tab">
+      <i class="fa-solid fa-plus"></i>
+    </button>
+    <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions">
+      <!-- [artwork.pix2] -->
+    </div>
+  </div>
 
   <!-- ================= MAIN WORKSPACE (SPLIT VIEW) ================= -->
   <main class="pa-workspace" id="pa-workspace">
