@@ -202,6 +202,7 @@ remain out of scope unless separately requested.
 |---|---|---|
 | C1 | Transactional v1.0→v1.1 conversion (`SAFE-01`), structural visibility/legacy-payload normalization (`SAFE-02`), non-compounding rotation, full-document autosave + recovery for hidden-only artwork, escape/commit transaction cleanup, new regression suites `test-safe-conversion`, `test-safe-visibility`, `test-safe-recovery` | All 16 suites + benchmark exit 0 |
 | C2 | Shared project tab strip (`js/tab-strip.js`): narrower width, smart horizontal drag-scroll, drag-and-drop tab reordering, pinned new-tab action, roving-tabindex keyboard nav + Alt+Arrow reorder; wired into Studio and PixelArt adapters; `tests/test-tab-strip.js` ordering/wiring contract | `test-tab-strip` 10/10; all suites exit 0; gesture UI remains a browser case |
+| C3 | Layout fix: PixelArt body → flex column; pa-header/docbar/workspace/palette-deck proper flex values; new-tab button in HTML (not JS); Studio docbar already correct; both apps render cleanly at 1600×900 | `pa-shot2.png`, `studio-shot2.png` captured; all 17 suites + benchmark exit 0 |
 
 Browser gesture cases (B12) are still `BỊ CHẶN` until a real browser session is
 available; the ordering math and static wiring are covered by production tests.

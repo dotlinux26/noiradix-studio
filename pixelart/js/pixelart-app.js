@@ -620,6 +620,15 @@
     renderPaProjectTabs();
     renderPaLayersTree();
     updateIsolationBannerUI();
+
+    // Ensure the new tab is scrolled into view (fixes first-click tab not visible)
+    if (typeof requestAnimationFrame !== 'undefined' && typeof document !== 'undefined') {
+      requestAnimationFrame(() => {
+        const strip = document.getElementById('pa-project-tabs-strip');
+        const newTab = strip?.querySelector(`[data-tab-id="${sessionId}"]`);
+        if (newTab) newTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+    }
   }
 
   function createPaProjectSession(title, doc, fileHandle = null) {
@@ -746,6 +755,17 @@
     return null;
   }
 
+  // Persistent expand/collapse state for groups
+  const groupExpanded = new Map();
+
+  function isGroupExpanded(groupId) {
+    return groupExpanded.get(groupId) !== false; // default expanded
+  }
+
+  function toggleGroupExpanded(groupId) {
+    groupExpanded.set(groupId, !isGroupExpanded(groupId));
+  }
+
   function renderPaLayersTree() {
     if (!_hasDocument) return;
     const container = document.getElementById('pa-layers-tree');
@@ -806,8 +826,6 @@
       nameRow.innerHTML = `<i class="fa-solid fa-layer-group text-accent"></i> <span>${escapeHtml(layer.name || layer.id)}</span>`;
       nameRow.addEventListener('click', () => {
         state.activeLayerId = layer.id;
-        // Layer selection must change drawing focus as well. Prefer the first
-        // editable semantic region; legacy/empty layers remain valid targets.
         const findEditableRegion = (nodes) => {
           for (const node of nodes || []) {
             if (node.visible === false || node.locked) continue;
@@ -820,6 +838,11 @@
         const region = findEditableRegion(layer.children);
         state.activeRegionId = region ? region.id : null;
         renderPaLayersTree();
+      });
+      // Layer context menu
+      nameRow.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showLayerContextMenu(e.clientX, e.clientY, layer, cell);
       });
 
       const actionsRow = document.createElement('div');
@@ -856,32 +879,70 @@
       const childrenCont = document.createElement('div');
       childrenCont.style.cssText = 'display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 2px solid rgba(99,102,241,0.25); margin-top: 4px;';
 
-      (layer.children || []).forEach(child => {
-        const itemEl = document.createElement('div');
-        const isIsolated = state.isolatedNodeId === child.id;
-        itemEl.className = `pa-layer-child${isIsolated ? ' is-isolated' : ''}`;
+      function renderNode(node, depth = 1, parentId = layer.id) {
+        if (node.type === 'group') {
+          const expanded = isGroupExpanded(node.id);
+          const groupEl = document.createElement('div');
+          groupEl.className = 'pa-layer-child';
 
-        const itemTitle = document.createElement('div');
-        itemTitle.style.cssText = 'display: flex; align-items: center; gap: 6px;';
-        const icon = child.type === 'group' ? 'fa-folder' : 'fa-vector-square';
-        itemTitle.innerHTML = `<i class="fa-solid ${icon}" style="color: #818cf8; font-size: 10px;"></i> <span>${escapeHtml(child.name || child.id)}</span>`;
+          const groupHeader = document.createElement('div');
+          groupHeader.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;';
+          groupHeader.innerHTML = `
+            <i class="fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'}" style="color: #818cf8; font-size: 9px; width: 12px;"></i>
+            <i class="fa-solid fa-folder" style="color: #818cf8; font-size: 10px;"></i>
+            <span>${escapeHtml(node.name || node.id)}</span>
+          `;
+          groupHeader.addEventListener('click', () => {
+            toggleGroupExpanded(node.id);
+            renderPaLayersTree();
+          });
+          groupHeader.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showGroupContextMenu(e.clientX, e.clientY, node, cell, layer, parentId);
+          });
+          groupEl.appendChild(groupHeader);
 
-        itemEl.appendChild(itemTitle);
+          if (expanded) {
+            const groupChildren = document.createElement('div');
+            groupChildren.style.cssText = 'display: flex; flex-direction: column; gap: 4px; padding-left: 12px; border-left: 1px dashed rgba(99,102,241,0.18); margin-top: 2px;';
+            (node.children || []).forEach(child => renderNode(child, depth + 1, node.id));
+            groupEl.appendChild(groupChildren);
+          }
 
-        itemEl.addEventListener('click', () => {
-          state.activeLayerId = layer.id;
-          state.activeRegionId = child.id;
-          renderPaLayersTree();
-        });
+          childrenCont.appendChild(groupEl);
+        } else if (node.type === 'region') {
+          const itemEl = document.createElement('div');
+          const isIsolated = state.isolatedNodeId === node.id;
+          const isActive = state.activeRegionId === node.id && state.activeLayerId === layer.id;
+          itemEl.className = `pa-layer-child${isIsolated ? ' is-isolated' : ''}${isActive ? ' is-active' : ''}`;
 
-        itemEl.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          enterIsolationMode(child.id, `${layer.name || layer.id} / ${child.name || child.id}`);
-        });
+          const itemTitle = document.createElement('div');
+          itemTitle.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+          itemTitle.innerHTML = `<i class="fa-solid fa-vector-square" style="color: #818cf8; font-size: 10px;"></i> <span>${escapeHtml(node.name || node.id)}</span>`;
 
-        childrenCont.appendChild(itemEl);
-      });
+          itemEl.appendChild(itemTitle);
 
+          itemEl.addEventListener('click', () => {
+            state.activeLayerId = layer.id;
+            state.activeRegionId = node.id;
+            renderPaLayersTree();
+          });
+
+          itemEl.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            enterIsolationMode(node.id, `${layer.name || layer.id} / ${node.name || node.id}`);
+          });
+
+          itemEl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showRegionContextMenu(e.clientX, e.clientY, node, cell, layer);
+          });
+
+          childrenCont.appendChild(itemEl);
+        }
+      }
+
+      (layer.children || []).forEach(child => renderNode(child, 1, layer.id));
       layerEl.appendChild(childrenCont);
       container.appendChild(layerEl);
     });
@@ -901,6 +962,254 @@
     // Structural changes must never snapshot a document while selected pixels
     // are temporarily lifted out of their owning Region.
     if (state.floatingPixels) commitFloatingSelection();
+  }
+
+  // ===========================================================================
+  // LAYER TREE CONTEXT MENUS (browser-only)
+  // ===========================================================================
+  let activeContextMenu = null;
+
+  function hideContextMenu() {
+    if (typeof document === 'undefined') return;
+    if (activeContextMenu) {
+      activeContextMenu.remove();
+      activeContextMenu = null;
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', hideContextMenu);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); });
+  }
+
+  function showContextMenu(x, y, items) {
+    if (typeof document === 'undefined') return;
+    hideContextMenu();
+    const menu = document.createElement('div');
+    menu.className = 'pa-context-menu';
+    menu.style.cssText = `
+      position: fixed; left: ${x}px; top: ${y}px; z-index: 9999;
+      background: var(--bg-card); border: 1px solid var(--border-subtle);
+      border-radius: 6px; padding: 4px 0; min-width: 160px; box-shadow: var(--shadow-md);
+    `;
+    items.forEach(item => {
+      if (item === 'separator') {
+        const sep = document.createElement('div');
+        sep.style.cssText = 'height: 1px; background: var(--border-subtle); margin: 4px 8px;';
+        menu.appendChild(sep);
+        return;
+      }
+      const btn = document.createElement('button');
+      btn.style.cssText = 'width: 100%; text-align: left; padding: 6px 12px; background: none; border: none; color: var(--text-main); font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;';
+      btn.innerHTML = `<i class="fa-solid ${item.icon}" style="width: 14px;"></i> ${item.label}`;
+      if (item.disabled) btn.style.opacity = '0.4';
+      else btn.addEventListener('click', () => { item.action(); hideContextMenu(); });
+      btn.addEventListener('mouseenter', () => { if (!item.disabled) btn.style.background = 'var(--bg-card-hover)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'none'; });
+      menu.appendChild(btn);
+    });
+    document.body.appendChild(menu);
+    requestAnimationFrame(() => {
+      const r = menu.getBoundingClientRect();
+      if (r.right > window.innerWidth) menu.style.left = `${window.innerWidth - r.width - 4}px`;
+      if (r.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - r.height - 4}px`;
+    });
+    activeContextMenu = menu;
+  }
+
+  function showLayerContextMenu(x, y, layer, cell) {
+    showContextMenu(x, y, [
+      { label: 'Rename Layer', icon: 'fa-pen-to-square', action: () => {
+        const newName = prompt('Rename layer:', layer.name || layer.id);
+        if (newName && newName.trim()) {
+          prepareStructureMutation();
+          layer.name = newName.trim();
+          commitStructureMutation();
+        }
+      }},
+      { label: 'Duplicate Layer', icon: 'fa-copy', action: () => {
+        prepareStructureMutation();
+        const clone = JSON.parse(JSON.stringify(layer));
+        clone.id = 'layer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        clone.name = (layer.name || 'Layer') + ' Copy';
+        function resetIds(node) {
+          node.id = node.type + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+          (node.children || []).forEach(resetIds);
+        }
+        (clone.children || []).forEach(resetIds);
+        cell.layers.push(clone);
+        commitStructureMutation();
+      }},
+      { label: 'Delete Layer', icon: 'fa-trash', action: () => {
+        if (confirm(`Delete layer "${layer.name || layer.id}" and all its contents?`)) {
+          prepareStructureMutation();
+          const idx = cell.layers.indexOf(layer);
+          if (idx !== -1) cell.layers.splice(idx, 1);
+          if (state.activeLayerId === layer.id) state.activeLayerId = null;
+          if (state.activeRegionId) state.activeRegionId = null;
+          commitStructureMutation();
+        }
+      }},
+      { type: 'separator' },
+      { label: 'Lock Layer', icon: layer.locked ? 'fa-lock-open' : 'fa-lock', action: () => {
+        prepareStructureMutation();
+        layer.locked = !layer.locked;
+        commitStructureMutation();
+      }},
+      { label: layer.visible === false ? 'Show Layer' : 'Hide Layer', icon: layer.visible === false ? 'fa-eye' : 'fa-eye-slash', action: () => {
+        prepareStructureMutation();
+        layer.visible = layer.visible === false;
+        commitStructureMutation();
+      }},
+    ]);
+  }
+
+  function showGroupContextMenu(x, y, group, cell, layer, parentId) {
+    showContextMenu(x, y, [
+      { label: 'Rename Group', icon: 'fa-pen-to-square', action: () => {
+        const newName = prompt('Rename group:', group.name || group.id);
+        if (newName && newName.trim()) {
+          prepareStructureMutation();
+          group.name = newName.trim();
+          commitStructureMutation();
+        }
+      }},
+      { label: 'Duplicate Group', icon: 'fa-copy', action: () => {
+        prepareStructureMutation();
+        const clone = JSON.parse(JSON.stringify(group));
+        clone.id = 'group_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        clone.name = (group.name || 'Group') + ' Copy';
+        function resetIds(node) {
+          node.id = node.type + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+          (node.children || []).forEach(resetIds);
+        }
+        (clone.children || []).forEach(resetIds);
+        const parent = parentId === layer.id ? layer : findNodeById(cell, parentId);
+        if (parent && parent.children) parent.children.push(clone);
+        commitStructureMutation();
+      }},
+      { label: 'Delete Group', icon: 'fa-trash', action: () => {
+        if (confirm(`Delete group "${group.name || group.id}" and all its contents?`)) {
+          prepareStructureMutation();
+          const parent = parentId === layer.id ? layer : findNodeById(cell, parentId);
+          if (parent && parent.children) {
+            const idx = parent.children.indexOf(group);
+            if (idx !== -1) parent.children.splice(idx, 1);
+          }
+          commitStructureMutation();
+        }
+      }},
+      { type: 'separator' },
+      { label: 'Add Region to Group', icon: 'fa-vector-square', action: () => {
+        prepareStructureMutation();
+        const newRegion = { type: 'region', id: 'region_' + Date.now(), cell: cell.id, parent: group.id, name: 'New Region', tags: [], visible: true, locked: false, pixels: {}, primitives: [] };
+        if (!group.children) group.children = [];
+        group.children.push(newRegion);
+        commitStructureMutation();
+      }},
+      { label: 'Add Sub-Group', icon: 'fa-folder-plus', action: () => {
+        prepareStructureMutation();
+        const newGroup = { type: 'group', id: 'group_' + Date.now(), cell: cell.id, parent: group.id, name: 'New Group', children: [] };
+        if (!group.children) group.children = [];
+        group.children.push(newGroup);
+        commitStructureMutation();
+      }},
+    ]);
+  }
+
+  function showRegionContextMenu(x, y, region, cell, layer) {
+    showContextMenu(x, y, [
+      { label: 'Rename Region', icon: 'fa-pen-to-square', action: () => {
+        const newName = prompt('Rename region:', region.name || region.id);
+        if (newName && newName.trim()) {
+          prepareStructureMutation();
+          region.name = newName.trim();
+          commitStructureMutation();
+        }
+      }},
+      { label: 'Duplicate Region', icon: 'fa-copy', action: () => {
+        prepareStructureMutation();
+        const clone = JSON.parse(JSON.stringify(region));
+        clone.id = 'region_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        clone.name = (region.name || 'Region') + ' Copy';
+        if (!layer.children) layer.children = [];
+        layer.children.push(clone);
+        commitStructureMutation();
+      }},
+      { label: 'Delete Region', icon: 'fa-trash', action: () => {
+        if (confirm(`Delete region "${region.name || region.id}"?`)) {
+          prepareStructureMutation();
+          const idx = layer.children.indexOf(region);
+          if (idx !== -1) layer.children.splice(idx, 1);
+          if (state.activeRegionId === region.id) state.activeRegionId = null;
+          commitStructureMutation();
+        }
+      }},
+      { type: 'separator' },
+      { label: 'Select Content', icon: 'fa-mouse-pointer', action: () => {
+        if (region.pixels && Object.keys(region.pixels).length) {
+          prepareStructureMutation();
+          const bounds = getRegionBounds(region);
+          state.selection = bounds;
+          state.activeLayerId = layer.id;
+          state.activeRegionId = region.id;
+          ensureFloatingSelection();
+          commitStructureMutation();
+        }
+      }},
+      { label: 'Extract to New Region', icon: 'fa-arrow-right-from-bracket', action: () => {
+        prepareStructureMutation();
+        const newRegion = { type: 'region', id: 'region_' + Date.now(), cell: cell.id, parent: layer.id, name: region.name + ' Extracted', tags: [], visible: true, locked: false, pixels: { ...region.pixels }, primitives: [] };
+        layer.children.push(newRegion);
+        commitStructureMutation();
+      }},
+      { type: 'separator' },
+      { label: 'Lock Region', icon: region.locked ? 'fa-lock-open' : 'fa-lock', action: () => {
+        prepareStructureMutation();
+        region.locked = !region.locked;
+        commitStructureMutation();
+      }},
+      { label: region.visible === false ? 'Show Region' : 'Hide Region', icon: region.visible === false ? 'fa-eye' : 'fa-eye-slash', action: () => {
+        prepareStructureMutation();
+        region.visible = region.visible === false;
+        commitStructureMutation();
+      }},
+    ]);
+  }
+
+  function findNodeById(cell, id) {
+    if (!cell.layers) return null;
+    for (const layer of cell.layers) {
+      if (layer.id === id) return layer;
+      function search(nodes) {
+        for (const n of nodes || []) {
+          if (n.id === id) return n;
+          if (n.type === 'group') {
+            const found = search(n.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+      const found = search(layer.children);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function getRegionBounds(region) {
+    if (!region.pixels) return { x: 0, y: 0, w: 1, h: 1 };
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const key in region.pixels) {
+      const comma = key.indexOf(',');
+      const x = parseInt(key.substring(0, comma), 10);
+      const y = parseInt(key.substring(comma + 1), 10);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
 
   // DOM Elements Cache
