@@ -58,6 +58,35 @@
       return { pixels: {}, w: srcW || 1, h: srcH || 1 };
     }
 
+    // Cardinal rotations use exact integer mapping. Besides preserving every
+    // pixel, this avoids floating-point bounding-box drift at 90/180/270°.
+    const quarterTurn = Math.PI / 2;
+    const quarterSteps = Math.round(angleRad / quarterTurn);
+    if (Math.abs(angleRad - quarterSteps * quarterTurn) < 1e-8) {
+      const normalizedSteps = ((quarterSteps % 4) + 4) % 4;
+      const dstW = normalizedSteps % 2 === 1 ? srcH : srcW;
+      const dstH = normalizedSteps % 2 === 1 ? srcW : srcH;
+      const result = {};
+      for (const key in sourcePixels) {
+        const [x, y] = key.split(',').map(Number);
+        if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= srcW || y < 0 || y >= srcH) continue;
+        let dx = x;
+        let dy = y;
+        if (normalizedSteps === 1) {
+          dx = srcH - 1 - y;
+          dy = x;
+        } else if (normalizedSteps === 2) {
+          dx = srcW - 1 - x;
+          dy = srcH - 1 - y;
+        } else if (normalizedSteps === 3) {
+          dx = y;
+          dy = srcW - 1 - x;
+        }
+        result[`${dx},${dy}`] = sourcePixels[key];
+      }
+      return { pixels: result, w: dstW, h: dstH };
+    }
+
     // Normalize angle
     const cos = Math.cos(angleRad);
     const sin = Math.sin(angleRad);

@@ -18,9 +18,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1. CI Test Suite: Syntax integrity & 208 automated unit tests across 12 suites
+  # 1. CI Test Suite: syntax integrity & behavioral unit suites (see step names)
   test:
-    name: Run Automated Test Suites (207 Tests)
+    name: Run Automated Test Suites
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -43,6 +43,8 @@ jobs:
           node --check js/modular-export.js
           node --check js/import-slice.js
           node --check js/default-sample.js
+          node --check js/structure-operations.js
+          node --check js/tab-strip.js
           node --check pix2/js/pix2-format.js
           node --check pixelart/js/pixelart-app.js
 
@@ -60,6 +62,18 @@ jobs:
 
       - name: Run PIX2 1.1 Specification & Integration Tests (9 Tests)
         run: node tests/test-pix2-v11.js
+
+      - name: Run SAFE-01 Lossless Conversion Tests (3 Tests)
+        run: node tests/test-safe-conversion.js
+
+      - name: Run SAFE-02 Visibility & Compositing Tests (5 Tests)
+        run: node tests/test-safe-visibility.js
+
+      - name: Run SAFE Recovery Tests (5 Tests)
+        run: node tests/test-safe-recovery.js
+
+      - name: Run Tab Strip Ordering & Wiring Tests (10 Cases)
+        run: node tests/test-tab-strip.js
 
       - name: Run Editor State Structural Engine Tests (8 Tests)
         run: node tests/test-editor-state-structural.js

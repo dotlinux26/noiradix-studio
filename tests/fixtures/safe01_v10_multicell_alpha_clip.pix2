@@ -1,0 +1,49 @@
+@pix2 1.0
+
+@meta
+  title: "SAFE-01 Legacy Fixture"
+  author: "NOIRADIX Regression"
+  version: "1.0"
+  color_mode: "RGBA"
+  coordinate_origin: "top-left"
+
+@grid
+  columns: 2
+  rows: 1
+  default_cell: 8x8
+  background: none
+
+@palette
+  1: #ff0000
+  2: #33669980
+  3: #00ff00ff
+
+@cell idle_custom
+  name: "Idle α"
+  direction: right
+  frame: 0
+  grid_pos: 0,0
+  size: 8x8
+  pixel 1,1 1
+  pixel 2,1 2
+  pixel 3,1 #abcdef40
+
+@cell attack_custom
+  name: "Attack α"
+  direction: right
+  frame: 1
+  grid_pos: 0,1
+  size: 8x8
+  pixel 4,4 3
+  pixel 5,4 #12345678
+
+@animation attack_right
+  name: "Attack Right"
+  direction: right
+  action: attack
+  frames: [idle_custom, attack_custom]
+  fps: 12
+  loop: false
+  mode: pingpong
+
+@end

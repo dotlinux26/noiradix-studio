@@ -263,6 +263,26 @@ const PIX2 = (function () {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
   }
 
+  function compositeColorsSourceOver(destinationHex, sourceHex, opacity = 1) {
+    const src = hexToRgba(sourceHex);
+    const srcA = (src.a / 255) * Math.max(0, Math.min(1, opacity));
+    if (!destinationHex) {
+      if (opacity >= 1) return normalizeHex(sourceHex) || sourceHex;
+      if (srcA <= 0) return null;
+      return rgbaToHex(src.r, src.g, src.b, Math.round(srcA * 255));
+    }
+    if (srcA <= 0) return destinationHex;
+
+    const dst = hexToRgba(destinationHex);
+    const dstA = dst.a / 255;
+    const outA = srcA + dstA * (1 - srcA);
+    if (outA <= 0) return null;
+    const outR = (src.r * srcA + dst.r * dstA * (1 - srcA)) / outA;
+    const outG = (src.g * srcA + dst.g * dstA * (1 - srcA)) / outA;
+    const outB = (src.b * srcA + dst.b * dstA * (1 - srcA)) / outA;
+    return rgbaToHex(outR, outG, outB, Math.round(outA * 255));
+  }
+
   // ===========================================================================
   // STRICT INTEGER & COORDINATE VALIDATION HELPERS
   // ===========================================================================
@@ -1590,6 +1610,8 @@ const PIX2 = (function () {
       if (isolatedId && !isIsolated) {
         effectiveNodeOpacity *= dimFactor;
       }
+      const localOpacity = node.type === 'layer' && node.opacity !== undefined ? node.opacity : 1.0;
+      const contentOpacity = effectiveNodeOpacity * localOpacity;
 
       if (node.pixels) {
         if (isolatedId && !isIsolated && dimFactor <= 0.0) {
@@ -1598,18 +1620,11 @@ const PIX2 = (function () {
           for (const coord in node.pixels) {
             const hex = node.pixels[coord];
             if (!hex) continue;
-            if (effectiveNodeOpacity >= 1.0) {
-              resultPixels[coord] = hex;
-            } else if (effectiveNodeOpacity <= 0.0) {
+            if (contentOpacity <= 0.0) {
               // invisible
             } else {
-              const rgba = hexToRgba(hex);
-              if (rgba) {
-                const blendedA = Math.round(rgba.a * effectiveNodeOpacity);
-                resultPixels[coord] = rgbaToHex(rgba.r, rgba.g, rgba.b, blendedA);
-              } else {
-                resultPixels[coord] = hex;
-              }
+              const composited = compositeColorsSourceOver(resultPixels[coord], hex, contentOpacity);
+              if (composited) resultPixels[coord] = composited;
             }
           }
         }
@@ -1617,7 +1632,7 @@ const PIX2 = (function () {
 
       const childList = node.children || node.layers;
       if (childList && Array.isArray(childList)) {
-        const nextOpacity = (node.type === 'layer' ? (node.opacity !== undefined ? node.opacity : 1.0) : 1.0) * effectiveNodeOpacity;
+        const nextOpacity = contentOpacity;
         for (const child of childList) {
           renderNode(child, isVisible, nextOpacity, isIsolated);
         }
@@ -1631,45 +1646,85 @@ const PIX2 = (function () {
     return resultPixels;
   }
 
-  function upgradeV10ToV11(doc) {
-    if (!doc || typeof doc !== 'object' || !doc.cells) {
+  function upgradeV10ToV11(doc, options = {}) {
+    if (!doc || typeof doc !== 'object' || !doc.meta || !doc.cells || typeof doc.cells !== 'object') {
       return { success: false, error: 'Invalid document structure' };
     }
-    const upgraded = JSON.parse(JSON.stringify(doc));
-    upgraded.meta.version = '1.1';
-    for (const cid in upgraded.cells) {
-      const cell = upgraded.cells[cid];
-      if (!cell.layers || cell.layers.length === 0) {
-        const layerId = `layer_legacy_${cell.id}`;
-        const regionId = `region_legacy_${cell.id}`;
-        const layer = {
-          type: 'layer',
-          id: layerId,
-          cell: cell.id,
-          name: 'Default',
-          visible: true,
-          locked: false,
-          opacity: 1.0,
-          blend: 'normal',
-          children: []
-        };
-        const region = {
-          type: 'region',
-          id: regionId,
-          cell: cell.id,
-          parent: layerId,
-          name: cell.name || 'Artwork',
-          tags: [],
-          visible: true,
-          locked: false,
-          pixels: { ...cell.pixels },
-          primitives: []
-        };
-        layer.children.push(region);
-        cell.layers = [layer];
-      }
+    if (doc.meta.version !== '1.0') {
+      return { success: false, error: `Expected PIX2 1.0 document, received ${doc.meta.version || 'unknown'}` };
     }
-    return { success: true, doc: upgraded };
+
+    const sourceValidation = validate(doc, { ...options, strict: true });
+    if (!sourceValidation.valid) {
+      return { success: false, error: 'Source PIX2 1.0 document failed validation', validation: sourceValidation };
+    }
+
+    let upgraded;
+    try {
+      upgraded = JSON.parse(JSON.stringify(doc));
+    } catch (error) {
+      return { success: false, error: `Unable to clone source document: ${error.message}` };
+    }
+
+    const sourcePixelsByCell = Object.create(null);
+    const convertedCellIds = [];
+    upgraded.meta.version = '1.1';
+    for (const cid of Object.keys(upgraded.cells)) {
+      const cell = upgraded.cells[cid];
+      if (!cell || typeof cell !== 'object') {
+        return { success: false, error: `Invalid cell "${cid}"` };
+      }
+      if (cell.layers && cell.layers.length > 0) {
+        return { success: false, error: `PIX2 1.0 cell "${cid}" already contains structural layers` };
+      }
+      const stableCellId = cell.id || cid;
+      cell.id = stableCellId;
+      sourcePixelsByCell[cid] = { ...(cell.pixels || {}) };
+      const layerId = `layer_legacy_${stableCellId}`;
+      const regionId = `region_legacy_${stableCellId}`;
+      const layer = {
+        type: 'layer',
+        id: layerId,
+        cell: stableCellId,
+        name: 'Default',
+        visible: true,
+        locked: false,
+        opacity: 1.0,
+        blend: 'normal',
+        children: []
+      };
+      const region = {
+        type: 'region',
+        id: regionId,
+        cell: stableCellId,
+        parent: layerId,
+        name: cell.name || 'Artwork',
+        tags: [],
+        visible: true,
+        locked: false,
+        pixels: { ...sourcePixelsByCell[cid] },
+        primitives: []
+      };
+      layer.children.push(region);
+      cell.layers = [layer];
+
+      const composite = compositeCellLayers(cell, upgraded.meta.cell_size || upgraded.meta.cellSize);
+      const sourceKeys = Object.keys(sourcePixelsByCell[cid]).sort();
+      const compositeKeys = Object.keys(composite).sort();
+      const equivalent = sourceKeys.length === compositeKeys.length && sourceKeys.every((key, index) => (
+        key === compositeKeys[index] && sourcePixelsByCell[cid][key] === composite[key]
+      ));
+      if (!equivalent) {
+        return { success: false, error: `Render-equivalence check failed for cell "${cid}"` };
+      }
+      convertedCellIds.push(cid);
+    }
+
+    const upgradedValidation = validate(upgraded, { ...options, strict: true });
+    if (!upgradedValidation.valid) {
+      return { success: false, error: 'Upgraded PIX2 1.1 document failed validation', validation: upgradedValidation };
+    }
+    return { success: true, doc: upgraded, convertedCellIds, validation: upgradedValidation };
   }
 
   function flattenV11ToV10(doc, options = {}) {

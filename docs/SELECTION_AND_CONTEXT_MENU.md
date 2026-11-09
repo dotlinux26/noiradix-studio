@@ -1,6 +1,6 @@
 # NOIRADIX Studio — Marquee Selection & Context Menu Specification
 
-**Document Version:** 1.0  
+**Document Version:** 1.1
 **Status:** Approved & Implemented  
 **Date:** 2026-11-06  
 **Scope:** Marquee Selection (`V`/`M`), Right-Click Context Menu, Clipboard Operations, Selection Transformations, and Zoom Anchor Lock.
@@ -16,6 +16,7 @@ In professional pixel art and sprite authoring (Aseprite, Photoshop, Figma), **S
 2. **True Coordinate Addressing:** Selection coordinates `(x, y, w, h)` represent discrete integer pixel coordinates $[0, \text{cellWidth}-1] \times [0, \text{cellHeight}-1]$. They are completely independent of CSS display zoom.
 3. **Anchor-Centered Zoom Priority:** When `state.selection` is active, `Alt + Wheel` zoom automatically anchors to the center of the active selection $(x + w/2, y + h/2)$, ensuring the user's region of interest never drifts out of view.
 4. **Desktop Right-Click Context Menu:** Right-clicking on the canvas opens a native-feeling context menu providing instant actions: Cut, Copy, Paste, Delete, Fill, Flip H, Flip V, Rotate, Select All, and Deselect.
+5. **Non-Destructive Floating Transaction:** Lifting a selection creates an immutable baseline. Preview movement, scaling, rotation, and flipping never enter document history until committed.
 
 ---
 
@@ -68,7 +69,7 @@ Right-clicking on the Cell Editor canvas opens `#studio-context-menu` at cursor 
 | **Flip Horizontal** | — | Mirrors pixels within selection horizontally: $x' = w - 1 - x$. |
 | **Flip Vertical** | — | Mirrors pixels within selection vertically: $y' = h - 1 - y$. |
 | **Select All** | `Ctrl + A` | Expands selection to entire cell boundary: $(0, 0, \text{cellW}, \text{cellH})$. |
-| **Deselect** | `Escape` | Clears active selection marquee. |
+| **Deselect / Cancel** | `Escape` | Cancels a floating interaction, restores its original pixels, then clears the marquee. |
 
 ---
 
@@ -76,7 +77,10 @@ Right-clicking on the Cell Editor canvas opens `#studio-context-menu` at cursor 
 
 - **Marquee Drag:** Click and drag on canvas with `select` tool (`V`/`M`) to define rectangle.
 - **Click to Clear:** Clicking on empty canvas without dragging clears the selection.
-- **`Escape` Key:** Clears selection marquee and hides context menu.
+- **`Enter` Key:** Commits the current floating selection to its preview position as one document mutation.
+- **`Escape` Key:** Cancels the current floating selection, restores the exact lift-time pixels, clears the marquee, and hides the context menu. It never deletes artwork or commits the preview.
+- **Pointer Cancellation / Window Blur:** During an active move, scale, or rotation gesture, a cancelled pointer or loss of focus follows the same restore path as `Escape`.
+- **Active Structural Layer:** Selection-independent tools target the active region; selecting a layer resolves its first editable region, so stale region focus from another layer cannot receive edits.
 - **`Alt + Wheel` Zoom:** Automatically locks zoom anchor to selection center $(x + w/2, y + h/2)$ when selection is active.
 - **HUD Update:** Bottom status bar and top coordinate badge show:  
   `SELECTION: [X: 2, Y: 4, W: 8, H: 6] (48 px)`

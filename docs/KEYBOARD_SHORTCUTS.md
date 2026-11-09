@@ -50,7 +50,9 @@ Single-key tool shortcuts are active in the Cell Editor whenever text inputs or 
 | <kbd>Ctrl</kbd> + <kbd>X</kbd> | Cell Editor / Grid | Cuts floating selection or grid cell. |
 | <kbd>Ctrl</kbd> + <kbd>V</kbd> | Cell Editor / Grid | Pastes copied selection or grid cell into active target. |
 | <kbd>Ctrl</kbd> + <kbd>A</kbd> | Cell Editor | Selects all pixels within active cell bounds. |
-| <kbd>Ctrl</kbd> + <kbd>D</kbd> / <kbd>Esc</kbd> | Cell Editor | Deselects active marquee selection and commits floating buffer. |
+| <kbd>Ctrl</kbd> + <kbd>D</kbd> | Cell Editor | Commits a floating selection (if any) and clears the marquee. |
+| <kbd>Esc</kbd> | Cell Editor | Cancels an in-progress floating selection and restores lift-time pixels; otherwise clears the marquee. |
+| <kbd>Enter</kbd> | Cell Editor | Commits the current floating selection as one undoable document mutation. |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Cell Editor / Grid | Clears pixels in selection or clears entire selected cell. |
 | <kbd>Ctrl</kbd> + <kbd>0</kbd> | Viewports | Resets zoom level and re-centers canvas (Grid, Studio, or Editor). |
 

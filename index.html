@@ -509,21 +509,21 @@
 
         <!-- Structure & Layers (PIX2 1.1) -->
         <div class="sidebar-card structure-card" id="structure-layers-card">
-          <div class="card-header flex-between" style="display: flex; align-items: center; justify-content: space-between;">
-            <span><i class="fa-solid fa-layer-group"></i> Structure &amp; Layers</span>
-            <div class="action-btn-group" style="display: inline-flex; align-items: center; gap: 4px;">
-              <button id="btn-add-layer" class="btn btn-xs btn-secondary" title="Add Layer" style="height: 22px; padding: 0 6px; font-size: 11px;">
+          <div class="card-header structure-card-header">
+            <span class="structure-card-title"><i class="fa-solid fa-layer-group"></i> Structure &amp; Layers</span>
+            <div class="structure-action-group">
+              <button id="btn-add-layer" class="btn btn-xs btn-secondary structure-create-btn" title="Add Layer">
                 <i class="fa-solid fa-plus"></i> Layer
               </button>
-              <button id="btn-add-group" class="btn btn-xs btn-secondary" title="Add Group" style="height: 22px; padding: 0 6px; font-size: 11px;">
+              <button id="btn-add-group" class="btn btn-xs btn-secondary structure-create-btn" title="Add Group">
                 <i class="fa-solid fa-folder-plus"></i> Group
               </button>
-              <button id="btn-add-region" class="btn btn-xs btn-secondary" title="Add Region" style="height: 22px; padding: 0 6px; font-size: 11px;">
+              <button id="btn-add-region" class="btn btn-xs btn-secondary structure-create-btn" title="Add Region">
                 <i class="fa-solid fa-vector-square"></i> Region
               </button>
             </div>
           </div>
-          <div class="card-body" style="padding: 6px; max-height: 200px; overflow-y: auto;">
+          <div class="card-body structure-card-body">
             <div id="structure-tree-container" class="structure-tree-container"></div>
           </div>
         </div>
@@ -1870,11 +1870,13 @@
   <script src="js/default-sample.js?v=2.0.0"></script>
   <script src="js/pix2-format.js?v=2.0.0"></script>
   <script src="js/selection-transform.js?v=2.0.0"></script>
+  <script src="js/structure-operations.js?v=2.0.0"></script>
   <script src="js/editor-state.js?v=2.0.0"></script>
   <script src="js/tools.js?v=2.0.0"></script>
   <script src="js/modular-export.js?v=2.0.0"></script>
   <script src="js/import-slice.js?v=2.0.0"></script>
   <script src="js/animation-player.js?v=2.0.0"></script>
+  <script src="js/tab-strip.js?v=2.0.0"></script>
   <script src="js/app.js?v=2.0.0"></script>
 
 

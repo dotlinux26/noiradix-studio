@@ -4,6 +4,8 @@
 const assert = require('assert');
 const EditorState = require('../js/editor-state.js');
 const PIX2 = require('../js/pix2-format.js');
+const Tools = require('../js/tools.js');
+const StructureOps = require('../js/structure-operations.js');
 
 console.log('====================================================');
 console.log('RUNNING EDITOR STATE STRUCTURAL ENGINE TEST SUITE');
@@ -77,10 +79,27 @@ assert.strictEqual(reg2.pixels['4,4'], '#00ff00');
 assert.strictEqual(cell.pixels['4,4'], '#00ff00');
 pass('addGroup and addRegion create nested hierarchy and receive plots');
 
+// 4b. Selecting a layer must replace stale region focus before painting
+state.selectLayer('c0', layer1.id);
+assert.strictEqual(state.activeLayerId, layer1.id, 'Selected layer becomes the active layer');
+assert.strictEqual(state.activeRegionId, reg1.id, 'Layer selection resolves its own first editable region');
+state.plotPixelAt('c0', 6, 6, '#ff0000');
+assert.strictEqual(reg1.pixels['6,6'], '#ff0000', 'Drawing follows selected layer focus');
+assert.strictEqual(reg2.pixels['6,6'], undefined, 'Drawing does not leak into stale region selection');
+pass('selectLayer makes active-layer editing deterministic');
+
+// 4c. Shared transforms accept an explicit structural target and never apply
+// to sibling regions simply because no browser-global state is available.
+reg1.pixels['1,1'] = '#ff0000';
+Tools.flipHorizontal(cell, 16, reg1.id);
+assert.strictEqual(reg1.pixels['14,1'], '#ff0000', 'Explicit transform target is changed');
+assert.strictEqual(reg2.pixels['4,4'], '#00ff00', 'Sibling region remains unchanged');
+pass('shared transforms honor explicit active-layer region target');
+
 // 5. Visibility and Opacity Compositing
 state.setLayerOpacity('c0', layer1.id, 0.5);
 assert.strictEqual(layer1.opacity, 0.5);
-const compPixel = cell.pixels['2,2'];
+const compPixel = cell.pixels['13,2'];
 assert.ok(compPixel.length === 9, 'Composited pixel has 50% alpha channel');
 
 state.setNodeVisibility('c0', reg2.id, false);
@@ -91,6 +110,8 @@ assert.ok(cell.pixels['4,4'], 'Restored visible region pixels in composite');
 pass('setLayerOpacity and setNodeVisibility dynamically update composited cell');
 
 // 6. Lock Protection
+state.activeLayerId = layer1.id;
+state.activeRegionId = reg2.id;
 state.setNodeLocked('c0', reg2.id, true);
 const plotLocked = state.plotPixelAt('c0', 5, 5, '#00ff00');
 assert.strictEqual(plotLocked, false, 'Plotting in locked region blocked');
@@ -121,6 +142,47 @@ assert.strictEqual(state.findNode('c0', layer1.id).node.opacity, 1.0, 'Opacity r
 state.redo(); // Redo Opacity 0.5
 assert.strictEqual(state.findNode('c0', layer1.id).node.opacity, 0.5, 'Opacity re-applied by redo');
 pass('Undo and Redo seamlessly restore both structural mutations and pixel buffers');
+
+// 9. Shared structural move/reorder core (used by both products)
+assert.strictEqual(state.reorderNode('c0', layer1.id, -1), true, 'Layer reorders through shared StructureOps');
+assert.strictEqual(state.getActiveCell().layers[0].id, layer1.id, 'Reordered layer receives the requested visual stack position');
+assert.strictEqual(state.moveNode('c0', reg2.id, layer1.id), true, 'Region moves between parent containers through shared StructureOps');
+const movedRegion = state.findNode('c0', reg2.id);
+assert.strictEqual(movedRegion.parent.id, layer1.id, 'Moved region parent is updated');
+assert.deepStrictEqual(StructureOps.bounds(movedRegion.node), { x: 4, y: 4, w: 1, h: 1, pixelCount: 1 }, 'Shared bounds derive from owned pixels');
+pass('Shared StructureOps reorders, reparents, and derives bounds deterministically');
+
+// 10. Legacy/direct layer pixels must be normalized to a Region before edits.
+const legacyCell = {
+  id: 'legacy-cell',
+  pixels: { '3,3': '#abcdef' },
+  layers: [{
+    id: 'legacy-layer',
+    type: 'layer',
+    name: 'Legacy Layer',
+    visible: true,
+    pixels: { '3,3': '#abcdef' },
+    children: []
+  }]
+};
+const normalized = StructureOps.normalizeRasterOwnership(legacyCell);
+assert.strictEqual(normalized.changed, true, 'Malformed raster ownership is detected');
+assert.strictEqual(legacyCell.layers[0].pixels, undefined, 'Layer no longer owns raster pixels');
+assert.strictEqual(legacyCell.layers[0].children.length, 1, 'Compatibility Region is created');
+const normalizedRegion = legacyCell.layers[0].children[0];
+assert.deepStrictEqual(normalizedRegion.pixels, { '3,3': '#abcdef' }, 'Existing pixels migrate losslessly');
+assert.strictEqual(Tools.getTargetForPlot(legacyCell, 'legacy-layer'), normalizedRegion,
+  'Layer focus resolves to its editable Region');
+
+PIX2.compositeCellLayers(legacyCell, { w: 16, h: 16 });
+assert.strictEqual(legacyCell.pixels['3,3'], '#abcdef', 'Visible normalized layer composites its pixel');
+legacyCell.layers[0].visible = false;
+PIX2.compositeCellLayers(legacyCell, { w: 16, h: 16 });
+assert.strictEqual(legacyCell.pixels['3,3'], undefined, 'Hide removes the layer from the composite');
+legacyCell.layers[0].visible = true;
+PIX2.compositeCellLayers(legacyCell, { w: 16, h: 16 });
+assert.strictEqual(legacyCell.pixels['3,3'], '#abcdef', 'Show restores the exact source pixel');
+pass('Raster ownership normalization preserves hide/show round-trips');
 
 console.log('\n====================================================');
 console.log(`ALL EDITOR STATE STRUCTURAL TESTS PASSED (${passCount}/${passCount})`);

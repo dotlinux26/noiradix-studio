@@ -4,6 +4,7 @@
  */
 
 const _PIX2 = (typeof PIX2 !== 'undefined' ? PIX2 : (typeof require !== 'undefined' ? require('./pix2-format.js') : (typeof window !== 'undefined' ? window.PIX2 : null)));
+const _StructureOps = (typeof StructureOps !== 'undefined' ? StructureOps : (typeof require !== 'undefined' ? require('./structure-operations.js') : null));
 
 class EditorState {
   constructor() {
@@ -226,6 +227,13 @@ class EditorState {
       this.openCellTabs.push(targetId);
     }
     this.activeTabId = targetId;
+    // Opening an existing tab is view state, not a document edit. Keep the
+    // current history entry's focus in sync so the first subsequent edit can
+    // be undone without unexpectedly throwing the user back to Overview.
+    // The snapshot data itself remains immutable.
+    if (this.historyIndex >= 0 && this.history[this.historyIndex]) {
+      this.history[this.historyIndex].activeTab = targetId;
+    }
     this.selection = null;
   }
 
@@ -242,6 +250,9 @@ class EditorState {
           this.activeTabId = 'tab-grid-overview';
         }
       }
+      if (this.historyIndex >= 0 && this.history[this.historyIndex]) {
+        this.history[this.historyIndex].activeTab = this.activeTabId;
+      }
     }
   }
 
@@ -249,11 +260,58 @@ class EditorState {
   // PIX2 1.1 STRUCTURAL TREE OPERATIONS & ACTIVE REGION RESOLUTION
   // ===========================================================================
 
+  upgradeDocumentToV11(preferredCellId = null, options = {}) {
+    if (!this.doc || !_PIX2 || typeof _PIX2.upgradeV10ToV11 !== 'function') {
+      return { success: false, error: 'No upgrade-capable document is loaded' };
+    }
+
+    const before = {
+      doc: this.doc,
+      history: this.history.slice(),
+      historyIndex: this.historyIndex,
+      activeLayerId: this.activeLayerId,
+      activeGroupId: this.activeGroupId,
+      activeRegionId: this.activeRegionId,
+      serialized: _PIX2.serialize(this.doc)
+    };
+    const upgrade = _PIX2.upgradeV10ToV11(this.doc, options);
+    if (!upgrade.success) return upgrade;
+
+    try {
+      const currentSnapshot = this.history[this.historyIndex];
+      if (!currentSnapshot || currentSnapshot.data !== before.serialized) {
+        this.saveSnapshot('Before PIX2 1.1 conversion');
+      }
+
+      this.doc = upgrade.doc;
+      const cellId = preferredCellId && this.doc.cells[preferredCellId]
+        ? preferredCellId
+        : (this.activeTabId && this.doc.cells[this.activeTabId] ? this.activeTabId : Object.keys(this.doc.cells)[0]);
+      const convertedCell = cellId ? this.doc.cells[cellId] : null;
+      const firstLayer = convertedCell && convertedCell.layers && convertedCell.layers[0];
+      const firstRegion = firstLayer && (firstLayer.children || []).find(node => node.type === 'region');
+      this.activeLayerId = firstLayer ? firstLayer.id : null;
+      this.activeGroupId = null;
+      this.activeRegionId = firstRegion ? firstRegion.id : null;
+      this.saveSnapshot('Convert document to PIX2 1.1 layers');
+      return { ...upgrade, cellId, historyEntriesAdded: this.history.length - before.history.length };
+    } catch (error) {
+      this.doc = before.doc;
+      this.history = before.history;
+      this.historyIndex = before.historyIndex;
+      this.activeLayerId = before.activeLayerId;
+      this.activeGroupId = before.activeGroupId;
+      this.activeRegionId = before.activeRegionId;
+      return { success: false, error: `Conversion transaction rolled back: ${error.message}` };
+    }
+  }
+
   // Find node by ID within cell
   findNode(cellId, nodeId) {
     if (!this.doc || !this.doc.cells) return null;
     const cell = cellId ? this.doc.cells[cellId] : this.getActiveCell();
     if (!cell || !cell.layers) return null;
+    if (_StructureOps) return _StructureOps.findNode(cell, nodeId);
 
     function search(nodes, parent, currentLayer) {
       for (let i = 0; i < nodes.length; i++) {
@@ -315,11 +373,37 @@ class EditorState {
       }
     }
 
-    // If explicit active region is selected
+    // An explicitly selected region wins when it belongs to the currently
+    // active layer. A stale region from another layer must never steal paint.
     if (this.activeRegionId) {
       const match = this.findNode(cell.id, this.activeRegionId);
-      if (match && match.node.type === 'region') {
+      if (match && match.node.type === 'region' &&
+          (!this.activeLayerId || !match.layer || match.layer.id === this.activeLayerId)) {
         return match.node;
+      }
+    }
+
+    // A layer selection is an editing-focus change, not merely a tree-row
+    // highlight. Resolve a concrete child region if no valid region is active.
+    if (this.activeLayerId) {
+      const layerMatch = this.findNode(cell.id, this.activeLayerId);
+      if (layerMatch && layerMatch.node.type === 'layer') {
+        const layer = layerMatch.node;
+        if (layer.visible === false || layer.locked) return null;
+        function findEditableInLayer(nodes) {
+          for (const node of nodes || []) {
+            if (node.visible === false || node.locked) continue;
+            if (node.type === 'region') return node;
+            const nested = findEditableInLayer(node.children);
+            if (nested) return nested;
+          }
+          return null;
+        }
+        const target = findEditableInLayer(layer.children);
+        if (target) {
+          this.activeRegionId = target.id;
+          return target;
+        }
       }
     }
 
@@ -401,6 +485,19 @@ class EditorState {
     return newLayer;
   }
 
+  // Selecting a layer must also establish a concrete editable target. This is
+  // intentionally centralized so Studio and any future UI reuse the same
+  // active-layer semantics.
+  selectLayer(cellId, layerId) {
+    const match = this.findNode(cellId, layerId);
+    if (!match || match.node.type !== 'layer') return false;
+    this.activeLayerId = layerId;
+    this.activeGroupId = null;
+    this.activeRegionId = null;
+    this.getActiveRegion(match.cell.id);
+    return true;
+  }
+
   // Add a group inside a layer or group
   addGroup(cellId, parentId, groupName = 'New Group', tags = []) {
     const parentMatch = this.findNode(cellId, parentId);
@@ -447,6 +544,7 @@ class EditorState {
       primitives: []
     };
     parentMatch.node.children.push(newRegion);
+    if (parentMatch.layer) this.activeLayerId = parentMatch.layer.id;
     this.activeRegionId = regionId;
     this.saveSnapshot(`Add Region: ${regionName}`);
     return newRegion;
@@ -464,6 +562,28 @@ class EditorState {
     if (this.isolatedNodeId === nodeId) this.isolatedNodeId = null;
     this.syncCellComposite(cell.id);
     this.saveSnapshot(`Delete Node: ${node.name || nodeId}`);
+    return true;
+  }
+
+  // Shared tree operations: both products use StructureOps for ordering and
+  // parentage, while this state owner contributes history/compositing.
+  moveNode(cellId, nodeId, targetParentId = null, targetIndex = null) {
+    const cell = cellId ? this.doc && this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell || !_StructureOps) return false;
+    const result = _StructureOps.moveNode(cell, nodeId, targetParentId, targetIndex);
+    if (!result.ok) return false;
+    this.syncCellComposite(cell.id);
+    this.saveSnapshot(`Move ${result.node.type}: ${result.node.name || result.node.id}`);
+    return true;
+  }
+
+  reorderNode(cellId, nodeId, direction) {
+    const cell = cellId ? this.doc && this.doc.cells[cellId] : this.getActiveCell();
+    if (!cell || !_StructureOps) return false;
+    const result = _StructureOps.reorderNode(cell, nodeId, direction);
+    if (!result.ok) return false;
+    this.syncCellComposite(cell.id);
+    this.saveSnapshot(`Reorder ${result.node.type}: ${result.node.name || result.node.id}`);
     return true;
   }
 

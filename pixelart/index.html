@@ -29,7 +29,7 @@
         <span class="pa-app-version-badge" id="pa-app-version-badge" title="Click to view About &amp; Release Info" style="font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); cursor: pointer; margin-left: 4px;">v2.0.0</span>
       </div>
       <!-- Project Sessions Tab Strip -->
-      <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions" style="max-width: 320px; margin-left: 8px;">
+      <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions">
         <!-- [artwork.pix2] [+] -->
       </div>
       <div class="pa-doc-info">
@@ -336,24 +336,24 @@
     <div class="pa-split-resizer" id="pa-split-resizer" title="Drag horizontally to resize panel width" role="separator" aria-orientation="vertical"></div>
 
     <!-- RIGHT PIX2 SOURCE CODE PANE -->
-    <section class="pa-code-pane" id="pa-code-pane">
-      <header class="pa-code-header" id="pa-code-header">
+    <section class="pa-code-pane side-layers-active" id="pa-code-pane">
+      <header class="pa-code-header code-context-hidden" id="pa-code-header">
         <div class="pa-code-title" style="display: flex; align-items: center; gap: 8px;">
-          <div class="pa-side-tab-toggle" style="display: flex; gap: 4px; background: rgba(0,0,0,0.25); border-radius: 4px; padding: 2px;">
-            <button id="btn-pa-side-layers" class="pa-btn-xs" title="Layers &amp; Structure"><i class="fa-solid fa-layer-group"></i> Layers</button>
-            <button id="btn-pa-side-code" class="pa-btn-xs active" title="PIX2 Source Code"><i class="fa-solid fa-code"></i> Code</button>
+          <div class="pa-side-tab-toggle" style="display: flex; gap: 4px; border-radius: 4px; padding: 2px;">
+            <button id="btn-pa-side-layers" class="pa-btn-xs active" title="Layers &amp; Structure"><i class="fa-solid fa-layer-group"></i> Layers</button>
+            <button id="btn-pa-side-code" class="pa-btn-xs" title="PIX2 Source Code"><i class="fa-solid fa-code"></i> Code</button>
           </div>
-          <span class="pa-sync-badge synced" id="pa-sync-badge">
+          <span class="pa-sync-badge synced pa-code-context-control" id="pa-sync-badge">
             <i class="fa-solid fa-circle"></i> Synced
           </span>
-          <span id="pa-code-mode-badge" class="pa-mode-badge locked" title="Safe View Mode (ReadOnly to prevent accidental deletion)">
+          <span id="pa-code-mode-badge" class="pa-mode-badge locked pa-code-context-control" title="Safe View Mode (ReadOnly to prevent accidental deletion)">
             <i class="fa-solid fa-lock"></i> View Only
           </span>
         </div>
 
-        <div class="pa-code-spacer" aria-hidden="true"></div>
+        <div class="pa-code-spacer pa-code-context-control" aria-hidden="true"></div>
 
-        <div class="pa-code-actions">
+        <div class="pa-code-actions pa-code-context-control">
           <button id="btn-toggle-code-lock" class="pa-btn-xs" title="Unlock to edit PIX2 code directly">
             <i class="fa-solid fa-pen-to-square"></i>
             <span>Edit</span>
@@ -374,8 +374,8 @@
       </header>
 
       <!-- Structure & Layers View -->
-      <div id="pa-layers-view" class="pa-layers-container hidden" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 12px; gap: 10px; background: rgba(0,0,0,0.15);">
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+      <div id="pa-layers-view" class="pa-layers-container">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px;">
           <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim, #94a3b8);"><i class="fa-solid fa-layer-group"></i> Artwork Layers</span>
           <div style="display: flex; gap: 4px;">
             <button id="btn-pa-add-layer" class="pa-btn-xs pa-btn-accent" title="Add New Layer"><i class="fa-solid fa-plus"></i> Layer</button>
@@ -388,12 +388,12 @@
         </div>
       </div>
 
-      <div class="pa-code-body" id="pa-code-body">
+      <div class="pa-code-body hidden" id="pa-code-body">
         <div class="pa-code-gutter" id="pa-code-gutter" aria-hidden="true"></div>
         <textarea id="pa-code-editor" class="pa-code-editor" readonly spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="PIX2 code appears here (Click 'Edit' to unlock manual editing)..."></textarea>
       </div>
 
-      <footer class="pa-code-statusbar" id="pa-code-statusbar">
+      <footer class="pa-code-statusbar pa-code-context-control" id="pa-code-statusbar">
         <div class="pa-code-status-left">
           <span id="pa-code-lines-count">1 line</span>
           <span class="pa-sep">•</span>
@@ -895,12 +895,16 @@
   <!-- Core PIX2 Reference Engine (Reused from parent) -->
   <script src="../js/pix2-format.js"></script>
   <script src="../js/selection-transform.js"></script>
+  <script src="../js/structure-operations.js"></script>
   <script src="../js/editor-state.js"></script>
 
   <!-- Tools Algorithm Library (Reused from parent) -->
   <script src="../js/tools.js"></script>
   <script src="../js/modular-export.js"></script>
   <script src="../js/import-slice.js"></script>
+
+  <!-- Shared project tab strip: drag-scroll, reorder, pinned new-tab action -->
+  <script src="../js/tab-strip.js"></script>
 
   <!-- PixelArt Application Logic -->
   <script src="js/pixelart-app.js"></script>

@@ -24,6 +24,7 @@
   // Ensure PIX2 engine and Tools library are loaded
   const _PIX2 = typeof PIX2 !== 'undefined' ? PIX2 : (_hasWindow && window.PIX2 ? window.PIX2 : (typeof require !== 'undefined' ? require('../../js/pix2-format.js') : null));
   const _Tools = typeof Tools !== 'undefined' ? Tools : (_hasWindow && window.Tools ? window.Tools : (typeof require !== 'undefined' ? require('../../js/tools.js') : null));
+  const _StructureOps = typeof StructureOps !== 'undefined' ? StructureOps : (typeof require !== 'undefined' ? require('../../js/structure-operations.js') : null);
 
   if (!_PIX2) {
     if (typeof console !== 'undefined' && console.error) {
@@ -233,6 +234,10 @@
     isMovingSelection: false,
     floatingPixels: null,
     floatingOriginalSel: null,
+    // The structural node that owned the pixels when they were lifted.  A
+    // selection transaction must not follow a later layer/tree selection.
+    floatingTargetId: null,
+    floatingBaselineTargetId: null,
     floatingCurrentX: 0,
     floatingCurrentY: 0,
     moveStartX: 0,
@@ -304,6 +309,13 @@
     rotationStartAngle: 0,
     rotationCurrentAngle: 0,
     rotationCenter: null,
+    // A floating selection keeps one immutable raster source across repeated
+    // rotation gestures. Re-sampling the previous axis-aligned bounding box is
+    // what caused the selection to grow after every rotation.
+    rotationSessionPixels: null,
+    rotationSessionSel: null,
+    rotationAccumulatedAngle: 0,
+    rotationGestureBaseAngle: 0,
 
     // Selection Scaling State (Unified SelectionTransform Engine)
     isScalingSelection: false,
@@ -494,18 +506,43 @@
     }
   }
 
+  function reorderPaProjectSessions(orderedIds) {
+    const byId = new Map(paProjectSessions.map(session => [session.id, session]));
+    const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+    if (ordered.length !== paProjectSessions.length) return;
+    paProjectSessions = ordered;
+    renderPaProjectTabs();
+  }
+
   function renderPaProjectTabs() {
     if (!_hasDocument) return;
     const strip = document.getElementById('pa-project-tabs-strip');
     if (!strip) return;
     strip.innerHTML = '';
 
+    // Pinned first: creating a new artwork is always reachable, even while
+    // the document tabs are scrolled or reordered.
+    const newBtn = document.createElement('button');
+    newBtn.className = 'project-tab-new';
+    newBtn.type = 'button';
+    newBtn.title = 'New Artwork Tab';
+    newBtn.setAttribute('aria-label', 'New artwork tab');
+    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    newBtn.addEventListener('click', () => {
+      if (dom.modalNew) {
+        dom.modalNew.classList.remove('hidden');
+      }
+    });
+    strip.appendChild(newBtn);
+
     paProjectSessions.forEach(session => {
       const tab = document.createElement('div');
       tab.className = `project-tab ${session.id === activePaProjectId ? 'active' : ''}`;
+      tab.dataset.tabId = session.id;
       tab.title = session.fileName || session.title;
 
       const titleSpan = document.createElement('span');
+      titleSpan.className = 'project-tab-label';
       titleSpan.textContent = session.fileName || session.title;
       tab.appendChild(titleSpan);
 
@@ -535,16 +572,15 @@
       strip.appendChild(tab);
     });
 
-    const newBtn = document.createElement('button');
-    newBtn.className = 'project-tab-new';
-    newBtn.title = 'New Artwork Tab';
-    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-    newBtn.addEventListener('click', () => {
-      if (dom.modalNew) {
-        dom.modalNew.classList.remove('hidden');
-      }
-    });
-    strip.appendChild(newBtn);
+    if (window.NoiraTabStrip) {
+      window.NoiraTabStrip.attach(strip, {
+        onReorder: reorderPaProjectSessions,
+        onAfterReorder: (tabId) => {
+          const tab = strip.querySelector(`[data-tab-id="${tabId}"]`);
+          if (tab) tab.focus({ preventScroll: true });
+        }
+      });
+    }
   }
 
   function saveCurrentPaSession() {
@@ -733,16 +769,49 @@
 
     const cell = getArtworkCell();
     if (!cell) return;
+    if (_StructureOps && typeof _StructureOps.normalizeRasterOwnership === 'function') {
+      const normalization = _StructureOps.normalizeRasterOwnership(cell);
+      if (normalization.changed && !state.activeRegionId && normalization.createdRegionIds.length) {
+        state.activeRegionId = normalization.createdRegionIds[0];
+      }
+    }
 
     if (!cell.layers || cell.layers.length === 0) {
-      container.innerHTML = '<div style="font-size: 11px; color: var(--text-dim, #94a3b8); padding: 8px 4px;">No structural layers. Drawing in flat root mode. Click "+ Layer" above to create layers.</div>';
+      container.innerHTML = '<div class="pa-layers-empty">No structural layers. Drawing in flat root mode. Click "+ Layer" above to create layers.</div>';
       return;
     }
 
     cell.layers.forEach((layer) => {
       const layerEl = document.createElement('div');
       layerEl.className = 'pa-layer-item';
-      layerEl.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
+      layerEl.draggable = true;
+      layerEl.title = 'Drag to reorder layer';
+      layerEl.addEventListener('dragstart', (event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('application/x-pix2-node', layer.id);
+        layerEl.classList.add('is-dragging');
+      });
+      layerEl.addEventListener('dragend', () => layerEl.classList.remove('is-dragging'));
+      layerEl.addEventListener('dragover', (event) => {
+        if (event.dataTransfer.types.includes('application/x-pix2-node')) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          layerEl.classList.add('is-drop-target');
+        }
+      });
+      layerEl.addEventListener('dragleave', () => layerEl.classList.remove('is-drop-target'));
+      layerEl.addEventListener('drop', (event) => {
+        event.preventDefault();
+        layerEl.classList.remove('is-drop-target');
+        const sourceId = event.dataTransfer.getData('application/x-pix2-node');
+        if (!sourceId || sourceId === layer.id || !_StructureOps) return;
+        prepareStructureMutation();
+        const targetIndex = cell.layers.indexOf(layer);
+        const result = _StructureOps.moveNode(cell, sourceId, null, targetIndex);
+        if (!result.ok) return;
+        commitStructureMutation();
+        showToast(`Reordered layer: ${result.node.name || result.node.id}`);
+      });
 
       const header = document.createElement('div');
       header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; font-size: 11.5px;';
@@ -752,6 +821,19 @@
       nameRow.innerHTML = `<i class="fa-solid fa-layer-group text-accent"></i> <span>${escapeHtml(layer.name || layer.id)}</span>`;
       nameRow.addEventListener('click', () => {
         state.activeLayerId = layer.id;
+        // Layer selection must change drawing focus as well. Prefer the first
+        // editable semantic region; legacy/empty layers remain valid targets.
+        const findEditableRegion = (nodes) => {
+          for (const node of nodes || []) {
+            if (node.visible === false || node.locked) continue;
+            if (node.type === 'region') return node;
+            const nested = findEditableRegion(node.children);
+            if (nested) return nested;
+          }
+          return null;
+        };
+        const region = findEditableRegion(layer.children);
+        state.activeRegionId = region ? region.id : null;
         renderPaLayersTree();
       });
 
@@ -764,10 +846,9 @@
       visBtn.title = layer.visible !== false ? 'Hide Layer' : 'Show Layer';
       visBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        prepareStructureMutation();
         layer.visible = layer.visible === false;
-        rebuildArtworkBuffer();
-        repaintCanvas();
-        renderPaLayersTree();
+        commitStructureMutation();
       });
       actionsRow.appendChild(visBtn);
 
@@ -777,8 +858,9 @@
       lockBtn.title = layer.locked ? 'Unlock Layer' : 'Lock Layer';
       lockBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        prepareStructureMutation();
         layer.locked = !layer.locked;
-        renderPaLayersTree();
+        commitStructureMutation();
       });
       actionsRow.appendChild(lockBtn);
 
@@ -792,7 +874,7 @@
       (layer.children || []).forEach(child => {
         const itemEl = document.createElement('div');
         const isIsolated = state.isolatedNodeId === child.id;
-        itemEl.style.cssText = `display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 4px 6px; border-radius: 4px; cursor: pointer; ${isIsolated ? 'background: rgba(99,102,241,0.2); border: 1px solid #6366f1;' : 'background: rgba(0,0,0,0.15);'}`;
+        itemEl.className = `pa-layer-child${isIsolated ? ' is-isolated' : ''}`;
 
         const itemTitle = document.createElement('div');
         itemTitle.style.cssText = 'display: flex; align-items: center; gap: 6px;';
@@ -802,6 +884,7 @@
         itemEl.appendChild(itemTitle);
 
         itemEl.addEventListener('click', () => {
+          state.activeLayerId = layer.id;
           state.activeRegionId = child.id;
           renderPaLayersTree();
         });
@@ -817,6 +900,22 @@
       layerEl.appendChild(childrenCont);
       container.appendChild(layerEl);
     });
+  }
+
+  function commitStructureMutation() {
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    pushHistory();
+    syncCanvasToSource();
+    triggerAutosave();
+    setDirty(true);
+    renderPaLayersTree();
+  }
+
+  function prepareStructureMutation() {
+    // Structural changes must never snapshot a document while selected pixels
+    // are temporarily lifted out of their owning Region.
+    if (state.floatingPixels) commitFloatingSelection();
   }
 
   // DOM Elements Cache
@@ -837,19 +936,20 @@
 
     let documentRestored = false;
     let autosavePayload = await retrieveAutosaveFromStorage();
-    if (!autosavePayload || !autosavePayload.pixels || Object.keys(autosavePayload.pixels).length === 0) {
+    if (!recoveryPayloadHasDocument(autosavePayload)) {
       autosavePayload = null;
     }
 
     // 0. Check for restorable pre-reload backup from previous session
     try {
       const preBackup = await getPreReloadBackup();
-      if (preBackup && preBackup.pixels && Object.keys(preBackup.pixels).length > 0) {
+      if (recoveryPayloadHasDocument(preBackup)) {
         if (dom.recoveryBanner) {
           if (dom.recoveryMsg) {
             const timeStr = preBackup.time ? new Date(preBackup.time).toLocaleTimeString() : 'previous session';
-            const count = Object.keys(preBackup.pixels).length;
-            dom.recoveryMsg.textContent = `Pre-reload backup found from ${timeStr} (${count} pixels).`;
+            const count = Object.keys(preBackup.pixels || {}).length;
+            const detail = preBackup.documentSource ? 'full structured document' : `${count} pixels`;
+            dom.recoveryMsg.textContent = `Pre-reload backup found from ${timeStr} (${detail}).`;
           }
           dom.recoveryBanner.classList.remove('hidden');
         }
@@ -888,9 +988,9 @@
 
         // If autosave has unsaved edits and disk has not drifted, recover autosave:
         if (autosaveHasUnsavedEdits && autosaveMatchesDiskBaseline) {
-          createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || state.title || 'Recovered Artwork');
-          const cell = getArtworkCell();
-          cell.pixels = { ...autosavePayload.pixels };
+          const recovered = installRecoveryPayload(autosavePayload);
+          if (!recovered) throw new Error('Autosave did not contain a recoverable document');
+          const cell = recovered.cell;
           rebuildArtworkBuffer();
           repaintCanvas();
           syncCanvasToSource();
@@ -936,17 +1036,23 @@
 
     // 3. Fallback: Check for crash recovery / autosave if no disk file was restored
     if (!documentRestored && autosavePayload) {
-      createNewDocument(autosavePayload.w, autosavePayload.h, autosavePayload.title || 'Recovered Artwork');
-      const cell = getArtworkCell();
-      cell.pixels = { ...autosavePayload.pixels };
-      rebuildArtworkBuffer();
-      repaintCanvas();
-      syncCanvasToSource();
-      documentRestored = true;
-      documentRevision = autosavePayload.revision || 1;
-      lastSavedRevision = autosavePayload.lastSavedRevision || 0;
-      setDirty(documentRevision !== lastSavedRevision);
-      showToast(`Recovered artwork from autosave (${Object.keys(cell.pixels).length} pixels)`, 'info');
+      try {
+        const recovered = installRecoveryPayload(autosavePayload);
+        if (recovered) {
+          const cell = recovered.cell;
+          rebuildArtworkBuffer();
+          repaintCanvas();
+          syncCanvasToSource();
+          documentRestored = true;
+          documentRevision = autosavePayload.revision || 1;
+          lastSavedRevision = autosavePayload.lastSavedRevision || 0;
+          setDirty(documentRevision !== lastSavedRevision);
+          const recoveryKind = recovered.legacy ? `${Object.keys(cell.pixels || {}).length} legacy pixels` : 'full structured document';
+          showToast(`Recovered artwork from autosave (${recoveryKind})`, 'info');
+        }
+      } catch (recoveryError) {
+        console.warn('Ignoring invalid autosave payload:', recoveryError);
+      }
     }
 
     // 4. Default: Blank canvas if nothing was restored
@@ -1004,6 +1110,7 @@
 
     container.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (e.target.closest('.project-tabs-strip')) return;
       if (['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
       if (e.target.closest('button, select, input, textarea, [role="button"], .pa-dim-badge, .pa-btn, .pa-icon-btn, .pa-color-slot, .pa-swatch, .pa-preset-chip, .pa-status-btn, .pa-mode-badge, .pa-autosave-pill, .pa-file-path-pill, .pa-file-source-badge, .pa-save-status-badge, .pa-btn-icon-xs, .pa-ai-ratio-btn')) return;
       isDown = true;
@@ -1143,6 +1250,7 @@
     // Splitter & Source Code Pane
     dom.splitResizer = document.getElementById('pa-split-resizer');
     dom.codePane = document.getElementById('pa-code-pane');
+    dom.codeHeader = document.getElementById('pa-code-header');
     dom.codeEditor = document.getElementById('pa-code-editor');
     dom.codeGutter = document.getElementById('pa-code-gutter');
     dom.syncBadge = document.getElementById('pa-sync-badge');
@@ -1281,6 +1389,32 @@
     return firstKey ? state.doc.cells[firstKey] : null;
   }
 
+  /**
+   * Returns the node that editing commands are allowed to mutate.  PIX2 1.1
+   * documents store source pixels in their layer tree; cell.pixels is only a
+   * composited render cache and must never be the write target in that case.
+   */
+  function getActiveEditingTarget(cell = getArtworkCell(), explicitTargetId = null) {
+    if (!cell) return null;
+    if (!cell.layers || cell.layers.length === 0) return cell;
+    if (_StructureOps && typeof _StructureOps.normalizeRasterOwnership === 'function') {
+      _StructureOps.normalizeRasterOwnership(cell);
+    }
+    if (!_Tools || typeof _Tools.getTargetForPlot !== 'function') return null;
+    return _Tools.getTargetForPlot(
+      cell,
+      explicitTargetId || state.isolatedNodeId || state.activeRegionId || state.activeLayerId || null
+    );
+  }
+
+  // Once a floating selection has lifted pixels, retain its original target
+  // even if the user clicks another layer before committing or pressing Esc.
+  function getFloatingSelectionTarget(cell = getArtworkCell()) {
+    if (!cell) return null;
+    if (!cell.layers || cell.layers.length === 0) return cell;
+    return state.floatingTargetId ? findNodeById(cell, state.floatingTargetId) : getActiveEditingTarget(cell);
+  }
+
   // ===========================================================================
   // HARDWARE-ACCELERATED 1:1 OFFSCREEN TEXTURE BUFFERS
   // ===========================================================================
@@ -1298,6 +1432,13 @@
     actx.clearRect(0, 0, state.w, state.h);
     const cell = getArtworkCell();
     if (!cell) return;
+
+    if (_StructureOps && typeof _StructureOps.normalizeRasterOwnership === 'function') {
+      const normalization = _StructureOps.normalizeRasterOwnership(cell);
+      if (normalization.changed && !state.activeRegionId && normalization.createdRegionIds.length) {
+        state.activeRegionId = normalization.createdRegionIds[0];
+      }
+    }
 
     if (cell.layers && cell.layers.length > 0 && typeof PIX2 !== 'undefined' && typeof PIX2.compositeCellLayers === 'function') {
       cell.pixels = PIX2.compositeCellLayers(cell, { w: state.w, h: state.h });
@@ -1380,6 +1521,9 @@
       state.floatingCtx = null;
       return;
     }
+    // This cache is only for rendering; selection state must remain usable in
+    // the Node test/runtime path where no Canvas/DOM exists.
+    if (typeof document === 'undefined') return;
     const w = state.selection.w;
     const h = state.selection.h;
     if (!state.floatingCanvas) {
@@ -1959,30 +2103,6 @@
     dom.ctxPreview.clearRect(rx, ry, rw, rh);
   }
 
-  function ensureFloatingSelection() {
-    if (!state.selection) return;
-    const cell = getArtworkCell();
-    if (!cell) return;
-    if (!state.floatingPixels) {
-      state.floatingOriginalSel = { ...state.selection };
-      state.floatingCurrentX = state.selection.x;
-      state.floatingCurrentY = state.selection.y;
-      state.floatingPixels = {};
-      for (let py = 0; py < state.selection.h; py++) {
-        for (let px = 0; px < state.selection.w; px++) {
-          const key = `${state.selection.x + px},${state.selection.y + py}`;
-          if (cell.pixels && cell.pixels[key]) {
-            state.floatingPixels[`${px},${py}`] = cell.pixels[key];
-            delete cell.pixels[key];
-          }
-        }
-      }
-      rebuildArtworkBuffer();
-      rebuildFloatingBuffer();
-      repaintCanvas();
-    }
-  }
-
   function renderSelectionMarquee() {
     clearPreviewCanvas();
     if (!state.selection) return;
@@ -2217,6 +2337,29 @@
     const mouseCanvasX = e.clientX - rect.left;
     const mouseCanvasY = e.clientY - rect.top;
     return Math.hypot(mouseCanvasX - handleCanvasX, mouseCanvasY - handleCanvasY) <= 22;
+  }
+
+  function resetRotationSession() {
+    state.rotationSessionPixels = null;
+    state.rotationSessionSel = null;
+    state.rotationAccumulatedAngle = 0;
+    state.rotationGestureBaseAngle = 0;
+    state.rotationBaseFloatingPixels = null;
+    state.rotationBaseSel = null;
+  }
+
+  function beginRotationGesture() {
+    ensureFloatingSelection();
+    if (!state.floatingPixels || !state.selection) return false;
+    if (!state.rotationSessionPixels || !state.rotationSessionSel) {
+      state.rotationSessionPixels = { ...state.floatingPixels };
+      state.rotationSessionSel = { ...state.selection };
+      state.rotationAccumulatedAngle = 0;
+    }
+    state.rotationGestureBaseAngle = state.rotationAccumulatedAngle;
+    state.rotationBaseFloatingPixels = state.rotationSessionPixels;
+    state.rotationBaseSel = state.rotationSessionSel;
+    return true;
   }
 
   const ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
@@ -2621,7 +2764,7 @@
     const h = state.h;
 
     const targetNode = (cell.layers && cell.layers.length > 0 && typeof Tools !== 'undefined' && typeof Tools.getTargetForPlot === 'function')
-      ? Tools.getTargetForPlot(cell, state.isolatedNodeId || state.activeRegionId)
+      ? Tools.getTargetForPlot(cell, state.isolatedNodeId || state.activeRegionId || state.activeLayerId)
       : null;
 
     const plotSingle = (px, py) => {
@@ -2716,9 +2859,10 @@
       if (hit === 'rot') {
         state.isRotatingSelection = true;
         state.isDrawing = false;
-        ensureFloatingSelection();
-        state.rotationBaseFloatingPixels = { ...state.floatingPixels };
-        state.rotationBaseSel = { ...state.selection };
+        if (!beginRotationGesture()) {
+          state.isRotatingSelection = false;
+          return;
+        }
 
         const cx = state.selection.x + state.selection.w / 2;
         const cy = state.selection.y + state.selection.h / 2;
@@ -2735,6 +2879,7 @@
         state.isScalingSelection = true;
         state.activeScaleHandle = hit;
         state.isDrawing = false;
+        resetRotationSession();
         ensureFloatingSelection();
         state.scaleOriginalPixels = { ...state.floatingPixels };
         state.scaleOriginalSel = { ...state.selection };
@@ -2744,9 +2889,10 @@
     } else if (state.selection && isOverRotationHandle(e)) {
       state.isRotatingSelection = true;
       state.isDrawing = false;
-      ensureFloatingSelection();
-      state.rotationBaseFloatingPixels = { ...state.floatingPixels };
-      state.rotationBaseSel = { ...state.selection };
+      if (!beginRotationGesture()) {
+        state.isRotatingSelection = false;
+        return;
+      }
 
       const rect = dom.canvasMain.getBoundingClientRect();
       const cx = state.selection.x + state.selection.w / 2;
@@ -2797,6 +2943,7 @@
           x >= state.selection.x && x < state.selection.x + state.selection.w &&
           y >= state.selection.y && y < state.selection.y + state.selection.h) {
         state.isMovingSelection = true;
+        resetRotationSession();
         state.moveStartX = x;
         state.moveStartY = y;
         ensureFloatingSelection();
@@ -2832,7 +2979,11 @@
         dom.viewport.style.cursor = 'wait';
       }
       setTimeout(() => {
-        _Tools.floodFill(cell, x, y, activeColor, { w: state.w, h: state.h });
+        _Tools.floodFill(cell, x, y, activeColor, {
+          w: state.w,
+          h: state.h,
+          targetId: state.isolatedNodeId || state.activeRegionId || state.activeLayerId
+        });
         rebuildArtworkBuffer();
         repaintCanvas();
         pushHistory();
@@ -2895,19 +3046,21 @@
     // Free Multi-Angle Selection Rotation Drag with Magnetic 90° & 15° Snapping
     if (state.isRotatingSelection && state.rotationCenter) {
       const currentAngle = Math.atan2(e.clientY - state.rotationCenter.y, e.clientX - state.rotationCenter.x);
-      let deltaAngle = currentAngle - state.rotationStartAngle;
+      const deltaAngle = currentAngle - state.rotationStartAngle;
+      let totalAngle = state.rotationGestureBaseAngle + deltaAngle;
 
       const halfPi = Math.PI / 2;
-      const nearest90 = Math.round(deltaAngle / halfPi) * halfPi;
+      const nearest90 = Math.round(totalAngle / halfPi) * halfPi;
       const snapThreshold = (10 * Math.PI) / 180; // 10 degree magnetic snap zone
-      if (Math.abs(deltaAngle - nearest90) < snapThreshold) {
-        deltaAngle = nearest90;
+      if (Math.abs(totalAngle - nearest90) < snapThreshold) {
+        totalAngle = nearest90;
       } else if (e.shiftKey) {
         // Shift key: Snap to 15-degree steps
         const step = (15 * Math.PI) / 180;
-        deltaAngle = Math.round(deltaAngle / step) * step;
+        totalAngle = Math.round(totalAngle / step) * step;
       }
-      state.rotationCurrentAngle = deltaAngle;
+      // Preview only the delta from the already-rendered accumulated result.
+      state.rotationCurrentAngle = totalAngle - state.rotationGestureBaseAngle;
       renderSelectionMarquee();
       return;
     }
@@ -3062,113 +3215,33 @@
     }
 
     if (state.isRotatingSelection) {
-      const theta = state.rotationCurrentAngle;
+      const theta = state.rotationGestureBaseAngle + state.rotationCurrentAngle;
       state.isRotatingSelection = false;
       state.isDrawing = false;
       state.rotationCurrentAngle = 0;
       dom.viewport.style.cursor = 'crosshair';
 
-      if (Math.abs(theta) > 0.01 && state.rotationBaseFloatingPixels) {
-        const basePixels = state.rotationBaseFloatingPixels;
-        const origW = state.rotationBaseSel.w;
-        const origH = state.rotationBaseSel.h;
-        const origX = state.rotationBaseSel.x;
-        const origY = state.rotationBaseSel.y;
-
-        // Check if angle is a multiple of 90 degrees (pi/2)
-        const halfPi = Math.PI / 2;
-        const steps90 = Math.round(theta / halfPi);
-        const isNear90 = Math.abs(theta - steps90 * halfPi) < 0.12;
-
-        let newW, newH;
-        const rotatedPixels = {};
-
-        if (isNear90) {
-          const normSteps = ((steps90 % 4) + 4) % 4;
-          if (normSteps === 1 || normSteps === 3) {
-            newW = origH;
-            newH = origW;
-          } else {
-            newW = origW;
-            newH = origH;
-          }
-
-          for (const key in basePixels) {
-            const commaIdx = key.indexOf(',');
-            if (commaIdx === -1) continue;
-            const px = Number(key.substring(0, commaIdx));
-            const py = Number(key.substring(commaIdx + 1));
-            const col = basePixels[key];
-            if (!col) continue;
-
-            let rx, ry;
-            if (normSteps === 0) {
-              rx = px;
-              ry = py;
-            } else if (normSteps === 1) { // 90 deg clockwise
-              rx = origH - 1 - py;
-              ry = px;
-            } else if (normSteps === 2) { // 180 deg
-              rx = origW - 1 - px;
-              ry = origH - 1 - py;
-            } else if (normSteps === 3) { // 270 deg clockwise
-              rx = py;
-              ry = origW - 1 - px;
-            }
-            if (rx >= 0 && rx < newW && ry >= 0 && ry < newH) {
-              rotatedPixels[`${rx},${ry}`] = col;
-            }
-          }
-
-          state.selection.x = Math.round(origX + (origW - newW) / 2);
-          state.selection.y = Math.round(origY + (origH - newH) / 2);
-          state.selection.w = newW;
-          state.selection.h = newH;
-          state.floatingPixels = rotatedPixels;
-          state.floatingCurrentX = state.selection.x;
-          state.floatingCurrentY = state.selection.y;
-          rebuildFloatingBuffer();
-        } else {
-          // Free continuous angle rotation
-          const cosT = Math.cos(theta);
-          const sinT = Math.sin(theta);
-          newW = Math.max(1, Math.round(Math.abs(origW * cosT) + Math.abs(origH * sinT)));
-          newH = Math.max(1, Math.round(Math.abs(origW * sinT) + Math.abs(origH * cosT)));
-
-          const origCenterX = origW / 2;
-          const origCenterY = origH / 2;
-          const newCenterX = newW / 2;
-          const newCenterY = newH / 2;
-
-          for (let dy = 0; dy < newH; dy++) {
-            for (let dx = 0; dx < newW; dx++) {
-              const rx = dx - newCenterX + 0.5;
-              const ry = dy - newCenterY + 0.5;
-              const srcX = Math.floor(rx * cosT + ry * sinT + origCenterX);
-              const srcY = Math.floor(-rx * sinT + ry * cosT + origCenterY);
-
-              if (srcX >= 0 && srcX < origW && srcY >= 0 && srcY < origH) {
-                const col = basePixels[`${srcX},${srcY}`];
-                if (col) {
-                  rotatedPixels[`${dx},${dy}`] = col;
-                }
-              }
-            }
-          }
-
-          state.selection.x = Math.round(origX + (origW - newW) / 2);
-          state.selection.y = Math.round(origY + (origH - newH) / 2);
-          state.selection.w = newW;
-          state.selection.h = newH;
-          state.floatingPixels = rotatedPixels;
-          state.floatingCurrentX = state.selection.x;
-          state.floatingCurrentY = state.selection.y;
-          rebuildFloatingBuffer();
-        }
+      if (state.rotationSessionPixels && state.rotationSessionSel && typeof SelectionTransform !== 'undefined') {
+        const baseSel = state.rotationSessionSel;
+        const rotated = SelectionTransform.rotatePixelsNearestNeighbor(
+          state.rotationSessionPixels,
+          baseSel.w,
+          baseSel.h,
+          theta
+        );
+        state.selection.x = Math.round(baseSel.x + (baseSel.w - rotated.w) / 2);
+        state.selection.y = Math.round(baseSel.y + (baseSel.h - rotated.h) / 2);
+        state.selection.w = rotated.w;
+        state.selection.h = rotated.h;
+        state.floatingPixels = rotated.pixels;
+        state.floatingCurrentX = state.selection.x;
+        state.floatingCurrentY = state.selection.y;
+        state.rotationAccumulatedAngle = theta;
+        rebuildFloatingBuffer();
 
         const deg = Math.round((theta * 180) / Math.PI);
-        showToast(`Rotated selection by ${deg}°`);
-        setDirty(true);
+        showToast(`Selection rotation: ${deg}°`);
+        if (Math.abs(theta) > 0.01) setDirty(true);
       }
 
       renderSelectionMarquee();
@@ -3414,14 +3487,15 @@
   function commitFloatingSelection() {
     if (!state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
-    if (cell) {
-      if (!cell.pixels) cell.pixels = {};
+    const target = getFloatingSelectionTarget(cell);
+    if (target) {
+      if (!target.pixels) target.pixels = {};
       for (const relKey in state.floatingPixels) {
         const [rx, ry] = relKey.split(',').map(Number);
         const destX = state.selection.x + rx;
         const destY = state.selection.y + ry;
         if (destX >= 0 && destX < state.w && destY >= 0 && destY < state.h) {
-          cell.pixels[`${destX},${destY}`] = state.floatingPixels[relKey];
+          target.pixels[`${destX},${destY}`] = state.floatingPixels[relKey];
         }
       }
       rebuildArtworkBuffer();
@@ -3432,8 +3506,63 @@
     }
     state.floatingPixels = null;
     state.floatingOriginalSel = null;
+    state.floatingTargetId = null;
+    state.floatingBaselinePixels = null;
+    state.floatingBaselineSel = null;
+    state.floatingBaselineTargetId = null;
     state.floatingCanvas = null;
     state.floatingCtx = null;
+    resetRotationSession();
+  }
+
+  /**
+   * Cancels a transient floating selection without changing the document.
+   * A floating selection is deliberately removed from the artwork buffer while
+   * it is being moved, scaled, or rotated. Cancelling must restore the
+   * immutable lift-time pixels rather than committing their preview position.
+   */
+  function cancelFloatingSelection() {
+    const cell = getArtworkCell();
+    const baselinePixels = state.floatingBaselinePixels;
+    const baselineSel = state.floatingBaselineSel;
+    const baselineTarget = state.floatingBaselineTargetId
+      ? findNodeById(cell, state.floatingBaselineTargetId)
+      : getFloatingSelectionTarget(cell);
+
+    if (baselineTarget && baselinePixels && baselineSel) {
+      if (!baselineTarget.pixels) baselineTarget.pixels = {};
+      for (const relKey in baselinePixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const x = baselineSel.x + rx;
+        const y = baselineSel.y + ry;
+        if (x >= 0 && x < state.w && y >= 0 && y < state.h) {
+          baselineTarget.pixels[`${x},${y}`] = baselinePixels[relKey];
+        }
+      }
+      rebuildArtworkBuffer();
+    }
+
+    state.floatingPixels = null;
+    state.floatingOriginalSel = null;
+    state.floatingTargetId = null;
+    state.floatingBaselinePixels = null;
+    state.floatingBaselineSel = null;
+    state.floatingBaselineTargetId = null;
+    state.floatingCanvas = null;
+    state.floatingCtx = null;
+    state.isMovingSelection = false;
+    state.isScalingSelection = false;
+    state.isRotatingSelection = false;
+    state.isSelecting = false;
+    state.isDrawing = false;
+    state.selection = null;
+    state.rotationCurrentAngle = 0;
+    state.scaleOriginalSel = null;
+    state.scaleOriginalPixels = null;
+    resetRotationSession();
+    rebuildFloatingBuffer();
+    repaintCanvas();
+    renderSelectionMarquee();
   }
 
   // ===========================================================================
@@ -3454,7 +3583,7 @@
 
   function copySelection() {
     const cell = getArtworkCell();
-    if (!cell || !cell.pixels) return;
+    if (!cell) return;
 
     if (state.floatingPixels && state.selection) {
       state.clipboard = {
@@ -3466,6 +3595,9 @@
       return;
     }
 
+    const target = getActiveEditingTarget(cell);
+    if (!target || !target.pixels) return;
+
     const x = state.selection ? state.selection.x : 0;
     const y = state.selection ? state.selection.y : 0;
     const w = state.selection ? state.selection.w : state.w;
@@ -3475,8 +3607,8 @@
     for (let py = y; py < y + h; py++) {
       for (let px = x; px < x + w; px++) {
         const key = `${px},${py}`;
-        if (cell.pixels[key]) {
-          copiedPixels[`${px - x},${py - y}`] = cell.pixels[key];
+        if (target.pixels[key]) {
+          copiedPixels[`${px - x},${py - y}`] = target.pixels[key];
         }
       }
     }
@@ -3494,6 +3626,10 @@
     if (state.floatingPixels) {
       state.floatingPixels = null;
       state.floatingOriginalSel = null;
+      state.floatingTargetId = null;
+      state.floatingBaselinePixels = null;
+      state.floatingBaselineSel = null;
+      state.floatingBaselineTargetId = null;
       state.selection = null;
       renderSelectionMarquee();
       repaintCanvas();
@@ -3504,10 +3640,11 @@
     }
 
     const cell = getArtworkCell();
-    if (!cell || !cell.pixels) return;
+    const target = getActiveEditingTarget(cell);
+    if (!target || !target.pixels) return;
 
     if (!state.selection) {
-      cell.pixels = {};
+      target.pixels = {};
       rebuildArtworkBuffer();
       repaintCanvas();
       pushHistory();
@@ -3520,7 +3657,7 @@
     const { x, y, w, h } = state.selection;
     for (let py = y; py < y + h; py++) {
       for (let px = x; px < x + w; px++) {
-        delete cell.pixels[`${px},${py}`];
+        delete target.pixels[`${px},${py}`];
       }
     }
 
@@ -3540,6 +3677,16 @@
     }
     commitFloatingSelection();
 
+    const target = getActiveEditingTarget();
+    if (!target) {
+      showToast('Select an editable layer or region before pasting', 'error');
+      return;
+    }
+
+    // Switch tools before creating the floating transaction: selectTool()
+    // commits an existing floating selection when changing tools.
+    selectTool('select');
+
     const startX = state.selection ? state.selection.x : 0;
     const startY = state.selection ? state.selection.y : 0;
 
@@ -3550,12 +3697,13 @@
       h: state.clipboard.h
     };
     state.floatingOriginalSel = { ...state.selection };
+    state.floatingTargetId = target === getArtworkCell() ? null : target.id;
+    state.floatingBaselineTargetId = null;
     state.floatingCurrentX = startX;
     state.floatingCurrentY = startY;
     state.floatingPixels = { ...state.clipboard.pixels };
     rebuildFloatingBuffer();
 
-    selectTool('select');
     renderSelectionMarquee();
     syncCanvasToSource();
     showToast(`Pasted ${Object.keys(state.clipboard.pixels).length} pixels`);
@@ -3563,12 +3711,14 @@
 
   function fillSelection() {
     const cell = getArtworkCell();
-    if (!cell) return;
+    const target = getActiveEditingTarget(cell);
+    if (!target) return;
+    if (!target.pixels) target.pixels = {};
 
     if (!state.selection) {
       for (let py = 0; py < state.h; py++) {
         for (let px = 0; px < state.w; px++) {
-          cell.pixels[`${px},${py}`] = state.primaryColor;
+          target.pixels[`${px},${py}`] = state.primaryColor;
         }
       }
       rebuildArtworkBuffer();
@@ -3583,12 +3733,16 @@
     const { x, y, w, h } = state.selection;
     for (let py = y; py < y + h; py++) {
       for (let px = x; px < x + w; px++) {
-        cell.pixels[`${px},${py}`] = state.primaryColor;
+        target.pixels[`${px},${py}`] = state.primaryColor;
       }
     }
 
     state.floatingPixels = null;
     state.floatingOriginalSel = null;
+    state.floatingTargetId = null;
+    state.floatingBaselinePixels = null;
+    state.floatingBaselineSel = null;
+    state.floatingBaselineTargetId = null;
     state.floatingCanvas = null;
     state.floatingCtx = null;
     rebuildArtworkBuffer();
@@ -3602,20 +3756,29 @@
   function ensureFloatingSelection() {
     if (state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
-    if (!cell) return;
+    const target = getActiveEditingTarget(cell);
+    if (!target) return;
+    if (!target.pixels) target.pixels = {};
     state.floatingOriginalSel = { ...state.selection };
+    state.floatingTargetId = target === cell ? null : target.id;
     state.floatingCurrentX = state.selection.x;
     state.floatingCurrentY = state.selection.y;
     state.floatingPixels = {};
+    resetRotationSession();
     for (let py = 0; py < state.selection.h; py++) {
       for (let px = 0; px < state.selection.w; px++) {
         const key = `${state.selection.x + px},${state.selection.y + py}`;
-        if (cell.pixels && cell.pixels[key]) {
-          state.floatingPixels[`${px},${py}`] = cell.pixels[key];
-          delete cell.pixels[key];
+        if (target.pixels[key]) {
+          state.floatingPixels[`${px},${py}`] = target.pixels[key];
+          delete target.pixels[key];
         }
       }
     }
+    // Transform previews replace floatingPixels, so retain the lift-time
+    // content separately for Escape/cancel restoration.
+    state.floatingBaselinePixels = { ...state.floatingPixels };
+    state.floatingBaselineSel = { ...state.floatingOriginalSel };
+    state.floatingBaselineTargetId = state.floatingTargetId;
     rebuildArtworkBuffer();
     rebuildFloatingBuffer();
   }
@@ -3624,8 +3787,10 @@
   function rotateArtwork() {
     const cell = getArtworkCell();
     if (!cell) return;
+    const targetId = state.isolatedNodeId || state.activeRegionId || state.activeLayerId || null;
 
     if (state.selection) {
+      resetRotationSession();
       ensureFloatingSelection();
       const newFloating = {};
       const oldW = state.selection.w;
@@ -3646,14 +3811,13 @@
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
-      pushHistory();
-      syncCanvasToSource();
-      triggerAutosave();
+      // This is a preview-only change. The original document stays untouched
+      // until commitFloatingSelection(), which records exactly one history step.
       showToast(`Rotated selection 90° CW (${state.selection.w}×${state.selection.h})`);
       return;
     }
 
-    _Tools.rotate90Clockwise(cell, state.w, state.h);
+    _Tools.rotate90Clockwise(cell, state.w, state.h, targetId);
     rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
@@ -3665,8 +3829,10 @@
   function flipArtworkH() {
     const cell = getArtworkCell();
     if (!cell) return;
+    const targetId = state.isolatedNodeId || state.activeRegionId || state.activeLayerId || null;
 
     if (state.selection) {
+      resetRotationSession();
       ensureFloatingSelection();
       const newFloating = {};
       const sw = state.selection.w;
@@ -3679,14 +3845,12 @@
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
-      pushHistory();
-      syncCanvasToSource();
-      triggerAutosave();
+      // Keep transforms transient until the selection is committed.
       showToast(`Flipped selection Horizontally`);
       return;
     }
 
-    _Tools.flipHorizontal(cell, state.w);
+    _Tools.flipHorizontal(cell, state.w, targetId);
     rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
@@ -3698,8 +3862,10 @@
   function flipArtworkV() {
     const cell = getArtworkCell();
     if (!cell) return;
+    const targetId = state.isolatedNodeId || state.activeRegionId || state.activeLayerId || null;
 
     if (state.selection) {
+      resetRotationSession();
       ensureFloatingSelection();
       const newFloating = {};
       const sh = state.selection.h;
@@ -3712,14 +3878,12 @@
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
-      pushHistory();
-      syncCanvasToSource();
-      triggerAutosave();
+      // Keep transforms transient until the selection is committed.
       showToast(`Flipped selection Vertically`);
       return;
     }
 
-    _Tools.flipVertical(cell, state.h);
+    _Tools.flipVertical(cell, state.h, targetId);
     rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
@@ -3732,8 +3896,13 @@
     commitFloatingSelection();
     const cell = getArtworkCell();
     if (!cell || !cell.pixels) return;
+    const targetId = state.isolatedNodeId || state.activeRegionId || state.activeLayerId || null;
+    const target = (cell.layers && cell.layers.length > 0 && _Tools && typeof _Tools.getTargetForPlot === 'function')
+      ? _Tools.getTargetForPlot(cell, targetId)
+      : cell;
+    if (!target || !target.pixels) return;
 
-    const coords = Object.keys(cell.pixels).map(k => k.split(',').map(Number));
+    const coords = Object.keys(target.pixels).map(k => k.split(',').map(Number));
     if (coords.length === 0) return;
 
     let minX = state.w, maxX = 0, minY = state.h, maxY = 0;
@@ -3778,15 +3947,18 @@
     if (shiftX === 0 && shiftY === 0) return;
 
     const newPixels = {};
-    for (const k in cell.pixels) {
+    for (const k in target.pixels) {
       const [x, y] = k.split(',').map(Number);
       const nx = x + shiftX;
       const ny = y + shiftY;
       if (nx >= 0 && nx < state.w && ny >= 0 && ny < state.h) {
-        newPixels[`${nx},${ny}`] = cell.pixels[k];
+        newPixels[`${nx},${ny}`] = target.pixels[k];
       }
     }
-    cell.pixels = newPixels;
+    target.pixels = newPixels;
+    if (target !== cell && typeof _Tools.syncCompositeIfStructured === 'function') {
+      _Tools.syncCompositeIfStructured(cell);
+    }
     rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
@@ -3810,7 +3982,7 @@
 
     const cell = getArtworkCell();
     if (!cell) return;
-    _Tools.nudge(cell, dx, dy, state.w, state.h);
+    _Tools.nudge(cell, dx, dy, state.w, state.h, state.isolatedNodeId || state.activeRegionId || state.activeLayerId || null);
     rebuildArtworkBuffer();
     repaintCanvas();
     pushHistory();
@@ -3855,6 +4027,7 @@
     for (const item of state.history) {
       if (item.type === 'snapshot' && item.pixels) {
         bytes += Object.keys(item.pixels).length * 48 + 512;
+        if (item.structuralLayers) bytes += JSON.stringify(item.structuralLayers).length * 2;
       } else if (item.type === 'diff' && item.diff) {
         bytes += Object.keys(item.diff).length * 64 + 256;
       }
@@ -3903,6 +4076,31 @@
     }
 
     const currPixels = cell.pixels || {};
+
+    // The composite buffer cannot represent layer order, groups, visibility or
+    // ownership. Structured documents therefore use complete AST snapshots;
+    // flat v1.0 documents retain the efficient pixel-diff path below.
+    if (cell.layers && cell.layers.length > 0) {
+      const snapshot = {
+        type: 'snapshot',
+        w: state.w,
+        h: state.h,
+        title: state.title,
+        revision: documentRevision,
+        pixels: { ...currPixels },
+        structuralLayers: JSON.parse(JSON.stringify(cell.layers))
+      };
+      const previous = state.history[state.historyIndex];
+      if (previous && previous.structuralLayers &&
+          JSON.stringify(previous.structuralLayers) === JSON.stringify(snapshot.structuralLayers) &&
+          previous.title === snapshot.title) return;
+      state.history.push(snapshot);
+      state.historyIndex = state.history.length - 1;
+      state.lastHistoryPixels = { ...currPixels };
+      state.activeStrokeChanges = null;
+      pruneHistoryBudget();
+      return;
+    }
 
     if (state.history.length === 0) {
       // Base history entry is always a full snapshot
@@ -4124,6 +4322,15 @@
       cell.pixels = { ...(snapshot.pixels || {}) };
     }
 
+    if (snapshot.structuralLayers !== undefined) {
+      if (snapshot.structuralLayers) cell.layers = JSON.parse(JSON.stringify(snapshot.structuralLayers));
+      else delete cell.layers;
+    } else if (cell.layers && cell.layers.length > 0) {
+      // A legacy history entry predates structural editing; it must restore
+      // the original flat representation rather than leaving a newer tree.
+      delete cell.layers;
+    }
+
     cell.size = { w: state.w, h: state.h };
     if (snapshot.revision !== undefined) {
       documentRevision = snapshot.revision;
@@ -4145,26 +4352,120 @@
   // ===========================================================================
   // AUTOSAVE & CRASH RECOVERY (IndexedDB v2 + Safe Fallback)
   // ===========================================================================
+  function recoveryPayloadHasDocument(payload) {
+    if (!payload) return false;
+    if (typeof payload.documentSource === 'string' && payload.documentSource.trim()) return true;
+    return Boolean(payload.pixels && Object.keys(payload.pixels).length > 0);
+  }
+
+  function createRecoveryPayload(extra = {}) {
+    const cell = getArtworkCell();
+    if (!cell || !state.doc) return null;
+    return {
+      schemaVersion: 3,
+      w: state.w,
+      h: state.h,
+      title: state.title,
+      revision: documentRevision,
+      lastSavedRevision: lastSavedRevision,
+      isDirty: state.isDirty,
+      baseContentHash: hashString(normalizeForCompare(lastSavedContent)),
+      // The serialized document is authoritative. `pixels` remains only for
+      // backwards compatibility with v2 recovery readers.
+      documentSource: _PIX2.serialize(state.doc),
+      pixels: { ...(cell.pixels || {}) },
+      activeLayerId: state.activeLayerId || null,
+      activeRegionId: state.activeRegionId || null,
+      isolatedNodeId: state.isolatedNodeId || null,
+      updatedAt: Date.now(),
+      ...extra
+    };
+  }
+
+  function decodeRecoveryPayload(payload) {
+    if (!payload) return null;
+
+    if (typeof payload.documentSource === 'string' && payload.documentSource.trim()) {
+      const doc = _PIX2.parse(payload.documentSource, { profile: 'pixelart' });
+      if (!doc || !doc.cells) throw new Error('Recovery document is missing cells');
+      const validation = _PIX2.validate(doc, { profile: 'pixelart', strict: false });
+      if (!validation.valid) {
+        throw new Error((validation.errors && validation.errors[0]) || 'Recovery document is invalid');
+      }
+      const cell = doc.cells.artwork || doc.cells[Object.keys(doc.cells)[0]];
+      if (!cell) throw new Error('Recovery document has no editable cell');
+      const size = cell.size || (doc.meta && (doc.meta.cell_size || doc.meta.cellSize)) || {};
+      return {
+        doc,
+        cell,
+        w: Math.max(1, Math.min(1024, Number(size.w || payload.w || 64))),
+        h: Math.max(1, Math.min(1024, Number(size.h || payload.h || 64))),
+        title: payload.title || (doc.meta && doc.meta.title) || cell.name || 'Recovered Artwork',
+        legacy: false
+      };
+    }
+
+    if (!payload.pixels) return null;
+    const w = Math.max(1, Math.min(1024, Number(payload.w || 64)));
+    const h = Math.max(1, Math.min(1024, Number(payload.h || 64)));
+    const title = payload.title || 'Recovered Artwork';
+    const doc = _PIX2.createDocument(title, 1, 1, w, h, { profile: 'pixelart' });
+    doc.cells = {
+      artwork: {
+        id: 'artwork',
+        name: title,
+        size: { w, h },
+        pixels: { ...payload.pixels }
+      }
+    };
+    return { doc, cell: doc.cells.artwork, w, h, title, legacy: true };
+  }
+
+  function seedRecoveryHistory(revision) {
+    const cell = getArtworkCell();
+    if (!cell) return;
+    const snapshot = {
+      type: 'snapshot',
+      w: state.w,
+      h: state.h,
+      title: state.title,
+      revision,
+      pixels: { ...(cell.pixels || {}) }
+    };
+    if (cell.layers && cell.layers.length > 0) {
+      snapshot.structuralLayers = JSON.parse(JSON.stringify(cell.layers));
+    }
+    state.history = [snapshot];
+    state.historyIndex = 0;
+    state.lastHistoryPixels = { ...(cell.pixels || {}) };
+    state.activeStrokeChanges = null;
+  }
+
+  function installRecoveryPayload(payload) {
+    const recovered = decodeRecoveryPayload(payload);
+    if (!recovered) return null;
+    state.doc = recovered.doc;
+    state.w = recovered.w;
+    state.h = recovered.h;
+    state.title = recovered.title;
+    state.selection = null;
+    state.floatingPixels = null;
+    state.activeLayerId = payload.activeLayerId || null;
+    state.activeRegionId = payload.activeRegionId || null;
+    state.isolatedNodeId = payload.isolatedNodeId || null;
+    if (state.doc.palette && Object.keys(state.doc.palette).length > 0) {
+      state.activeSwatches = Object.values(state.doc.palette);
+    }
+    seedRecoveryHistory(payload.revision || 1);
+    return recovered;
+  }
+
   let autosaveTimer = null;
   function triggerAutosave(immediate = false) {
     clearTimeout(autosaveTimer);
     const execute = () => {
-      const cell = getArtworkCell();
-      if (!cell) return;
-
-      const payload = {
-        w: state.w,
-        h: state.h,
-        title: state.title,
-        revision: documentRevision,
-        lastSavedRevision: lastSavedRevision,
-        isDirty: state.isDirty,
-        baseContentHash: hashString(normalizeForCompare(lastSavedContent)),
-        pixels: cell.pixels,
-        updatedAt: Date.now()
-      };
-
-      saveAutosaveToStorage(payload);
+      const payload = createRecoveryPayload();
+      if (payload) saveAutosaveToStorage(payload);
     };
 
     if (immediate) {
@@ -4850,14 +5151,25 @@ Do not include conversational greetings or postscripts.`;
 
   async function restorePreReloadBackup() {
     const backup = await getPreReloadBackup();
-    if (!backup || !backup.pixels) {
+    if (!recoveryPayloadHasDocument(backup)) {
       showToast('No pre-reload backup found to restore.', 'warning');
       return false;
     }
+    let recovered;
+    try {
+      recovered = decodeRecoveryPayload(backup);
+    } catch (error) {
+      showToast(`Backup is invalid: ${error.message}`, 'error');
+      return false;
+    }
     pushHistory();
-    state.w = backup.w || state.w;
-    state.h = backup.h || state.h;
-    state.title = backup.title || state.title;
+    state.doc = recovered.doc;
+    state.w = recovered.w;
+    state.h = recovered.h;
+    state.title = recovered.title;
+    state.activeLayerId = backup.activeLayerId || null;
+    state.activeRegionId = backup.activeRegionId || null;
+    state.isolatedNodeId = backup.isolatedNodeId || null;
     if (dom.docTitle) dom.docTitle.value = state.title;
 
     // Robust Document Identity Validation via W3C FileSystemHandle isSameEntry:
@@ -4897,16 +5209,13 @@ Do not include conversational greetings or postscripts.`;
     }
 
     const cell = getArtworkCell();
-    if (cell) {
-      cell.size = { w: state.w, h: state.h };
-      cell.pixels = { ...backup.pixels };
-    }
+    if (cell) cell.size = { w: state.w, h: state.h };
     resizeCanvasesToZoom();
     rebuildArtworkBuffer();
     repaintCanvas();
     renderRulers();
     syncCanvasToSource(true);
-    markDocumentMutation('restore-backup');
+    pushHistory();
     if (dom.recoveryBanner) dom.recoveryBanner.classList.add('hidden');
     await clearPreReloadBackup();
     updateDocumentTitle();
@@ -4954,8 +5263,6 @@ Do not include conversational greetings or postscripts.`;
   }
 
   async function openFileNative() {
-    if (!await confirmDiscardUnsavedChanges('open another file')) return;
-
     if ('showOpenFilePicker' in window) {
       try {
         const [handle] = await window.showOpenFilePicker({
@@ -4973,9 +5280,10 @@ Do not include conversational greetings or postscripts.`;
         const file = await handle.getFile();
         if (file.name.endsWith('.pix2') || file.name.endsWith('.txt')) {
           const text = await file.text();
+          let parsed;
           // Transactional validation before replacing active document
           try {
-            const parsed = _PIX2.parse(text, { profile: 'pixelart' });
+            parsed = _PIX2.parse(text, { profile: 'pixelart' });
             if (!parsed || !parsed.cells) throw new Error('Missing cells in PIX2 document.');
             const val = _PIX2.validate(parsed, { profile: 'pixelart', strict: false });
             if (!val.valid) throw new Error((val.errors && val.errors[0]) || 'Invalid PIX2 format.');
@@ -4983,17 +5291,15 @@ Do not include conversational greetings or postscripts.`;
             showToast(`Cannot open file: ${valErr.message}`, 'error');
             return;
           }
-          state.sourcePaneMode = 'full';
-          dom.codeEditor.value = text;
-          const ok = applySourceCodeToCanvas();
-          if (!ok) {
-            showToast('Failed to apply file to canvas.', 'error');
-            return;
-          }
-          currentFileHandle = handle;
+          const title = file.name.replace(/\.[^/.]+$/, '');
+          const session = createPaProjectSession(title, parsed, handle);
+          session.fileName = file.name;
+          session.isDirty = false;
+          state.history = [];
+          state.historyIndex = -1;
+          state.lastHistoryPixels = null;
+          pushHistory();
           currentFileName = file.name;
-          state.title = file.name.replace(/\.[^/.]+$/, '');
-          dom.docTitle.value = state.title;
           lastKnownFileModified = file.lastModified;
           lastSavedContent = text;
           pendingExternalConflict = null;
@@ -5323,7 +5629,12 @@ Do not include conversational greetings or postscripts.`;
       document.getElementById('btn-theme-toggle').querySelector('i').className = 'fa-solid fa-moon';
       localStorage.setItem('pix2_theme', 'light');
     }
+    // Rulers keep an offscreen static tick layer.  Theme changes alter every
+    // cached ruler colour, so invalidate and paint now instead of waiting for
+    // the next pointer move to trigger drawRulerHighlights().
+    invalidateRulerCache();
     repaintCanvas();
+    renderRulers();
   }
 
   function toggleTheme() {
@@ -5466,20 +5777,13 @@ Do not include conversational greetings or postscripts.`;
       // Emergency snapshot to pre-reload backup before discarding canvas edits
       const cell = getArtworkCell();
       if (cell && cell.pixels) {
-        const backupPayload = {
-          schemaVersion: 2,
+        const backupPayload = createRecoveryPayload({
           docId: state.title,
           fileName: currentFileName || '',
           fileHandle: currentFileHandle || null,
-          revision: documentRevision,
-          lastSavedRevision: lastSavedRevision,
-          w: state.w,
-          h: state.h,
-          title: state.title,
-          pixels: { ...cell.pixels },
           time: Date.now(),
           baseContentHash: hashString(normalizeForCompare(lastSavedContent || ''))
-        };
+        });
         const backupOk = await savePreReloadBackup(backupPayload);
         if (!backupOk) {
           const proceedWithoutBackup = confirm(
@@ -5560,6 +5864,11 @@ Do not include conversational greetings or postscripts.`;
     dom.viewport.addEventListener('mousedown', onPointerDown);
     window.addEventListener('mousemove', onPointerMove);
     window.addEventListener('mouseup', onPointerUp);
+    dom.viewport.addEventListener('pointercancel', () => {
+      if (state.isMovingSelection || state.isScalingSelection || state.isRotatingSelection) {
+        cancelFloatingSelection();
+      }
+    });
     dom.viewport.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openContextMenu(e.clientX, e.clientY);
@@ -5887,21 +6196,27 @@ Do not include conversational greetings or postscripts.`;
     }
 
     // Structure & Layers Pane Toggle & Actions (PIX2 1.1)
+    // Code-only controls are intentionally hidden in the Layers context so
+    // the structural workflow is not cluttered by source-editor commands.
+    function setSidePaneTab(tab) {
+      const showCode = tab === 'code';
+      if (dom.paLayersView) dom.paLayersView.classList.toggle('hidden', showCode);
+      if (dom.paCodeBody) dom.paCodeBody.classList.toggle('hidden', !showCode);
+      if (dom.btnPaSideLayers) dom.btnPaSideLayers.classList.toggle('active', !showCode);
+      if (dom.btnPaSideCode) dom.btnPaSideCode.classList.toggle('active', showCode);
+      if (dom.codeHeader) dom.codeHeader.classList.toggle('code-context-hidden', !showCode);
+      if (dom.codePane) dom.codePane.classList.toggle('side-layers-active', !showCode);
+      if (!showCode) renderPaLayersTree();
+    }
+
     if (dom.btnPaSideLayers) {
       dom.btnPaSideLayers.addEventListener('click', () => {
-        if (dom.paLayersView) dom.paLayersView.classList.remove('hidden');
-        if (dom.paCodeBody) dom.paCodeBody.classList.add('hidden');
-        dom.btnPaSideLayers.classList.add('active');
-        if (dom.btnPaSideCode) dom.btnPaSideCode.classList.remove('active');
-        renderPaLayersTree();
+        setSidePaneTab('layers');
       });
     }
     if (dom.btnPaSideCode) {
       dom.btnPaSideCode.addEventListener('click', () => {
-        if (dom.paLayersView) dom.paLayersView.classList.add('hidden');
-        if (dom.paCodeBody) dom.paCodeBody.classList.remove('hidden');
-        dom.btnPaSideCode.classList.add('active');
-        if (dom.btnPaSideLayers) dom.btnPaSideLayers.classList.remove('active');
+        setSidePaneTab('code');
       });
     }
 
@@ -5913,20 +6228,34 @@ Do not include conversational greetings or postscripts.`;
         const layerNum = cell.layers.length + 1;
         const name = prompt('Enter Layer Name:', `Layer ${layerNum}`);
         if (!name) return;
+        prepareStructureMutation();
+        const layerId = 'layer_' + Date.now().toString(36);
+        const regionId = 'region_' + Date.now().toString(36);
+        const newRegion = {
+          type: 'region',
+          id: regionId,
+          cell: cell.id,
+          parent: layerId,
+          name: `${name.trim()} Content`,
+          visible: true,
+          locked: false,
+          pixels: {}
+        };
         const newLayer = {
           type: 'layer',
-          id: 'layer_' + Date.now().toString(36),
+          id: layerId,
           cell: cell.id,
           name: name.trim(),
           visible: true,
+          locked: false,
           opacity: 1.0,
           blend: 'normal',
-          children: []
+          children: [newRegion]
         };
         cell.layers.push(newLayer);
         state.activeLayerId = newLayer.id;
-        renderPaLayersTree();
-        setDirty(true);
+        state.activeRegionId = newRegion.id;
+        commitStructureMutation();
       });
     }
 
@@ -5936,6 +6265,7 @@ Do not include conversational greetings or postscripts.`;
         if (!cell || !cell.layers || cell.layers.length === 0) return;
         const groupName = prompt('Enter Group Name:', 'New Group');
         if (!groupName) return;
+        prepareStructureMutation();
         const parentLayer = cell.layers.find(l => l.id === state.activeLayerId) || cell.layers[0];
         if (!parentLayer.children) parentLayer.children = [];
         const newGroup = {
@@ -5948,8 +6278,7 @@ Do not include conversational greetings or postscripts.`;
           children: []
         };
         parentLayer.children.push(newGroup);
-        renderPaLayersTree();
-        setDirty(true);
+        commitStructureMutation();
       });
     }
 
@@ -5962,6 +6291,7 @@ Do not include conversational greetings or postscripts.`;
         }
         const regionName = prompt('Enter Region Name:', 'New Region');
         if (!regionName) return;
+        prepareStructureMutation();
         const parentLayer = cell.layers.find(l => l.id === state.activeLayerId) || cell.layers[0];
         if (!parentLayer.children) parentLayer.children = [];
         const newRegion = {
@@ -5975,8 +6305,7 @@ Do not include conversational greetings or postscripts.`;
         };
         parentLayer.children.push(newRegion);
         state.activeRegionId = newRegion.id;
-        renderPaLayersTree();
-        setDirty(true);
+        commitStructureMutation();
         if (typeof showToast === 'function') showToast(`Created region: "${regionName.trim()}"`);
       });
     }
@@ -6137,28 +6466,32 @@ Do not include conversational greetings or postscripts.`;
       });
     });
 
-    document.getElementById('btn-confirm-new-canvas').addEventListener('click', async () => {
-      if (!await confirmDiscardUnsavedChanges('create a new canvas')) return;
+    document.getElementById('btn-confirm-new-canvas').addEventListener('click', () => {
       const cw = parseInt(document.getElementById('input-custom-w').value, 10) || 64;
       const ch = parseInt(document.getElementById('input-custom-h').value, 10) || 64;
+      // New Canvas creates an independent session. It must not overwrite the
+      // artwork currently shown in another project tab.
+      const title = 'New Artwork';
+      const doc = _PIX2.createDocument(title, 1, 1, cw, ch, { profile: 'pixelart' });
+      doc.meta.title = title;
+      createPaProjectSession(title, doc, null);
+      state.history = [];
+      state.historyIndex = -1;
+      state.lastHistoryPixels = null;
+      pushHistory();
       currentFileHandle = null;
       currentFileName = null;
       lastKnownFileModified = 0;
       lastSavedContent = '';
       pendingExternalConflict = null;
-      clearPersistedFileHandle();
-      clearAutosave();
-      _storage.removeItem('noiradix_pixelart_file_name');
-      _storage.removeItem('pix2_last_saved_content');
-      _storage.removeItem('pix2_last_saved_time');
       const btnReload = document.getElementById('btn-reload-file');
       if (btnReload) {
         btnReload.classList.remove('pulse-warning');
         btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
       }
-      createNewDocument(cw, ch, 'New Artwork');
       updateDocumentTitle();
       markDocumentSaved();
+      renderPaProjectTabs();
       dom.modalNew.classList.add('hidden');
       setTimeout(fitCanvasToViewport, 50);
     });
@@ -6441,9 +6774,8 @@ Do not include conversational greetings or postscripts.`;
           return;
         }
         closeContextMenu();
-        commitFloatingSelection();
-        state.selection = null;
-        renderSelectionMarquee();
+        cancelFloatingSelection();
+        showToast('Selection cancelled; original pixels restored');
       } else if (e.key === 'Enter') {
         commitFloatingSelection();
         renderSelectionMarquee();
@@ -6500,6 +6832,9 @@ Do not include conversational greetings or postscripts.`;
 
     window.addEventListener('blur', () => {
       state.isSpaceDown = false;
+      if (state.isMovingSelection || state.isScalingSelection || state.isRotatingSelection) {
+        cancelFloatingSelection();
+      }
       if (state.isPanning) {
         state.isPanning = false;
         if (dom.viewport) dom.viewport.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
@@ -6643,6 +6978,10 @@ Do not include conversational greetings or postscripts.`;
       saveAutosaveToStorage,
       retrieveAutosaveFromStorage,
       clearAutosave,
+      recoveryPayloadHasDocument,
+      createRecoveryPayload,
+      decodeRecoveryPayload,
+      installRecoveryPayload,
       savePreReloadBackup,
       getPreReloadBackup,
       restorePreReloadBackup,
@@ -6655,6 +6994,12 @@ Do not include conversational greetings or postscripts.`;
       hashString,
       createNewDocument,
       getArtworkCell,
+      getActiveEditingTarget,
+      prepareStructureMutation,
+      ensureFloatingSelection,
+      commitFloatingSelection,
+      cancelFloatingSelection,
+      resetRotationSession,
       checkAndReloadExternalFileChanges,
       handleManualFileReload,
       getCurrentFileHandle: () => currentFileHandle,

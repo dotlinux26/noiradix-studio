@@ -44,6 +44,16 @@ const Tools = (function () {
   // PIX2 1.1 STRUCTURAL TARGET RESOLUTION HELPERS
   // ===========================================================================
 
+  function findFirstEditableRegion(node, ancestorsEditable = true) {
+    if (!node || !ancestorsEditable || node.locked || node.visible === false) return null;
+    if (node.type === 'region') return node;
+    for (const child of (node.children || [])) {
+      const region = findFirstEditableRegion(child, true);
+      if (region) return region;
+    }
+    return null;
+  }
+
   function getTargetForPlot(cell, explicitTargetId) {
     if (!cell) return null;
     if (cell.layers && cell.layers.length > 0) {
@@ -61,7 +71,10 @@ const Tools = (function () {
           const found = findInNode(layer);
           if (found) {
             if (found.locked || found.visible === false) return null;
-            return found;
+            // PIX2 1.1 raster data belongs to Region nodes. Selecting a Layer
+            // or Group changes focus, but drawing must resolve to an editable
+            // descendant instead of silently creating layer.pixels.
+            return found.type === 'region' ? found : findFirstEditableRegion(found);
           }
         }
       }
@@ -73,13 +86,22 @@ const Tools = (function () {
           return reg;
         }
       }
+      for (const layer of cell.layers) {
+        const region = findFirstEditableRegion(layer);
+        if (region) return region;
+      }
+      return null;
     }
     return cell;
   }
 
-  function getTargetsForTransform(cell) {
+  function getTargetsForTransform(cell, explicitTargetId = null) {
     if (!cell) return [];
     if (!cell.layers || cell.layers.length === 0) return [cell];
+    if (explicitTargetId) {
+      const target = getTargetForPlot(cell, explicitTargetId);
+      return target ? [target] : [];
+    }
     const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
     if (activeState && activeState.activeRegionId) {
       const found = activeState.findNode(cell.id, activeState.activeRegionId);
@@ -160,9 +182,12 @@ const Tools = (function () {
   }
 
   // 4-way flood fill (supports both signatures)
-  function floodFill(cell, startX, startY, arg4, arg5, arg6, arg7) {
+  function floodFill(cell, startX, startY, arg4, arg5, arg6, arg7, explicitTargetId = null) {
     if (!cell) return;
-    const target = getTargetForPlot(cell);
+    // Object-form callers may carry a target ID without changing the public
+    // API used by legacy PIX2 documents.
+    const requestedTarget = explicitTargetId || (arg5 && typeof arg5 === 'object' ? arg5.targetId : null);
+    const target = getTargetForPlot(cell, requestedTarget);
     if (!target) return;
     if (!target.pixels) target.pixels = {};
 
@@ -232,8 +257,8 @@ const Tools = (function () {
   }
 
   // Align drawn contents to center
-  function alignCenter(cell, w, h, axis = 'both') {
-    const targets = getTargetsForTransform(cell);
+  function alignCenter(cell, w, h, axis = 'both', explicitTargetId = null) {
+    const targets = getTargetsForTransform(cell, explicitTargetId);
     for (const target of targets) {
       if (!target.pixels) continue;
       const coords = Object.keys(target.pixels).map(k => k.split(',').map(Number));
@@ -279,8 +304,8 @@ const Tools = (function () {
   }
 
   // Flip horizontally
-  function flipHorizontal(cell, w) {
-    const targets = getTargetsForTransform(cell);
+  function flipHorizontal(cell, w, explicitTargetId = null) {
+    const targets = getTargetsForTransform(cell, explicitTargetId);
     for (const target of targets) {
       if (!target.pixels) continue;
       const newPixels = {};
@@ -295,8 +320,8 @@ const Tools = (function () {
   }
 
   // Flip vertically
-  function flipVertical(cell, h) {
-    const targets = getTargetsForTransform(cell);
+  function flipVertical(cell, h, explicitTargetId = null) {
+    const targets = getTargetsForTransform(cell, explicitTargetId);
     for (const target of targets) {
       if (!target.pixels) continue;
       const newPixels = {};
@@ -311,8 +336,8 @@ const Tools = (function () {
   }
 
   // Rotate 90 degrees clockwise
-  function rotate90Clockwise(cell, w, h) {
-    const targets = getTargetsForTransform(cell);
+  function rotate90Clockwise(cell, w, h, explicitTargetId = null) {
+    const targets = getTargetsForTransform(cell, explicitTargetId);
     for (const target of targets) {
       if (!target.pixels) continue;
       const newPixels = {};
@@ -330,8 +355,8 @@ const Tools = (function () {
   }
 
   // Nudge pixels
-  function nudge(cell, dx, dy, w, h) {
-    const targets = getTargetsForTransform(cell);
+  function nudge(cell, dx, dy, w, h, explicitTargetId = null) {
+    const targets = getTargetsForTransform(cell, explicitTargetId);
     for (const target of targets) {
       if (!target.pixels) continue;
       const newPixels = {};

@@ -141,6 +141,29 @@ console.log('\nTest 6: Side-Handle Single-Axis Scaling');
   console.log('  [PASS] Side handles scale strictly on single axis without altering orthogonal axis');
 }
 
+// Test 7: Repeated rotation gestures must sample one immutable source.
+console.log('\nTest 7: Immutable Rotation Source Prevents Bounding-Box Growth');
+{
+  const srcPixels = {};
+  for (let y = 0; y < 6; y++) {
+    for (let x = 0; x < 10; x++) srcPixels[`${x},${y}`] = '#ffffff';
+  }
+  const angle = Math.PI / 3;
+  const fromOriginal = SelectionTransform.rotatePixelsNearestNeighbor(srcPixels, 10, 6, angle);
+  const repeatedFromSameSnapshot = SelectionTransform.rotatePixelsNearestNeighbor(srcPixels, 10, 6, angle);
+  assert.deepStrictEqual(
+    { w: repeatedFromSameSnapshot.w, h: repeatedFromSameSnapshot.h },
+    { w: fromOriginal.w, h: fromOriginal.h },
+    'The same cumulative angle from the same snapshot must have stable bounds'
+  );
+
+  const cardinal = SelectionTransform.rotatePixelsNearestNeighbor(srcPixels, 10, 6, Math.PI * 2);
+  assert.strictEqual(cardinal.w, 10, 'A full turn restores source width exactly');
+  assert.strictEqual(cardinal.h, 6, 'A full turn restores source height exactly');
+  assert.strictEqual(Object.keys(cardinal.pixels).length, 60, 'A full turn preserves every source pixel');
+  console.log('  [PASS] cumulative rotation from an immutable snapshot has stable bounds and exact full turns');
+}
+
 console.log('\n====================================================');
-console.log('ALL SELECTION TRANSFORM TESTS PASSED (6/6)');
+console.log('ALL SELECTION TRANSFORM TESTS PASSED (7/7)');
 console.log('====================================================\n');

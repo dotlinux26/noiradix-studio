@@ -575,16 +575,40 @@
     cur.selection = state.selection ? { ...state.selection } : null;
   }
 
+  function reorderProjectSessions(orderedIds) {
+    const byId = new Map(projectSessions.map(session => [session.id, session]));
+    const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+    if (ordered.length !== projectSessions.length) return;
+    projectSessions = ordered;
+    renderProjectTabs();
+  }
+
   function renderProjectTabs() {
     if (!dom.projectTabsStrip) return;
     dom.projectTabsStrip.innerHTML = '';
 
+    // The native "new tab" action is pinned first. Document tabs can only be
+    // reordered after it, which keeps the create entry point discoverable at
+    // any scroll position.
+    const newBtn = document.createElement('button');
+    newBtn.className = 'project-tab-new';
+    newBtn.type = 'button';
+    newBtn.title = 'New Project Tab';
+    newBtn.setAttribute('aria-label', 'New project tab');
+    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    newBtn.addEventListener('click', () => {
+      openNewFileModal();
+    });
+    dom.projectTabsStrip.appendChild(newBtn);
+
     projectSessions.forEach(session => {
       const tab = document.createElement('div');
       tab.className = `project-tab ${session.id === activeProjectId ? 'active' : ''}`;
+      tab.dataset.tabId = session.id;
       tab.title = session.filePath || session.title;
 
       const titleSpan = document.createElement('span');
+      titleSpan.className = 'project-tab-label';
       titleSpan.textContent = session.fileName || session.title;
       tab.appendChild(titleSpan);
 
@@ -615,15 +639,15 @@
       dom.projectTabsStrip.appendChild(tab);
     });
 
-    // Add [+] New Project Tab Button
-    const newBtn = document.createElement('button');
-    newBtn.className = 'project-tab-new';
-    newBtn.title = 'New Project Tab';
-    newBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-    newBtn.addEventListener('click', () => {
-      openNewFileModal();
-    });
-    dom.projectTabsStrip.appendChild(newBtn);
+    if (window.NoiraTabStrip) {
+      window.NoiraTabStrip.attach(dom.projectTabsStrip, {
+        onReorder: reorderProjectSessions,
+        onAfterReorder: (tabId) => {
+          const tab = dom.projectTabsStrip.querySelector(`[data-tab-id="${tabId}"]`);
+          if (tab) tab.focus({ preventScroll: true });
+        }
+      });
+    }
   }
 
   function switchProjectSession(sessionId) {
@@ -976,6 +1000,7 @@
       let scrollStart = 0;
 
       container.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.project-tabs-strip')) return;
         if (e.target.closest('input, button, select, .chip-btn, .pill-btn, .file-path-pill, .studio-tab')) {
           return;
         }
@@ -3455,14 +3480,18 @@
       const btnConvert = document.getElementById('btn-convert-v11-layers');
       if (btnConvert) {
         btnConvert.addEventListener('click', () => {
-          state.addLayer(cell.id, 'Base Layer');
-          if (cell.layers && cell.layers[0] && cell.layers[0].children && cell.layers[0].children[0]) {
-            const reg = cell.layers[0].children[0];
-            reg.pixels = { ...cell.pixels };
+          // Never create an empty layer before preserving the flat source:
+          // addLayer() synchronizes its composite and would otherwise replace
+          // cell.pixels before it can be copied.  The canonical upgrader
+          // snapshots every cell first and creates deterministic legacy IDs.
+          const upgrade = state.upgradeDocumentToV11(cell.id, { profile: 'studio' });
+          if (!upgrade.success) {
+            showToast(`Unable to convert document: ${upgrade.error || 'unknown error'}`, 'error');
+            return;
           }
-          state.syncCellComposite(cell.id);
+          triggerEventAutosave();
           refreshAll();
-          showToast('Converted frame to PIX2 1.1 structural layers');
+          showToast('Converted document to PIX2 1.1 layers without changing pixels');
         });
       }
       return;
@@ -3510,9 +3539,13 @@
 
       itemEl.addEventListener('click', (e) => {
         if (e.target.closest('.structure-action-btn') || e.target.closest('.structure-opacity-input')) return;
-        if (node.type === 'region') state.activeRegionId = node.id;
+        if (node.type === 'region') {
+          const match = state.findNode(cell.id, node.id);
+          state.activeLayerId = match && match.layer ? match.layer.id : state.activeLayerId;
+          state.activeRegionId = node.id;
+        }
         else if (node.type === 'group') state.activeGroupId = node.id;
-        else if (node.type === 'layer') state.activeLayerId = node.id;
+        else if (node.type === 'layer') state.selectLayer(cell.id, node.id);
         renderStructureLayersTree();
       });
 
@@ -4772,12 +4805,40 @@
   let rotationCurrentAngle = 0;
   let rotationBaseFloatingPixels = null;
   let rotationBaseSel = null;
+  // Transform previews replace floatingSelectionPixels. Keep an immutable
+  // lift-time baseline so Escape can restore, rather than commit, artwork.
+  let floatingBaselinePixels = null;
+  let floatingBaselineSel = null;
+  let floatingSelectionCellId = null;
+  let floatingSelectionTargetId = null;
+
+  // PIX2 1.1 keeps source pixels in the selected region, while cell.pixels is
+  // a composited cache. Keep every selection transaction bound to that source
+  // node so changing a tree row mid-transform can never redirect its write.
+  function getSelectionTarget(cell, targetId = null) {
+    if (!cell) return null;
+    if (!cell.layers || cell.layers.length === 0) return cell;
+    if (targetId) {
+      const match = state.findNode(cell.id, targetId);
+      return match ? match.node : null;
+    }
+    return state.getActiveRegion(cell.id);
+  }
+
+  function getFloatingSelectionCell() {
+    return (floatingSelectionCellId && state.doc && state.doc.cells)
+      ? state.doc.cells[floatingSelectionCellId]
+      : state.getActiveCell();
+  }
 
   function ensureFloatingSelection() {
     if (floatingSelectionPixels && floatingOriginalSel) return;
     const cell = state.getActiveCell();
-    if (!cell || !state.selection) return;
+    const target = getSelectionTarget(cell);
+    if (!cell || !target || !state.selection) return;
     floatingOriginalSel = { ...state.selection };
+    floatingSelectionCellId = cell.id;
+    floatingSelectionTargetId = cell.layers && cell.layers.length ? target.id : null;
     floatingCurrentX = floatingOriginalSel.x;
     floatingCurrentY = floatingOriginalSel.y;
     floatingSelectionPixels = {};
@@ -4785,28 +4846,32 @@
     for (let py = 0; py < floatingOriginalSel.h; py++) {
       for (let px = 0; px < floatingOriginalSel.w; px++) {
         const key = `${floatingOriginalSel.x + px},${floatingOriginalSel.y + py}`;
-        if (cell.pixels && cell.pixels[key]) {
-          floatingSelectionPixels[`${px},${py}`] = cell.pixels[key];
-          delete cell.pixels[key];
+        if (target.pixels && target.pixels[key]) {
+          floatingSelectionPixels[`${px},${py}`] = target.pixels[key];
+          delete target.pixels[key];
         }
       }
     }
+    floatingBaselinePixels = { ...floatingSelectionPixels };
+    floatingBaselineSel = { ...floatingOriginalSel };
+    if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
     renderCellEditor();
   }
 
   function commitFloatingSelection() {
     if (!floatingSelectionPixels || !floatingOriginalSel) return;
-    const cell = state.getActiveCell();
-    if (cell) {
+    const cell = getFloatingSelectionCell();
+    const target = getSelectionTarget(cell, floatingSelectionTargetId);
+    if (cell && target) {
       const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
       const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-      if (!cell.pixels) cell.pixels = {};
+      if (!target.pixels) target.pixels = {};
       for (const relKey in floatingSelectionPixels) {
         const [rx, ry] = relKey.split(',').map(Number);
         const destX = floatingCurrentX + rx;
         const destY = floatingCurrentY + ry;
         if (destX >= 0 && destX < cw && destY >= 0 && destY < ch) {
-          cell.pixels[`${destX},${destY}`] = floatingSelectionPixels[relKey];
+          target.pixels[`${destX},${destY}`] = floatingSelectionPixels[relKey];
         }
       }
       state.selection = {
@@ -4815,6 +4880,7 @@
         w: floatingOriginalSel.w,
         h: floatingOriginalSel.h
       };
+      if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
       state.endStroke('Move Selection');
       triggerEventAutosave();
       renderCellEditor();
@@ -4822,6 +4888,51 @@
     }
     floatingSelectionPixels = null;
     floatingOriginalSel = null;
+    floatingBaselinePixels = null;
+    floatingBaselineSel = null;
+    floatingSelectionCellId = null;
+    floatingSelectionTargetId = null;
+  }
+
+  function cancelFloatingSelection() {
+    const cell = getFloatingSelectionCell();
+    const target = getSelectionTarget(cell, floatingSelectionTargetId);
+    if (target && floatingBaselinePixels && floatingBaselineSel) {
+      if (!target.pixels) target.pixels = {};
+      const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
+      const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
+      for (const relKey in floatingBaselinePixels) {
+        const [rx, ry] = relKey.split(',').map(Number);
+        const x = floatingBaselineSel.x + rx;
+        const y = floatingBaselineSel.y + ry;
+        if (x >= 0 && x < cw && y >= 0 && y < ch) {
+          target.pixels[`${x},${y}`] = floatingBaselinePixels[relKey];
+        }
+      }
+      if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
+    }
+    // beginStroke() captured the pre-lift document. Cancellation leaves no
+    // committed mutation, so discard it rather than recording a false undo.
+    state.strokePreState = null;
+    floatingSelectionPixels = null;
+    floatingOriginalSel = null;
+    floatingBaselinePixels = null;
+    floatingBaselineSel = null;
+    floatingSelectionCellId = null;
+    floatingSelectionTargetId = null;
+    isMovingSelection = false;
+    isScalingSelection = false;
+    isRotatingSelection = false;
+    activeScaleHandle = null;
+    scaleOriginalSel = null;
+    scaleOriginalPixels = null;
+    rotationCenter = null;
+    rotationBaseFloatingPixels = null;
+    rotationBaseSel = null;
+    state.selection = null;
+    renderCellEditor();
+    renderMiniPreview();
+    renderCellOverlay();
   }
 
   function renderMovingSelectionOverlay() {
@@ -4877,7 +4988,7 @@
       const rect = dom.cellOverlay.getBoundingClientRect();
       const mouseCanvasX = e.clientX - rect.left;
       const mouseCanvasY = e.clientY - rect.top;
-      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.zoom);
+      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.cellZoom);
 
       if (hit === 'rot') {
         isRotatingSelection = true;
@@ -4887,8 +4998,8 @@
         rotationBaseSel = { ...state.selection };
         const cx = state.selection.x + state.selection.w / 2;
         const cy = state.selection.y + state.selection.h / 2;
-        const screenCenterX = rect.left + cx * state.zoom;
-        const screenCenterY = rect.top + cy * state.zoom;
+        const screenCenterX = rect.left + cx * state.cellZoom;
+        const screenCenterY = rect.top + cy * state.cellZoom;
         rotationCenter = { x: screenCenterX, y: screenCenterY, cx, cy };
         rotationStartAngle = Math.atan2(e.clientY - screenCenterY, e.clientX - screenCenterX);
         rotationCurrentAngle = 0;
@@ -4914,24 +5025,9 @@
       isPointerDown = true;
       moveStartX = coords.x;
       moveStartY = coords.y;
-
-      if (!floatingSelectionPixels) {
-        floatingOriginalSel = { ...state.selection };
-        floatingCurrentX = floatingOriginalSel.x;
-        floatingCurrentY = floatingOriginalSel.y;
-        floatingSelectionPixels = {};
-        state.beginStroke();
-        for (let py = 0; py < floatingOriginalSel.h; py++) {
-          for (let px = 0; px < floatingOriginalSel.w; px++) {
-            const key = `${floatingOriginalSel.x + px},${floatingOriginalSel.y + py}`;
-            if (cell.pixels && cell.pixels[key]) {
-              floatingSelectionPixels[`${px},${py}`] = cell.pixels[key];
-              delete cell.pixels[key];
-            }
-          }
-        }
-        renderCellEditor();
-      }
+      // Always use the same lift transaction as scale/rotate so Escape and
+      // pointer cancellation can restore the exact original pixels.
+      ensureFloatingSelection();
       renderMovingSelectionOverlay();
       return;
     }
@@ -5081,7 +5177,7 @@
       const rect = dom.cellOverlay.getBoundingClientRect();
       const mouseCanvasX = e.clientX - rect.left;
       const mouseCanvasY = e.clientY - rect.top;
-      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.zoom);
+      const hit = SelectionTransform.hitTestSelectionHandles(state.selection, mouseCanvasX, mouseCanvasY, state.cellZoom);
       if (hit === 'rot') {
         dom.cellOverlay.style.cursor = 'grab';
       } else if (hit === 'nw' || hit === 'se') {
@@ -8461,6 +8557,12 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     dom.cellOverlay.addEventListener('mousedown', handleCellMouseDown);
     window.addEventListener('mousemove', handleCellMouseMove);
     window.addEventListener('mouseup', handleCellMouseUp);
+    dom.cellOverlay.addEventListener('pointercancel', () => {
+      if (isMovingSelection || isScalingSelection || isRotatingSelection) {
+        isPointerDown = false;
+        cancelFloatingSelection();
+      }
+    });
     dom.cellOverlay.addEventListener('dblclick', (e) => {
       if (state.currentTool === 'region-select') {
         const coords = getPixelCoords(e);
@@ -10486,6 +10588,15 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       }
     });
 
+    // Losing focus during a drag is equivalent to cancelling that gesture.
+    // Do not leave lifted pixels detached from the artwork document.
+    window.addEventListener('blur', () => {
+      if (isMovingSelection || isScalingSelection || isRotatingSelection) {
+        isPointerDown = false;
+        cancelFloatingSelection();
+      }
+    });
+
     window.addEventListener('keydown', (e) => {
       const isInputActive = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
       const key = e.key.toLowerCase();
@@ -10663,15 +10774,16 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           return;
         }
         if (e.key === 'Escape' && (isScalingSelection || isRotatingSelection)) {
-          isScalingSelection = false;
-          isRotatingSelection = false;
-          scaleOriginalSel = null;
-          scaleOriginalPixels = null;
-          rotationCenter = null;
-          renderCellOverlay();
+          cancelFloatingSelection();
+          showToast('Selection transform cancelled; original pixels restored');
           return;
         }
-        executeDeselect();
+        if (e.key === 'Escape') {
+          cancelFloatingSelection();
+          showToast('Selection cancelled; original pixels restored');
+        } else {
+          executeDeselect();
+        }
         closeContextMenu();
         closeGridContextMenu();
         return;

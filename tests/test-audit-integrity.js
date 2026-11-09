@@ -204,13 +204,13 @@ async function runSuite() {
   console.log('\nTest 7: P0-03 New Canvas Discard Guard in Source Code');
   {
     const pixelartApp = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
-    const newCanvasBlock = pixelartApp.match(/btn-confirm-new-canvas[\s\S]*?createNewDocument/);
+    const newCanvasBlock = pixelartApp.match(/btn-confirm-new-canvas[\s\S]*?renderPaProjectTabs/);
     assert(newCanvasBlock, 'Must find btn-confirm-new-canvas listener');
     assert(
-      newCanvasBlock[0].includes('confirmDiscardUnsavedChanges'),
-      'btn-confirm-new-canvas MUST call confirmDiscardUnsavedChanges before creating new document'
+      newCanvasBlock[0].includes('createPaProjectSession'),
+      'btn-confirm-new-canvas must create an independent project tab'
     );
-    console.log('  [PASS] btn-confirm-new-canvas calls confirmDiscardUnsavedChanges()');
+    console.log('  [PASS] btn-confirm-new-canvas preserves existing work in a new project tab');
   }
 
   // -----------------------------------------------------------------------------
@@ -223,15 +223,15 @@ async function runSuite() {
     const openFileBlock = pixelartApp.match(/openFileNative[\s\S]*?showToast\(`Opened/);
     assert(openFileBlock, 'Must find openFileNative block');
     assert(
-      openFileBlock[0].includes("state.sourcePaneMode = 'full'"),
-      'openFileNative must reset sourcePaneMode to full before calling applySourceCodeToCanvas'
+      openFileBlock[0].includes('createPaProjectSession(title, parsed, handle)'),
+      'openFileNative must open valid PIX2 files in an independent project session'
     );
     assert(
-      openFileBlock[0].includes('const ok = applySourceCodeToCanvas()'),
-      'openFileNative must check the return status of applySourceCodeToCanvas'
+      openFileBlock[0].includes('_PIX2.validate(parsed'),
+      'openFileNative must validate PIX2 before creating a project session'
     );
 
-    console.log('  [PASS] File open flows reset sourcePaneMode to full and check applySourceCodeToCanvas status');
+    console.log('  [PASS] File open validates then creates an independent project session');
   }
 
   // -----------------------------------------------------------------------------
@@ -476,8 +476,8 @@ async function runSuite() {
 
     const pixelartApp = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
     assert(
-      pixelartApp.includes('schemaVersion: 2'),
-      'Backup payload must define schemaVersion: 2 with document identity and revision'
+      pixelartApp.includes('schemaVersion: 3') && pixelartApp.includes('documentSource: _PIX2.serialize(state.doc)'),
+      'Backup payload must define schemaVersion: 3 and preserve the complete structured document'
     );
     assert(
       pixelartApp.includes('proceedWithoutBackup'),
@@ -802,7 +802,193 @@ async function runSuite() {
   }
 
   console.log('\n====================================================');
-  console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (24/24)');
+  // -----------------------------------------------------------------------------
+  // Test 25: P0 Selection Escape restores lift-time pixels, never preview pixels
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 25: Selection Escape Restore Invariant');
+  {
+    PixelArtApp.createNewDocument(8, 8, 'Selection cancel');
+    const cell = PixelArtApp.getArtworkCell();
+    cell.pixels = { '2,2': '#ff0000', '3,2': '#00ff00' };
+    PixelArtApp.state.selection = { x: 2, y: 2, w: 2, h: 1 };
+    // Simulate a transformed floating preview after the original pixels have
+    // been lifted out of the document. The baseline must win on Escape.
+    delete cell.pixels['2,2'];
+    delete cell.pixels['3,2'];
+    PixelArtApp.state.floatingPixels = { '0,0': '#0000ff' };
+    PixelArtApp.state.floatingOriginalSel = { x: 4, y: 4, w: 1, h: 1 };
+    PixelArtApp.state.floatingBaselinePixels = { '0,0': '#ff0000', '1,0': '#00ff00' };
+    PixelArtApp.state.floatingBaselineSel = { x: 2, y: 2, w: 2, h: 1 };
+
+    PixelArtApp.cancelFloatingSelection();
+    assert.deepStrictEqual(cell.pixels, { '2,2': '#ff0000', '3,2': '#00ff00' },
+      'Escape must restore the original selection instead of committing transformed preview pixels');
+    assert.strictEqual(PixelArtApp.state.selection, null, 'Escape must clear the transient selection');
+    assert.strictEqual(PixelArtApp.state.floatingPixels, null, 'Escape must clear transient floating pixels');
+
+    const studioSource = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+    assert(studioSource.includes('state.cellZoom'), 'Studio selection controller must use EditorState.cellZoom');
+    assert(studioSource.includes('function cancelFloatingSelection()'), 'Studio must provide cancellation restoration logic');
+    assert(studioSource.includes('ensureFloatingSelection();\n      renderMovingSelectionOverlay();'),
+      'Studio move interaction must use the shared lift transaction with a cancellation baseline');
+    assert(studioSource.includes("addEventListener('pointercancel'"),
+      'Studio must cancel interrupted selection gestures');
+    console.log('  [PASS] Escape restores original pixels and Studio uses the canonical cell zoom state');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 26: Structural selections must retain their original editable target
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 26: Structural Selection Target Isolation & Ruler Theme Refresh');
+  {
+    PixelArtApp.createNewDocument(8, 8, 'Structural selection');
+    const cell = PixelArtApp.getArtworkCell();
+    const regionA = { id: 'region-a', type: 'region', pixels: { '1,1': '#ff0000' } };
+    const regionB = { id: 'region-b', type: 'region', pixels: { '1,1': '#00ff00' } };
+    cell.layers = [{ id: 'layer-a', type: 'layer', children: [regionA, regionB] }];
+    cell.pixels = { '1,1': '#00ff00' };
+    PixelArtApp.state.activeLayerId = 'layer-a';
+    PixelArtApp.state.activeRegionId = 'region-a';
+    PixelArtApp.state.isolatedNodeId = null;
+    PixelArtApp.state.selection = { x: 1, y: 1, w: 1, h: 1 };
+
+    assert.strictEqual(PixelArtApp.getActiveEditingTarget(), regionA,
+      'Structural editing must resolve the active region, not the composite cell cache');
+    PixelArtApp.ensureFloatingSelection();
+    assert.deepStrictEqual(regionA.pixels, {}, 'Lifting a structural selection must remove pixels from its source region');
+    assert.deepStrictEqual(regionB.pixels, { '1,1': '#00ff00' }, 'Lifting one region must not alter its sibling');
+
+    // Change the active layer target while a selection is floating: Esc must
+    // still restore to the lift-time source, not the newly selected sibling.
+    PixelArtApp.state.activeRegionId = 'region-b';
+    PixelArtApp.state.floatingPixels = { '0,0': '#0000ff' };
+    PixelArtApp.cancelFloatingSelection();
+    assert.deepStrictEqual(regionA.pixels, { '1,1': '#ff0000' }, 'Esc must restore into the original structural region');
+    assert.deepStrictEqual(regionB.pixels, { '1,1': '#00ff00' }, 'Esc must not write into a newly selected sibling region');
+
+    const source = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+    assert(source.includes('invalidateRulerCache();\n    repaintCanvas();\n    renderRulers();'),
+      'Theme changes must invalidate and repaint cached rulers immediately');
+    console.log('  [PASS] Selection transactions keep their structural target and theme changes repaint ruler caches');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 27: Layers context must not expose code-only controls or low-contrast UI
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 27: Layers Context Isolation & Theme Contrast');
+  {
+    const html = fs.readFileSync(path.join(__dirname, '../pixelart/index.html'), 'utf8');
+    const css = fs.readFileSync(path.join(__dirname, '../pixelart/css/pixelart.css'), 'utf8');
+    const app = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+    assert(html.includes('pa-code-pane side-layers-active'), 'Layers must be the initial side-pane context');
+    assert(html.includes('pa-code-context-control'), 'Code-only UI controls must be explicitly marked');
+    assert(css.includes('.pa-code-pane.side-layers-active .pa-code-context-control'),
+      'Layers context must hide code-only controls, including the code status bar');
+    assert(css.includes('.pa-layers-container {') && css.includes('background: var(--bg-primary);'),
+      'Layers panel must use the theme background rather than a fixed translucent black overlay');
+    assert(app.includes("setSidePaneTab('code')") && app.includes("setSidePaneTab('layers')"),
+      'Switching side-pane tabs must consistently update their context UI');
+    console.log('  [PASS] Layers view hides code-only controls and uses theme-aware contrast');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 28: Studio floating selections preserve their structural source node
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 28: Studio Structural Selection Transaction Targeting');
+  {
+    const studioSource = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+    assert(studioSource.includes('function getSelectionTarget(cell, targetId = null)'),
+      'Studio must resolve selection writes through the active structural target');
+    assert(studioSource.includes('floatingSelectionTargetId = cell.layers && cell.layers.length ? target.id : null;'),
+      'Studio must bind an in-flight selection to its lift-time source node');
+    assert(studioSource.includes('state.syncCellComposite(cell.id);'),
+      'Studio structural selection operations must refresh the cell composite cache');
+    console.log('  [PASS] Studio selection transactions are bound to their source structural node');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 29: UI conversion must use the lossless canonical v1.0 -> v1.1 path
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 29: Lossless Structure Conversion UI Path');
+  {
+    const studioSource = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+    const editorStateSource = fs.readFileSync(path.join(__dirname, '../js/editor-state.js'), 'utf8');
+    assert(studioSource.includes('state.upgradeDocumentToV11(cell.id'), 'Convert UI must use the transactional EditorState upgrader');
+    assert(editorStateSource.includes('_PIX2.upgradeV10ToV11(this.doc, options)'), 'EditorState transaction must delegate to the canonical PIX2 lossless upgrader');
+    assert(!studioSource.includes("state.addLayer(cell.id, 'Base Layer')"), 'Convert UI must not create/sync an empty layer before copying flat pixels');
+    console.log('  [PASS] Structure conversion upgrades from a preserved document snapshot');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 30: PixelArt structural history restores AST, not merely composites
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 30: PixelArt Structural Undo / Redo');
+  {
+    PixelArtApp.createNewDocument(8, 8, 'Structural history');
+    const cell = PixelArtApp.getArtworkCell();
+    cell.layers = [
+      { id: 'layer-bottom', type: 'layer', opacity: 1, children: [{ id: 'region-bottom', type: 'region', pixels: { '1,1': '#ff0000' } }] },
+      { id: 'layer-top', type: 'layer', opacity: 1, children: [{ id: 'region-top', type: 'region', pixels: { '1,1': '#00ff00' } }] }
+    ];
+    cell.pixels = { '1,1': '#00ff00' };
+    PixelArtApp.state.history = [];
+    PixelArtApp.state.historyIndex = -1;
+    PixelArtApp.pushHistory();
+    cell.layers.reverse();
+    cell.pixels = { '1,1': '#ff0000' };
+    PixelArtApp.pushHistory();
+    PixelArtApp.undo();
+    assert.strictEqual(PixelArtApp.getArtworkCell().layers[0].id, 'layer-bottom', 'Undo restores original layer ordering');
+    PixelArtApp.redo();
+    assert.strictEqual(PixelArtApp.getArtworkCell().layers[0].id, 'layer-top', 'Redo restores reordered layer AST');
+    console.log('  [PASS] PixelArt undo/redo restores structural layers and ordering atomically');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 31: Layer visibility transactions must settle lifted selection pixels
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 31: Layer Hide / Show Preserves Floating Selection Pixels');
+  {
+    PixelArtApp.createNewDocument(8, 8, 'Visibility transaction');
+    const cell = PixelArtApp.getArtworkCell();
+    const region = { id: 'visibility-region', type: 'region', visible: true, pixels: { '2,2': '#ff00ff' } };
+    const layer = { id: 'visibility-layer', type: 'layer', visible: true, opacity: 1, children: [region] };
+    cell.layers = [layer];
+    cell.pixels = { '2,2': '#ff00ff' };
+    PixelArtApp.state.activeLayerId = layer.id;
+    PixelArtApp.state.activeRegionId = region.id;
+    PixelArtApp.state.selection = { x: 2, y: 2, w: 1, h: 1 };
+
+    PixelArtApp.ensureFloatingSelection();
+    assert.strictEqual(region.pixels['2,2'], undefined, 'Selection lift temporarily removes the source pixel');
+    PixelArtApp.prepareStructureMutation();
+    assert.strictEqual(region.pixels['2,2'], '#ff00ff', 'Structure transaction settles the lifted pixel first');
+    assert.strictEqual(PixelArtApp.state.floatingPixels, null, 'No floating transaction leaks across visibility mutation');
+
+    layer.visible = false;
+    PIX2.compositeCellLayers(cell, { w: 8, h: 8 });
+    assert.strictEqual(cell.pixels['2,2'], undefined, 'Hidden layer is absent from composite');
+    layer.visible = true;
+    PIX2.compositeCellLayers(cell, { w: 8, h: 8 });
+    assert.strictEqual(cell.pixels['2,2'], '#ff00ff', 'Shown layer restores its source pixel');
+    console.log('  [PASS] visibility changes cannot snapshot a lifted/empty structural source');
+  }
+
+  // -----------------------------------------------------------------------------
+  // Test 32: Rotation gestures use one immutable source for cumulative angles
+  // -----------------------------------------------------------------------------
+  console.log('\nTest 32: Selection Rotation Session Is Non-Compounding');
+  {
+    const source = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+    assert(source.includes('rotationSessionPixels'), 'PixelArt must retain an immutable rotation-session raster');
+    assert(source.includes('state.rotationGestureBaseAngle + state.rotationCurrentAngle'),
+      'Pointer-up must apply the cumulative angle rather than re-rotating the previous bounding box');
+    assert(source.includes('SelectionTransform.rotatePixelsNearestNeighbor(\n          state.rotationSessionPixels'),
+      'Committed rotation must sample the immutable session pixels');
+    console.log('  [PASS] repeated rotation gestures use a stable source snapshot and cumulative angle');
+  }
+
+  console.log('ALL AUDIT INTEGRITY & REGRESSION TESTS PASSED (32/32)');
   console.log('====================================================\n');
 }
 
