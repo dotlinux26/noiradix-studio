@@ -835,6 +835,7 @@
       if (match.node.type === 'region') state.activeRegionId = match.node.id;
       regionSelection?.focus(cell, state.activeLayerId, null, [(match.path[1] || match.node).id]);
     }
+    selectTool('region-select');
     if (_hasDocument) renderPaLayersTree();
     updateIsolationBannerUI();
     rebuildArtworkBuffer();
@@ -4530,6 +4531,7 @@
         session.fileName = file.name;
         currentFileName = file.name;
         lastSavedContent = text;
+        syncCanvasToSource(true);
         markDocumentSaved();
         triggerAutosave(true);
         saveCurrentPaSession();
@@ -5914,7 +5916,9 @@
     if (state.currentTool !== toolName && state.floatingPixels) {
       commitFloatingSelection();
     }
-    regionSelection?.cancel();
+    if (toolName !== 'region-select') {
+      regionSelection?.cancel();
+    }
     state.currentTool = toolName;
     document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((b) => {
       b.classList.toggle('active', b.dataset.tool === toolName);

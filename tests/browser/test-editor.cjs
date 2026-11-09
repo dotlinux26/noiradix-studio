@@ -87,15 +87,19 @@ const fixture = `@pix2 1.1
         waitUntil: 'domcontentloaded',
       });
       if (pa) {
+        await page.locator('#pa-canvas-main').waitFor({ state: 'attached' });
+        await page.waitForTimeout(400);
         await page.locator('#pa-hidden-file-input').setInputFiles({
           name: 'fixture.pix2',
           mimeType: 'text/plain',
           buffer: Buffer.from(fixture),
         });
-        await page.waitForFunction(() =>
-          document
-            .querySelector('#pa-code-editor')
-            .value.includes('@region green'),
+        await page.waitForFunction(
+          () =>
+            document
+              .querySelector('#pa-code-editor')
+              ?.value?.includes('@region green'),
+          { timeout: 25000 },
         );
       }
       await page.waitForTimeout(600);
