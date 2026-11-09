@@ -1134,6 +1134,8 @@
       document.getElementById('tabs-container'),
       document.querySelector('.studio-statusbar'),
       document.querySelector('.code-pane-header'),
+      document.getElementById('slice-viewport-header'),
+      document.getElementById('import-slices-header'),
       ...document.querySelectorAll('.view-sub-toolbar')
     ];
 
@@ -4369,7 +4371,7 @@
     }
 
     let html = `
-      <div style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; padding: 4px 10px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2;">
+      <div style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; padding: 4px 10px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; min-width: 580px;">
         <span>#</span>
         <span>Thumb</span>
         <span>Slice Name</span>
@@ -4384,7 +4386,7 @@
       const isSel = (idx === importSliceState.selectedSliceIndex);
       const colVal = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : 0);
       html += `
-        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}" style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; align-items: center; padding: 4px 10px;">
+        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}" style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; align-items: center; padding: 4px 10px; min-width: 580px;">
           <span style="font-weight: 600; color: var(--text-dim);">${idx + 1}</span>
           <canvas class="slice-thumb-canvas" id="slice-thumb-${idx}" width="24" height="24"></canvas>
           <input type="text" class="slice-input-sm slice-name-input" data-slice-idx="${idx}" value="${escapeHTML(f.name)}" placeholder="Frame Name">
@@ -11799,6 +11801,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     enableHorizontalDragScroll(document.querySelector('.cell-top-bar'));
     enableHorizontalDragScroll(document.querySelector('.timeline-header'));
     enableHorizontalDragScroll(document.getElementById('timeline-frames-strip'));
+    enableHorizontalDragScroll(document.getElementById('slice-viewport-header'));
+    enableHorizontalDragScroll(document.getElementById('import-slices-header'));
     document.querySelectorAll('.view-sub-toolbar').forEach(tb => enableHorizontalDragScroll(tb));
 
     bindAction('btn-export-atlas', exportAtlasPng);

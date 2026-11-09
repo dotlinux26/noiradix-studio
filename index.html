@@ -928,16 +928,16 @@
 
           <!-- Right Interactive Preview Area -->
           <div class="sidebar-card" style="display: flex; flex-direction: column; overflow: hidden; flex: 1; height: 100%; min-width: 0;">
-            <!-- Viewport Header Toolbar -->
-            <div class="card-header flex-between" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; flex-shrink: 0;">
+            <!-- Viewport Header Toolbar (Single-line Horizontal Drag-Scroll) -->
+            <div class="card-header flex-between slice-viewport-header" id="slice-viewport-header">
               <!-- Title & Badge -->
-              <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                 <span><i class="fa-regular fa-eye"></i> Slicing Viewport</span>
                 <span id="slice-count-badge" class="badge-tag">0 slices detected</span>
               </div>
 
               <!-- Tools & Actions Strip -->
-              <div class="slice-viewport-toolbar" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <div class="slice-viewport-toolbar" id="slice-viewport-toolbar">
                 <!-- Tool Mode Buttons -->
                 <div class="btn-group" role="group" aria-label="Tool Selection">
                   <button type="button" id="btn-slice-tool-select" class="btn btn-xs btn-secondary active" title="Select &amp; Move Slice (V)">
@@ -1027,13 +1027,13 @@
 
             <!-- Slices & Tagging Inspector Deck -->
             <div class="import-slices-deck" id="import-slices-deck" style="border-top: 1px solid var(--border-subtle); background: var(--bg-card); display: flex; flex-direction: column; height: 260px; max-height: 40%; flex-shrink: 0;">
-              <!-- Inspector Header with Quick Tagging Tools -->
-              <div style="padding: 6px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; flex-shrink: 0; flex-wrap: wrap; gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 6px;">
+              <!-- Inspector Header with Quick Tagging Tools (Single-line Horizontal Drag-Scroll) -->
+              <div class="import-slices-header" id="import-slices-header">
+                <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                   <span><i class="fa-solid fa-tags"></i> Slices &amp; Tagging Inspector</span>
                   <span id="import-slices-count-text" style="font-weight: normal; color: var(--text-dim);">(0 items)</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="import-slices-actions" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                   <button type="button" id="btn-batch-tag-prefix" class="btn btn-xs btn-secondary" title="Assign a common tag prefix to all slices (e.g. 'walk', 'idle')">
                     <i class="fa-solid fa-tag"></i> Batch Tag Prefix...
                   </button>
@@ -1050,7 +1050,7 @@
               </div>
 
               <!-- Table list -->
-              <div id="import-slices-list" class="import-slices-table-container" style="overflow-y: auto; flex: 1; min-height: 80px;">
+              <div id="import-slices-list" class="import-slices-table-container" style="overflow-y: auto; overflow-x: auto; flex: 1; min-height: 80px;">
                 <!-- Populated dynamically -->
               </div>
             </div>

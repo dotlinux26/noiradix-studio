@@ -408,6 +408,33 @@ console.log('\nTest 10: Slicing Inspector Row/Tag & Col/Frame Index Contract Ver
   pass('Slices & Tagging Inspector row-tag and column-frame-index contracts verified');
 }
 
+// -----------------------------------------------------------------------------
+// Test 11: Slicing Viewport & Inspector Toolbars Horizontal Drag-Scroll Invariant
+// -----------------------------------------------------------------------------
+console.log('\nTest 11: Slicing Viewport & Inspector Toolbars Horizontal Drag-Scroll Invariant');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const styleCss = fs.readFileSync(path.join(__dirname, '../css/style.css'), 'utf8');
+
+  // Verify DOM elements exist
+  assert(indexHtml.includes('id="slice-viewport-header"'), 'slice-viewport-header must exist in DOM');
+  assert(indexHtml.includes('id="import-slices-header"'), 'import-slices-header must exist in DOM');
+
+  // Verify CSS nowrap and drag cursor rules
+  assert(styleCss.includes('.slice-viewport-header') && styleCss.includes('.import-slices-header'), 'CSS must define slice header classes');
+  assert(styleCss.includes('flex-wrap: nowrap !important;'), 'Headers must enforce single-line flex-wrap: nowrap');
+  assert(styleCss.includes('cursor: grab !important;'), 'Headers must define cursor: grab');
+
+  // Verify horizontal drag-scroll listeners attached in app.js
+  assert(appJs.includes("enableHorizontalDragScroll(document.getElementById('slice-viewport-header'))"), 'app.js must attach drag-scroll to slice-viewport-header');
+  assert(appJs.includes("enableHorizontalDragScroll(document.getElementById('import-slices-header'))"), 'app.js must attach drag-scroll to import-slices-header');
+
+  pass('Slicing Viewport and Inspector horizontal drag-scroll contracts verified');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');
