@@ -268,6 +268,42 @@ assert.strictEqual(vProto.valid, false);
 assert.ok(vProto.errors.some(e => e.includes('PIX2_ERR_PROTOTYPE_POLLUTION')));
 pass('Validation guards against prototype pollution in structural node IDs');
 
+const opacitySource = require('node:fs').readFileSync(
+  require('node:path').join(__dirname, '../pix2/test-vectors/canonical_v11_opacity.pix2'), 'utf8'
+).replace(/\r\n/g, '\n');
+const opacityDoc = PIX2.parse(opacitySource);
+assert.equal(PIX2.validate(opacityDoc, { strict: true }).valid, true);
+const opacityCell = opacityDoc.cells.c;
+const layer = opacityCell.layers[0];
+assert.deepEqual(layer.children.map(node => node.id), ['below', 'g', 'above']);
+assert.equal(opacityCell.pixels['1,0'], '#ff000010');
+assert.equal(opacityCell.pixels['0,0'], '#3800c790');
+const serialized = PIX2.serialize(opacityDoc);
+const reloaded = PIX2.parse(serialized);
+assert.deepEqual(reloaded.cells.c.layers, opacityCell.layers);
+assert.deepEqual(reloaded.cells.c.pixels, opacityCell.pixels);
+assert.deepEqual(require('../pix2/js/pix2-format.js').parse(serialized).cells.c.pixels, opacityCell.pixels);
+assert.deepEqual(require('../js/modular-export.js').extractNodePixels(layer), opacityCell.pixels);
+const beforeUngroup = { ...opacityCell.pixels };
+require('../js/structure-operations.js').ungroupNode(opacityCell, 'g');
+assert.deepEqual(PIX2.compositeCellLayers(opacityCell), beforeUngroup);
+assert.deepEqual(PIX2.flattenV11ToV10(opacityDoc).doc.cells.c.pixels, beforeUngroup);
+pass('Nested opacity and mixed sibling order survive roundtrip, ungroup, flatten and modular export');
+
+for (const value of ['0.5oops', '-0.01', '1.01', 'NaN', 'Infinity', '0x1', '']) {
+  const bad = PIX2.parse(opacitySource.replace('opacity: 5e-1', 'opacity: ' + value));
+  assert.ok(PIX2.validate(bad).diagnostics.some(item => item.code === 'PIX2_ERR_INVALID_OPACITY'), value);
+}
+const cycle = PIX2.parse(opacitySource.replace('  parent: l\n  opacity: .5', '  parent: g\n  opacity: .5'));
+assert.ok(PIX2.validate(cycle).diagnostics.some(item => item.code === 'PIX2_ERR_HIERARCHY_CYCLE'));
+const groupChain = Array.from({ length: 17 }, (_, i) =>
+  `@group chain_${i}\n  cell: c\n  parent: ${i ? 'chain_' + (i - 1) : 'l'}\n`
+);
+assert.equal(PIX2.validate(PIX2.parse(opacitySource + groupChain.slice(0, 16).join(''))).valid, true);
+assert.ok(PIX2.validate(PIX2.parse(opacitySource + groupChain.join(''))).diagnostics
+  .some(item => item.code === 'PIX2_ERR_RESOURCE_LIMIT'));
+pass('Malformed opacity, detached cycles and excessive Group depth fail validation');
+
 console.log('\n====================================================');
 console.log(`ALL PIX2 1.1 TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

@@ -93,7 +93,11 @@ const StructureOps = (function () {
     const match = findNode(cell, id);
     if (!isEditable(match) || match.node.type !== 'group') return null;
     const children = match.node.children || [];
-    for (const child of children) refreshParentage(child, cell.id, match.parent.id);
+    const opacity = match.node.opacity ?? 1;
+    for (const child of children) {
+      if (opacity !== 1) child.opacity = (child.opacity ?? 1) * opacity;
+      refreshParentage(child, cell.id, match.parent.id);
+    }
     match.siblings.splice(match.index, 1, ...children);
     return children;
   }

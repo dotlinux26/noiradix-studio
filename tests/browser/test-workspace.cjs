@@ -2,9 +2,10 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
+const { pathToFileURL } = require('node:url');
 const PIX2 = require('../../js/pix2-format.js');
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ channel: process.env.EDITOR_QA_CHANNEL || 'chrome', headless: true });
   try {
     console.log('Chrome', browser.version());
     let studioTabStyle;
@@ -340,7 +341,7 @@ const PIX2 = require('../../js/pix2-format.js');
         activeId: 'large', sessions: [{ id: 'large', title: 'Large Grid', content }]
       }));
     }, largeSheet);
-    await gridPage.goto('http://127.0.0.1:8769/');
+    await gridPage.goto(pathToFileURL(join(__dirname, '../../index.html')).href);
     await gridPage.locator('#btn-grid-zoom-fit').click();
     assert.match(await gridPage.locator('#grid-zoom-level').innerText(), /%$/);
     const gridCanvas = gridPage.locator('#grid-canvas');

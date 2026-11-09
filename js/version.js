@@ -14,15 +14,15 @@
   return {
     studio: {
       name: 'NOIRADIX Studio',
-      version: '2.0.0',
+      version: '2.1.0',
       channel: 'Stable',
-      displayVersion: 'v2.0.0'
+      displayVersion: 'v2.1.0'
     },
     pixelart: {
       name: 'NOIRADIX PixelArt',
-      version: '2.0.0',
+      version: '2.1.0',
       channel: 'Stable',
-      displayVersion: 'v2.0.0'
+      displayVersion: 'v2.1.0'
     },
     format: {
       name: 'PIX2',

@@ -5,6 +5,8 @@
 
 ---
 
+[Normative PIX2 1.1 specification](../PIX2_SPECIFICATION.md) · [Historical PIX2 1.0 reference](SPECIFICATION.md)
+
 ## 1. Overview & Vision
 
 **PIX2** is an open, human-readable, deterministic Domain Specific Language (DSL) engineered specifically for defining 2D pixel art spritesheets, character cell atlases, palettes, and multi-directional animations as pure structured data.
@@ -26,7 +28,7 @@ While **NOIRADIX Studio** serves as the initial reference visual editor and suit
 ```
 pix2/
 ├── README.md               # Standard overview & creator accreditation
-├── SPECIFICATION.md        # Canonical language specification v1.0
+├── SPECIFICATION.md        # Historical language specification v1.0
 ├── LICENSE-CODE            # Apache-2.0 for reference code & compiler
 ├── LICENSE-SPEC            # CC BY 4.0 for specifications & documentation
 ├── js/                     # Canonical JavaScript compiler/parser implementation

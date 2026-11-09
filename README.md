@@ -9,7 +9,7 @@
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.0.0-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.0-8b5cf6.svg" alt="Studio Version"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.1-6366f1.svg" alt="PIX2 Standard"></a>
     <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
     <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
@@ -449,7 +449,7 @@ noiradix-studio/
 │
 ├── pix2/                        # Standalone PIX2 standard distribution
 │   ├── README.md                # Language specification overview & creator credits
-│   ├── SPECIFICATION.md         # Canonical language specification v1.0
+│   ├── SPECIFICATION.md         # Historical language specification v1.0
 │   ├── LICENSE-CODE             # Apache-2.0 license for reference engine
 │   ├── LICENSE-SPEC             # CC BY 4.0 license for standard specifications
 │   ├── js/                      # Canonical reference JavaScript implementation
@@ -499,7 +499,7 @@ Looking for detailed technical deep-dives, EBNF grammars, or engineering roadmap
 
 👉 **[Explore the NOIRADIX Studio Documentation Hub (`docs/README.md`)](docs/README.md)**
 
-* **[PIX2 Language Specification](docs/PIX2/PIX2_SPEC.md)**
+* **[PIX2 1.1 Language Specification](PIX2_SPECIFICATION.md)**
 * **[AI Authoring & Prompting Guide](docs/PIX2/PIX2_AI_AUTHORING_GUIDE.md)**
 * **[Grid & Cell Model Architecture](docs/FEATURES/GRID_AND_CELL_MODEL.md)**
 * **[Animation Engine & Directional Locomotion](docs/FEATURES/ANIMATION_MODEL.md)**

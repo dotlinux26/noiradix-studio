@@ -301,63 +301,46 @@ PIX2 1.1 evolves the standard from flat pixel arrays into a structured, hierarch
 
 ### 8.1 Structural Primitives: `@layer`, `@group`, and `@region`
 
-#### 8.1.1 The `@layer` Directive
-A top-level visual stratum within a cell. Layers are evaluated in document order (or explicit `z_index`) using standard alpha compositing.
+#### 8.1.1 Structural records
+
+Use unique node IDs and explicit ownership. Layers reference a cell. Groups and Regions reference a Layer or Group within that same cell. A Region owns raster commands. The canonical serializer emits flat blocks with explicit references.
+
 ```pix2
+@pix2 1.1
+@grid
+  cols: 1
+  rows: 1
+  default_cell: 16x16
 @cell cell_0_0
-  @layer base_body
-    name: "Body & Silhouette"
-    visible: true
-    opacity: 1.0
-    z_index: 0
-    @region skin
-      name: "Skin"
-      p 7,6 #ffccaa
-      p 8,6 #ffccaa
+@layer body
+  cell: cell_0_0
+  name: "Body"
+  opacity: 0.5
+  blend: normal
+@group face
+  cell: cell_0_0
+  parent: body
+  opacity: 0.5
+@region left_eye
+  cell: cell_0_0
+  parent: face
+  opacity: 0.5
+  tags: [face, eyes]
+  p 6,5 #38bdf880
 ```
-* **Properties:**
-  - `name: <string>` — Human-readable display label.
-  - `visible: <boolean>` — Visibility toggle (default: `true`).
-  - `opacity: <float>` — Floating-point alpha multiplier between `0.0` and `1.0` (default: `1.0`).
-  - `blend: <string>` — Compositing blend mode (`normal`).
-  - `z_index: <integer>` — Explicit layer rendering depth (default: document pre-order).
 
-#### 8.1.2 The `@group` Directive
-A hierarchical organizational folder inside a layer or parent group. Groups inherit parent visibility and opacity.
-```pix2
-    @group equipment
-      name: "Armor & Weapons"
-      visible: true
-      opacity: 1.0
-      collapsed: false
-      @region chestplate
-        name: "Steel Chestplate"
-        p 6,8 #8899aa
-```
-* **Properties:**
-  - `name: <string>` — Human-readable folder name.
-  - `visible: <boolean>` — Cascading visibility flag.
-  - `opacity: <float>` — Cascading opacity multiplier.
-  - `collapsed: <boolean>` — Editor tree fold state.
+| Property | Layer | Group | Region | Meaning |
+|---|---|---|---|---|
+| `cell` | Yes | Yes | Yes | Owning cell ID |
+| `parent` | | Yes | Yes | Layer or Group ID in the same cell |
+| `name` | Yes | Yes | Yes | Display label |
+| `visible` | Yes | Yes | Yes | Defaults to true and is inherited |
+| `locked` | Yes | Yes | Yes | Defaults to false and restricts editing |
+| `opacity` | Yes | Yes | Yes | Finite number between 0 and 1 inclusive, defaults to 1 |
+| `blend` | Yes | | | `normal` |
+| `tags` | | Yes | Yes | List of identifiers |
 
-#### 8.1.3 The `@region` Directive (Semantic Isolation)
-A named, isolated pixel partition representing an individual anatomical feature, garment, or accessory (e.g., `left_eye`, `visor`, `cape`).
-```pix2
-      @region left_eye
-        name: "Left Eye"
-        visible: true
-        opacity: 1.0
-        color: #38bdf8
-        tags: ["face", "eyes"]
-        p 6,5 #38bdf8
-```
-* **Properties:**
-  - `name: <string>` — Human-readable semantic name.
-  - `visible: <boolean>` — Visibility flag.
-  - `opacity: <float>` — Local opacity multiplier.
-  - `color: <hex>` — Swatch accent color in the editor UI.
-  - `tags: [<string>, ...]` — Optional query tags for AI reasoning.
-  - `p <x,y> <color>` — Local cell-anchored pixel coordinates.
+Sibling order is the paint order. `z_index`, tree fold state, selection, zoom, and isolation are outside the file contract. Structural parent cycles and excessive Group depth are invalid.
 
 ### 8.2 Semantic Isolation & Zero Cross-Region Mutation Invariant
 
@@ -366,11 +349,13 @@ In traditional flat pixel art formats, sprites are an undifferentiated bag of co
 **PIX2 1.1 Semantic Isolation solves this:**
 1. **Isolated Paint Target:** Drawing tools (pen, eraser, line, fill) write strictly into the active `@region`.
 2. **Zero Cross-Region Mutation:** Pixels belonging to sibling or parent regions remain strictly immutable during edit transactions.
-3. **Editor Isolation:** Studio and PixelArt hide content outside the isolated subtree in the editing viewport. The view preserves the isolated content's layer opacity. Isolation does not affect the saved or exported composite.
+3. **Editor Isolation:** Studio and PixelArt hide content outside the isolated subtree in the editing viewport. The view preserves the isolated content's inherited opacity. Isolation does not affect the saved or exported composite.
 
 ### 8.3 Compositing, Z-Order & Alpha Blending
 
-Cells composite structural nodes using standard Porter-Duff source-over normal alpha blending:
+The effective source alpha is the pixel alpha multiplied by the opacity of its Region, each ancestor Group, and its Layer. The example above therefore produces `#38bdf810` over a transparent destination. Ink % is an editor brush setting. It scales the color's alpha at paint time, and the resulting pixel alpha is written as `#RRGGBBAA` or as a reference to an RGBA palette entry. Zero ink skips drawing. Node opacity remains separate from pixel data.
+
+Cells composite structural nodes using Porter-Duff source-over normal alpha blending. The reference engine rounds RGB and alpha to 8-bit channels after each blend:
 $$\alpha_{\text{out}} = \alpha_A + \alpha_B (1 - \alpha_A)$$
 $$C_{\text{out}} = \frac{C_A \alpha_A + C_B \alpha_B (1 - \alpha_A)}{\alpha_{\text{out}}}$$
 
@@ -440,34 +425,27 @@ GridProperty       ::= WS* ("columns" | "cols") ":" WS* Integer
 PaletteSection     ::= "@palette" EOL (PaletteEntry EOL)+
 PaletteEntry       ::= WS* (Identifier | Integer) ":" WS* HexColor (WS* Comment)?
 
-CellSection        ::= ("@cell" | "@frame") WS+ Identifier EOL (CellProperty | PixelLine | VectorPrimitive | LayerSection)*
+CellSection        ::= ("@cell" | "@frame") WS+ Identifier EOL (CellProperty | PixelLine | VectorPrimitive)* (LayerSection | GroupSection | RegionSection)*
 CellProperty       ::= WS* "name:" WS* StringLiteral EOL
                      | WS* "direction:" WS* DirectionEnum EOL
                      | WS* "frame:" WS* Integer EOL
                      | WS* "size:" WS* Dimension EOL
                      | WS* "grid_pos:" WS* Integer "," Integer EOL
 
-LayerSection       ::= WS* "@layer" WS+ Identifier EOL (LayerProperty | GroupSection | RegionSection | PixelLine | VectorPrimitive)*
-LayerProperty      ::= WS* "name:" WS* StringLiteral EOL
+LayerSection       ::= "@layer" WS+ Identifier EOL (NodeProperty | LayerProperty)*
+GroupSection       ::= "@group" WS+ Identifier EOL (NodeProperty | ChildProperty)*
+RegionSection      ::= "@region" WS+ Identifier EOL (NodeProperty | ChildProperty | PixelLine | VectorPrimitive)*
+NodeProperty       ::= WS* "cell:" WS* Identifier EOL
+                     | WS* "name:" WS* StringLiteral EOL
                      | WS* "visible:" WS* Boolean EOL
-                     | WS* "opacity:" WS* Float EOL
-                     | WS* "blend:" WS* StringLiteral EOL
-                     | WS* "z_index:" WS* Integer EOL
-
-GroupSection       ::= WS* "@group" WS+ Identifier EOL (GroupProperty | GroupSection | RegionSection | PixelLine | VectorPrimitive)*
-GroupProperty      ::= WS* "name:" WS* StringLiteral EOL
-                     | WS* "visible:" WS* Boolean EOL
-                     | WS* "opacity:" WS* Float EOL
-                     | WS* "collapsed:" WS* Boolean EOL
-
-RegionSection      ::= WS* "@region" WS+ Identifier EOL (RegionProperty | PixelLine | VectorPrimitive)*
-RegionProperty     ::= WS* "name:" WS* StringLiteral EOL
-                     | WS* "visible:" WS* Boolean EOL
-                     | WS* "opacity:" WS* Float EOL
-                     | WS* "color:" WS* HexColor EOL
+                     | WS* "locked:" WS* Boolean EOL
+                     | WS* "opacity:" WS* OpacityNumber EOL
+LayerProperty      ::= WS* "blend:" WS* "normal" EOL
+ChildProperty      ::= WS* "parent:" WS* Identifier EOL
                      | WS* "tags:" WS* TagList EOL
-
-TagList            ::= "[" WS* (StringLiteral (WS* "," WS* StringLiteral)*)? WS* "]"
+OpacityNumber      ::= ("+" | "-")? ([0-9]+ ("." [0-9]*)? | "." [0-9]+)
+                       (("e" | "E") ("+" | "-")? [0-9]+)?
+TagList            ::= "[" WS* (Identifier (WS* "," WS* Identifier)*)? WS* "]"
 
 DirectionEnum      ::= "down" | "up" | "right" | "left"
                      | "down_right" | "down_left" | "up_right" | "up_left"

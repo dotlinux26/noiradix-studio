@@ -31,7 +31,7 @@ const fixture = `@pix2 1.1
   p 5,2 #00ff00
 `;
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ channel: process.env.EDITOR_QA_CHANNEL || 'chrome', headless: true });
   try {
     let studioTools;
     const studioCircles = new Map();

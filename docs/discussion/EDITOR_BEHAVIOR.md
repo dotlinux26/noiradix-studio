@@ -14,7 +14,7 @@
 | Esc | Hủy thao tác kéo chưa commit. Khi đang isolation, Esc trả về Region Select cùng focus ban đầu. Esc tiếp theo bỏ viền chọn. |
 | Marquee | Chọn theo mặt nạ pixel. Copy, cut, paste, fill và biến đổi raster trong Studio đọc và ghi payload của Region đích. Trạng thái floating giữ đích từ lúc lift. |
 | Brush và Eraser | Cọ vuông 1–32 px, mỗi công cụ có kích thước riêng. Cỡ lẻ bám tâm pixel, cỡ chẵn bám giao điểm lưới gần con trỏ. Viền dự báo dùng đúng footprint vẽ hoặc xóa, kể cả khi sát mép. Brush, Eraser và Ink mỗi mục có một dòng với thanh kéo và ô số đồng bộ. |
-| Layer opacity | 0–100% trên UI, chuẩn hóa thành 0–1 trong PIX2 1.1. Đây là thuộc tính riêng với alpha RGBA của pixel. Group/Region opacity là khoảng lệch giữa đặc tả và parser hiện hành. |
+| Node opacity | Layer chỉnh 0–100% trên UI. Layer, Group và Region lưu 0–1 trong PIX2 1.1. Composite nhân alpha RGBA với opacity của Region và các node cha. Ink % ghi alpha vào nét vẽ. |
 
 Giữ hai công cụ trên cùng toolbar vì chúng thao tác trên hai loại dữ liệu. Marquee thao tác trên pixel của một đích vẽ. Region Select thao tác trên node có định danh và cây Group. Kéo, nudge, scale và rotate áp dụng cho các Region con trong cùng khung tọa độ, giữ cây và ID. Scale và rotate dự báo khung trước khi commit. Clipboard đối tượng vẫn mở. [Adobe Illustrator về chọn Group](https://helpx.adobe.com/illustrator/desktop/manage-objects/select-objects/select-object-groups-and-nested-object-groups.html), [Adobe Illustrator về isolation](https://helpx.adobe.com/ie/illustrator/desktop/manage-objects/select-objects/isolate-objects.html), [Aseprite về cọ và opacity](https://aseprite.org/docs/context-bar).
 

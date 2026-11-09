@@ -2,7 +2,7 @@ name: CI & GitHub Pages Deployment
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'codex/editor-stabilization' ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
@@ -96,8 +96,49 @@ jobs:
       - name: Run Audit Data Integrity & Regression Tests
         run: node tests/test-audit-integrity.js
 
+      - name: Run Shared Viewport Pan & Zoom Tests
+        run: node tests/test-viewport-pan-zoom.js
+
       - name: Run Performance & Latency Benchmark Suite
         run: node tests/benchmark-performance.js
+
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/noiradix-qa" --no-save playwright@1.65.0
+          "$RUNNER_TEMP/noiradix-qa/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Exercise both editor entry points
+        env:
+          EDITOR_QA_CHANNEL: chromium
+        run: |
+          export NODE_PATH="$RUNNER_TEMP/noiradix-qa/node_modules"
+          python3 -m http.server 8769 --bind 127.0.0.1 > "$RUNNER_TEMP/noiradix-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:8769/ > /dev/null
+          EDITOR_QA_DENSE=1 EDITOR_QA_DPR=2 node tests/browser/test-editor.cjs
+          node tests/browser/test-workspace.cjs
+
+  release:
+    name: Publish verified GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish existing tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node -e 'const v = require("./js/version.js"); const tag = process.env.RELEASE_TAG; if (v.studio.displayVersion !== tag || v.pixelart.displayVersion !== tag) throw new Error("Tag and app versions differ");'
+          gh release create "$RELEASE_TAG" --verify-tag \
+            --title "NOIRADIX Studio & PixelArt $RELEASE_TAG" \
+            --notes-file "docs/releases/$RELEASE_TAG.md"
 
   # 2. CD Deployment: Deploy static web application to GitHub Pages
   deploy:

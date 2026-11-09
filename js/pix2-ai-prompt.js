@@ -13,7 +13,7 @@ const Pix2AiPrompt = (() => {
     const limits = PIX2.PROFILES[profile];
     const rules =
       version === '1.1'
-        ? 'Declare @cell before its @layer, @group and @region blocks. Layers belong to a cell, groups belong to a layer or group, and regions belong to a layer or group in that same cell. Put pixel commands inside @region. Keep IDs globally unique, preserve parent references, and retain sibling order from back to front. Layer opacity is 0–1 with normal blending. Group and Region support visibility and locks.'
+        ? 'Declare @cell before its @layer, @group and @region blocks. Layers belong to a cell, groups belong to a layer or group, and regions belong to a layer or group in that same cell. Put pixel commands inside @region. Keep IDs globally unique, preserve parent references, and retain sibling order from back to front. Layer, Group and Region support opacity from 0 to 1, visibility, and locks. Use normal blending.'
         : 'Keep the legacy flat structure. Put pixel commands inside @cell. Convert explicitly to PIX2 1.1 before introducing a Layer, Group or Region.';
     const detail = detailed
       ? [
@@ -23,7 +23,7 @@ const Pix2AiPrompt = (() => {
           'For animation, put the ordered cell IDs in frames: [first_cell, second_cell]. Preserve direction, fps, loop and mode. Keep repeated frame IDs when the clip intentionally holds a pose.',
           `Stay within ${limits.maxGridCols} columns, ${limits.maxGridRows} rows, ${limits.maxTotalCells} cells, ${limits.maxFramesPerAnim} frames per animation, and ${limits.maxAnimFps} FPS.`,
           version === '1.1'
-            ? `Stay within ${limits.maxLayersPerCell} layers per cell and group depth ${limits.maxGroupDepth}. Keep each Region inside its owning Layer. Use #RRGGBBAA for partial alpha. Layer opacity multiplies per-pixel alpha during compositing.`
+            ? `Stay within ${limits.maxLayersPerCell} layers per cell and group depth ${limits.maxGroupDepth}. Keep each Region inside its owning Layer. Use #RRGGBBAA for partial alpha. The opacity of each node and its ancestors multiplies per-pixel alpha during compositing.`
             : 'For legacy source, preserve the flat raster and alpha. Ask for an explicit migration before introducing structural blocks.',
           'For modular sprites, keep independently editable components in named Regions and use Groups to preserve hierarchy. Keep coordinates cell-local. Preserve hidden and locked artwork and stable component IDs.',
           'Preserve top-left origins, transparent margins, and alignment when matching an existing atlas or adding a related frame. Keep importer and export metadata outside PIX2 unless a canonical field in the supplied source represents it.',

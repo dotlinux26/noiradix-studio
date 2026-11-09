@@ -167,6 +167,7 @@ git diff --check
 | Browser draft và reload | Chrome mở hai tab, vẽ lên tài liệu import, tải lại ngay trước debounce và so source, ID, thứ tự và tab đang mở. Giả lập localStorage hết quota, chờ IndexedDB ghi xong và reload để kiểm bản mới. Đóng tất cả rồi reload giữ workspace trống. Studio lưu chính danh sách tab mà startup đọc. PixelArt khôi phục danh sách tab và giữ đường kiểm disk baseline cho phiên native đang active. |
 | Đường zoom 512×512 | Đo callback wheel trong Chrome bằng sự kiện có tọa độ theo cả hai chiều. Kiểm một fill nền và một blit ở mỗi nấc thay đổi, không dựng lại buffer 1×, ở 8× chỉ blit phần nhìn thấy và giữ neo con trỏ dưới 2 CSS px. Chạy thêm với `EDITOR_QA_DENSE=1` và `EDITOR_QA_DPR=2`. Đây là chi phí callback JS và layout đồng bộ, chưa bao gồm thời gian GPU trình bày frame. |
 | Fit Grid Overview | Chrome DPR 2 mở sheet 4×4 có frame 512×512, Fit dưới 1×, thu nhỏ thêm, Shift+Space, rồi double-click đúng frame góc dưới phải. Canvas Grid giới hạn backing store 4096 px mỗi chiều. |
+| Hợp đồng PIX2 1.1 | Vector `canonical_v11_opacity.pix2` kiểm thứ tự Group xen Region, alpha theo cả ba cấp, opacity 0, lưu/mở lại và byte parity compiler. Suite 1.1 kiểm opacity sai cú pháp, Group depth 16/17, cycle, Ungroup, flatten và modular export. |
 | Studio workspace | Dự án Ghost sẵn có, tab mới và đóng đúng tab, ưu tiên bốn tab kể cả khi đã mở cell editor, hai thanh kéo bằng chuột và wheel, resize panel ngang, crop tay 3×3, chỉnh width, xóa, nhập tên nhiều ký tự, gán tag chéo và frame #2. Import PNG alpha vào dự án riêng và giữ nguyên source dự án ban đầu. |
 | PixelArt workspace | PNG alpha qua file input, ghi vào Region, giữ source tab cũ, đóng hết rồi reload ở trạng thái trống. |
 | Chuyển đổi Studio | `tests/fixtures/safe01_v10_multicell_alpha_clip.pix2`. So pixel và animation với nguồn, vẽ ngay sau Convert, Undo nét vẽ, Undo/Redo chuyển đổi. |
@@ -180,5 +181,5 @@ Cả hai runner browser exit 0 trên working tree của lượt này. Các kết
 
 1. `SAFE-03–05`, `SEL-01–02`, `TREE-03–05`. Kiểm toàn bộ cử chỉ marquee trên hai app. Chốt hợp đồng resize, rotate và clipboard đối tượng giữ cấu trúc. Kiểm switch file, focus cây, cancel và thao tác khi khóa.
 2. `IO-02–06`, `PROJ-03–04`. Chạy các ca native handle, Save A/B và reload recovery bằng file thử. Kiểm nhiều tab qua reload và trạng thái file thay đổi khi đang ghi.
-3. `IMP-02`, `ANIM-01–02`, `EXP-01–05`. Chạy fixtures rotated/trimmed/multipage, animation và xuất modular/Unity. Đối chiếu Group/Region opacity từ grammar đến engine và export.
+3. `IMP-02`, `ANIM-01–02`, `EXP-01–05`. Chạy thêm fixtures rotated/trimmed/multipage, animation và kiểm Unity trong ứng dụng đích.
 4. `PERF-01–02`, `QA-01`, `REL-01–03`. Đo browser và kiểm conformance/release theo từng case đã có bằng chứng.

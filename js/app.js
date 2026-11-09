@@ -8802,8 +8802,8 @@ const outText = PIX2.serialize(doc);</code></pre>
 
       const unityJsonData = {
         meta: {
-          app: "NOIRADIX Studio v2.0.0",
-          version: "2.0.0",
+          app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
+          version: NOIRADIX_VERSION.studio.version,
           formatVersion: "1.1",
           image: pngName,
           cellWidth: state.doc.meta.cellSize.w * opts.scale,
@@ -9176,8 +9176,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         frames: tpFrames,
         animations: tpAnimations,
         meta: {
-          app: "NOIRADIX Studio v2.0.0",
-          version: "2.0.0",
+          app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
+          version: NOIRADIX_VERSION.studio.version,
           formatVersion: "1.1",
           image: pngName,
           format: "RGBA8888",
