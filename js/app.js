@@ -46,6 +46,9 @@
     selectedSliceIndex: -1,
     activeTool: 'select', // 'select' | 'draw' | 'hand'
     zoom: 1,
+    showPixelGrid: true,
+    showLabels: true,
+    showRulers: true,
     isDrawingSlice: false,
     isDraggingSlice: false,
     isResizingSlice: false,
@@ -154,6 +157,9 @@
     populatePaletteDropdown();
 
     await initAppSession();
+    if (projectSessions.length === 0 && state.doc) {
+      syncOrRegisterProjectSession(state.doc, currentFileName || 'noiradix_ghost.pix2', currentFileHandle, currentFilePath || 'noiradix_ghost.pix2');
+    }
     renderProjectTabs();
     updateAutosaveIndicator('saved', Date.now());
     initFileWatcher();
@@ -376,6 +382,23 @@
     dom.btnAutoTag4Dir = document.getElementById('btn-auto-tag-4dir');
     dom.btnAutoTag8Dir = document.getElementById('btn-auto-tag-8dir');
     dom.btnClearAllTags = document.getElementById('btn-clear-all-tags');
+    dom.btnSliceToggleGrid = document.getElementById('btn-slice-toggle-grid');
+    dom.btnSliceToggleRulers = document.getElementById('btn-slice-toggle-rulers');
+    dom.btnSliceToggleLabels = document.getElementById('btn-slice-toggle-labels');
+    dom.sliceCoordsInfo = document.getElementById('slice-coords-info');
+    dom.importSliceOverlay = document.getElementById('import-slice-overlay');
+    dom.sliceContainerWithRulers = document.getElementById('slice-container-with-rulers');
+    dom.sliceRulerTop = document.getElementById('slice-ruler-top');
+    dom.sliceRulerLeft = document.getElementById('slice-ruler-left');
+    dom.sliceRulerCorner = document.getElementById('slice-ruler-corner');
+    dom.btnCellResizeFrame = document.getElementById('btn-cell-resize-frame');
+    dom.chkResizeFrameCenter = document.getElementById('chk-resize-frame-center');
+
+    // Grid Overview Zoom Controls
+    dom.btnGridZoomOut = document.getElementById('btn-grid-zoom-out');
+    dom.gridZoomLevel = document.getElementById('grid-zoom-level');
+    dom.btnGridZoomIn = document.getElementById('btn-grid-zoom-in');
+    dom.btnGridZoomReset = document.getElementById('btn-grid-zoom-reset');
 
     // Direction 2-dir button
     dom.btnMode2dir = document.getElementById('btn-mode-2dir');
@@ -724,14 +747,22 @@
     const path = filePath || currentFilePath || name;
     const title = (doc.meta && doc.meta.title) || name;
 
-    let session = projectSessions.find(p => p.id === activeProjectId);
+    // Check if the currently active session is the one being synced
+    let session = projectSessions.find(p => p.id === activeProjectId && (p.fileName === name || p.filePath === path));
+    
+    // Otherwise look for any open session matching this file/path
     if (!session) {
       session = projectSessions.find(p => (p.filePath && p.filePath === path) || (p.fileName && p.fileName === name));
     }
 
     if (!session) {
+      if (activeProjectId) {
+        saveCurrentSessionState();
+      }
       const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
       session = new ProjectSession(newId, title, doc, fileHandle, name, path);
+      session.lastSavedContent = (typeof PIX2 !== 'undefined') ? PIX2.serialize(doc) : '';
+      session.isDirty = isDocumentDirty;
       projectSessions.push(session);
       activeProjectId = newId;
     } else {
@@ -740,10 +771,9 @@
       session.fileName = name;
       session.filePath = path;
       if (fileHandle) session.fileHandle = fileHandle;
-      activeProjectId = session.id;
+      session.isDirty = isDocumentDirty;
     }
 
-    session.isDirty = isDocumentDirty;
     renderProjectTabs();
     return session;
   }
@@ -1527,11 +1557,6 @@
     if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
       return;
     }
-    if (isDocumentDirty) {
-      if (!confirm('You have unsaved changes. Discard and create new file?')) {
-        return;
-      }
-    }
     if (!dom.modalNewFile) return;
 
     if (dom.newFileNameInput) {
@@ -1631,8 +1656,9 @@
     if (!state.doc) return;
     const newW = dom.resizeFrameW ? Math.min(512, Math.max(1, parseInt(dom.resizeFrameW.value, 10) || 16)) : 16;
     const newH = dom.resizeFrameH ? Math.min(512, Math.max(1, parseInt(dom.resizeFrameH.value, 10) || 16)) : 16;
+    const shouldCenter = dom.chkResizeFrameCenter ? dom.chkResizeFrameCenter.checked : false;
     closeResizeFrameModal();
-    setResolution(newW, newH);
+    setResolution(newW, newH, shouldCenter);
   }
 
   function closeNewFileModal() {
@@ -1703,6 +1729,8 @@
     }
 
     closeNewFileModal();
+    selectedGridCellId = 'cell_0_0';
+    renderProjectTabs();
     refreshAll();
     showToast(`Created new file "${cleanFileName}"!`, 'success');
   }
@@ -1895,6 +1923,14 @@
         renderCodeEditor();
       } else if (state.activeTabId === 'tab-import-slice') {
         switchView('import-slice');
+        if (state.doc && state.doc.meta && state.doc.meta.cellSize) {
+          if (dom.inputSliceCellW && !dom.inputSliceCellW.dataset.userModified) {
+            dom.inputSliceCellW.value = state.doc.meta.cellSize.w;
+          }
+          if (dom.inputSliceCellH && !dom.inputSliceCellH.dataset.userModified) {
+            dom.inputSliceCellH.value = state.doc.meta.cellSize.h;
+          }
+        }
         renderImportSliceView();
       } else {
         switchView('cell');
@@ -1958,7 +1994,7 @@
   function renderTabs() {
     dom.tabsContainer.innerHTML = '';
 
-    // 1. Grid Overview Tab (Pinned)
+    // 1. Grid Overview Tab (Pinned #1)
     const gridTab = createTabElement({
       id: 'tab-grid-overview',
       title: 'Grid Overview',
@@ -1968,7 +2004,7 @@
     });
     dom.tabsContainer.appendChild(gridTab);
 
-    // 2. Dedicated Animation Studio Tab (Pinned)
+    // 2. Dedicated Animation Studio Tab (Pinned #2)
     const animStudioTab = createTabElement({
       id: 'tab-anim-studio',
       title: 'Animation Studio',
@@ -1978,7 +2014,27 @@
     });
     dom.tabsContainer.appendChild(animStudioTab);
 
-    // 3. Open Cell Tabs
+    // 3. Import & Slice Tab (Pinned #3)
+    const importSliceTab = createTabElement({
+      id: 'tab-import-slice',
+      title: 'Import & Slice',
+      icon: 'fa-solid fa-scissors',
+      isActive: state.activeTabId === 'tab-import-slice',
+      closable: false
+    });
+    dom.tabsContainer.appendChild(importSliceTab);
+
+    // 4. PIX2 Code & AI Tab (Pinned #4)
+    const codeTab = createTabElement({
+      id: 'tab-pix2-code',
+      title: 'PIX2 Code & AI',
+      icon: 'fa-solid fa-code',
+      isActive: state.activeTabId === 'tab-pix2-code',
+      closable: false
+    });
+    dom.tabsContainer.appendChild(codeTab);
+
+    // 5. Open Cell Editor Tabs (Appended after the 4 primary tabs)
     state.openCellTabs.forEach(cellId => {
       const cell = state.doc ? state.doc.cells[cellId] : null;
       const title = cell ? (cell.name || cellId) : cellId;
@@ -1995,26 +2051,6 @@
       });
       dom.tabsContainer.appendChild(tabEl);
     });
-
-    // 4. Import & Slice Tab (Pinned)
-    const importSliceTab = createTabElement({
-      id: 'tab-import-slice',
-      title: 'Import & Slice',
-      icon: 'fa-solid fa-scissors',
-      isActive: state.activeTabId === 'tab-import-slice',
-      closable: false
-    });
-    dom.tabsContainer.appendChild(importSliceTab);
-
-    // 5. PIX2 Code & AI Tab
-    const codeTab = createTabElement({
-      id: 'tab-pix2-code',
-      title: 'PIX2 Code & AI',
-      icon: 'fa-solid fa-code',
-      isActive: state.activeTabId === 'tab-pix2-code',
-      closable: false
-    });
-    dom.tabsContainer.appendChild(codeTab);
   }
 
   function createTabElement({ id, title, icon, isActive, closable, onClose }) {
@@ -2072,6 +2108,29 @@
     cellGapY: 52,
     zoom: 4
   };
+
+  const GRID_ZOOM_LEVELS = [1, 2, 3, 4, 6, 8, 12, 16];
+
+  function setGridZoom(newZoom) {
+    const clamped = Math.max(1, Math.min(16, Math.round(newZoom)));
+    GRID_LAYOUT.zoom = clamped;
+    if (dom.gridZoomLevel) {
+      dom.gridZoomLevel.textContent = `${clamped}×`;
+    }
+    renderGridOverview();
+  }
+
+  function zoomGridIn() {
+    const cur = GRID_LAYOUT.zoom || 4;
+    const next = GRID_ZOOM_LEVELS.find(z => z > cur) || 16;
+    setGridZoom(next);
+  }
+
+  function zoomGridOut() {
+    const cur = GRID_LAYOUT.zoom || 4;
+    const prev = [...GRID_ZOOM_LEVELS].reverse().find(z => z < cur) || 1;
+    setGridZoom(prev);
+  }
 
   let gridRowDeleteButtons = [];
   let gridRowDuplicateButtons = [];
@@ -3560,7 +3619,13 @@
             showToast(`Unable to convert document: ${upgrade.error || 'unknown error'}`, 'error');
             return;
           }
+          const curSession = getActiveSession();
+          if (curSession) {
+            curSession.doc = state.doc;
+          }
+          saveCurrentSessionState();
           triggerEventAutosave();
+          renderProjectTabs();
           refreshAll();
           showToast('Converted document to PIX2 1.1 layers without changing pixels');
         });
@@ -3700,15 +3765,28 @@
     const clamped = Math.max(0.25, Math.min(32, Math.round(newZoom * 100) / 100));
     importSliceState.zoom = clamped;
     applySliceZoom();
+    renderImportSliceView();
   }
 
   function applySliceZoom() {
     const canvas = dom.importSliceCanvas;
+    const overlay = dom.importSliceOverlay;
+    const wrapper = document.getElementById('import-slice-canvas-wrapper');
     if (!canvas || !importSliceState.image) return;
     const z = importSliceState.zoom || 1;
-    canvas.style.width = `${Math.round(importSliceState.image.width * z)}px`;
-    canvas.style.height = `${Math.round(importSliceState.image.height * z)}px`;
+    const w = Math.round(importSliceState.image.width * z);
+    const h = Math.round(importSliceState.image.height * z);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     canvas.style.imageRendering = 'pixelated';
+    if (overlay) {
+      overlay.style.width = `${w}px`;
+      overlay.style.height = `${h}px`;
+    }
+    if (wrapper) {
+      wrapper.style.width = `${w}px`;
+      wrapper.style.height = `${h}px`;
+    }
     if (dom.sliceZoomLevel) {
       dom.sliceZoomLevel.textContent = `${Math.round(z * 100)}%`;
     }
@@ -3844,29 +3922,101 @@
     if (!rect.width || !rect.height) return null;
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const x = Math.max(0, Math.min(canvas.width, Math.round((e.clientX - rect.left) * scaleX)));
-    const y = Math.max(0, Math.min(canvas.height, Math.round((e.clientY - rect.top) * scaleY)));
+    const x = Math.max(0, Math.min(canvas.width - 1, Math.floor((e.clientX - rect.left) * scaleX)));
+    const y = Math.max(0, Math.min(canvas.height - 1, Math.floor((e.clientY - rect.top) * scaleY)));
     return { x, y };
   }
 
-  function hitTestSliceHandles(slice, cx, cy) {
+  function drawRoundedRect(ctx, x, y, width, height, radius, fill = true, stroke = false) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+  }
+
+  function hitTestSliceHandles(slice, e) {
     if (!slice || !slice.frame) return null;
-    const { x, y, w, h } = slice.frame;
-    const hitR = 8;
-    if (Math.abs(cx - x) <= hitR && Math.abs(cy - y) <= hitR) return 'nw';
-    if (Math.abs(cx - (x + w)) <= hitR && Math.abs(cy - y) <= hitR) return 'ne';
-    if (Math.abs(cx - (x + w)) <= hitR && Math.abs(cy - (y + h)) <= hitR) return 'se';
-    if (Math.abs(cx - x) <= hitR && Math.abs(cy - (y + h)) <= hitR) return 'sw';
-    if (cx >= x && cx <= x + w && cy >= y && cy <= y + h) return 'move';
+    const canvas = dom.importSliceCanvas;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+    const sx = rect.left + slice.frame.x * scaleX;
+    const sy = rect.top + slice.frame.y * scaleY;
+    const sw = slice.frame.w * scaleX;
+    const sh = slice.frame.h * scaleY;
+
+    const mx = e.clientX;
+    const my = e.clientY;
+    const hitR = 8; // 8 screen pixels
+
+    if (Math.abs(mx - sx) <= hitR && Math.abs(my - sy) <= hitR) return 'nw';
+    if (Math.abs(mx - (sx + sw)) <= hitR && Math.abs(my - sy) <= hitR) return 'ne';
+    if (Math.abs(mx - (sx + sw)) <= hitR && Math.abs(my - (sy + sh)) <= hitR) return 'se';
+    if (Math.abs(mx - sx) <= hitR && Math.abs(my - (sy + sh)) <= hitR) return 'sw';
+    if (mx >= sx && mx <= sx + sw && my >= sy && my <= sy + sh) return 'move';
     return null;
+  }
+
+  function renderSliceRulers(imgW, imgH, zoom) {
+    if (!dom.sliceRulerTop || !dom.sliceRulerLeft) return;
+    if (importSliceState.showRulers === false) {
+      dom.sliceRulerTop.style.display = 'none';
+      dom.sliceRulerLeft.style.display = 'none';
+      if (dom.sliceRulerCorner) dom.sliceRulerCorner.style.display = 'none';
+      return;
+    }
+    dom.sliceRulerTop.style.display = 'flex';
+    dom.sliceRulerLeft.style.display = 'flex';
+    if (dom.sliceRulerCorner) dom.sliceRulerCorner.style.display = 'flex';
+
+    dom.sliceRulerTop.innerHTML = '';
+    dom.sliceRulerLeft.innerHTML = '';
+
+    let step = 16;
+    if (zoom >= 8) step = 2;
+    else if (zoom >= 4) step = 4;
+    else if (zoom >= 2) step = 8;
+    else if (zoom < 1) step = 32;
+
+    for (let x = 0; x < imgW; x += step) {
+      const tick = document.createElement('div');
+      tick.className = 'ruler-tick';
+      const tickW = Math.min(step, imgW - x) * zoom;
+      tick.style.width = `${tickW}px`;
+      tick.textContent = x;
+      dom.sliceRulerTop.appendChild(tick);
+    }
+
+    for (let y = 0; y < imgH; y += step) {
+      const tick = document.createElement('div');
+      tick.className = 'ruler-tick-v';
+      const tickH = Math.min(step, imgH - y) * zoom;
+      tick.style.height = `${tickH}px`;
+      tick.textContent = y;
+      dom.sliceRulerLeft.appendChild(tick);
+    }
   }
 
   function renderImportSliceView() {
     if (!dom.views['import-slice']) return;
     const canvas = dom.importSliceCanvas;
+    const overlay = dom.importSliceOverlay;
     if (!canvas) return;
 
     if (!importSliceState.image) {
+      if (dom.sliceContainerWithRulers) dom.sliceContainerWithRulers.style.display = 'none';
       if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'block';
       canvas.width = 320;
       canvas.height = 240;
@@ -3874,22 +4024,32 @@
       canvas.style.height = '240px';
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (overlay) {
+        overlay.width = 320;
+        overlay.height = 240;
+        overlay.style.width = '320px';
+        overlay.style.height = '240px';
+        const octx = overlay.getContext('2d');
+        octx.clearRect(0, 0, 320, 240);
+      }
       if (dom.sliceZoomLevel) dom.sliceZoomLevel.textContent = '100%';
       renderImportSlicesList();
       return;
     }
 
     if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'none';
+    if (dom.sliceContainerWithRulers) dom.sliceContainerWithRulers.style.display = 'inline-grid';
 
     const img = importSliceState.image;
     canvas.width = img.width;
     canvas.height = img.height;
     applySliceZoom();
+    renderSliceRulers(img.width, img.height, importSliceState.zoom || 1);
 
+    // 1. Draw Checkerboard and Source Image onto base canvas (1:1 pixels)
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    // Checkerboard
     const isDark = document.body.classList.contains('dark-theme');
     const c1 = isDark ? '#1f202e' : '#ffffff';
     const c2 = isDark ? '#171822' : '#e2e8f0';
@@ -3899,11 +4059,159 @@
         ctx.fillRect(x, y, 8, 8);
       }
     }
-
-    // Draw source image
     ctx.drawImage(img, 0, 0);
 
-    // Draw sliced frame boxes and labels
+    // 2. High-DPI Sharp Vector Overlay for Grid, Slices, Handles, Labels, and Marquee
+    if (overlay) {
+      const dpr = window.devicePixelRatio || 1;
+      const zoom = importSliceState.zoom || 1;
+      const screenW = Math.round(img.width * zoom);
+      const screenH = Math.round(img.height * zoom);
+      overlay.width = Math.round(screenW * dpr);
+      overlay.height = Math.round(screenH * dpr);
+      overlay.style.width = `${screenW}px`;
+      overlay.style.height = `${screenH}px`;
+
+      const octx = overlay.getContext('2d');
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      octx.clearRect(0, 0, screenW, screenH);
+
+      // Pixel Grid (Crisp 1px lines when zoom >= 3x and enabled)
+      if (importSliceState.showPixelGrid !== false && zoom >= 3) {
+        octx.save();
+        octx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
+        octx.lineWidth = 1;
+        octx.beginPath();
+        for (let x = 0; x <= img.width; x++) {
+          const px = Math.floor(x * zoom) + 0.5;
+          octx.moveTo(px, 0);
+          octx.lineTo(px, screenH);
+        }
+        for (let y = 0; y <= img.height; y++) {
+          const py = Math.floor(y * zoom) + 0.5;
+          octx.moveTo(0, py);
+          octx.lineTo(screenW, py);
+        }
+        octx.stroke();
+        octx.restore();
+      }
+
+      const frames = importSliceState.frames || [];
+      const showLabels = (importSliceState.showLabels !== false);
+
+      frames.forEach((f, idx) => {
+        const rect = f.frame;
+        const isSelected = (idx === importSliceState.selectedSliceIndex);
+        const sx = Math.floor(rect.x * zoom);
+        const sy = Math.floor(rect.y * zoom);
+        const sw = Math.floor(rect.w * zoom);
+        const sh = Math.floor(rect.h * zoom);
+
+        octx.save();
+        if (isSelected) {
+          // Selected slice fill and outline
+          octx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+          octx.fillRect(sx, sy, sw, sh);
+
+          octx.strokeStyle = '#10b981';
+          octx.lineWidth = 2;
+          octx.strokeRect(sx + 0.5, sy + 0.5, sw, sh);
+
+          // Crisp screen handles (8x8 screen pixels, never blurry!)
+          const handleSize = 8;
+          const half = handleSize / 2;
+          const handles = [
+            [sx, sy],
+            [sx + sw, sy],
+            [sx + sw, sy + sh],
+            [sx, sy + sh]
+          ];
+          octx.fillStyle = '#10b981';
+          octx.strokeStyle = '#ffffff';
+          octx.lineWidth = 1.5;
+          handles.forEach(([hx, hy]) => {
+            octx.fillRect(hx - half, hy - half, handleSize, handleSize);
+            octx.strokeRect(hx - half + 0.5, hy - half + 0.5, handleSize, handleSize);
+          });
+
+          // Crisp label badge
+          if (showLabels) {
+            const labelText = `${f.name || `slice_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''} (${rect.w}×${rect.h})`;
+            octx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            const metrics = octx.measureText(labelText);
+            const badgeW = metrics.width + 12;
+            const badgeH = 18;
+            const badgeY = (sy - badgeH - 2 >= 0) ? (sy - badgeH - 2) : (sy + 2);
+
+            octx.fillStyle = '#10b981';
+            drawRoundedRect(octx, sx, badgeY, badgeW, badgeH, 3, true, false);
+            octx.fillStyle = '#ffffff';
+            octx.textBaseline = 'middle';
+            octx.fillText(labelText, sx + 6, badgeY + badgeH / 2);
+          }
+        } else {
+          // Unselected slice outline
+          octx.strokeStyle = 'rgba(99, 102, 241, 0.85)';
+          octx.lineWidth = 1.5;
+          octx.strokeRect(sx + 0.5, sy + 0.5, sw, sh);
+
+          // Compact badge for unselected slice
+          if (showLabels) {
+            const labelText = `${f.name || `slice_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''}`;
+            octx.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            const metrics = octx.measureText(labelText);
+            const badgeW = Math.min(sw, metrics.width + 10);
+            const badgeH = 15;
+            const badgeY = (sy - badgeH - 1 >= 0) ? (sy - badgeH - 1) : (sy + 1);
+
+            octx.fillStyle = 'rgba(99, 102, 241, 0.9)';
+            drawRoundedRect(octx, sx, badgeY, badgeW, badgeH, 2, true, false);
+            octx.fillStyle = '#ffffff';
+            octx.textBaseline = 'middle';
+            octx.save();
+            octx.beginPath();
+            octx.rect(sx, badgeY, badgeW, badgeH);
+            octx.clip();
+            octx.fillText(labelText, sx + 4, badgeY + badgeH / 2);
+            octx.restore();
+          }
+        }
+        octx.restore();
+      });
+
+      // Live drag marquee
+      if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
+        const dr = importSliceState.currentDragRect;
+        const dsx = Math.floor(dr.x * zoom);
+        const dsy = Math.floor(dr.y * zoom);
+        const dsw = Math.floor(dr.w * zoom);
+        const dsh = Math.floor(dr.h * zoom);
+
+        octx.save();
+        octx.strokeStyle = '#10b981';
+        octx.lineWidth = 1.5;
+        octx.setLineDash([4, 4]);
+        octx.strokeRect(dsx + 0.5, dsy + 0.5, dsw, dsh);
+        octx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+        octx.fillRect(dsx, dsy, dsw, dsh);
+        octx.setLineDash([]);
+
+        const dimText = `${dr.w} × ${dr.h} px`;
+        octx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const metrics = octx.measureText(dimText);
+        const badgeW = metrics.width + 10;
+        const badgeH = 18;
+        const badgeY = (dsy - badgeH - 2 >= 0) ? (dsy - badgeH - 2) : (dsy + 2);
+
+        octx.fillStyle = '#10b981';
+        drawRoundedRect(octx, dsx, badgeY, badgeW, badgeH, 3, true, false);
+        octx.fillStyle = '#ffffff';
+        octx.textBaseline = 'middle';
+        octx.fillText(dimText, dsx + 5, badgeY + badgeH / 2);
+        octx.restore();
+      }
+    }
+
     const frames = importSliceState.frames || [];
     if (dom.sliceCountBadge) {
       dom.sliceCountBadge.textContent = `${frames.length} slice${frames.length === 1 ? '' : 's'} detected`;
@@ -3912,73 +4220,6 @@
       dom.btnSliceDeleteSelected.disabled = (importSliceState.selectedSliceIndex < 0 || importSliceState.selectedSliceIndex >= frames.length);
     }
 
-    ctx.save();
-    frames.forEach((f, idx) => {
-      const rect = f.frame;
-      const isSelected = (idx === importSliceState.selectedSliceIndex);
-
-      if (isSelected) {
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
-        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-
-        const handleSize = 6;
-        ctx.fillStyle = '#10b981';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        const corners = [
-          [rect.x, rect.y],
-          [rect.x + rect.w, rect.y],
-          [rect.x + rect.w, rect.y + rect.h],
-          [rect.x, rect.y + rect.h]
-        ];
-        corners.forEach(([hx, hy]) => {
-          ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
-          ctx.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
-        });
-
-        const labelText = `${f.name || `frame_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''} (${rect.w}×${rect.h})`;
-        ctx.font = 'bold 10px monospace';
-        const labelW = Math.min(Math.max(rect.w, 90), ctx.measureText(labelText).width + 8);
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(rect.x, Math.max(0, rect.y - 15), labelW, 15);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(labelText, rect.x + 4, Math.max(0, rect.y - 15) + 11);
-      } else {
-        ctx.strokeStyle = '#6366f1';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
-
-        const labelText = `${f.name || `frame_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''}`;
-        ctx.font = '10px monospace';
-        const labelW = Math.min(rect.w, 90);
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.85)';
-        ctx.fillRect(rect.x, Math.max(0, rect.y - 14), labelW, 14);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(labelText, rect.x + 3, Math.max(0, rect.y - 14) + 10);
-      }
-    });
-
-    if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
-      const dr = importSliceState.currentDragRect;
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.strokeRect(dr.x + 0.5, dr.y + 0.5, dr.w, dr.h);
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
-      ctx.fillRect(dr.x, dr.y, dr.w, dr.h);
-
-      const dimText = `${dr.w} × ${dr.h} px`;
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = '#10b981';
-      ctx.fillRect(dr.x, Math.max(0, dr.y - 16), 84, 16);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(dimText, dr.x + 4, Math.max(0, dr.y - 16) + 12);
-    }
-
-    ctx.restore();
     renderImportSlicesList();
   }
 
@@ -4196,14 +4437,14 @@
         importSliceState.isDrawingSlice = true;
         importSliceState.dragStartX = coords.x;
         importSliceState.dragStartY = coords.y;
-        importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 0, h: 0 };
+        importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 1, h: 1 };
         renderImportSliceView();
         return;
       }
 
       // Check handle on currently selected slice
       if (selected) {
-        const handle = hitTestSliceHandles(selected, coords.x, coords.y);
+        const handle = hitTestSliceHandles(selected, e);
         if (handle && handle !== 'move') {
           importSliceState.isResizingSlice = true;
           importSliceState.activeHandle = handle;
@@ -4240,7 +4481,7 @@
       importSliceState.isDrawingSlice = true;
       importSliceState.dragStartX = coords.x;
       importSliceState.dragStartY = coords.y;
-      importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 0, h: 0 };
+      importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 1, h: 1 };
       renderImportSliceView();
     });
 
@@ -4257,12 +4498,24 @@
       const coords = getSliceCanvasCoords(e);
       if (!coords) return;
 
+      if (dom.sliceCoordsInfo) {
+        let text = `${coords.x}, ${coords.y}`;
+        if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
+          const dr = importSliceState.currentDragRect;
+          text = `${dr.w}×${dr.h} @ (${dr.x}, ${dr.y})`;
+        } else if (importSliceState.selectedSliceIndex >= 0 && importSliceState.frames[importSliceState.selectedSliceIndex]) {
+          const fr = importSliceState.frames[importSliceState.selectedSliceIndex].frame;
+          text = `${coords.x}, ${coords.y} | Sel: ${fr.w}×${fr.h} @ (${fr.x}, ${fr.y})`;
+        }
+        dom.sliceCoordsInfo.textContent = text;
+      }
+
       if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
         const x1 = Math.min(importSliceState.dragStartX, coords.x);
         const y1 = Math.min(importSliceState.dragStartY, coords.y);
         const x2 = Math.max(importSliceState.dragStartX, coords.x);
         const y2 = Math.max(importSliceState.dragStartY, coords.y);
-        importSliceState.currentDragRect = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+        importSliceState.currentDragRect = { x: x1, y: y1, w: x2 - x1 + 1, h: y2 - y1 + 1 };
         renderImportSliceView();
         return;
       }
@@ -4290,28 +4543,28 @@
           const h = importSliceState.activeHandle;
 
           if (h === 'se') {
-            slice.frame.w = Math.max(4, orig.w + dx);
-            slice.frame.h = Math.max(4, orig.h + dy);
+            slice.frame.w = Math.max(2, orig.w + dx);
+            slice.frame.h = Math.max(2, orig.h + dy);
           } else if (h === 'sw') {
-            slice.frame.x = Math.min(orig.x + orig.w - 4, orig.x + dx);
-            slice.frame.w = Math.max(4, orig.w - dx);
-            slice.frame.h = Math.max(4, orig.h + dy);
+            slice.frame.x = Math.min(orig.x + orig.w - 2, orig.x + dx);
+            slice.frame.w = Math.max(2, orig.w - dx);
+            slice.frame.h = Math.max(2, orig.h + dy);
           } else if (h === 'ne') {
-            slice.frame.y = Math.min(orig.y + orig.h - 4, orig.y + dy);
-            slice.frame.w = Math.max(4, orig.w + dx);
-            slice.frame.h = Math.max(4, orig.h - dy);
+            slice.frame.y = Math.min(orig.y + orig.h - 2, orig.y + dy);
+            slice.frame.w = Math.max(2, orig.w + dx);
+            slice.frame.h = Math.max(2, orig.h - dy);
           } else if (h === 'nw') {
-            slice.frame.x = Math.min(orig.x + orig.w - 4, orig.x + dx);
-            slice.frame.y = Math.min(orig.y + orig.h - 4, orig.y + dy);
-            slice.frame.w = Math.max(4, orig.w - dx);
-            slice.frame.h = Math.max(4, orig.h - dy);
+            slice.frame.x = Math.min(orig.x + orig.w - 2, orig.x + dx);
+            slice.frame.y = Math.min(orig.y + orig.h - 2, orig.y + dy);
+            slice.frame.w = Math.max(2, orig.w - dx);
+            slice.frame.h = Math.max(2, orig.h - dy);
           }
           renderImportSliceView();
         }
         return;
       }
 
-      if (e.target === canvas) {
+      if (e.target === canvas || e.target === dom.importSliceOverlay) {
         if (importSliceState.activeTool === 'hand' || isSpacebarHeld) {
           canvas.style.cursor = 'grab';
           return;
@@ -4324,7 +4577,7 @@
         const frames = importSliceState.frames || [];
         const selected = (importSliceState.selectedSliceIndex >= 0) ? frames[importSliceState.selectedSliceIndex] : null;
         if (selected) {
-          const handle = hitTestSliceHandles(selected, coords.x, coords.y);
+          const handle = hitTestSliceHandles(selected, e);
           if (handle === 'nw' || handle === 'se') {
             canvas.style.cursor = 'nwse-resize';
             return;
@@ -4517,6 +4770,8 @@
       state.endStroke(`Import ${importSliceState.frames.length} Slices`);
       triggerEventAutosave();
       state.activeTabId = 'tab-grid-overview';
+      updateResolutionButtons();
+      centerGridCanvas();
       refreshAll();
       showToast(`Imported ${importSliceState.frames.length} frames into project!`, 'success');
     } catch (err) {
@@ -5883,7 +6138,7 @@
         }
       }
       return;
-    } else if (tool === 'line' || tool === 'rect' || tool === 'select') {
+    } else if (tool === 'line' || tool === 'rect' || tool === 'rect-fill' || tool === 'circle' || tool === 'circle-fill' || tool === 'select') {
       renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color);
     }
   }
@@ -6068,7 +6323,7 @@
         renderCellEditor();
         renderMiniPreview();
       }
-    } else if (tool === 'line' || tool === 'rect' || tool === 'select') {
+    } else if (tool === 'line' || tool === 'rect' || tool === 'rect-fill' || tool === 'circle' || tool === 'circle-fill' || tool === 'select') {
       renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color);
     }
   }
@@ -6122,6 +6377,21 @@
     } else if (tool === 'rect') {
       Tools.plotRect(cell, dragStartX, dragStartY, coords.x, coords.y, color, false, state.symmetry, state.doc.meta.cellSize.w);
       state.endStroke('Rectangle Draw');
+      triggerEventAutosave();
+      refreshAll();
+    } else if (tool === 'rect-fill') {
+      Tools.plotRect(cell, dragStartX, dragStartY, coords.x, coords.y, color, true, state.symmetry, state.doc.meta.cellSize.w);
+      state.endStroke('Filled Rectangle Draw');
+      triggerEventAutosave();
+      refreshAll();
+    } else if (tool === 'circle') {
+      Tools.plotCircle(cell, dragStartX, dragStartY, coords.x, coords.y, color, false, state.symmetry, state.doc.meta.cellSize.w);
+      state.endStroke('Circle Draw');
+      triggerEventAutosave();
+      refreshAll();
+    } else if (tool === 'circle-fill') {
+      Tools.plotCircle(cell, dragStartX, dragStartY, coords.x, coords.y, color, true, state.symmetry, state.doc.meta.cellSize.w);
+      state.endStroke('Filled Circle Draw');
       triggerEventAutosave();
       refreshAll();
     } else if (tool === 'select') {
@@ -6273,6 +6543,31 @@
         const symMinX = cw - 1 - maxX;
         const symMaxX = cw - 1 - minX;
         ctx.strokeRect(symMinX * zoom, minY * zoom, (symMaxX - symMinX + 1) * zoom, (maxY - minY + 1) * zoom);
+      }
+    } else if (tool === 'rect-fill') {
+      ctx.fillStyle = color;
+      ctx.fillRect(minX * zoom, minY * zoom, (maxX - minX + 1) * zoom, (maxY - minY + 1) * zoom);
+
+      if (state.symmetry) {
+        const symMinX = cw - 1 - maxX;
+        const symMaxX = cw - 1 - minX;
+        ctx.fillRect(symMinX * zoom, minY * zoom, (symMaxX - symMinX + 1) * zoom, (maxY - minY + 1) * zoom);
+      }
+    } else if (tool === 'circle' || tool === 'circle-fill') {
+      ctx.fillStyle = color;
+      const plot = (px, py) => {
+        if (px >= 0 && px < cw && py >= 0 && py < ch) {
+          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+        }
+        if (state.symmetry) {
+          const symX = cw - 1 - px;
+          if (symX >= 0 && symX < cw && py >= 0 && py < ch) {
+            ctx.fillRect(symX * zoom, py * zoom, zoom, zoom);
+          }
+        }
+      };
+      if (typeof Tools !== 'undefined' && typeof Tools.ellipse === 'function') {
+        Tools.ellipse(x0, y0, x1, y1, plot, tool === 'circle-fill');
       }
     } else if (tool === 'line') {
       ctx.fillStyle = color;
@@ -9149,11 +9444,6 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
   async function handleFileOpenFromHandle(handle) {
     if (!handle) return;
-    if (isDocumentDirty) {
-      if (!confirm('You have unsaved changes in current project. Discard changes and open new file?')) {
-        return;
-      }
-    }
     try {
       const file = await handle.getFile();
       if (file.size > 25 * 1024 * 1024) {
@@ -9164,6 +9454,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       if (name.endsWith('.pix2') || name.endsWith('.txt')) {
         const text = await file.text();
         const doc = PIX2.parse(text);
+        saveCurrentSessionState();
         currentFileHandle = handle;
         currentFileName = file.name;
         currentFilePath = file.name;
@@ -9177,8 +9468,9 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         state.setDocument(doc);
         syncOrRegisterProjectSession(doc, file.name, handle, file.name);
         setDirty(false);
+        renderProjectTabs();
         refreshAll();
-        showToast(`Linked & opened ${file.name} from disk (Ctrl+S will save directly)!`, 'success');
+        showToast(`Linked & opened ${file.name} in tab!`, 'success');
         return;
       } else if (file.type.startsWith('image/')) {
         const reader = new FileReader();
@@ -9206,11 +9498,6 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       showToast('File exceeds 25MB safety limit.', 'error');
       return;
     }
-    if (isDocumentDirty) {
-      if (!confirm('You have unsaved changes in current project. Discard changes and open new file?')) {
-        return;
-      }
-    }
     const name = file.name.toLowerCase();
     if (name.endsWith('.pix2') || name.endsWith('.txt')) {
       const reader = new FileReader();
@@ -9218,6 +9505,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         try {
           const content = e.target.result;
           const doc = PIX2.parse(content);
+          saveCurrentSessionState();
           state.setDocument(doc);
           currentFileHandle = null;
           currentFileName = file.name;
@@ -9230,8 +9518,9 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           localStorage.setItem('pix2_last_saved_content', content);
           syncOrRegisterProjectSession(doc, file.name, null, file.name);
           setDirty(false);
+          renderProjectTabs();
           refreshAll();
-          showToast(`Opened ${file.name}!`, 'success');
+          showToast(`Opened ${file.name} in tab!`, 'success');
         } catch (err) {
           alert(`Error reading .pix2 file:\n${err.message}`);
         }
@@ -9292,7 +9581,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     showToast(`Imported ${filename} (${defaultCols}x${defaultRows} cells)!`, 'success');
   }
 
-  function setResolution(newW, newH) {
+  function setResolution(newW, newH, centerArtwork = false) {
     if (!state.doc) return;
     newW = Math.min(Math.max(1, parseInt(newW, 10) || 16), 512);
     newH = Math.min(Math.max(1, parseInt(newH, 10) || 16), 512);
@@ -9306,9 +9595,19 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     // Preserves existing pixel art with 100% mathematical fidelity! Zero pixel loss!
     PIX2.resizeCells(state.doc, newW, newH, 'expand');
 
+    if (centerArtwork && (newW > curW || newH > curH)) {
+      const dx = Math.floor((newW - curW) / 2);
+      const dy = Math.floor((newH - curH) / 2);
+      if (dx > 0 || dy > 0) {
+        for (const cid in state.doc.cells) {
+          Tools.nudge(state.doc.cells[cid], dx, dy, newW, newH);
+        }
+      }
+    }
+
     triggerEventAutosave();
     refreshAll();
-    showToast(`Canvas bounds set to ${newW}×${newH} px (Artwork preserved)`, 'success');
+    showToast(`Canvas bounds set to ${newW}×${newH} px (${centerArtwork ? 'Centered' : 'Artwork preserved'})`, 'success');
   }
 
   // ===========================================================================
@@ -9515,6 +9814,18 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           showToast('Grid centered');
         }
       });
+
+      // Mouse wheel zoom on Grid Viewport
+      gridViewport.addEventListener('wheel', (e) => {
+        if (state.activeTabId === 'tab-grid-overview') {
+          e.preventDefault();
+          if (e.deltaY < 0) {
+            zoomGridIn();
+          } else {
+            zoomGridOut();
+          }
+        }
+      }, { passive: false });
     }
 
     dom.gridCanvas.addEventListener('click', (e) => {
@@ -9895,6 +10206,11 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     dom.btnQuick4dir?.addEventListener('click', () => openActionTemplateModal(4));
     dom.btnQuick8dir?.addEventListener('click', () => openActionTemplateModal(8));
 
+    // Grid Overview Zoom Controls
+    dom.btnGridZoomOut?.addEventListener('click', zoomGridOut);
+    dom.btnGridZoomIn?.addEventListener('click', zoomGridIn);
+    dom.btnGridZoomReset?.addEventListener('click', () => setGridZoom(4));
+
     // Action Template Modal Event Handlers (2-Dir Platformer, 4-Dir, 8-Dir)
     dom.btnMode2dir?.addEventListener('click', () => {
       currentTemplateMode = 2;
@@ -10051,6 +10367,12 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       updateImportSlices();
     });
 
+    [dom.inputSliceCellW, dom.inputSliceCellH].forEach(input => {
+      input?.addEventListener('input', () => {
+        input.dataset.userModified = 'true';
+      });
+    });
+
     [dom.inputSliceCellW, dom.inputSliceCellH, dom.inputSliceCols, dom.inputSliceRows,
      dom.inputSliceSpacing, dom.inputSliceMargin, dom.inputSliceAlphaThresh, dom.inputSliceMinSize].forEach(input => {
       input?.addEventListener('input', updateImportSlices);
@@ -10100,6 +10422,26 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     dom.btnAutoTag4Dir?.addEventListener('click', autoTag4Dir);
     dom.btnAutoTag8Dir?.addEventListener('click', autoTag8Dir);
     dom.btnClearAllTags?.addEventListener('click', clearAllTags);
+
+    // Slicing Viewport Guides Toggles
+    dom.btnSliceToggleGrid?.addEventListener('click', () => {
+      importSliceState.showPixelGrid = !importSliceState.showPixelGrid;
+      dom.btnSliceToggleGrid?.classList.toggle('active', importSliceState.showPixelGrid);
+      renderImportSliceView();
+    });
+    dom.btnSliceToggleRulers?.addEventListener('click', () => {
+      importSliceState.showRulers = !importSliceState.showRulers;
+      dom.btnSliceToggleRulers?.classList.toggle('active', importSliceState.showRulers);
+      renderImportSliceView();
+    });
+    dom.btnSliceToggleLabels?.addEventListener('click', () => {
+      importSliceState.showLabels = !importSliceState.showLabels;
+      dom.btnSliceToggleLabels?.classList.toggle('active', importSliceState.showLabels);
+      renderImportSliceView();
+    });
+
+    // Cell Editor Resize Frame button
+    dom.btnCellResizeFrame?.addEventListener('click', openResizeFrameModal);
 
     // Game Export Studio Modal Event Handlers
     dom.exportFormatOptions?.addEventListener('click', (e) => {

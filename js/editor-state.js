@@ -373,12 +373,23 @@ class EditorState {
       }
     }
 
+    // Verify activeLayerId belongs to this cell; invalidate if stale across cell tabs
+    if (this.activeLayerId) {
+      const layerCheck = this.findNode(cell.id, this.activeLayerId);
+      if (!layerCheck || layerCheck.node.type !== 'layer') {
+        this.activeLayerId = null;
+      }
+    }
+
     // An explicitly selected region wins when it belongs to the currently
     // active layer. A stale region from another layer must never steal paint.
     if (this.activeRegionId) {
       const match = this.findNode(cell.id, this.activeRegionId);
       if (match && match.node.type === 'region' &&
           (!this.activeLayerId || !match.layer || match.layer.id === this.activeLayerId)) {
+        if (!this.activeLayerId && match.layer) {
+          this.activeLayerId = match.layer.id;
+        }
         return match.node;
       }
     }
@@ -424,6 +435,10 @@ class EditorState {
     const first = findFirstEditable(cell.layers);
     if (first) {
       this.activeRegionId = first.id;
+      const firstMatch = this.findNode(cell.id, first.id);
+      if (firstMatch && firstMatch.layer) {
+        this.activeLayerId = firstMatch.layer.id;
+      }
       return first;
     }
 

@@ -181,6 +181,90 @@ const Tools = (function () {
     });
   }
 
+  // Midpoint ellipse algorithm (outline or filled)
+  function ellipse(x0, y0, x1, y1, fill = false, callback) {
+    const minX = Math.min(x0, x1);
+    const maxX = Math.max(x0, x1);
+    const minY = Math.min(y0, y1);
+    const maxY = Math.max(y0, y1);
+    let a = Math.abs(maxX - minX);
+    let b = Math.abs(maxY - minY);
+    let b1 = b & 1;
+    let dx = 4 * (1 - a) * b * b;
+    let dy = 4 * (b1 + 1) * a * a;
+    let err = dx + dy + b1 * a * a;
+    let e2;
+
+    let y_top = minY;
+    let y_bot = maxY;
+    let x_left = minX;
+    let x_right = maxX;
+
+    a = 8 * a * a;
+    b1 = 8 * b * b;
+
+    const scanlines = {};
+    const outlinePoints = [];
+
+    const plot4 = (xl, xr, yt, yb) => {
+      if (fill) {
+        if (!scanlines[yt]) scanlines[yt] = [xl, xr];
+        else {
+          scanlines[yt][0] = Math.min(scanlines[yt][0], xl);
+          scanlines[yt][1] = Math.max(scanlines[yt][1], xr);
+        }
+        if (!scanlines[yb]) scanlines[yb] = [xl, xr];
+        else {
+          scanlines[yb][0] = Math.min(scanlines[yb][0], xl);
+          scanlines[yb][1] = Math.max(scanlines[yb][1], xr);
+        }
+      } else {
+        outlinePoints.push({ x: xl, y: yt });
+        outlinePoints.push({ x: xr, y: yt });
+        outlinePoints.push({ x: xl, y: yb });
+        outlinePoints.push({ x: xr, y: yb });
+      }
+    };
+
+    do {
+      plot4(x_left, x_right, y_top, y_bot);
+      e2 = 2 * err;
+      if (e2 <= dy) { y_top++; y_bot--; err += dy += a; }
+      if (e2 >= dx || 2 * err > dy) { x_left++; x_right--; err += dx += b1; }
+    } while (x_left <= x_right);
+
+    while (y_top - y_bot <= b) {
+      plot4(x_left - 1, x_right + 1, y_top, y_bot);
+      y_top++; y_bot--;
+    }
+
+    if (fill) {
+      for (const sy in scanlines) {
+        const y = parseInt(sy, 10);
+        const [leftX, rightX] = scanlines[sy];
+        for (let x = leftX; x <= rightX; x++) {
+          callback(x, y);
+        }
+      }
+    } else {
+      const seen = new Set();
+      for (const pt of outlinePoints) {
+        const k = `${pt.x},${pt.y}`;
+        if (!seen.has(k)) {
+          seen.add(k);
+          callback(pt.x, pt.y);
+        }
+      }
+    }
+  }
+
+  // Plot circle / ellipse outline or filled
+  function plotCircle(cell, x0, y0, x1, y1, color, fill = false, symmetry = false, cellWidth = 16) {
+    ellipse(x0, y0, x1, y1, fill, (x, y) => {
+      plotPixel(cell, x, y, color, symmetry, cellWidth);
+    });
+  }
+
   // 4-way flood fill (supports both signatures)
   function floodFill(cell, startX, startY, arg4, arg5, arg6, arg7, explicitTargetId = null) {
     if (!cell) return;
@@ -388,6 +472,8 @@ const Tools = (function () {
     plotLine,
     eraseLine,
     plotRect,
+    ellipse,
+    plotCircle,
     getTargetForPlot,
     getTargetsForTransform,
     syncCompositeIfStructured

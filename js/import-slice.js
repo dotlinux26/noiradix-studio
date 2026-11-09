@@ -323,6 +323,29 @@
     // Grouping for auto-animation detection (e.g. walk_0, walk_1)
     const animGroups = {};
 
+    // Ensure document cell dimensions accommodate the imported frames
+    let maxImportW = 0, maxImportH = 0;
+    for (const f of frames) {
+      const fr = f.frame || f;
+      const fw = fr.w || f.w || 16;
+      const fh = fr.h || f.h || 16;
+      if (fw > maxImportW) maxImportW = fw;
+      if (fh > maxImportH) maxImportH = fh;
+    }
+
+    if (doc.meta && doc.meta.cellSize) {
+      if (maxImportW > doc.meta.cellSize.w || maxImportH > doc.meta.cellSize.h) {
+        const newW = Math.max(doc.meta.cellSize.w, maxImportW);
+        const newH = Math.max(doc.meta.cellSize.h, maxImportH);
+        if (typeof PIX2 !== 'undefined' && PIX2.resizeCells) {
+          PIX2.resizeCells(doc, newW, newH, 'expand');
+        } else {
+          doc.meta.cellSize.w = newW;
+          doc.meta.cellSize.h = newH;
+        }
+      }
+    }
+
     let maxCol = doc.meta.grid ? (doc.meta.grid.cols || 4) : 4;
     let curRow = 0, curCol = 0;
 
@@ -392,6 +415,14 @@
         const idx = parseInt(match[2], 10);
         if (!animGroups[animName]) animGroups[animName] = [];
         animGroups[animName].push({ idx, cellId });
+      }
+    }
+
+    // Ensure grid rows accommodate all newly placed cells
+    if (doc.meta && doc.meta.grid) {
+      const neededRows = curCol > 0 ? curRow + 1 : Math.max(1, curRow);
+      if (neededRows > (doc.meta.grid.rows || 0)) {
+        doc.meta.grid.rows = neededRows;
       }
     }
 
