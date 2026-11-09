@@ -387,6 +387,27 @@ console.log('\nTest 9: Studio Multi-Project Tabs & Primary Tab Strip Invariants'
   pass('Studio primary tab priority order and multi-project sessions invariants verified');
 }
 
+// -----------------------------------------------------------------------------
+// Test 10: Slicing Inspector Row/Tag & Col/Frame Index Contract Verification
+// -----------------------------------------------------------------------------
+console.log('\nTest 10: Slicing Inspector Row/Tag & Col/Frame Index Contract Verification');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+
+  // Verify Slicing Inspector table headers and inputs
+  assert(appJs.includes('Tag (Row)'), 'Inspector must have Tag (Row) column');
+  assert(appJs.includes('Frame # (Col)'), 'Inspector must have Frame # (Col) column');
+  assert(appJs.includes('slice-col-input'), 'Inspector must provide slice-col-input');
+
+  // Verify auto-tagging functions set row, col, and frameIndex
+  assert(appJs.includes('f.frameIndex = colIdx'), 'autoTag4Dir / autoTag8Dir must set frameIndex to column index');
+  assert(appJs.includes('f.row = rowIdx'), 'autoTag4Dir / autoTag8Dir must set row to row index');
+
+  pass('Slices & Tagging Inspector row-tag and column-frame-index contracts verified');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

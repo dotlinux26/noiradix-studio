@@ -3946,9 +3946,9 @@
       showToast(`Tagged slice #${importSliceState.selectedSliceIndex + 1} with "${cleanPrefix}"`, 'success');
     } else {
       frames.forEach((f, idx) => {
-        f.tag = `${cleanPrefix}_${idx}`;
+        f.tag = cleanPrefix;
       });
-      showToast(`Tagged ${frames.length} slices with prefix "${cleanPrefix}"`, 'success');
+      showToast(`Tagged ${frames.length} slices with "${cleanPrefix}"`, 'success');
     }
     renderImportSliceView();
   }
@@ -3980,12 +3980,15 @@
       const dir = dirNames[rowIdx % 4];
       row.sort((a, b) => a.frame.x - b.frame.x);
       row.forEach((f, colIdx) => {
-        f.tag = `walk_${dir}_${colIdx}`;
+        f.tag = `walk_${dir}`;
+        f.row = rowIdx;
+        f.col = colIdx;
+        f.frameIndex = colIdx;
         f.name = `${dir}_${colIdx}`;
       });
     });
 
-    showToast(`Auto-tagged ${frames.length} slices with 4-direction locomotion tags`, 'success');
+    showToast(`Auto-tagged ${frames.length} slices (Row = Tag, Col = Frame #)`, 'success');
     renderImportSliceView();
   }
 
@@ -4015,12 +4018,15 @@
       const dir = dirNames[rowIdx % 8];
       row.sort((a, b) => a.frame.x - b.frame.x);
       row.forEach((f, colIdx) => {
-        f.tag = `walk_${dir}_${colIdx}`;
+        f.tag = `walk_${dir}`;
+        f.row = rowIdx;
+        f.col = colIdx;
+        f.frameIndex = colIdx;
         f.name = `${dir}_${colIdx}`;
       });
     });
 
-    showToast(`Auto-tagged ${frames.length} slices with 8-direction locomotion tags`, 'success');
+    showToast(`Auto-tagged ${frames.length} slices with 8-direction locomotion rows`, 'success');
     renderImportSliceView();
   }
 
@@ -4255,7 +4261,9 @@
 
           // Crisp label badge
           if (showLabels) {
-            const labelText = `${f.name || `slice_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''} (${rect.w}×${rect.h})`;
+            const colNum = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : idx);
+            const tagDesc = f.tag ? `${f.tag} : f${colNum}` : (f.row !== undefined ? `row ${f.row} : f${colNum}` : `f${colNum}`);
+            const labelText = `${f.name || `slice_${idx}`} [${tagDesc}] (${rect.w}×${rect.h})`;
             octx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const metrics = octx.measureText(labelText);
             const badgeW = metrics.width + 12;
@@ -4276,7 +4284,9 @@
 
           // Compact badge for unselected slice
           if (showLabels) {
-            const labelText = `${f.name || `slice_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''}`;
+            const colNum = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : idx);
+            const tagDesc = f.tag ? `${f.tag} : f${colNum}` : (f.row !== undefined ? `row ${f.row} : f${colNum}` : `f${colNum}`);
+            const labelText = `${f.name || `slice_${idx}`} [${tagDesc}]`;
             octx.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const metrics = octx.measureText(labelText);
             const badgeW = Math.min(sw, metrics.width + 10);
@@ -4359,11 +4369,12 @@
     }
 
     let html = `
-      <div style="display: grid; grid-template-columns: 28px 36px 1.2fr 1.2fr 130px 48px; gap: 6px; padding: 4px 10px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2;">
+      <div style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; padding: 4px 10px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2;">
         <span>#</span>
         <span>Thumb</span>
         <span>Slice Name</span>
-        <span>Animation Tag</span>
+        <span>Tag (Row)</span>
+        <span style="text-align: center;">Frame # (Col)</span>
         <span>Rect (X, Y, W, H)</span>
         <span style="text-align: right;">Actions</span>
       </div>
@@ -4371,12 +4382,14 @@
 
     frames.forEach((f, idx) => {
       const isSel = (idx === importSliceState.selectedSliceIndex);
+      const colVal = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : 0);
       html += `
-        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}">
+        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}" style="display: grid; grid-template-columns: 28px 36px 1.1fr 1.1fr 64px 130px 48px; gap: 6px; align-items: center; padding: 4px 10px;">
           <span style="font-weight: 600; color: var(--text-dim);">${idx + 1}</span>
           <canvas class="slice-thumb-canvas" id="slice-thumb-${idx}" width="24" height="24"></canvas>
           <input type="text" class="slice-input-sm slice-name-input" data-slice-idx="${idx}" value="${escapeHTML(f.name)}" placeholder="Frame Name">
-          <input type="text" class="slice-input-sm slice-tag-input" data-slice-idx="${idx}" value="${escapeHTML(f.tag || '')}" placeholder="Tag (e.g. idle_0, eyes)">
+          <input type="text" class="slice-input-sm slice-tag-input" data-slice-idx="${idx}" value="${escapeHTML(f.tag || '')}" placeholder="Tag / Row (e.g. walk_down)">
+          <input type="number" class="slice-input-sm slice-col-input" data-slice-idx="${idx}" value="${colVal}" min="0" max="256" style="width: 58px; text-align: center;" title="Frame sequence index / Column (0, 1, 2...)">
           <div style="display: flex; gap: 3px; align-items: center;">
             <input type="number" class="slice-input-sm slice-coord-w" data-slice-idx="${idx}" value="${f.frame.w}" style="width: 36px;" title="Width (px)">
             <span>×</span>
@@ -4436,6 +4449,18 @@
         const idx = parseInt(e.target.dataset.sliceIdx, 10);
         if (importSliceState.frames[idx]) {
           importSliceState.frames[idx].tag = e.target.value.trim();
+          renderImportSliceView();
+        }
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.slice-col-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.sliceIdx, 10);
+        const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+        if (importSliceState.frames[idx]) {
+          importSliceState.frames[idx].col = val;
+          importSliceState.frames[idx].frameIndex = val;
           renderImportSliceView();
         }
       });
@@ -4838,13 +4863,23 @@
         margin: margin
       });
 
-      importSliceState.frames = rects.map((r, i) => ({
-        name: `slice_${String(i).padStart(3, '0')}`,
-        tag: '',
-        frame: r,
-        sourceSize: { w: r.w, h: r.h },
-        spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
-      }));
+      const dirNames4 = ['down', 'up', 'right', 'left'];
+      importSliceState.frames = rects.map((r, i) => {
+        const rowIdx = (r.row !== undefined) ? r.row : 0;
+        const colIdx = (r.col !== undefined) ? r.col : (r.frameIndex !== undefined ? r.frameIndex : i);
+        const defaultTag = (rects.length >= 4 && rowIdx < 4) ? `walk_${dirNames4[rowIdx]}` : `row_${rowIdx}`;
+        const dirName = (rowIdx < 4) ? dirNames4[rowIdx] : `anim_${rowIdx}`;
+        return {
+          name: `${dirName}_${colIdx}`,
+          tag: defaultTag,
+          row: rowIdx,
+          col: colIdx,
+          frameIndex: colIdx,
+          frame: { x: r.x, y: r.y, w: r.w, h: r.h },
+          sourceSize: { w: r.w, h: r.h },
+          spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
+        };
+      });
     } else if (method === 'alpha') {
       const canvas = document.createElement('canvas');
       canvas.width = importSliceState.image.width;
@@ -4862,7 +4897,10 @@
 
       importSliceState.frames = islands.map((r, i) => ({
         name: `island_${String(i).padStart(3, '0')}`,
-        tag: '',
+        tag: 'island',
+        row: 0,
+        col: i,
+        frameIndex: i,
         frame: r,
         sourceSize: { w: r.w, h: r.h },
         spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
@@ -4873,7 +4911,15 @@
           width: importSliceState.image.width,
           height: importSliceState.image.height
         });
-        importSliceState.frames = plan.frames;
+        importSliceState.frames = (plan.frames || []).map((f, i) => {
+          const colVal = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : i);
+          return {
+            ...f,
+            col: colVal,
+            frameIndex: colVal,
+            row: (f.row !== undefined) ? f.row : 0
+          };
+        });
       }
     }
 
@@ -4899,7 +4945,8 @@
       state.beginStroke(`Import ${importSliceState.frames.length} Slices`);
       ImportSlice.importFramesToDoc(state.doc, importSliceState.frames, imgData, {
         layerName: layerName,
-        createAnimations: autoAnimate
+        createAnimations: autoAnimate,
+        useGridCellIds: true
       });
       state.endStroke(`Import ${importSliceState.frames.length} Slices`);
       triggerEventAutosave();

@@ -184,6 +184,50 @@ assert.strictEqual(anim.fps, 12);
 assert.deepStrictEqual(anim.frames, ['imported_walk_0', 'imported_walk_1', 'imported_walk_2']);
 pass('importFramesToDoc imports frames into v1.1 cells and auto-assembles animation clips');
 
+// -----------------------------------------------------------------------------
+// Test 6: Tag-to-Row and Frame-Index-to-Column Mapping Invariant
+// -----------------------------------------------------------------------------
+console.log('\nTest 6: Tag-to-Row and Frame-Index-to-Column Mapping Invariant');
+const doc2 = PIX2.createDocument('Row Col Tagging Project', 4, 4, 16, 16);
+const taggedFrames = [
+  { name: 'down_0', tag: 'walk_down', frameIndex: 0, x: 0, y: 0, w: 16, h: 16 },
+  { name: 'down_1', tag: 'walk_down', frameIndex: 1, x: 16, y: 0, w: 16, h: 16 },
+  { name: 'up_0', tag: 'walk_up', frameIndex: 0, x: 0, y: 16, w: 16, h: 16 },
+  { name: 'up_1', tag: 'walk_up', frameIndex: 1, x: 16, y: 16, w: 16, h: 16 },
+  { name: 'right_0', tag: 'walk_right', frameIndex: 0, x: 0, y: 32, w: 16, h: 16 },
+  { name: 'right_1', tag: 'walk_right', frameIndex: 1, x: 16, y: 32, w: 16, h: 16 },
+  { name: 'left_0', tag: 'walk_left', frameIndex: 0, x: 0, y: 48, w: 16, h: 16 },
+  { name: 'left_1', tag: 'walk_left', frameIndex: 1, x: 16, y: 48, w: 16, h: 16 }
+];
+
+ImportSlice.importFramesToDoc(doc2, taggedFrames, mockAnimAtlas, {
+  createAnimations: true,
+  useGridCellIds: true
+});
+
+assert.strictEqual(doc2.cells['cell_0_0'].row, 0);
+assert.strictEqual(doc2.cells['cell_0_0'].col, 0);
+assert.strictEqual(doc2.cells['cell_0_0'].direction, 'down');
+
+assert.strictEqual(doc2.cells['cell_0_1'].row, 0);
+assert.strictEqual(doc2.cells['cell_0_1'].col, 1);
+
+assert.strictEqual(doc2.cells['cell_1_0'].row, 1);
+assert.strictEqual(doc2.cells['cell_1_0'].col, 0);
+assert.strictEqual(doc2.cells['cell_1_0'].direction, 'up');
+
+assert.strictEqual(doc2.cells['cell_2_0'].row, 2);
+assert.strictEqual(doc2.cells['cell_2_0'].col, 0);
+assert.strictEqual(doc2.cells['cell_2_0'].direction, 'right');
+
+assert.strictEqual(doc2.cells['cell_3_0'].row, 3);
+assert.strictEqual(doc2.cells['cell_3_0'].col, 0);
+assert.strictEqual(doc2.cells['cell_3_0'].direction, 'left');
+
+assert.deepStrictEqual(doc2.animations['walk_down'].frames, ['cell_0_0', 'cell_0_1']);
+assert.deepStrictEqual(doc2.animations['walk_up'].frames, ['cell_1_0', 'cell_1_1']);
+pass('Tag maps to Row, frameIndex maps to Column, and animations preserve sequential frames');
+
 console.log('\n====================================================');
 console.log(`ALL IMPORT & SLICE TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

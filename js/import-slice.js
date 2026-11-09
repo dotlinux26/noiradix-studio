@@ -103,14 +103,19 @@
    * Slice a uniform grid
    */
   function sliceGrid(atlasW, atlasH, options = {}) {
-    const cellW = Math.max(1, options.cellW || 16);
-    const cellH = Math.max(1, options.cellH || 16);
+    if (typeof atlasW === 'object' && atlasW !== null) {
+      options = atlasW;
+      atlasW = options.imageWidth || options.atlasW || options.width || 0;
+      atlasH = options.imageHeight || options.atlasH || options.height || 0;
+    }
+    const cellW = Math.max(1, options.cellW || options.cellWidth || 16);
+    const cellH = Math.max(1, options.cellH || options.cellHeight || 16);
     const margin = Math.max(0, options.margin || 0);
-    const gap = Math.max(0, options.gap || 0);
+    const gap = Math.max(0, options.gap || options.spacing || 0);
 
     const availableW = atlasW - 2 * margin;
     const availableH = atlasH - 2 * margin;
-    const cols = options.cols || Math.floor((availableW + gap) / (cellW + gap));
+    const cols = options.cols || options.columns || Math.floor((availableW + gap) / (cellW + gap));
     const rows = options.rows || Math.floor((availableH + gap) / (cellH + gap));
 
     const frames = [];
@@ -123,6 +128,7 @@
             name: `cell_${r}_${c}`,
             row: r,
             col: c,
+            frameIndex: c,
             x,
             y,
             w: cellW,
@@ -349,18 +355,109 @@
     let maxCol = doc.meta.grid ? (doc.meta.grid.cols || 4) : 4;
     let curRow = 0, curCol = 0;
 
+    function inferDirectionFromTagOrRow(tag, row) {
+      const t = (tag || '').toLowerCase();
+      if (t.includes('down_right')) return 'down_right';
+      if (t.includes('down_left')) return 'down_left';
+      if (t.includes('up_right')) return 'up_right';
+      if (t.includes('up_left')) return 'up_left';
+      if (t.includes('down')) return 'down';
+      if (t.includes('up')) return 'up';
+      if (t.includes('right')) return 'right';
+      if (t.includes('left')) return 'left';
+      const standardDirs = ['down', 'up', 'right', 'left', 'down_right', 'up_right', 'up_left', 'down_left'];
+      if (row >= 0 && row < standardDirs.length) return standardDirs[row];
+      return 'none';
+    }
+
+    function inferRowFromTag(tag, customTagMap) {
+      if (!tag) return null;
+      const t = tag.trim().toLowerCase();
+      if (t === 'down' || t === 'walk_down' || t.startsWith('down') || t.startsWith('walk_down')) return 0;
+      if (t === 'up' || t === 'walk_up' || t.startsWith('up') || t.startsWith('walk_up')) return 1;
+      if (t === 'right' || t === 'walk_right' || t.startsWith('right') || t.startsWith('walk_right')) return 2;
+      if (t === 'left' || t === 'walk_left' || t.startsWith('left') || t.startsWith('walk_left')) return 3;
+      if (t === 'down_right' || t.startsWith('down_right')) return 4;
+      if (t === 'up_right' || t.startsWith('up_right')) return 5;
+      if (t === 'up_left' || t.startsWith('up_left')) return 6;
+      if (t === 'down_left' || t.startsWith('down_left')) return 7;
+      if (customTagMap && customTagMap.has(t)) return customTagMap.get(t);
+      return null;
+    }
+
+    const customTagMap = new Map();
+    let nextAvailableRow = 0;
+    frames.forEach(f => {
+      if (f.row !== undefined && f.row >= nextAvailableRow) {
+        nextAvailableRow = f.row + 1;
+      }
+    });
+
+    const tagFrameCounters = new Map();
+    let maxAssignedRow = 0;
+    let maxAssignedCol = 0;
+
     for (const f of frames) {
       const extracted = extractFramePixels(getPixelRgba, f);
-      const cellId = `${cellIdPrefix}${f.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
+      // Determine targetRow (Tag = Row)
+      let targetRow;
+      if (f.row !== undefined) {
+        targetRow = f.row;
+      } else {
+        const inferred = inferRowFromTag(f.tag, customTagMap);
+        if (inferred !== null) {
+          targetRow = inferred;
+        } else if (f.tag && f.tag.trim()) {
+          const tKey = f.tag.trim().toLowerCase();
+          if (!customTagMap.has(tKey)) {
+            while (nextAvailableRow === 0 || nextAvailableRow === 1 || nextAvailableRow === 2 || nextAvailableRow === 3) {
+              nextAvailableRow = 4;
+            }
+            customTagMap.set(tKey, nextAvailableRow++);
+          }
+          targetRow = customTagMap.get(tKey);
+        } else {
+          targetRow = curRow;
+        }
+      }
+
+      // Determine targetCol (Frame # = Column)
+      const rowKey = String(targetRow);
+      const seqIndex = tagFrameCounters.get(rowKey) || 0;
+      tagFrameCounters.set(rowKey, seqIndex + 1);
+
+      let targetCol;
+      if (f.col !== undefined) {
+        targetCol = f.col;
+      } else if (f.frameIndex !== undefined) {
+        targetCol = f.frameIndex;
+      } else {
+        const numMatch = (f.name || '').match(/[_-](\d+)$/);
+        if (numMatch) {
+          targetCol = parseInt(numMatch[1], 10);
+        } else {
+          targetCol = seqIndex;
+        }
+      }
+
+      maxAssignedRow = Math.max(maxAssignedRow, targetRow);
+      maxAssignedCol = Math.max(maxAssignedCol, targetCol);
+
+      const cellId = (options.useGridCellIds && !options.cellPrefix)
+        ? `cell_${targetRow}_${targetCol}`
+        : `${cellIdPrefix}${f.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
+      const targetDir = inferDirectionFromTagOrRow(f.tag, targetRow);
 
       // Create new cell
       const newCell = {
         id: cellId,
-        name: f.name,
-        row: f.row !== undefined ? f.row : curRow,
-        col: f.col !== undefined ? f.col : curCol,
-        direction: 'none',
-        frame: curCol,
+        name: f.name || `frame_${targetRow}_${targetCol}`,
+        row: targetRow,
+        col: targetCol,
+        direction: targetDir,
+        frame: targetCol,
         size: { w: extracted.width, h: extracted.height },
         pixels: extracted.pixels
       };
@@ -399,7 +496,7 @@
       doc.cells[cellId] = newCell;
 
       // Advance auto-grid row/col
-      if (f.row === undefined || f.col === undefined) {
+      if (f.row === undefined && f.col === undefined && !f.tag) {
         curCol++;
         if (curCol >= maxCol) {
           curCol = 0;
@@ -407,34 +504,39 @@
         }
       }
 
-      // Detect animation frame sequence: <tag_or_name>_<index>
-      const seqSource = f.tag || f.name;
-      const match = seqSource.match(/^(.*?)[_-](\d+)$/);
-      if (match) {
-        const animName = match[1];
-        const idx = parseInt(match[2], 10);
-        if (!animGroups[animName]) animGroups[animName] = [];
-        animGroups[animName].push({ idx, cellId });
+      // Detect animation frame sequence: by tag or name prefix
+      const animKey = (f.tag && f.tag.trim()) ? f.tag.trim() : null;
+      if (animKey) {
+        if (!animGroups[animKey]) animGroups[animKey] = [];
+        animGroups[animKey].push({ col: targetCol, cellId, dir: targetDir });
+      } else {
+        const seqSource = f.name || '';
+        const match = seqSource.match(/^(.*?)[_-](\d+)$/);
+        if (match) {
+          const animName = match[1];
+          const idx = parseInt(match[2], 10);
+          if (!animGroups[animName]) animGroups[animName] = [];
+          animGroups[animName].push({ col: idx, cellId, dir: targetDir });
+        }
       }
     }
 
-    // Ensure grid rows accommodate all newly placed cells
+    // Ensure grid rows & cols accommodate all newly placed cells
     if (doc.meta && doc.meta.grid) {
-      const neededRows = curCol > 0 ? curRow + 1 : Math.max(1, curRow);
-      if (neededRows > (doc.meta.grid.rows || 0)) {
-        doc.meta.grid.rows = neededRows;
-      }
+      doc.meta.grid.rows = Math.max(doc.meta.grid.rows || 1, maxAssignedRow + 1);
+      doc.meta.grid.cols = Math.max(doc.meta.grid.cols || 1, maxAssignedCol + 1);
     }
 
     // Auto-create detected animations if requested
     if (options.createAnimations !== false) {
       if (!doc.animations) doc.animations = {};
       for (const animName in animGroups) {
-        const sorted = animGroups[animName].sort((a, b) => a.idx - b.idx);
+        const sorted = animGroups[animName].sort((a, b) => a.col - b.col);
+        const animDir = sorted[0].dir || inferDirectionFromTagOrRow(animName, 0);
         doc.animations[animName] = {
           id: animName,
-          name: animName,
-          direction: 'none',
+          name: animName.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          direction: animDir,
           frames: sorted.map(s => s.cellId),
           fps: options.fps || 8,
           loop: true,
