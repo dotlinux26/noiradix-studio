@@ -1247,9 +1247,9 @@
     const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(title, '.pix2', 'untitled');
     const isDirectDiskLinked = Boolean(currentFileHandle);
 
-    document.title = (dirty || !isDirectDiskLinked)
-      ? `● ${fileName} - NOIRADIX Studio`
-      : `${fileName} - NOIRADIX Studio`;
+    document.title = NOIRADIX_VERSION.documentTitle(
+      NOIRADIX_VERSION.studio, state.doc ? fileName : null, dirty || !isDirectDiskLinked
+    );
 
     const dirtyDot = document.getElementById('header-dirty-dot');
     if (dirtyDot) {
@@ -2159,7 +2159,10 @@
     if (dirtyDot) {
       dirtyDot.classList.toggle('is-dirty', isDocumentDirty);
     }
-    document.title = state.doc ? `${currentFileName || state.doc.meta.title || 'Untitled'} - NOIRADIX Studio 2.0` : 'NOIRADIX Studio 2.0';
+    const fileName = state.doc ? currentFileName || state.doc.meta.title || 'Untitled' : null;
+    document.title = NOIRADIX_VERSION.documentTitle(
+      NOIRADIX_VERSION.studio, fileName, isDocumentDirty || !currentFileHandle
+    );
   }
 
   function updateResolutionButtons() {

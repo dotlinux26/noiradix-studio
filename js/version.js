@@ -12,6 +12,10 @@
   }
 })(typeof self !== 'undefined' ? self : this, function () {
   return {
+    documentTitle(app, fileName, unsaved = false) {
+      const appTitle = `${app.name} ${app.displayVersion}`;
+      return fileName ? `${unsaved ? '● ' : ''}${fileName} — ${appTitle}` : appTitle;
+    },
     studio: {
       name: 'NOIRADIX Studio',
       version: '2.1.0',

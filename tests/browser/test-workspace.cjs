@@ -35,6 +35,11 @@ const PIX2 = require('../../js/pix2-format.js');
       );
       const initial = await tabs.count();
       const firstId = await tabs.first().getAttribute('data-tab-id');
+      const versionLabel = await page.evaluate(pa => {
+        const app = pa ? NOIRADIX_VERSION.pixelart : NOIRADIX_VERSION.studio;
+        return `${app.name} ${app.displayVersion}`;
+      }, pa);
+      assert.ok((await page.title()).endsWith(versionLabel));
       await plus.click();
       await page
         .locator(pa ? '#btn-confirm-new-canvas' : '#btn-confirm-new-file')
@@ -224,6 +229,8 @@ const PIX2 = require('../../js/pix2-format.js');
       await page.waitForFunction(id => document.querySelector('.project-tab.active')?.dataset.tabId === id, expectedActive);
       assert.deepEqual(await tabs.evaluateAll(rows => rows.map(row => row.dataset.tabId)), expectedTabs);
       assert.equal(await sourceText(), afterStroke);
+      assert.ok((await page.title()).startsWith('● '));
+      assert.ok((await page.title()).endsWith(versionLabel));
       // Force the workspace mirror to hit quota and exercise IndexedDB recovery.
       const workspaceKey = pa ? 'noiradix_pixelart_open_sessions' : 'noiradix_open_project_sessions';
       await page.evaluate(key => {
@@ -262,6 +269,7 @@ const PIX2 = require('../../js/pix2-format.js');
         .locator(pa ? '#pa-empty-workspace' : '#studio-empty-workspace')
         .waitFor({ state: 'visible' });
       assert.equal(await tabs.count(), 0);
+      assert.equal(await page.title(), versionLabel);
       assert.deepEqual(errs, []);
       console.log(
         (pa ? 'PixelArt' : 'Studio') +
@@ -333,6 +341,7 @@ const PIX2 = require('../../js/pix2-format.js');
       'Studio PASS legacy multi-cell conversion / immediate drawing / undo / redo',
     );
     const gridPage = await browser.newPage({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 2 });
+    gridPage.setDefaultTimeout(7000);
     await gridPage.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     const largeSheet = PIX2.serialize(PIX2.createDocument('Large Grid', 4, 4, 512, 512));
     await gridPage.addInitScript(content => {

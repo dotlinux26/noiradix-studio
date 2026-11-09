@@ -31,6 +31,7 @@
   const _EditorCanvas = typeof EditorCanvas !== 'undefined' ? EditorCanvas : require('../../js/editor-canvas.js');
   const _EditorRulers = typeof EditorRulers !== 'undefined' ? EditorRulers : require('../../js/editor-rulers.js');
   const _SelectionTransform = typeof SelectionTransform !== 'undefined' ? SelectionTransform : require('../../js/selection-transform.js');
+  const _Version = typeof NOIRADIX_VERSION !== 'undefined' ? NOIRADIX_VERSION : require('../../js/version.js');
   const PRESET_PALETTES = {
     noiradix: [
       '#1a1a24', '#ffffff', '#4f46e5', '#7c3aed', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'
@@ -403,9 +404,7 @@
 
     renderPaProjectTabs();
 
-    document.title = (dirty || !isLinked)
-      ? `● ${fileName} — NOIRADIX PixelArt`
-      : `${fileName} — NOIRADIX PixelArt`;
+    document.title = _Version.documentTitle(_Version.pixelart, state.doc ? fileName : null, dirty || !isLinked);
 
     const dirtyDot = document.getElementById('pa-header-dirty-dot');
     if (dirtyDot) {
@@ -654,7 +653,7 @@
     if (codePane) codePane.style.display = isEmpty ? 'none' : 'flex';
 
     if (isEmpty) {
-      document.title = 'NOIRADIX PixelArt 2.0';
+      document.title = _Version.documentTitle(_Version.pixelart);
       if (dom && dom.docTitle) dom.docTitle.value = '';
       if (dom && dom.dimBadge) dom.dimBadge.textContent = '0×0';
     } else {
@@ -4273,7 +4272,7 @@
   function updateDocumentTitle() {
     if (typeof document === 'undefined') return;
     const name = currentFileName || `${sanitizeFilename(state.title || 'Untitled')}.pix2`;
-    document.title = state.isDirty ? `● ${name} — NOIRADIX PixelArt` : `${name} — NOIRADIX PixelArt`;
+    document.title = _Version.documentTitle(_Version.pixelart, state.doc ? name : null, state.isDirty || !currentFileHandle);
     const pathText = document.getElementById('pa-file-path-text');
     if (pathText) {
       if (currentFileName) {
