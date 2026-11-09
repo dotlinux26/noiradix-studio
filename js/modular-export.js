@@ -164,36 +164,12 @@
   // Extract component pixel buffers for a node
   function extractNodePixels(node, parentOpacity = 1.0) {
     if (!node || node.visible === false) return {};
-    const effectiveOpacity = (node.type === 'layer' ? (node.opacity !== undefined ? node.opacity : 1.0) : 1.0) * parentOpacity;
-    const pixels = {};
-
-    function collect(n, op) {
-      if (!n || n.visible === false) return;
-      if (n.type === 'region' && n.pixels) {
-        for (const k in n.pixels) {
-          const hex = n.pixels[k];
-          if (!hex) continue;
-          if (op >= 1.0) {
-            pixels[k] = hex;
-          } else {
-            const rgba = PIX2.hexToRgba(hex);
-            if (rgba) {
-              const blendedA = Math.round(rgba.a * op);
-              pixels[k] = PIX2.rgbaToHex(rgba.r, rgba.g, rgba.b, blendedA);
-            }
-          }
-        }
-      }
-      for (const child of n.children || []) {
-        collect(child, op);
-      }
-    }
-
-    collect(node, effectiveOpacity);
-    return pixels;
+    return PIX2.compositeCellLayers({
+      layers: [{ ...node, opacity: (node.opacity ?? 1) * parentOpacity }]
+    });
   }
 
-  // Generate PNG data bytes from pixel object
+  // Render pixels to PNG (pure byte writer).
   function renderPixelsToPngBytes(pixels, w, h) {
     if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
@@ -320,7 +296,7 @@
 
         for (const layer of cell.layers || []) {
           if (layer.visible === false) continue;
-          const nodePixels = extractNodePixels(layer, 1.0);
+          const nodePixels = extractNodePixels(bakeOpacity ? layer : { ...layer, opacity: 1 });
           let exportPixels = nodePixels;
           let outW = cellW;
           let outH = cellH;
@@ -402,7 +378,7 @@
     const manifest = {
       $schema: options.schemaUri || DEFAULT_SCHEMA_URI,
       formatVersion: '1.1',
-      generator: 'NOIRADIX Studio 2.0.0',
+      generator: `NOIRADIX Studio ${versionInfo?.studio.version || '2.1.0'}`,
       document: {
         title: (workingDoc.meta && workingDoc.meta.title) || 'Untitled',
         cellSize: { w: defaultW, h: defaultH },

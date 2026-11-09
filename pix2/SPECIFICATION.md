@@ -1,4 +1,6 @@
 # PIX2 SPECIFICATION v1.0
+
+> Historical PIX2 1.0 reference. For current structural records and conformance rules, see the [normative PIX2 1.1 specification](../PIX2_SPECIFICATION.md).
 ## The AI-Native Pixel Art & Sprite Language
 
 > **Document Version:** 1.0.0  

@@ -12,6 +12,14 @@
 
 ---
 
+## Editor stabilization
+
+- [Requirements and verification ledger](discussion/STABILIZATION_LEDGER.md)
+- [Shared editor behavior and implementation decisions](discussion/EDITOR_BEHAVIOR.md)
+- [Studio and PixelArt editor engine audit](discussion/EDITOR_ENGINE_AUDIT.md)
+- [Repository workflow for agents](../AGENTS.md)
+- [Release process and verification gates](ENGINEERING/RELEASE_PROCESS.md)
+
 ## 📸 Studio Visual Tour
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
@@ -252,7 +260,7 @@ flowchart TD
 
 ### 🤖 For AI Engineers & LLM Prompt Authors
 * **[AI Mascot Case Study (Gemini 3.8 Flash)](PIX2/PIX2_AI_AUTHORING_GUIDE.md#8-real-world-case-study-creating-noiradix_ghostpix2-with-gemini-38-flash):** Complete breakdown of how Gemini 3.8 Flash authored the official 4-directional 16-frame Noiradix Ghost template.
-* **[PIX2 Language Specification](PIX2/PIX2_SPEC.md):** Complete definition of `@meta`, `@grid`, `@palette`, `@cell`, and `@animation` directives.
+* **[PIX2 1.1 Language Specification](../PIX2_SPECIFICATION.md):** Complete definition of `@meta`, `@grid`, `@palette`, `@cell`, and `@animation` directives.
 * **[AI Authoring Guide & One-Shot Prompts](PIX2/PIX2_AI_AUTHORING_GUIDE.md):** Master prompt template, system instructions, and walk-cycle mathematics for ChatGPT, Claude, and Gemini.
 * **[Formal EBNF Grammar](PIX2/PIX2_GRAMMAR.md):** Unambiguous grammar specification for building external parsers and language servers.
 * **[Validation Criteria & Diagnostics](PIX2/PIX2_VALIDATION_RULES.md):** Strict boundary checks and error codes to ensure generated sprites are 100% valid.

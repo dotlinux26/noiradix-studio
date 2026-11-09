@@ -247,6 +247,72 @@
     return null;
   }
 
+  function drawHandles(ctx, bounds, zoom) {
+    const handles = getSelectionHandles(bounds, zoom);
+    if (!handles) return;
+    const { sx, sy, sw, sh } = handles.bounds;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#4f46e5';
+    ctx.fillStyle = '#6366f1';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(handles.rot.x, sy);
+    ctx.lineTo(handles.rot.x, handles.rot.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(handles.rot.x, handles.rot.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#6366f1';
+    if (sw >= 8 && sh >= 8) {
+      for (const id of ['nw','ne','se','sw','n','e','s','w']) {
+        if (('ns'.includes(id) && sw < 24) || ('ew'.includes(id) && sh < 24)) continue;
+        const point = handles[id];
+        ctx.fillRect(point.x - 2.5, point.y - 2.5, 5, 5);
+      }
+    }
+    ctx.restore();
+  }
+
+  function liftPixels(target, bounds) {
+    const source = target.pixels ??= {};
+    const pixels = {};
+    for (let y = 0; y < bounds.h; y++) {
+      for (let x = 0; x < bounds.w; x++) {
+        const key = `${bounds.x + x},${bounds.y + y}`;
+        if (!source[key]) continue;
+        pixels[`${x},${y}`] = source[key];
+        delete source[key];
+      }
+    }
+    return { pixels, baselinePixels: { ...pixels }, baselineBounds: { ...bounds } };
+  }
+
+  function placePixels(target, pixels, origin, size) {
+    target.pixels ??= {};
+    for (const key in pixels) {
+      const [relativeX, relativeY] = key.split(',').map(Number);
+      const x = origin.x + relativeX;
+      const y = origin.y + relativeY;
+      if (x >= 0 && x < size.w && y >= 0 && y < size.h) {
+        target.pixels[`${x},${y}`] = pixels[key];
+      }
+    }
+  }
+
+  function quarterTurnBounds(bounds, size) {
+    const w = bounds.h;
+    const h = bounds.w;
+    if (w > size.w || h > size.h) return null;
+    return {
+      x: Math.max(0, Math.min(size.w - w, bounds.x)),
+      y: Math.max(0, Math.min(size.h - h, bounds.y)),
+      w, h
+    };
+  }
+
   /**
    * Computes scaled selection bounds given original selection, active handle,
    * current pointer coordinates in artwork pixel units, and shiftKey constraint.
@@ -363,6 +429,10 @@
     rotatePixelsNearestNeighbor,
     getSelectionHandles,
     hitTestSelectionHandles,
+    drawHandles,
+    liftPixels,
+    placePixels,
+    quarterTurnBounds,
     computeScaledBounds
   };
 });

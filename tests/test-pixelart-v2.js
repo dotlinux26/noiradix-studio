@@ -186,7 +186,7 @@ console.log('\nTest 4: Modular Component Export & Manifest Structure');
 
   const exportResult = ModularExport.exportModularComponents(doc, { mode: 'modular', trimmed: false });
   assert.ok(exportResult.manifest, 'Manifest generated');
-  assert.strictEqual(exportResult.manifest.generator, 'NOIRADIX Studio 2.0.0');
+  assert.strictEqual(exportResult.manifest.generator, 'NOIRADIX Studio 2.1.0');
   assert.strictEqual(exportResult.manifest.formatVersion, '1.1');
   assert.strictEqual(exportResult.manifest.components.length, 2, '2 components exported');
   assert.ok(exportResult.zip, 'ZIP archive generated');
@@ -263,11 +263,14 @@ console.log('\nTest 6: PixelArt Structural Hierarchy Lookup & Isolation Mode');
   assert.strictEqual(torsoGroup.name, 'Torso');
 
   // Isolation mode transitions
+  const previousDoc = paApp.state.doc;
+  paApp.state.doc = v11Doc;
   paApp.enterIsolationMode('r_chest', 'Body / Torso / Chest Armor');
   assert.strictEqual(paApp.state.isolatedNodeId, 'r_chest', 'Isolation mode set to chest region');
 
   paApp.exitIsolationMode();
   assert.strictEqual(paApp.state.isolatedNodeId, null, 'Isolation mode cleared on exit');
+  paApp.state.doc = previousDoc;
 
   console.log('  [PASS] Structural node lookup and isolation mode transitions verified');
 }
@@ -320,9 +323,9 @@ console.log('\nTest 8: PixelArt 2.0 DOM Contract Verification');
   const fs = require('fs');
   const path = require('path');
   const html = fs.readFileSync(path.join(__dirname, '../pixelart/index.html'), 'utf8');
+  const toolbar = fs.readFileSync(path.join(__dirname, '../js/editor-toolbar.js'), 'utf8');
 
   const requiredIds = [
-    'btn-pa-tool-region-select',
     'pa-isolation-banner',
     'pa-isolation-breadcrumb',
     'btn-pa-exit-isolation',
@@ -339,6 +342,8 @@ console.log('\nTest 8: PixelArt 2.0 DOM Contract Verification');
   for (const id of requiredIds) {
     assert(html.includes(`id="${id}"`), `pixelart/index.html must define #${id}`);
   }
+  assert(html.includes('src="../js/editor-toolbar.js"') && toolbar.includes('id="btn-pa-tool-region-select"'),
+    'PixelArt loads its Region Select control from the shared toolbar');
 
   console.log('  [PASS] PixelArt 2.0 Structure, Layers, and Region Select UI contract verified');
 }

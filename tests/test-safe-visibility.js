@@ -3,6 +3,7 @@ const assert = require('assert');
 const PIX2 = require('../js/pix2-format.js');
 const EditorState = require('../js/editor-state.js');
 const StructureOps = require('../js/structure-operations.js');
+const Tools = require('../js/tools.js');
 
 function makeDocument() {
   return {
@@ -140,6 +141,92 @@ console.log('====================================================\n');
   console.log('  [PASS] old direct-Layer payload migrates to a Region and remains hide/show safe');
 }
 
+// 6. Isolation views and incremental stroke compositing leave the full cache intact.
+{
+  const doc = makeDocument();
+  const cell = doc.cells.c0;
+  const full = PIX2.compositeCellLayers(cell, cell.size);
+  const display = PIX2.compositeCellLayers(cell, cell.size, { isolatedNodeId: 'region_top', dimNonIsolated: 0 });
+  assert.deepStrictEqual(display, { '1,1': '#0000ff40', '3,3': '#ffffff40' });
+  assert.strictEqual(cell.pixels, full);
+  const incremental = PIX2.compositeCellLayers(cell, cell.size, { coordinates: new Set(['1,1']) });
+  assert.deepStrictEqual(incremental, { '1,1': full['1,1'] });
+  assert.strictEqual(cell.pixels, full);
+  delete StructureOps.findNode(cell, 'region_top').node.pixels['1,1'];
+  const { updateComposite } = require('../js/editor-canvas.js');
+  assert.deepStrictEqual(updateComposite(PIX2, cell, cell.size, new Set(['1,1']), 'region_top'), {});
+  assert.strictEqual(cell.pixels, full);
+  assert.equal(cell.pixels['1,1'], PIX2.compositeCellLayers(cell, cell.size, { coordinates: new Set(['1,1']) })['1,1']);
+  assert.ok(cell.pixels['3,3']);
+}
+
+// 7. Hidden or locked ancestors block the whole target path without changing rendering.
+{
+  const doc = makeDocument();
+  const cell = doc.cells.c0;
+  const top = cell.layers[1];
+  const full = composite(doc);
+  top.children[0].locked = true;
+  assert.strictEqual(StructureOps.hitRegion(cell, 1, 1, top.id), null);
+  assert.strictEqual(Tools.getTargetForPlot(cell, 'region_top'), null);
+  assert.deepStrictEqual(composite(doc), full);
+  top.children[0].locked = false;
+  assert.strictEqual(StructureOps.hitRegion(cell, 1, 1, top.id).node.id, 'region_top');
+  assert.strictEqual(StructureOps.hitRegion(cell, 1, 1, cell.layers[0].id).node.id, 'region_bottom');
+  assert.strictEqual(StructureOps.hitRegion(cell, 1, 1, top.id, 'region_bottom'), null);
+}
+
+// Overlapping raster siblings follow paint order even while one is isolated.
+{
+  const lower = { id: 'lower', type: 'region', pixels: { '1,1': '#ff0000' } };
+  const upper = { id: 'upper', type: 'region', pixels: { '1,1': '#00ff00' } };
+  const cell = { layers: [{ id: 'layer', type: 'layer', children: [lower, upper] }] };
+  const point = { x: 1, y: 1 };
+  const state = { activeLayerId: 'layer', isolatedNodeId: 'upper' };
+  assert.equal(StructureOps.pickIsolationRegion(cell, point, state, true).node.id, 'lower');
+  lower.visible = false;
+  assert.equal(StructureOps.pickIsolationRegion(cell, point, state, true).node.id, 'upper');
+  lower.visible = true;
+  lower.locked = true;
+  assert.equal(StructureOps.pickIsolationRegion(cell, point, state, true).node.id, 'upper');
+  upper.pixels['1,1'] = '#00ff0000';
+  assert.equal(StructureOps.pickIsolationRegion(cell, point, state, true), null);
+}
+
+// 8. Even brush sizes snap around the closest grid intersection.
+{
+  const dimensions = { w: 16, h: 16 };
+  const point = Tools.brushPoint({ x: 49, y: 61, zoom: 10 }, 4, dimensions);
+  assert.deepStrictEqual(point, { x: 5, y: 6 });
+  const pixels = new Set();
+  Tools.brushStroke(point.x, point.y, point.x, point.y, 4, dimensions, (x, y) => pixels.add(`${x},${y}`));
+  assert.strictEqual(pixels.size, 16);
+  assert.ok(pixels.has('3,4') && pixels.has('6,7'));
+  assert.deepStrictEqual(Tools.brushPoint({ x: 49, y: 61, zoom: 10 }, 3, dimensions), { x: 4, y: 6 });
+}
+
+// 9. Display names may coincide. Reorder and grouping use stable node IDs.
+{
+  const cell = {
+    id: 'c0',
+    layers: [
+      { id: 'a', type: 'layer', name: 'Same', children: [] },
+      { id: 'b', type: 'layer', name: 'Same', children: [] }
+    ]
+  };
+  assert.ok(StructureOps.moveNode(cell, 'a', null, 2).ok);
+  assert.deepStrictEqual(cell.layers.map(node => node.id), ['b', 'a']);
+  const children = cell.layers[0].children;
+  for (const id of ['r1', 'r2', 'r3', 'r4']) children.push({ id, type: 'region', pixels: {} });
+  const first = StructureOps.groupNodes(cell, ['r1', 'r2']);
+  const second = StructureOps.groupNodes(cell, ['r3', 'r4']);
+  assert.strictEqual(first.name, 'Group');
+  assert.strictEqual(second.name, 'Group 2');
+  second.name = first.name;
+  assert.deepStrictEqual(StructureOps.ungroupNode(cell, second.id).map(node => node.id), ['r3', 'r4']);
+  assert.strictEqual(StructureOps.findNode(cell, first.id).node, first);
+}
+
 console.log('\n====================================================');
-console.log('ALL SAFE-02 VISIBILITY TESTS PASSED (5/5)');
+console.log('ALL SAFE-02 VISIBILITY TESTS PASSED (9/9)');
 console.log('====================================================\n');

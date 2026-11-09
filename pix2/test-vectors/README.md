@@ -26,6 +26,7 @@ A conforming PIX2 parser must satisfy the following requirements:
 | `canonical_valid_hero.json` | Baseline AST | Normative JSON representation of `canonical_valid_hero.pix2`. |
 | `canonical_primitives_raster.pix2` | Vector Primitives | Tests Bresenham line tie-breaking, rect fill/outline, 4-way flood fill, sym_dot custom sizing, and LWW overwrite rules. |
 | `canonical_primitives_raster.json` | Baseline Raster | Expected pixel AST representation of `canonical_primitives_raster.pix2`. |
+| `canonical_v11_opacity.pix2` | PIX2 1.1 structural | Layer children stay in order `below, g, above`. Expected composite pixels are `0,0 #3800c790` and `1,0 #ff000010`. The zero-opacity Region contributes no color. |
 | `invalid_syntax_coordinate.pix2` | Invalid Syntax | Rejects non-integer coordinate `1abc,3`. |
 | `invalid_missing_frame.pix2` | Invalid Semantics | Validator flags missing frame reference `phantom_cell_404`. |
 | `invalid_out_of_bounds.pix2` | Security Violation | Validator flags coordinates outside cell bounds in strict mode with `PIX2_WARN_OUT_OF_BOUNDS`. |

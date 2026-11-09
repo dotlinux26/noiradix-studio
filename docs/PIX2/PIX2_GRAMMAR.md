@@ -1,5 +1,7 @@
 # PIX2 Formal Grammar Specification v1.0
 
+> Historical PIX2 1.0 reference. For current structural records and conformance rules, see the [normative PIX2 1.1 specification](../../PIX2_SPECIFICATION.md).
+
 This document defines the formal lexical and syntactic grammar of the **PIX2 Sprite Description Language (`.pix2`)**.
 Any conforming parser, serializer, or AI model MUST adhere to these rules.
 

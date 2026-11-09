@@ -167,6 +167,13 @@ const oobStrictDiag = structuredStrict.diagnostics.find(d => d.code === 'PIX2_WA
 assert.strictEqual(oobStrictDiag.severity, 'error', 'Strict out-of-bounds must promote severity to error');
 console.log('  [PASS] Structured Diagnostic API verified: code, severity, cell_id, and coordinate metadata emitted');
 
+const structural = PIX2.parse(fs.readFileSync(path.join(vectorsDir, 'canonical_v11_opacity.pix2'), 'utf8'));
+assert.equal(PIX2.validate(structural, { strict: true }).valid, true);
+assert.deepEqual(structural.cells.c.layers[0].children.map(node => node.id), ['below', 'g', 'above']);
+assert.deepEqual(structural.cells.c.pixels, { '0,0': '#3800c790', '1,0': '#ff000010' });
+assert.deepEqual(PIX2.parse(PIX2.serialize(structural)).cells.c.pixels, structural.cells.c.pixels);
+console.log('  [PASS] PIX2 1.1 mixed sibling order and inherited opacity match the reference pixels');
+
 console.log('\n====================================================');
 console.log('ALL TEST VECTORS VALIDATED SUCCESSFULLY');
 console.log('====================================================');

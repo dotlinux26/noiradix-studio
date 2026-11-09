@@ -263,6 +263,10 @@ const PIX2 = (function () {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
   }
 
+  function isOpacity(value) {
+    return Number.isFinite(value) && value >= 0 && value <= 1;
+  }
+
   function compositeColorsSourceOver(destinationHex, sourceHex, opacity = 1) {
     const src = hexToRgba(sourceHex);
     const srcA = (src.a / 255) * Math.max(0, Math.min(1, opacity));
@@ -512,6 +516,18 @@ const PIX2 = (function () {
 
     const diagnostics = [];
     doc._diagnostics = diagnostics;
+    function readOpacity(node, value, line) {
+      const opacity = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value) ? Number(value) : NaN;
+      if (!isOpacity(opacity)) {
+        diagnostics.push({
+          code: 'PIX2_ERR_INVALID_OPACITY',
+          line,
+          message: `Invalid opacity "${value}" on ${node.type} "${node.id}" (expected a number from 0 to 1)`
+        });
+      } else {
+        node.opacity = opacity;
+      }
+    }
 
     let hasPix2Header = false;
     let currentSection = null;
@@ -521,8 +537,9 @@ const PIX2 = (function () {
     let currentGroup = null;
     let currentRegion = null;
     const parsedLayers = [];
-    const parsedGroups = [];
-    const parsedRegions = [];
+    const parsedChildren = [];
+    let parsedGroupCount = 0;
+    let parsedRegionCount = 0;
     const nodeRegistry = new Map();
 
     for (let i = 0; i < lines.length; i++) {
@@ -651,8 +668,8 @@ const PIX2 = (function () {
           currentSection = 'group';
           currentAnim = null;
           currentRegion = null;
-          const rawGroupId = parts[1] || `group_${parsedGroups.length}`;
-          const groupId = sanitizeKey(rawGroupId, `group_${parsedGroups.length}`);
+          const rawGroupId = parts[1] || `group_${parsedGroupCount}`;
+          const groupId = sanitizeKey(rawGroupId, `group_${parsedGroupCount}`);
           if (!isSafeIdentifier(groupId)) {
             diagnostics.push({
               code: 'PIX2_ERR_PROTOTYPE_POLLUTION',
@@ -679,13 +696,14 @@ const PIX2 = (function () {
             children: []
           };
           nodeRegistry.set(groupId, currentGroup);
-          parsedGroups.push(currentGroup);
+          parsedGroupCount++;
+          parsedChildren.push(currentGroup);
           continue;
         } else if (secName === 'region') {
           currentSection = 'region';
           currentAnim = null;
-          const rawRegionId = parts[1] || `region_${parsedRegions.length}`;
-          const regionId = sanitizeKey(rawRegionId, `region_${parsedRegions.length}`);
+          const rawRegionId = parts[1] || `region_${parsedRegionCount}`;
+          const regionId = sanitizeKey(rawRegionId, `region_${parsedRegionCount}`);
           if (!isSafeIdentifier(regionId)) {
             diagnostics.push({
               code: 'PIX2_ERR_PROTOTYPE_POLLUTION',
@@ -713,7 +731,8 @@ const PIX2 = (function () {
             primitives: []
           };
           nodeRegistry.set(regionId, currentRegion);
-          parsedRegions.push(currentRegion);
+          parsedRegionCount++;
+          parsedChildren.push(currentRegion);
           continue;
         } else if (secName === 'cell' || secName === 'frame') {
           currentSection = 'cell';
@@ -984,16 +1003,7 @@ const PIX2 = (function () {
           } else if (key === 'locked') {
             currentLayer.locked = (val.toLowerCase() === 'true');
           } else if (key === 'opacity') {
-            const op = parseFloat(val);
-            if (isNaN(op) || op < 0 || op > 1) {
-              diagnostics.push({
-                code: 'PIX2_ERR_INVALID_OPACITY',
-                line: i + 1,
-                message: `Invalid layer opacity "${val}" (expected float between 0.0 and 1.0)`
-              });
-            } else {
-              currentLayer.opacity = op;
-            }
+            readOpacity(currentLayer, val, i + 1);
           } else if (key === 'blend') {
             const mode = val.toLowerCase();
             if (mode !== 'normal') {
@@ -1026,6 +1036,8 @@ const PIX2 = (function () {
             currentGroup.visible = (val.toLowerCase() !== 'false');
           } else if (key === 'locked') {
             currentGroup.locked = (val.toLowerCase() === 'true');
+          } else if (key === 'opacity') {
+            readOpacity(currentGroup, val, i + 1);
           } else if (key === 'tags') {
             currentGroup.tags = parseTagsList(line.slice(colonIdx + 1).trim(), profile);
           }
@@ -1052,6 +1064,8 @@ const PIX2 = (function () {
               currentRegion.visible = (val.toLowerCase() !== 'false');
             } else if (key === 'locked') {
               currentRegion.locked = (val.toLowerCase() === 'true');
+            } else if (key === 'opacity') {
+              readOpacity(currentRegion, val, i + 1);
             } else if (key === 'tags') {
               currentRegion.tags = parseTagsList(line.slice(colonIdx + 1).trim(), profile);
             }
@@ -1379,71 +1393,39 @@ const PIX2 = (function () {
       });
     }
 
-    // Post-parsing: Tree Assembly for v1.1 nodes
-    for (const group of parsedGroups) {
-      if (group.parent) {
-        const parentNode = nodeRegistry.get(group.parent);
-        if (!parentNode) {
-          diagnostics.push({
-            code: 'PIX2_ERR_MISSING_PARENT',
-            line: 1,
-            message: `Group "${group.id}" references non-existent parent "${group.parent}"`
-          });
-        } else if (parentNode.type === 'region') {
-          diagnostics.push({
-            code: 'PIX2_ERR_INVALID_PARENT_TYPE',
-            line: 1,
-            message: `Group "${group.id}" cannot have region "${group.parent}" as parent`
-          });
-        } else if (group.cell && parentNode.cell && group.cell !== parentNode.cell) {
-          diagnostics.push({
-            code: 'PIX2_ERR_CROSS_CELL_PARENT',
-            line: 1,
-            message: `Group "${group.id}" in cell "${group.cell}" cannot reference parent in cell "${parentNode.cell}"`
-          });
-        } else {
-          parentNode.children.push(group);
-        }
+    // Link all child types in source order so mixed Group/Region siblings keep
+    // their exact paint order after save and reload.
+    for (const node of parsedChildren) {
+      const parent = nodeRegistry.get(node.parent);
+      let code, message;
+      if (!parent) {
+        code = 'PIX2_ERR_MISSING_PARENT';
+        message = `Node "${node.id}" references missing parent "${node.parent || ''}"`;
+      } else if (parent.type === 'region') {
+        code = 'PIX2_ERR_INVALID_PARENT_TYPE';
+        message = `Node "${node.id}" cannot have region "${parent.id}" as parent`;
+      } else if (node.cell && parent.cell && node.cell !== parent.cell) {
+        code = 'PIX2_ERR_CROSS_CELL_PARENT';
+        message = `Node "${node.id}" in cell "${node.cell}" cannot reference parent in cell "${parent.cell}"`;
       } else {
-        diagnostics.push({
-          code: 'PIX2_ERR_MISSING_PARENT',
-          line: 1,
-          message: `Group "${group.id}" has no parent specified`
-        });
-      }
-    }
-
-    for (const region of parsedRegions) {
-      if (region.parent) {
-        const parentNode = nodeRegistry.get(region.parent);
-        if (!parentNode) {
-          diagnostics.push({
-            code: 'PIX2_ERR_MISSING_PARENT',
-            line: 1,
-            message: `Region "${region.id}" references non-existent parent "${region.parent}"`
-          });
-        } else if (parentNode.type === 'region') {
-          diagnostics.push({
-            code: 'PIX2_ERR_INVALID_PARENT_TYPE',
-            line: 1,
-            message: `Region "${region.id}" cannot have region "${region.parent}" as parent`
-          });
-        } else if (region.cell && parentNode.cell && region.cell !== parentNode.cell) {
-          diagnostics.push({
-            code: 'PIX2_ERR_CROSS_CELL_PARENT',
-            line: 1,
-            message: `Region "${region.id}" in cell "${region.cell}" cannot reference parent in cell "${parentNode.cell}"`
-          });
-        } else {
-          parentNode.children.push(region);
+        const seen = new Set([node.id]);
+        let groups = Number(node.type === 'group');
+        for (let ancestor = parent; ancestor?.type === 'group'; ancestor = nodeRegistry.get(ancestor.parent)) {
+          if (seen.has(ancestor.id)) {
+            code = 'PIX2_ERR_HIERARCHY_CYCLE';
+            message = `Cycle detected in hierarchy at node "${ancestor.id}"`;
+            break;
+          }
+          seen.add(ancestor.id);
+          if (++groups > profile.maxGroupDepth) {
+            code = 'PIX2_ERR_RESOURCE_LIMIT';
+            message = `Node "${node.id}" exceeds group nesting limit ${profile.maxGroupDepth}`;
+            break;
+          }
         }
-      } else {
-        diagnostics.push({
-          code: 'PIX2_ERR_MISSING_PARENT',
-          line: 1,
-          message: `Region "${region.id}" has no parent specified`
-        });
       }
+      if (code) diagnostics.push({ code, line: 1, message });
+      else parent.children.push(node);
     }
 
     for (const layer of parsedLayers) {
@@ -1627,6 +1609,7 @@ const PIX2 = (function () {
     }
     const isolatedId = options.isolatedNodeId || null;
     const dimFactor = options.dimNonIsolated !== undefined ? options.dimNonIsolated : 1.0;
+    const coordinates = options.coordinates;
     const resultPixels = {};
 
     function nodeIsIsolatedOrChild(node, inIsolatedPath) {
@@ -1638,33 +1621,22 @@ const PIX2 = (function () {
       const isVisible = parentVisible && (node.visible !== false);
       if (!isVisible) return;
       const isIsolated = nodeIsIsolatedOrChild(node, inIsolatedPath);
-      let effectiveNodeOpacity = parentOpacity;
-      if (isolatedId && !isIsolated) {
-        effectiveNodeOpacity *= dimFactor;
-      }
-      const localOpacity = node.type === 'layer' && node.opacity !== undefined ? node.opacity : 1.0;
-      const contentOpacity = effectiveNodeOpacity * localOpacity;
+      const localOpacity = node.opacity ?? 1;
+      const inheritedOpacity = parentOpacity * localOpacity;
+      const contentOpacity = isolatedId && !isIsolated ? inheritedOpacity * dimFactor : inheritedOpacity;
 
-      if (node.pixels) {
-        if (isolatedId && !isIsolated && dimFactor <= 0.0) {
-          // dimmed out completely
-        } else {
-          for (const coord in node.pixels) {
-            const hex = node.pixels[coord];
-            if (!hex) continue;
-            if (contentOpacity <= 0.0) {
-              // invisible
-            } else {
-              const composited = compositeColorsSourceOver(resultPixels[coord], hex, contentOpacity);
-              if (composited) resultPixels[coord] = composited;
-            }
-          }
+      if (node.pixels && contentOpacity > 0) {
+        for (const coord of coordinates || Object.keys(node.pixels)) {
+          const hex = node.pixels[coord];
+          if (!hex) continue;
+          const composited = compositeColorsSourceOver(resultPixels[coord], hex, contentOpacity);
+          if (composited) resultPixels[coord] = composited;
         }
       }
 
       const childList = node.children || node.layers;
       if (childList && Array.isArray(childList)) {
-        const nextOpacity = contentOpacity;
+        const nextOpacity = inheritedOpacity;
         for (const child of childList) {
           renderNode(child, isVisible, nextOpacity, isIsolated);
         }
@@ -1674,7 +1646,7 @@ const PIX2 = (function () {
     for (const layer of cell.layers) {
       renderNode(layer, true, 1.0, false);
     }
-    cell.pixels = resultPixels;
+    if (!isolatedId && !coordinates) cell.pixels = resultPixels;
     return resultPixels;
   }
 
@@ -1777,11 +1749,9 @@ const PIX2 = (function () {
 
     function collectDiscarded(node) {
       if (!node) return;
+      if (node.opacity !== undefined && node.opacity < 1) lossReport.flattenedOpacityCount++;
       if (node.type === 'layer') {
         lossReport.discardedLayers.push(node.id);
-        if (node.opacity !== undefined && node.opacity < 1.0) {
-          lossReport.flattenedOpacityCount++;
-        }
         for (const ch of node.children || []) collectDiscarded(ch);
       } else if (node.type === 'group') {
         lossReport.discardedGroups.push(node.id);
@@ -1937,6 +1907,7 @@ const PIX2 = (function () {
             if (node.name) lines.push(`  name: "${escapePix2String(node.name)}"`);
             lines.push(`  visible: ${node.visible !== false}`);
             lines.push(`  locked: ${Boolean(node.locked)}`);
+            if (node.opacity !== undefined) lines.push(`  opacity: ${node.opacity}`);
             if (node.tags && node.tags.length > 0) {
               lines.push(`  tags: [${node.tags.join(', ')}]`);
             }
@@ -1948,6 +1919,7 @@ const PIX2 = (function () {
             if (node.name) lines.push(`  name: "${escapePix2String(node.name)}"`);
             lines.push(`  visible: ${node.visible !== false}`);
             lines.push(`  locked: ${Boolean(node.locked)}`);
+            if (node.opacity !== undefined) lines.push(`  opacity: ${node.opacity}`);
             if (node.tags && node.tags.length > 0) {
               lines.push(`  tags: [${node.tags.join(', ')}]`);
             }
@@ -2373,12 +2345,10 @@ const PIX2 = (function () {
             const currentAncestors = new Set(visitedAncestors);
             currentAncestors.add(node.id);
 
+            if (node.opacity !== undefined && !isOpacity(node.opacity)) {
+              recordDiagnostic('PIX2_ERR_INVALID_OPACITY', 'error', `Node "${node.id}" has invalid opacity ${node.opacity} (must be 0.0 - 1.0)`, { cell_id: cellId, node_id: node.id, opacity: node.opacity });
+            }
             if (node.type === 'layer') {
-              if (node.opacity !== undefined) {
-                if (typeof node.opacity !== 'number' || isNaN(node.opacity) || node.opacity < 0 || node.opacity > 1) {
-                  recordDiagnostic('PIX2_ERR_INVALID_OPACITY', 'error', `Layer "${node.id}" has invalid opacity ${node.opacity} (must be 0.0 - 1.0)`, { cell_id: cellId, layer_id: node.id, opacity: node.opacity });
-                }
-              }
               if (node.blend !== undefined && node.blend !== null && node.blend !== 'normal') {
                 recordDiagnostic('PIX2_ERR_UNSUPPORTED_BLEND', 'error', `Layer "${node.id}" specifies unsupported blend mode "${node.blend}" (expected "normal")`, { cell_id: cellId, layer_id: node.id, blend: node.blend });
               }
@@ -2444,7 +2414,7 @@ const PIX2 = (function () {
           }
 
           for (const layer of cell.layers) {
-            validateNode(layer, 1, new Set());
+            validateNode(layer, 0, new Set());
           }
         }
       }

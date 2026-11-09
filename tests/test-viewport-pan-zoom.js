@@ -57,7 +57,20 @@ const fitZ = NoiraViewport.computeFitZoom(1000, 800, 100, 100, NoiraViewport.DEF
 assert.strictEqual(fitZ, 6);
 console.log('  [PASS] computeFitZoom fits within padding bounds correctly');
 
-// 5. Script Inclusion in Entry Points
+// 5. Shared artwork zoom policy for Studio frames and PixelArt canvases
+const { artworkZoomLimit, stepArtworkZoom, fitArtworkZoom } = NoiraViewport;
+for (const [size, limit] of [[127, 64], [128, 32], [255, 32], [256, 16], [511, 16], [512, 8], [1024, 8]]) {
+  assert.equal(artworkZoomLimit(size, 16), limit);
+  assert.equal(artworkZoomLimit(16, size), limit);
+  assert.equal(stepArtworkZoom(limit, 1, size, 16), limit);
+  assert.equal(fitArtworkZoom(100000, 100000, size, 16, 64), limit);
+}
+assert.equal(stepArtworkZoom(8, -1, 512, 16), 6);
+assert.equal(stepArtworkZoom(1, -1, 512, 16), 0.75);
+assert.equal(fitArtworkZoom(640, 480, 1024, 512, 64), 0.5);
+console.log('  [PASS] Artwork caps apply by longest side, with fractional Fit on large canvases');
+
+// 6. Script Inclusion in Entry Points
 for (const entry of ['index.html', 'pixelart/index.html']) {
   const html = fs.readFileSync(path.join(__dirname, '..', entry), 'utf8');
   assert.ok(html.includes('viewport-pan-zoom.js'), `${entry} includes viewport-pan-zoom.js`);
@@ -70,5 +83,5 @@ for (const entry of ['index.html', 'pixelart/index.html']) {
 console.log('  [PASS] Both Studio and PixelArt load viewport-pan-zoom module before application logic');
 
 console.log('\n====================================================');
-console.log('ALL NOIRA VIEWPORT PAN & ZOOM TESTS PASSED (5/5)');
+console.log('ALL NOIRA VIEWPORT PAN & ZOOM TESTS PASSED (6/6)');
 console.log('====================================================\n');

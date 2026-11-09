@@ -55,7 +55,7 @@ The workspace follows a responsive split-view architecture:
 * **Return Link:** Quick button returning to NOIRADIX Studio (`../`).
 * **Document Info:** Editable artwork title and current dimensions badge (e.g. `128×128 px`).
 * **File Operations:**
-  * **New Canvas (`Ctrl+N`):** Opens dimension picker modal with presets up to $1024 \times 1024$.
+  * **New Canvas (`Alt+N`):** Opens dimension picker modal with presets up to $1024 \times 1024$.
   * **Open File (`Ctrl+O`):** Reads `.pix2` file from disk via File System Access API or file input.
   * **Save / Download (`Ctrl+S`):** Downloads `.pix2` source.
   * **Export PNG:** Opens export modal with integer scale multipliers ($1\times, 2\times, 4\times, 8\times, 16\times, 32\times$).
@@ -104,7 +104,7 @@ The workspace follows a responsive split-view architecture:
 ### 2.3 Canvas Artboard, High-Precision Grid & Desktop Context Menu
 * **Pixel-Aligned Checkerboard:** Rendered directly onto `dom.ctxMain`. At `zoom >= 4`, each checker tile is **EXACTLY** 1 artwork pixel (`zoom × zoom` screen px), eliminating all visual vibration/eye strain.
 * **Razor-Sharp Normative Grid:** Grid lines are rendered directly onto the canvas with half-pixel $(+0.5\text{px})$ offset at zoom levels $\ge 4\times$, perfectly separating pixel boundaries.
-* **Analytical Invariant Cursor Zoom:** Smooth mouse wheel zoom (1x to 64x integer multiples) mathematically invariant under the cursor position.
+* **Cursor-centered zoom:** PixelArt and Studio Sprite Editor share steps from 10% to 64× and the same Fit calculation. Based on the longer canvas side, the maximum is 64× below 128 px, 32× at 128–255 px, 16× at 256–511 px, and 8× from 512 px. Wheel zoom keeps the artwork point under the cursor in place to the nearest screen pixel. Rulers space labels at least 40 CSS pixels apart.
 * **Separated Statusbar Geometry:** Features explicit 14px dividers (`.pa-status-divider`) with 6px margins and dedicated min-widths, guaranteeing zero collision between cursor coordinates, hover color (`Transparent` / hex), background style selector, grid toggle, and zoom controls on narrow panes.
 * **Desktop Right-Click Context Menu (`#pa-context-menu`):** Right-clicking anywhere on the canvas or viewport opens a native desktop context menu featuring Cut (`Ctrl+X`), Copy (`Ctrl+C`), Paste (`Ctrl+V`), Select All (`Ctrl+A`), Deselect (`Esc`), Fill (`F`), Flip Horizontal (`H`), Flip Vertical (`Shift+H`), Rotate 90° Clockwise (`R`), Center Content, and Delete (`Del`).
 * **Decoupled Secondary Color Drawing:** Secondary color painting via right-click has been decoupled in favor of the context menu. Artists effortlessly swap primary and secondary colors using the `X` key or the swap button.
@@ -177,8 +177,8 @@ The workspace follows a responsive split-view architecture:
 | `Ctrl + S` | Save File | Direct disk writeback or download |
 | `Ctrl + Shift + S` | Save As | File System Access API picker |
 | `Ctrl + O` | Open File | Native picker for `.pix2`, `.png`, `.jpg` |
-| `Ctrl + N` | New Canvas Modal | Custom dimension setup |
-| `Mouse Wheel` | Invariant Cursor-Centered Zoom | 1x to 64x integer magnification |
+| `Alt + N` | New Canvas Modal | Custom dimension setup |
+| `Mouse Wheel` | Cursor-centered zoom | Shared steps and canvas-size limit |
 
 ---
 
