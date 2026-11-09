@@ -3949,9 +3949,9 @@ body.dark-theme .export-preview-viewport {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   width: auto;
-  max-width: 100%;
+  max-width: calc(100% - 36px);
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -4310,6 +4310,94 @@ body.dark-theme .new-file-summary-card .summary-profile-badge {
   color: var(--text-dim);
   white-space: nowrap;
 }
+
+/* ================= EMPTY WORKSPACE STATE ================= */
+.studio-empty-workspace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: calc(100vh - 120px);
+  background: radial-gradient(circle at 50% 30%, rgba(99, 102, 241, 0.05) 0%, transparent 60%), var(--bg-primary);
+  padding: 32px 16px;
+  box-sizing: border-box;
+}
+
+.empty-workspace-card {
+  max-width: 520px;
+  width: 100%;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-subtle);
+  border-radius: 14px;
+  padding: 36px 28px;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.empty-workspace-card.drag-over {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.04);
+  transform: scale(1.01);
+}
+
+.empty-workspace-icon {
+  font-size: 42px;
+  color: var(--accent-primary);
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.empty-workspace-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.empty-workspace-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.empty-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.empty-workspace-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.empty-workspace-shortcuts kbd {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
 
 
 

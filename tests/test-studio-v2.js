@@ -435,6 +435,69 @@ console.log('\nTest 11: Slicing Viewport & Inspector Toolbars Horizontal Drag-Sc
   pass('Slicing Viewport and Inspector horizontal drag-scroll contracts verified');
 }
 
+// -----------------------------------------------------------------------------
+// Test 12: Empty Workspace State & Adjacent Tab Placement Invariants
+// -----------------------------------------------------------------------------
+console.log('\nTest 12: Empty Workspace State & Adjacent Tab Placement Invariants');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const paIndexHtml = fs.readFileSync(path.join(__dirname, '../pixelart/index.html'), 'utf8');
+  const styleCss = fs.readFileSync(path.join(__dirname, '../css/style.css'), 'utf8');
+  const paStyleCss = fs.readFileSync(path.join(__dirname, '../pixelart/css/pixelart.css'), 'utf8');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const paAppJs = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+
+  // 1. Studio empty workspace elements
+  assert(indexHtml.includes('id="studio-empty-workspace"'), 'index.html must include #studio-empty-workspace');
+  assert(indexHtml.includes('id="btn-empty-new-project"'), 'index.html must include #btn-empty-new-project');
+  assert(indexHtml.includes('id="btn-empty-open-file"'), 'index.html must include #btn-empty-open-file');
+  assert(indexHtml.includes('id="btn-empty-load-sample"'), 'index.html must include #btn-empty-load-sample');
+
+  // 2. PixelArt empty workspace elements
+  assert(paIndexHtml.includes('id="pa-empty-workspace"'), 'pixelart/index.html must include #pa-empty-workspace');
+  assert(paIndexHtml.includes('id="pa-btn-empty-new"'), 'pixelart/index.html must include #pa-btn-empty-new');
+  assert(paIndexHtml.includes('id="pa-btn-empty-open"'), 'pixelart/index.html must include #pa-btn-empty-open');
+  assert(paIndexHtml.includes('id="pa-btn-empty-sample"'), 'pixelart/index.html must include #pa-btn-empty-sample');
+
+  // 3. Adjacent Tab + Button ordering in PixelArt (strip before button: [tab] [+])
+  const stripIdx = paIndexHtml.indexOf('id="pa-project-tabs-strip"');
+  const newBtnIdx = paIndexHtml.indexOf('id="pa-btn-project-new-tab"');
+  assert(stripIdx !== -1 && newBtnIdx !== -1 && stripIdx < newBtnIdx,
+    'pixelart/index.html must place #pa-project-tabs-strip before #pa-btn-project-new-tab for adjacent [tab][+] layout');
+
+  // 4. Tab Strip shrink-wrap styles in both Studio and PixelArt CSS
+  assert(styleCss.includes('.project-tabs-strip') && styleCss.includes('max-width: calc(100% - 36px);'),
+    'css/style.css must shrink-wrap .project-tabs-strip with max-width: calc(100% - 36px)');
+  assert(paStyleCss.includes('.project-tabs-strip') && paStyleCss.includes('max-width: calc(100% - 36px);'),
+    'pixelart.css must shrink-wrap .project-tabs-strip with max-width: calc(100% - 36px)');
+
+  // 5. Studio closeProjectSession empty workspace transition & RAM purge
+  assert(appJs.includes('activeProjectId = null;') && appJs.includes('studio-empty-workspace'),
+    'app.js must transition to empty workspace state when projectSessions is empty');
+  assert(appJs.includes('session.doc = null;') && appJs.includes('session.history = [];'),
+    'app.js must immediately purge closed session document and history from RAM');
+
+  // 6. PixelArt closePaProjectSession empty workspace transition & RAM purge
+  assert(paAppJs.includes('updatePaEmptyWorkspaceUI') && paAppJs.includes('pa-empty-workspace'),
+    'pixelart-app.js must implement updatePaEmptyWorkspaceUI and transition to empty workspace state');
+  assert(paAppJs.includes('session.doc = null;') && paAppJs.includes('session.history = [];'),
+    'pixelart-app.js must immediately purge closed session document and history from RAM');
+
+  // 7. Alt+N Browser-Friendly Shortcut Support
+  assert(appJs.includes("e.altKey && key === 'n'") || appJs.includes('Alt + N'),
+    'app.js must support Alt+N browser-safe new project shortcut');
+  assert(paAppJs.includes("e.altKey && (e.key === 'n' || e.key === 'N')"),
+    'pixelart-app.js must support Alt+N browser-safe new canvas shortcut');
+
+  // 8. Studio documentRevision Variable Integrity
+  assert(appJs.includes('let documentRevision = 0;'),
+    'app.js must define documentRevision at module scope');
+
+  pass('Empty workspace state, RAM purge, and adjacent [+] button placement contracts verified');
+}
+
 console.log('\n====================================================');
 console.log(`ALL STUDIO 2.0 INTEGRATION TESTS PASSED (${passCount}/${passCount})`);
 console.log('====================================================\n');

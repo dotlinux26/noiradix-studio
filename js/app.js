@@ -21,6 +21,8 @@
   let currentFileName = 'player_wispling.pix2';
   let currentFilePath = null;
   let isDocumentDirty = false;
+  let documentRevision = 0;
+  let lastSavedRevision = 0;
   let periodicAutosaveTimer = null;
   let debouncedAutosaveTimer = null;
   let miniPreviewScale = 6;
@@ -228,7 +230,14 @@
     if (savedSessionsJson) {
       try {
         const data = JSON.parse(savedSessionsJson);
-        if (data && Array.isArray(data.sessions) && data.sessions.length > 0) {
+        if (data && Array.isArray(data.sessions)) {
+          if (data.sessions.length === 0) {
+            projectSessions = [];
+            activeProjectId = null;
+            state.doc = null;
+            refreshAll();
+            return true;
+          }
           projectSessions = [];
           for (const item of data.sessions) {
             try {
@@ -854,13 +863,56 @@
       projectSessions.splice(idx, 1);
     }
 
+    // Immediately purge and release RAM references from discarded session
+    session.doc = null;
+    session.history = [];
+    session.lastSavedContent = '';
+    session.fileHandle = null;
+    session.openCellTabs = [];
+    session.selection = null;
+
     if (projectSessions.length === 0) {
-      loadDefaultProject();
+      activeProjectId = null;
+      state.doc = null;
+      state.history = [];
+      state.historyIndex = -1;
+      state.selection = null;
+      state.openCellTabs = [];
+      currentFileHandle = null;
+      currentFileName = null;
+      currentFilePath = null;
+      lastSavedContent = '';
+      floatingSelectionPixels = null;
+      floatingOriginalSel = null;
+
+      // Clear canvas buffers to free GPU/RAM memory
+      if (dom.gridCanvas) {
+        const gctx = dom.gridCanvas.getContext('2d');
+        gctx.clearRect(0, 0, dom.gridCanvas.width, dom.gridCanvas.height);
+      }
+      if (dom.cellCanvas) {
+        const cctx = dom.cellCanvas.getContext('2d');
+        cctx.clearRect(0, 0, dom.cellCanvas.width, dom.cellCanvas.height);
+      }
+      if (dom.miniPreviewCanvas) {
+        const mctx = dom.miniPreviewCanvas.getContext('2d');
+        mctx.clearRect(0, 0, dom.miniPreviewCanvas.width, dom.miniPreviewCanvas.height);
+      }
+
+      // Purge recovery drafts from localStorage so closed discarded files never linger
+      localStorage.removeItem('pix2_draft_content');
+      localStorage.removeItem('pix2_recovery_snapshot');
+      localStorage.removeItem('pix2_last_saved_content');
+      localStorage.removeItem('noiradix_active_file_name');
+      localStorage.removeItem('noiradix_active_file_path');
+      persistAllProjectSessions();
+      renderProjectTabs();
+      refreshAll();
     } else {
       const nextSession = projectSessions[Math.min(idx, projectSessions.length - 1)];
       switchProjectSession(nextSession.id);
+      persistAllProjectSessions();
     }
-    persistAllProjectSessions();
   }
 
   // ===========================================================================
@@ -1249,6 +1301,11 @@
 
   function setDirty(dirty) {
     isDocumentDirty = dirty;
+    if (dirty) {
+      documentRevision++;
+    } else {
+      lastSavedRevision = documentRevision;
+    }
     const title = (state.doc ? state.doc.meta.title : 'NOIRADIX Studio') || 'Untitled';
     const fileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(title, '.pix2', 'untitled');
     const isDirectDiskLinked = Boolean(currentFileHandle);
@@ -1311,6 +1368,24 @@
     const saveStatusBadge = document.getElementById('save-status-badge');
     const saveStatusText = document.getElementById('save-status-text');
     const btnSave = document.getElementById('btn-save-pix2');
+
+    if (!state.doc) {
+      if (fileSourceBadge) {
+        fileSourceBadge.className = 'file-source-badge draft';
+        fileSourceBadge.innerHTML = '<i class="fa-solid fa-folder"></i> <span id="file-source-text">No File</span>';
+        fileSourceBadge.title = 'No project open. Create or open a file to start editing.';
+      }
+      if (filePathText && filePathPill) {
+        filePathText.textContent = 'No File Open';
+        filePathPill.style.display = 'none';
+      }
+      if (saveStatusBadge) {
+        saveStatusBadge.className = 'save-status-badge clean';
+        saveStatusBadge.innerHTML = '<i class="fa-solid fa-minus"></i> <span id="save-status-text">Idle</span>';
+        saveStatusBadge.title = 'No active document';
+      }
+      return;
+    }
 
     const isDirectDiskLinked = Boolean(currentFileHandle);
     const hasFileName = Boolean(currentFileName || currentFilePath);
@@ -1971,6 +2046,32 @@
   }
 
   function refreshAll() {
+    const emptyWorkspace = document.getElementById('studio-empty-workspace');
+    if (!state.doc || projectSessions.length === 0) {
+      if (emptyWorkspace) emptyWorkspace.style.display = 'flex';
+      if (dom.tabsContainer) dom.tabsContainer.style.display = 'none';
+      if (dom.animFloatingPanel) {
+        dom.animFloatingPanel.classList.add('hidden');
+        dom.animFloatingPanel.style.display = 'none';
+        if (dom.btnToggleFloatAnim) dom.btnToggleFloatAnim.classList.remove('active');
+      }
+      if (dom.views) {
+        Object.values(dom.views).forEach(v => {
+          if (v) {
+            v.classList.remove('is-active', 'active');
+            v.style.display = 'none';
+          }
+        });
+      }
+      updateProjectTitleUI();
+      updateFileStatusUI();
+      renderProjectTabs();
+      return;
+    }
+
+    if (emptyWorkspace) emptyWorkspace.style.display = 'none';
+    if (dom.tabsContainer) dom.tabsContainer.style.display = 'flex';
+
     renderTabs();
     updateProjectTitleUI();
     updateFileStatusUI();
@@ -2048,24 +2149,32 @@
   function switchView(viewName) {
     for (const key in dom.views) {
       if (dom.views[key]) {
-        dom.views[key].classList.toggle('active', key === viewName);
+        const isActive = (key === viewName);
+        dom.views[key].classList.toggle('active', isActive);
+        dom.views[key].style.display = isActive ? 'flex' : 'none';
       }
     }
   }
 
   function updateProjectTitleUI() {
-    if (dom.inputProjectTitle && state.doc) {
-      const displayFileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(state.doc.meta.title, '.pix2', 'untitled');
-      dom.inputProjectTitle.value = displayFileName;
-      const fullPath = getProjectFullPath();
-      dom.inputProjectTitle.title = isDocumentDirty
-        ? `● ${displayFileName} (Unsaved Changes - Ctrl+S to save)\nFull Path: ${fullPath}`
-        : `${displayFileName} (Saved)\nFull Path: ${fullPath}`;
+    if (dom.inputProjectTitle) {
+      if (state.doc) {
+        const displayFileName = currentFileName || (currentFileHandle ? currentFileHandle.name : null) || sanitizeSafeFilename(state.doc.meta.title, '.pix2', 'untitled');
+        dom.inputProjectTitle.value = displayFileName;
+        const fullPath = getProjectFullPath();
+        dom.inputProjectTitle.title = isDocumentDirty
+          ? `● ${displayFileName} (Unsaved Changes - Ctrl+S to save)\nFull Path: ${fullPath}`
+          : `${displayFileName} (Saved)\nFull Path: ${fullPath}`;
+      } else {
+        dom.inputProjectTitle.value = '';
+        dom.inputProjectTitle.title = 'No project open';
+      }
     }
     const dirtyDot = document.getElementById('header-dirty-dot');
     if (dirtyDot) {
       dirtyDot.classList.toggle('is-dirty', isDocumentDirty);
     }
+    document.title = state.doc ? `${currentFileName || state.doc.meta.title || 'Untitled'} - NOIRADIX Studio 2.0` : 'NOIRADIX Studio 2.0';
   }
 
   function updateResolutionButtons() {
@@ -11507,6 +11616,25 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     bindAction('btn-save-pix2', () => saveFileNative(false));
     bindAction('btn-save-as-pix2', () => saveFileNative(true));
 
+    // Empty Workspace Actions
+    bindAction('btn-empty-new-project', openNewFileModal);
+    bindAction('btn-empty-open-file', openFileNative);
+    bindAction('btn-empty-load-sample', () => loadDefaultProject());
+
+    const studioEmptyDropzone = document.getElementById('studio-empty-dropzone');
+    if (studioEmptyDropzone) {
+      studioEmptyDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        studioEmptyDropzone.classList.add('drag-over');
+      });
+      studioEmptyDropzone.addEventListener('dragleave', () => {
+        studioEmptyDropzone.classList.remove('drag-over');
+      });
+      studioEmptyDropzone.addEventListener('drop', () => {
+        studioEmptyDropzone.classList.remove('drag-over');
+      });
+    }
+
     function copyCurrentPathToClipboard() {
       const full = getProjectFullPath();
       if (full) {
@@ -12007,8 +12135,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         return;
       }
 
-      // New (Ctrl + N)
-      if ((e.ctrlKey || e.metaKey) && key === 'n') {
+      // New (Alt + N, Ctrl + Alt + N, or Ctrl + N)
+      if ((e.altKey && key === 'n') || ((e.ctrlKey || e.metaKey) && key === 'n')) {
         e.preventDefault();
         openNewFileModal();
         return;

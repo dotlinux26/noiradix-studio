@@ -56,7 +56,7 @@
     </div>
 
     <div class="pa-actions-group">
-      <button id="btn-new-canvas" class="pa-btn" title="New Canvas (Ctrl+N)">
+      <button id="btn-new-canvas" class="pa-btn" title="New Canvas (Alt+N)">
         <i class="fa-solid fa-file-circle-plus"></i>
         <span>New</span>
       </button>
@@ -102,17 +102,46 @@
 
   <!-- ================= DOCUMENT BAR (artwork sessions) ================= -->
   <div class="pa-docbar" id="pa-docbar">
-    <button type="button" id="pa-btn-project-new-tab" class="project-tab-new" aria-label="New artwork tab" title="New Artwork Tab">
-      <i class="fa-solid fa-plus"></i>
-    </button>
     <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions">
       <!-- [artwork.pix2] -->
     </div>
+    <button type="button" id="pa-btn-project-new-tab" class="project-tab-new" aria-label="New artwork tab" title="New Artwork Tab">
+      <i class="fa-solid fa-plus"></i>
+    </button>
   </div>
 
   <!-- ================= MAIN WORKSPACE (SPLIT VIEW) ================= -->
   <main class="pa-workspace" id="pa-workspace">
     
+    <!-- ================= EMPTY WORKSPACE STATE ================= -->
+    <section class="pa-empty-workspace" id="pa-empty-workspace" style="display: none;">
+      <div class="empty-workspace-card" id="pa-empty-dropzone">
+        <div class="empty-workspace-icon">
+          <i class="fa-solid fa-paintbrush"></i>
+        </div>
+        <h2 class="empty-workspace-title">NOIRADIX PixelArt</h2>
+        <p class="empty-workspace-desc">
+          No artwork open. Create a new canvas, open a <code>.pix2</code> or image file, or drag and drop files anywhere here.
+        </p>
+        <div class="empty-workspace-actions">
+          <button type="button" class="pa-btn pa-btn-accent" id="pa-btn-empty-new">
+            <i class="fa-solid fa-plus"></i> New Canvas
+          </button>
+          <button type="button" class="pa-btn" id="pa-btn-empty-open">
+            <i class="fa-solid fa-folder-open"></i> Open from Computer
+          </button>
+          <button type="button" class="pa-btn" id="pa-btn-empty-sample">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Load Sample Artwork
+          </button>
+        </div>
+        <div class="empty-workspace-shortcuts">
+          <span><kbd>Alt+N</kbd> New Canvas</span>
+          <span><kbd>Ctrl+O</kbd> Open File</span>
+          <span><kbd>Drop</kbd> .pix2 or Sprite Image</span>
+        </div>
+      </div>
+    </section>
+
     <!-- LEFT TOOLBAR -->
     <aside class="pa-toolbar" id="pa-toolbar">
       <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B) — Draw pixels">
@@ -813,7 +842,7 @@
             <tr><td><kbd>Ctrl+S</kbd></td><td>Save File (Direct Disk or Download)</td></tr>
             <tr><td><kbd>Ctrl+Shift+S</kbd></td><td>Save As... (Choose File Name / Location)</td></tr>
             <tr><td><kbd>Ctrl+O</kbd></td><td>Open File (.pix2, image)</td></tr>
-            <tr><td><kbd>Ctrl+N</kbd></td><td>New Canvas Modal</td></tr>
+            <tr><td><kbd>Alt+N</kbd> / <kbd>Ctrl+N</kbd></td><td>New Canvas Modal</td></tr>
             <tr><td><kbd>Wheel</kbd></td><td>Cursor-Centered Integer Zoom (Pixel Anchor Invariant)</td></tr>
           </tbody>
         </table>

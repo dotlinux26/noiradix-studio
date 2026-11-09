@@ -143,7 +143,7 @@
         <span class="btn-text">Demo</span>
       </button>
 
-      <button id="btn-new-file" class="btn btn-secondary btn-compact" title="New Blank Sprite Sheet (Ctrl+N)">
+      <button id="btn-new-file" class="btn btn-secondary btn-compact" title="New Blank Sprite Sheet (Alt+N)">
         <i class="fa-solid fa-file-circle-plus"></i>
         <span class="btn-text">New</span>
       </button>
@@ -191,6 +191,35 @@
 
   <!-- ================= MAIN WORKSPACE AREA ================= -->
   <main class="studio-main">
+
+    <!-- ================= EMPTY WORKSPACE STATE ================= -->
+    <section class="studio-empty-workspace" id="studio-empty-workspace" style="display: none;">
+      <div class="empty-workspace-card" id="studio-empty-dropzone">
+        <div class="empty-workspace-icon">
+          <i class="fa-solid fa-ghost"></i>
+        </div>
+        <h2 class="empty-workspace-title">NOIRADIX Studio</h2>
+        <p class="empty-workspace-desc">
+          No project open. Create a new sprite sheet, open an existing <code>.pix2</code> file, or drag and drop files anywhere here.
+        </p>
+        <div class="empty-workspace-actions">
+          <button type="button" class="btn btn-primary" id="btn-empty-new-project">
+            <i class="fa-solid fa-plus"></i> New Project
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-empty-open-file">
+            <i class="fa-solid fa-folder-open"></i> Open from Computer
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-empty-load-sample">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Load Sample Ghost
+          </button>
+        </div>
+        <div class="empty-workspace-shortcuts">
+          <span><kbd>Alt+N</kbd> New Project</span>
+          <span><kbd>Ctrl+O</kbd> Open File</span>
+          <span><kbd>Drop</kbd> .pix2 or Sprite Image</span>
+        </div>
+      </div>
+    </section>
 
     <!-- 1. VIEW: GRID OVERVIEW -->
     <section id="view-grid-overview" class="view-panel active">

@@ -620,6 +620,7 @@
     renderPaProjectTabs();
     renderPaLayersTree();
     updateIsolationBannerUI();
+    updatePaEmptyWorkspaceUI();
 
     // Ensure the new tab is scrolled into view (fixes first-click tab not visible)
     if (typeof requestAnimationFrame !== 'undefined' && typeof document !== 'undefined') {
@@ -629,6 +630,84 @@
         if (newTab) newTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       });
     }
+  }
+
+  function updatePaEmptyWorkspaceUI() {
+    if (!_hasDocument) return;
+    const emptyWorkspace = document.getElementById('pa-empty-workspace');
+    const isEmpty = (!state.doc || paProjectSessions.length === 0);
+    if (emptyWorkspace) {
+      emptyWorkspace.style.display = isEmpty ? 'flex' : 'none';
+    }
+    const toolbar = document.getElementById('pa-toolbar');
+    const canvasPane = document.getElementById('pa-canvas-pane');
+    const resizer = document.getElementById('pa-split-resizer');
+    const codePane = document.getElementById('pa-code-pane');
+    if (toolbar) toolbar.style.display = isEmpty ? 'none' : 'flex';
+    if (canvasPane) canvasPane.style.display = isEmpty ? 'none' : 'flex';
+    if (resizer) resizer.style.display = isEmpty ? 'none' : '';
+    if (codePane) codePane.style.display = isEmpty ? 'none' : 'flex';
+
+    if (isEmpty) {
+      document.title = 'NOIRADIX PixelArt 2.0';
+      if (dom && dom.docTitle) dom.docTitle.value = '';
+      if (dom && dom.dimBadge) dom.dimBadge.textContent = '0×0';
+    } else {
+      updateDocumentTitle();
+    }
+  }
+
+  function loadSamplePixelArt() {
+    const title = 'Sample Ghost Art';
+    createNewDocument(32, 32, title);
+    const cell = getArtworkCell();
+    if (cell) {
+      // Draw a cute ghost silhouette in pixel art
+      const cWhite = '#f8fafc';
+      const cCyan = '#38bdf8';
+      const cShadow = '#64748b';
+      const cEye = '#0f172a';
+      // Body shape
+      for (let y = 8; y <= 22; y++) {
+        for (let x = 10; x <= 22; x++) {
+          cell.pixels[`${x},${y}`] = cWhite;
+        }
+      }
+      // Top round head
+      for (let x = 12; x <= 20; x++) {
+        cell.pixels[`${x},7`] = cWhite;
+      }
+      for (let x = 14; x <= 18; x++) {
+        cell.pixels[`${x},6`] = cWhite;
+      }
+      // Eyes
+      cell.pixels['13,12'] = cEye;
+      cell.pixels['14,12'] = cEye;
+      cell.pixels['13,13'] = cEye;
+      cell.pixels['14,13'] = cEye;
+      cell.pixels['18,12'] = cEye;
+      cell.pixels['19,12'] = cEye;
+      cell.pixels['18,13'] = cEye;
+      cell.pixels['19,13'] = cEye;
+      // Cheeks
+      cell.pixels['11,15'] = '#f43f5e';
+      cell.pixels['21,15'] = '#f43f5e';
+      // Ghost ripples / feet
+      for (let x = 10; x <= 22; x++) {
+        if (x % 3 !== 0) cell.pixels[`${x},23`] = cShadow;
+      }
+      // Wisps
+      cell.pixels['8,11'] = cCyan;
+      cell.pixels['7,12'] = cCyan;
+      cell.pixels['24,11'] = cCyan;
+      cell.pixels['25,12'] = cCyan;
+    }
+    rebuildArtworkBuffer();
+    repaintCanvas();
+    pushHistory();
+    createPaProjectSession(title, state.doc, null);
+    showToast('Loaded Sample Ghost Artwork!', 'success');
+    setTimeout(fitCanvasToViewport, 50);
   }
 
   function createPaProjectSession(title, doc, fileHandle = null) {
@@ -672,8 +751,46 @@
       paProjectSessions.splice(idx, 1);
     }
 
+    // Immediately purge and release RAM references from discarded session
+    session.doc = null;
+    session.history = [];
+    session.lastSavedContent = '';
+    session.fileHandle = null;
+    session.selection = null;
+    session.lastHistoryPixels = null;
+
     if (paProjectSessions.length === 0) {
-      createNewDocument(64, 64, 'Pixel Artwork');
+      activePaProjectId = null;
+      state.doc = null;
+      state.history = [];
+      state.historyIndex = -1;
+      state.selection = null;
+      state.lastHistoryPixels = null;
+      state.isolatedNodeId = null;
+      currentFileHandle = null;
+      currentFileName = null;
+      lastSavedContent = '';
+      state.floatingPixels = null;
+      state.floatingOriginalSel = null;
+      state.isMovingSelection = false;
+
+      // Clear canvas buffers to free GPU/RAM memory
+      if (dom && dom.canvasMain) {
+        const ctx = dom.canvasMain.getContext('2d');
+        ctx.clearRect(0, 0, dom.canvasMain.width, dom.canvasMain.height);
+      }
+      if (dom && dom.canvasPreview) {
+        const pctx = dom.canvasPreview.getContext('2d');
+        pctx.clearRect(0, 0, dom.canvasPreview.width, dom.canvasPreview.height);
+      }
+
+      // Purge autosave from localStorage so closed discarded artwork never lingers
+      localStorage.removeItem('pa_autosave_payload');
+      localStorage.removeItem('pa_active_file_name');
+
+      state.title = 'Pixel Artwork';
+      renderPaProjectTabs();
+      updatePaEmptyWorkspaceUI();
     } else {
       const nextSession = paProjectSessions[Math.min(idx, paProjectSessions.length - 1)];
       switchPaProjectSession(nextSession.id);
@@ -6798,6 +6915,40 @@ Do not include conversational greetings or postscripts.`;
       setTimeout(fitCanvasToViewport, 50);
     });
 
+    // Empty Workspace Actions
+    const paBtnEmptyNew = document.getElementById('pa-btn-empty-new');
+    if (paBtnEmptyNew) {
+      paBtnEmptyNew.addEventListener('click', () => {
+        if (dom.modalNew) dom.modalNew.classList.remove('hidden');
+      });
+    }
+
+    const paBtnEmptyOpen = document.getElementById('pa-btn-empty-open');
+    if (paBtnEmptyOpen) {
+      paBtnEmptyOpen.addEventListener('click', openFileNative);
+    }
+
+    const paBtnEmptySample = document.getElementById('pa-btn-empty-sample');
+    if (paBtnEmptySample) {
+      paBtnEmptySample.addEventListener('click', () => {
+        loadSamplePixelArt();
+      });
+    }
+
+    const paEmptyDropzone = document.getElementById('pa-empty-dropzone');
+    if (paEmptyDropzone) {
+      paEmptyDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        paEmptyDropzone.classList.add('drag-over');
+      });
+      paEmptyDropzone.addEventListener('dragleave', () => {
+        paEmptyDropzone.classList.remove('drag-over');
+      });
+      paEmptyDropzone.addEventListener('drop', () => {
+        paEmptyDropzone.classList.remove('drag-over');
+      });
+    }
+
     // Resize Canvas Modal confirm & preset chips
     document.querySelectorAll('#modal-resize-canvas .pa-preset-chip').forEach((chip) => {
       chip.addEventListener('click', () => {
@@ -7033,7 +7184,7 @@ Do not include conversational greetings or postscripts.`;
       } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
         handleManualFileReload();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N')) {
+      } else if ((e.altKey && (e.key === 'n' || e.key === 'N')) || ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N'))) {
         e.preventDefault();
         dom.modalNew.classList.remove('hidden');
       } else if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
