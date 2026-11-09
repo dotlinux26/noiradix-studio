@@ -1406,8 +1406,9 @@
     container.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (e.target.closest('.project-tabs-strip')) return;
-      if (['BUTTON', 'SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-      if (e.target.closest('button, select, input, textarea, [role="button"], .pa-dim-badge, .pa-btn, .pa-icon-btn, .pa-color-slot, .pa-swatch, .pa-preset-chip, .pa-status-btn, .pa-mode-badge, .pa-autosave-pill, .pa-file-path-pill, .pa-file-source-badge, .pa-save-status-badge, .pa-btn-icon-xs, .pa-ai-ratio-btn')) return;
+      // Allow drag on container background; exclude only specific interactive elements
+      if (e.target.closest('select, input, textarea, [role="button"], .pa-dim-badge, .pa-icon-btn, .pa-color-slot, .pa-swatch, .pa-preset-chip, .pa-status-btn, .pa-mode-badge, .pa-autosave-pill, .pa-file-path-pill, .pa-file-source-badge, .pa-save-status-badge, .pa-btn-icon-xs, .pa-ai-ratio-btn')) return;
+      // Buttons (pa-btn, pa-btn-xs, etc.) are now allowed for drag on their background area
       isDown = true;
       isDragging = false;
       startX = e.clientX;
