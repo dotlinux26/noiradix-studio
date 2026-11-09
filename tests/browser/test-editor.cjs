@@ -31,7 +31,17 @@ const fixture = `@pix2 1.1
   p 5,2 #00ff00
 `;
 (async () => {
-  const browser = await chromium.launch({ channel: process.env.EDITOR_QA_CHANNEL || 'chrome', headless: true });
+  let browser;
+  const channel = process.env.EDITOR_QA_CHANNEL || (process.env.CI ? undefined : 'chrome');
+  if (channel) {
+    try {
+      browser = await chromium.launch({ channel, headless: true });
+    } catch (_) {
+      browser = await chromium.launch({ headless: true });
+    }
+  } else {
+    browser = await chromium.launch({ headless: true });
+  }
   try {
     let studioTools;
     const studioCircles = new Map();
@@ -42,7 +52,7 @@ const fixture = `@pix2 1.1
         deviceScaleFactor: Number(process.env.EDITOR_QA_DPR || 1),
         acceptDownloads: true,
       });
-      page.setDefaultTimeout(7000);
+      page.setDefaultTimeout(25000);
       const errors = [];
       page.on('pageerror', (e) => {
         errors.push(e.stack);

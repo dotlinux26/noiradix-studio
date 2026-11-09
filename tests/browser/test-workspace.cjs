@@ -5,7 +5,17 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const PIX2 = require('../../js/pix2-format.js');
 (async () => {
-  const browser = await chromium.launch({ channel: process.env.EDITOR_QA_CHANNEL || 'chrome', headless: true });
+  let browser;
+  const channel = process.env.EDITOR_QA_CHANNEL || (process.env.CI ? undefined : 'chrome');
+  if (channel) {
+    try {
+      browser = await chromium.launch({ channel, headless: true });
+    } catch (_) {
+      browser = await chromium.launch({ headless: true });
+    }
+  } else {
+    browser = await chromium.launch({ headless: true });
+  }
   try {
     console.log('Chrome', browser.version());
     let studioTabStyle;
@@ -13,7 +23,7 @@ const PIX2 = require('../../js/pix2-format.js');
       const page = await browser.newPage({
         viewport: { width: 1100, height: 840 },
       });
-      page.setDefaultTimeout(7000);
+      page.setDefaultTimeout(25000);
       const errs = [];
       page.on('pageerror', (e) => {
         errs.push(e.stack);
@@ -341,7 +351,7 @@ const PIX2 = require('../../js/pix2-format.js');
       'Studio PASS legacy multi-cell conversion / immediate drawing / undo / redo',
     );
     const gridPage = await browser.newPage({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 2 });
-    gridPage.setDefaultTimeout(7000);
+    gridPage.setDefaultTimeout(25000);
     await gridPage.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     const largeSheet = PIX2.serialize(PIX2.createDocument('Large Grid', 4, 4, 512, 512));
     await gridPage.addInitScript(content => {

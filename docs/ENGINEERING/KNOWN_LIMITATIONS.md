@@ -15,3 +15,10 @@
 ## 3. GitHub Language Statistic Bar
 - GitHub uses the `github/linguist` gem to calculate language percentages. Because `.pix2` is a newly formalized DSL, it does not yet appear in GitHub's official global `languages.yml` database. Repository badges and TextMate YAML grammar provide immediate syntax highlighting and branding.
 
+## 4. AI Generator Parsing Nuances (Field Observation by Gemini Argon 4.0)
+- **`rect` Primitive Dimension Delimiter:**
+  - `parseDimension` strictly expects `WxH` (separated by `x`, e.g. `8x7`). Using comma separators (`8,7`) in `rect` commands causes coordinate rejection. AI models are advised to use Scanline Rendering (`line x1,y x2,y <col>`) or strict `WxH` format.
+- **Palette Inline Comment Characters:**
+  - In `@palette`, semicolon `;` is strongly recommended over `#` for inline comments to avoid lexical collision with hexadecimal color codes.
+  - See full root-cause analysis in [`AI_ARGON_PARSER_FEEDBACK_REPORT.md`](AI_ARGON_PARSER_FEEDBACK_REPORT.md).
+

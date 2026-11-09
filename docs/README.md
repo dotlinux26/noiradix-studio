@@ -19,6 +19,7 @@
 - [Studio and PixelArt editor engine audit](discussion/EDITOR_ENGINE_AUDIT.md)
 - [Repository workflow for agents](../AGENTS.md)
 - [Release process and verification gates](ENGINEERING/RELEASE_PROCESS.md)
+- [Gemini Argon 4.0 PIX2 1.1 Field Report & Parser Findings](ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md)
 
 ## 📸 Studio Visual Tour
 
