@@ -366,7 +366,7 @@ In traditional flat pixel art formats, sprites are an undifferentiated bag of co
 **PIX2 1.1 Semantic Isolation solves this:**
 1. **Isolated Paint Target:** Drawing tools (pen, eraser, line, fill) write strictly into the active `@region`.
 2. **Zero Cross-Region Mutation:** Pixels belonging to sibling or parent regions remain strictly immutable during edit transactions.
-3. **Editor Focus & Dimming:** In Isolation Mode, non-isolated regions are dimmed to `0.22` opacity, providing clear visual focus while retaining context.
+3. **Editor Isolation:** Studio and PixelArt hide content outside the isolated subtree in the editing viewport. The view preserves the isolated content's layer opacity. Isolation does not affect the saved or exported composite.
 
 ### 8.3 Compositing, Z-Order & Alpha Blending
 
@@ -374,7 +374,7 @@ Cells composite structural nodes using standard Porter-Duff source-over normal a
 $$\alpha_{\text{out}} = \alpha_A + \alpha_B (1 - \alpha_A)$$
 $$C_{\text{out}} = \frac{C_A \alpha_A + C_B \alpha_B (1 - \alpha_A)}{\alpha_{\text{out}}}$$
 
-Evaluation proceeds in depth pre-order: lower layers render first, followed by child groups and regions, composited over the transparent background.
+Evaluation proceeds in depth pre-order. Root layers and each set of siblings are stored back to front, so later siblings paint over earlier siblings. Studio and PixelArt display the Layers tree front to back at each depth. The order in the serialized PIX2 file stays back to front.
 
 ### 8.4 Platformer 2-Direction Locomotion Template
 

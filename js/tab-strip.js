@@ -4,11 +4,11 @@
  * Zero dependencies, static-deployment friendly. Provides:
  *  - smart horizontal drag-scroll for the strip (mouse, pen, touch)
  *  - drag-and-drop reordering of document tabs
- *  - a pinned "new tab" action that always stays first
+ *  - a separate "new tab" action outside the scrolling strip
  *  - keyboard navigation (Arrow/Home/End) and Alt+Arrow reordering
  *
- * The module intentionally never creates or owns tab state. Product adapters
- * render the tabs and pass a callback; the callback owns session ordering.
+ * Product adapters pass sessions and callbacks. The module renders the strip
+ * and handles gestures while the adapters own session state.
  */
 (function (global) {
   'use strict';
@@ -40,6 +40,59 @@
     if (placeAfter) ref += 1;
     order.splice(ref, 0, fromId);
     return order;
+  }
+
+  function render(strip, sessions, activeId, { onActivate, onClose, onReorder } = {}) {
+    if (!strip) return;
+    const doc = strip.ownerDocument;
+    const focus = (id) => {
+      const tab = Array.from(strip.children).find(child => child.dataset.tabId === id);
+      tab?.focus({ preventScroll: true });
+    };
+    const focused = strip.contains(doc.activeElement);
+    const tabs = sessions.map(session => {
+      const tab = doc.createElement('div');
+      const label = session.fileName || session.title;
+      tab.className = 'project-tab';
+      tab.classList.toggle('active', session.id === activeId);
+      tab.dataset.tabId = session.id;
+      tab.title = session.filePath || label;
+      const text = doc.createElement('span');
+      text.className = 'project-tab-label';
+      text.textContent = label;
+      tab.append(text);
+      if (session.isDirty) {
+        const dirty = doc.createElement('span');
+        dirty.className = 'project-tab-dirty-dot';
+        dirty.textContent = '●';
+        dirty.setAttribute('aria-hidden', 'true');
+        tab.setAttribute('aria-label', `${label}, unsaved changes`);
+        tab.append(dirty);
+      }
+      if (onClose) {
+        const close = doc.createElement('button');
+        close.type = 'button';
+        close.className = 'project-tab-close';
+        close.tabIndex = -1;
+        close.setAttribute('aria-label', `Close ${label}`);
+        close.title = 'Close tab';
+        close.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+        close.addEventListener('click', (event) => {
+          event.stopPropagation();
+          onClose(session);
+        });
+        tab.append(close);
+      }
+      tab.addEventListener('click', () => {
+        if (session.id !== activeId) onActivate?.(session.id);
+      });
+      return tab;
+    });
+    strip.setAttribute('role', 'tablist');
+    if (strip.title) strip.setAttribute('aria-label', strip.title);
+    strip.replaceChildren(...tabs);
+    attach(strip, { onReorder, onAfterReorder: focus });
+    if (focused) focus(activeId);
   }
 
   function attach(strip, options) {
@@ -141,10 +194,9 @@
 
       ghost = tab.cloneNode(true);
       ghost.classList.add('tab-drag-ghost');
+      ghost.inert = true;
       ghost.style.width = `${rect.width}px`;
       ghost.style.height = `${rect.height}px`;
-      ghost.style.left = `${rect.left}px`;
-      ghost.style.top = `${rect.top}px`;
       document.body.appendChild(ghost);
       updateGhost(e.clientX, e.clientY);
       suppressClickUntil = Date.now() + CLICK_SUPPRESS_MS;
@@ -311,6 +363,7 @@
     }
 
     function onKeyDown(e) {
+      if (e.target.closest('.project-tab-close')) return;
       const tab = e.target.closest(opts.tabSelector);
       if (!tab || !strip.contains(tab)) return;
       const list = tabs();
@@ -318,6 +371,7 @@
 
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
+        e.stopPropagation();
         if (e.altKey) {
           reorderByKeyboard(tab, e.key === 'ArrowRight' ? 1 : -1);
           return;
@@ -331,16 +385,27 @@
       }
       if (e.key === 'Home') {
         e.preventDefault();
+        e.stopPropagation();
         if (list[0]) list[0].focus({ preventScroll: true });
         return;
       }
       if (e.key === 'End') {
         e.preventDefault();
+        e.stopPropagation();
         if (list[list.length - 1]) list[list.length - 1].focus({ preventScroll: true });
+        return;
+      }
+      if (e.key === 'Delete') {
+        const close = tab.querySelector('.project-tab-close');
+        if (!close) return;
+        e.preventDefault();
+        e.stopPropagation();
+        close.click();
         return;
       }
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
+        e.stopPropagation();
         tab.click();
       }
     }
@@ -393,7 +458,7 @@
     return controller;
   }
 
-  const api = { attach, computeReorder };
+  const api = { attach, computeReorder, render };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.NoiraTabStrip = api;
 })(typeof window !== 'undefined' ? window : null);

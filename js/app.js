@@ -11,6 +11,8 @@
 (function () {
   'use strict';
 
+  const regionSelection = RegionSelection.create();
+  let brushSettings;
   let animPlayer = null;
   let studioAnimPlayer = null;
   let selectedGridCellId = 'cell_0_0';
@@ -26,6 +28,7 @@
   let periodicAutosaveTimer = null;
   let debouncedAutosaveTimer = null;
   let miniPreviewScale = 6;
+  const MINI_PREVIEW_ZOOMS = [0.125, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
 
   // Real-Time File Watcher & External Hot-Reload
   let lastKnownFileModified = 0;
@@ -137,6 +140,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
+    EditorToolbar.mount(document.getElementById('studio-tool-rail'), true);
     initDomCache();
     initTheme();
     initAnimationPlayers();
@@ -164,7 +168,7 @@
       syncOrRegisterProjectSession(state.doc, currentFileName || 'noiradix_ghost.pix2', currentFileHandle, currentFilePath || 'noiradix_ghost.pix2');
     }
     renderProjectTabs();
-    updateAutosaveIndicator('saved', Date.now());
+    updateAutosaveIndicator(currentFileHandle && !isDocumentDirty ? 'disk' : 'browser', Date.now());
     initFileWatcher();
     updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
   });
@@ -227,10 +231,9 @@
 
   async function initAppSession() {
     // 0. Restore multi-document project sessions if saved
-    const savedSessionsJson = localStorage.getItem('noiradix_open_project_sessions');
-    if (savedSessionsJson) {
+    const data = await EditorWorkspaceStorage.read('noiradix_open_project_sessions');
+    if (data) {
       try {
-        const data = JSON.parse(savedSessionsJson);
         if (data && Array.isArray(data.sessions)) {
           if (data.sessions.length === 0) {
             projectSessions = [];
@@ -663,6 +666,7 @@
       this.openCellTabs = [];
       this.activeTabId = 'tab-grid-overview';
       this.selection = null;
+      this.structureFocus = {};
     }
   }
 
@@ -686,6 +690,12 @@
     cur.history = state.history ? [...state.history] : [];
     cur.historyIndex = state.historyIndex;
     cur.selection = state.selection ? { ...state.selection } : null;
+    cur.structureFocus = {
+      activeLayerId: state.activeLayerId,
+      activeGroupId: state.activeGroupId,
+      activeRegionId: state.activeRegionId,
+      isolatedNodeId: state.isolatedNodeId
+    };
   }
 
   function persistAllProjectSessions() {
@@ -701,12 +711,13 @@
         openCellTabs: s.openCellTabs,
         content: (typeof PIX2 !== 'undefined' && s.doc) ? PIX2.serialize(s.doc) : (s.lastSavedContent || '')
       }));
-      localStorage.setItem('noiradix_open_project_sessions', JSON.stringify({
+      return EditorWorkspaceStorage.write('noiradix_open_project_sessions', {
         activeId: activeProjectId,
         sessions: payload
-      }));
+      });
     } catch (err) {
       console.warn('Failed to persist project sessions to localStorage:', err);
+      return false;
     }
   }
 
@@ -720,62 +731,19 @@
   }
 
   function renderProjectTabs() {
-    if (!dom.projectTabsStrip) return;
-    dom.projectTabsStrip.innerHTML = '';
-
-    projectSessions.forEach(session => {
-      const tab = document.createElement('div');
-      tab.className = `project-tab ${session.id === activeProjectId ? 'active' : ''}`;
-      tab.dataset.tabId = session.id;
-      tab.title = session.filePath || session.title;
-
-      const titleSpan = document.createElement('span');
-      titleSpan.className = 'project-tab-label';
-      titleSpan.textContent = session.fileName || session.title;
-      tab.appendChild(titleSpan);
-
-      if (session.isDirty) {
-        const dot = document.createElement('span');
-        dot.className = 'project-tab-dirty-dot';
-        dot.textContent = '●';
-        tab.appendChild(dot);
-      }
-
-      // Close button
-      const closeBtn = document.createElement('span');
-      closeBtn.className = 'project-tab-close';
-      closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-      closeBtn.title = 'Close project session';
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeProjectSession(session);
-      });
-      tab.appendChild(closeBtn);
-
-      tab.addEventListener('click', () => {
-        if (session.id !== activeProjectId) {
-          switchProjectSession(session.id);
-        }
-      });
-
-      dom.projectTabsStrip.appendChild(tab);
+    NoiraTabStrip.render(dom.projectTabsStrip, projectSessions, activeProjectId, {
+      onActivate: switchProjectSession,
+      onClose: closeProjectSession,
+      onReorder: reorderProjectSessions
     });
-
-    if (window.NoiraTabStrip) {
-      window.NoiraTabStrip.attach(dom.projectTabsStrip, {
-        onReorder: reorderProjectSessions,
-        onAfterReorder: (tabId) => {
-          const tab = dom.projectTabsStrip.querySelector(`[data-tab-id="${tabId}"]`);
-          if (tab) tab.focus({ preventScroll: true });
-        }
-      });
-    }
   }
 
   function switchProjectSession(sessionId) {
     const target = projectSessions.find(p => p.id === sessionId);
     if (!target) return;
 
+    commitFloatingSelection();
+    regionSelection.reset();
     if (activeProjectId && activeProjectId !== sessionId) {
       saveCurrentSessionState();
     }
@@ -795,8 +763,13 @@
       state.openCellTabs = [];
     }
     state.activeTabId = target.activeTabId || 'tab-grid-overview';
-    state.history = target.history || [];
-    state.historyIndex = target.historyIndex || -1;
+    Object.assign(state, target.structureFocus);
+    if (target.history?.length) {
+      state.history = target.history;
+      state.historyIndex = target.historyIndex;
+    } else if (state.history[state.historyIndex]) {
+      state.history[state.historyIndex].activeTab = state.activeTabId;
+    }
     state.selection = target.selection ? { ...target.selection } : null;
 
     setDirty(target.isDirty);
@@ -859,6 +832,7 @@
     }
 
     const isClosingActive = (activeProjectId === session.id);
+    if (isClosingActive) regionSelection.reset();
     const idx = projectSessions.indexOf(session);
     if (idx !== -1) {
       projectSessions.splice(idx, 1);
@@ -1191,52 +1165,10 @@
       document.getElementById('tabs-container'),
       document.querySelector('.studio-statusbar'),
       document.querySelector('.code-pane-header'),
-      document.getElementById('slice-viewport-header'),
-      document.getElementById('import-slices-header'),
       ...document.querySelectorAll('.view-sub-toolbar')
     ];
 
-    containers.forEach(container => {
-      if (!container) return;
-
-      // 1. Mouse-Wheel horizontal scroll
-      container.addEventListener('wheel', (e) => {
-        if (e.deltaY !== 0) {
-          e.preventDefault();
-          container.scrollLeft += e.deltaY;
-        }
-      }, { passive: false });
-
-      // 2. Drag-to-pan by holding left click on background
-      let isDown = false;
-      let startX = 0;
-      let scrollStart = 0;
-
-      container.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.project-tabs-strip')) return;
-        if (e.target.closest('input, button, select, .chip-btn, .pill-btn, .file-path-pill, .studio-tab')) {
-          return;
-        }
-        isDown = true;
-        container.classList.add('is-dragging');
-        startX = e.pageX;
-        scrollStart = container.scrollLeft;
-      });
-
-      window.addEventListener('mouseup', () => {
-        if (isDown) {
-          isDown = false;
-          container.classList.remove('is-dragging');
-        }
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (!isDown) return;
-        e.preventDefault();
-        const dx = e.pageX - startX;
-        container.scrollLeft = scrollStart - dx;
-      });
-    });
+    containers.forEach(container => window.NoiraViewport.enableHorizontalDragScroll(container));
   }
 
   // ===========================================================================
@@ -1343,7 +1275,7 @@
     }
 
     if (!dirty) {
-      updateAutosaveIndicator('saved', Date.now());
+      updateAutosaveIndicator(currentFileHandle ? 'disk' : 'browser', Date.now());
     }
 
     const cur = getActiveSession();
@@ -1466,21 +1398,23 @@
     const textEl = document.getElementById('autosave-status-text');
     if (!pill || !textEl) return;
 
-    const isDirectDiskLinked = Boolean(currentFileHandle);
-
     if (status === 'saving') {
       pill.className = 'autosave-pill saving';
       pill.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> <span id="autosave-status-text">Saving...</span>';
-    } else if (status === 'saved') {
+    } else if (status === 'failed') {
+      pill.className = 'autosave-pill memory-draft';
+      textEl.textContent = 'Browser autosave failed';
+      pill.title = 'The browser could not save a recovery copy. Save to disk to keep your edits.';
+    } else {
       const timeStr = time ? new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Just now';
-      if (isDirectDiskLinked) {
+      if (status === 'disk') {
         pill.className = 'autosave-pill saved';
         pill.innerHTML = `<i class="fa-solid fa-hard-drive"></i> <span id="autosave-status-text">Saved to Disk ${timeStr}</span>`;
         pill.title = `All changes automatically synchronized to disk file (${currentFileHandle.name}) at ${timeStr}.`;
       } else {
         pill.className = 'autosave-pill memory-draft';
-        pill.innerHTML = `<i class="fa-solid fa-memory"></i> <span id="autosave-status-text">Memory Cached ${timeStr} (Unsaved to Disk)</span>`;
-        pill.title = `Draft cached in browser temporary storage at ${timeStr}. Not yet saved to physical disk! Press Ctrl+S to save to disk.`;
+        pill.innerHTML = `<i class="fa-solid fa-memory"></i> <span id="autosave-status-text">Browser Draft Saved ${timeStr}</span>`;
+        pill.title = `Draft saved in this browser at ${timeStr}. Press Ctrl+S to save to disk.`;
       }
     }
   }
@@ -1505,56 +1439,71 @@
 
   async function saveRecoverySnapshot() {
     if (!state.doc) return;
-    if (typeof commitFloatingSelection === 'function' && floatingSelectionPixels) {
-      commitFloatingSelection();
-    }
+    if (floatingSelectionPixels) return;
+    const doc = state.doc;
+    const handle = currentFileHandle;
+    const revision = documentRevision;
+    const fileName = currentFileName;
     try {
-      const text = PIX2.serialize(state.doc);
+      const text = PIX2.serialize(doc);
       const now = Date.now();
+      const cached = await persistAllProjectSessions();
+      if (state.doc !== doc || revision !== documentRevision) return;
       const snapshot = {
         timestamp: now,
         title: state.doc.meta.title || 'Untitled',
-        fileName: currentFileName || 'new_sprite.pix2',
+        fileName: fileName || 'new_sprite.pix2',
         data: text
       };
-      localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
-      localStorage.setItem('pix2_draft_content', text);
-      localStorage.setItem('noiradix_active_file_name', currentFileName || snapshot.fileName);
+      if (!cached) {
+        localStorage.setItem('pix2_recovery_snapshot', JSON.stringify(snapshot));
+        localStorage.setItem('pix2_draft_content', text);
+        localStorage.setItem('noiradix_active_file_name', snapshot.fileName);
+      }
+      let writtenToDisk = false;
 
       // Direct write to disk file if linked to matching filename
-      const isDirectDiskValid = currentFileHandle &&
-                                'createWritable' in currentFileHandle &&
-                                (!currentFileName || currentFileHandle.name.normalize('NFC') === currentFileName.normalize('NFC'));
+      const isDirectDiskValid = isDocumentDirty && handle &&
+                                'createWritable' in handle &&
+                                (!fileName || handle.name.normalize('NFC') === fileName.normalize('NFC'));
 
       if (isDirectDiskValid) {
         try {
           let hasPerm = true;
-          if (currentFileHandle.queryPermission) {
-            const p = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+          if (handle.queryPermission) {
+            const p = await handle.queryPermission({ mode: 'readwrite' });
             hasPerm = (p === 'granted');
           }
-          if (hasPerm) {
-            const writable = await currentFileHandle.createWritable();
+          if (hasPerm && state.doc === doc && currentFileHandle === handle && revision === documentRevision) {
+            const writable = await handle.createWritable();
             await writable.write(text);
             await writable.close();
-            lastSavedContent = text;
+            let modified;
             try {
-              const fresh = await currentFileHandle.getFile();
-              lastKnownFileModified = fresh.lastModified;
+              modified = (await handle.getFile()).lastModified;
             } catch (_) {}
-            pendingExternalConflict = null;
-            setDirty(false);
+            if (state.doc === doc && currentFileHandle === handle) {
+              lastSavedContent = text;
+              if (modified !== undefined) lastKnownFileModified = modified;
+              pendingExternalConflict = null;
+              if (revision === documentRevision) {
+                setDirty(false);
+                persistAllProjectSessions();
+                writtenToDisk = true;
+              }
+            }
           }
         } catch (diskErr) {
           console.debug('Direct disk autosave skipped:', diskErr);
         }
-      } else {
-        setDirty(false);
       }
 
-      updateAutosaveIndicator('saved', now);
+      if (state.doc === doc && revision === documentRevision) {
+        updateAutosaveIndicator(writtenToDisk ? 'disk' : cached ? 'browser' : 'failed', now);
+      }
     } catch (err) {
       console.warn('Autosave snapshot failed:', err);
+      updateAutosaveIndicator('failed');
     }
   }
 
@@ -1700,8 +1649,6 @@
     lastSavedRevision = 0;
     state.openCellTabs = [];
     state.activeTabId = 'tab-grid-overview';
-    state.history = [];
-    state.historyIndex = -1;
     state.selection = null;
     setDirty(false);
 
@@ -2350,54 +2297,65 @@
     zoom: 4
   };
 
-  const GRID_ZOOM_LEVELS = [1, 2, 3, 4, 6, 8, 12, 16];
+  const GRID_ZOOM_LEVELS = [0.025, 0.05, 0.075, 0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 2, 3, 4, 6, 8, 12, 16];
 
   function setGridZoom(newZoom, clientX, clientY) {
-    const clamped = Math.max(1, Math.min(16, Math.round(newZoom)));
-    if (clamped === GRID_LAYOUT.zoom) return;
-
-    const oldZoom = GRID_LAYOUT.zoom || 4;
-    GRID_LAYOUT.zoom = clamped;
-    if (dom.gridZoomLevel) {
-      dom.gridZoomLevel.textContent = `${clamped}×`;
-    }
-
-    if (clientX !== undefined && clientY !== undefined && dom.gridCanvas) {
-      const rect = dom.gridCanvas.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const mx = clientX - rect.left;
-        const my = clientY - rect.top;
-        const unscaledX = mx / oldZoom;
-        const unscaledY = my / oldZoom;
-        const cw = rect.width / oldZoom;
-        const ch = rect.height / oldZoom;
-        if (typeof NoiraViewport !== 'undefined' && NoiraViewport.computeAnchorZoomPan) {
-          const res = NoiraViewport.computeAnchorZoomPan(gridPanX, gridPanY, oldZoom, clamped, unscaledX, unscaledY, cw, ch);
-          gridPanX = res.panX;
-          gridPanY = res.panY;
-        } else {
-          const deltaW = (cw * (clamped - oldZoom)) / 2;
-          const deltaH = (ch * (clamped - oldZoom)) / 2;
-          gridPanX = Math.round(gridPanX + (deltaW - unscaledX * (clamped - oldZoom)));
-          gridPanY = Math.round(gridPanY + (deltaH - unscaledY * (clamped - oldZoom)));
-        }
-        applyGridPan();
-      }
-    }
-
+    if (!state.doc) return;
+    const oldZoom = GRID_LAYOUT.zoom;
+    if (newZoom === oldZoom) return;
+    const anchor = Number.isFinite(clientX) && Number.isFinite(clientY)
+      ? dom.gridCanvas.getBoundingClientRect()
+      : null;
+    GRID_LAYOUT.zoom = newZoom;
+    dom.gridZoomLevel.textContent = newZoom < 0.1
+      ? `${Number((newZoom * 100).toFixed(1))}%`
+      : NoiraViewport.formatArtworkZoom(newZoom);
     renderGridOverview();
+
+    if (anchor?.width && anchor.height) {
+      const { cellSize, grid } = state.doc.meta;
+      const { leftHeaderW, topHeaderH, cellGapX, cellGapY } = GRID_LAYOUT;
+      const resized = dom.gridCanvas.getBoundingClientRect();
+      const x = NoiraViewport.gridZoomOffset(clientX - anchor.left, leftHeaderW, cellSize.w, cellGapX, oldZoom, newZoom, grid.cols);
+      const y = NoiraViewport.gridZoomOffset(clientY - anchor.top, topHeaderH, cellSize.h, cellGapY, oldZoom, newZoom, grid.rows);
+      gridPanX += Math.round(clientX - resized.left - x);
+      gridPanY += Math.round(clientY - resized.top - y);
+      applyGridPan();
+    }
+  }
+
+  function fitGridCanvas() {
+    if (!state.doc) return;
+    const viewport = dom.gridCanvas.parentElement;
+    const style = getComputedStyle(viewport);
+    const paddedWidth = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const paddedHeight = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const { cellSize, grid } = state.doc.meta;
+    const { leftHeaderW, topHeaderH, cellGapX, cellGapY } = GRID_LAYOUT;
+    const zoom = NoiraViewport.gridFitZoom(
+      viewport.clientWidth - paddedWidth, viewport.clientHeight - paddedHeight,
+      grid.cols * cellSize.w, grid.rows * cellSize.h,
+      leftHeaderW + grid.cols * cellGapX + 36,
+      topHeaderH + grid.rows * cellGapY + 40
+    );
+    if (zoom === null) {
+      showToast('The grid controls alone exceed the viewport. Zoom out and pan to browse.');
+      setGridZoom(GRID_ZOOM_LEVELS[0]);
+    } else {
+      setGridZoom(zoom);
+    }
+    centerGridCanvas();
   }
 
   function zoomGridIn(clientX, clientY) {
-    const cur = GRID_LAYOUT.zoom || 4;
-    const next = GRID_ZOOM_LEVELS.find(z => z > cur) || 16;
-    setGridZoom(next, clientX, clientY);
+    const cur = GRID_LAYOUT.zoom;
+    setGridZoom(GRID_ZOOM_LEVELS.find(z => z > cur) ?? cur, clientX, clientY);
   }
 
   function zoomGridOut(clientX, clientY) {
-    const cur = GRID_LAYOUT.zoom || 4;
-    const prev = [...GRID_ZOOM_LEVELS].reverse().find(z => z < cur) || 1;
-    setGridZoom(prev, clientX, clientY);
+    const cur = GRID_LAYOUT.zoom;
+    const next = GRID_ZOOM_LEVELS.findLast(z => z < cur) ?? cur;
+    setGridZoom(next, clientX, clientY);
   }
 
   let gridRowDeleteButtons = [];
@@ -2642,12 +2600,11 @@
     const sheetH = topHeaderH + rows * (ch * zoom + cellGapY) + 40;
 
     // High-DPI Razor-Sharp Text & Canvas Rendering
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(sheetW * dpr);
-    canvas.height = Math.round(sheetH * dpr);
+    const dpr = Math.min(window.devicePixelRatio || 1, 4096 / sheetW, 4096 / sheetH);
+    EditorCanvas.resize(canvas, Math.round(sheetW * dpr), Math.round(sheetH * dpr));
     canvas.style.width = `${sheetW}px`;
     canvas.style.height = `${sheetH}px`;
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(canvas.width / sheetW, 0, 0, canvas.height / sheetH, 0, 0);
 
     ctx.clearRect(0, 0, sheetW, sheetH);
     ctx.imageSmoothingEnabled = true;
@@ -2868,7 +2825,8 @@
         const isSelected = (cellId === selectedGridCellId || (!cell && selectedGridCellId === `cell_${r}_${c}`));
 
         // Checkerboard
-        drawChecker(ctx, cx, cy, cw * zoom, ch * zoom, 4 * zoom);
+        ctx.fillStyle = EditorCanvas.checker(ctx, zoom, isDark);
+        ctx.fillRect(cx, cy, cw * zoom, ch * zoom);
 
         // Cell border (selected = bright accent outline)
         if (isSelected) {
@@ -3021,9 +2979,11 @@
     const c1 = isDark ? '#1f202e' : '#ffffff';
     const c2 = isDark ? '#171822' : '#e2e8f0';
 
-    for (let py = 0; py < h; py += size) {
-      for (let px = 0; px < w; px += size) {
-        ctx.fillStyle = ((px / size + py / size) % 2 === 0) ? c1 : c2;
+    for (let row = 0; row < Math.ceil(h / size); row++) {
+      const py = row * size;
+      for (let col = 0; col < Math.ceil(w / size); col++) {
+        const px = col * size;
+        ctx.fillStyle = (col + row) % 2 === 0 ? c1 : c2;
         ctx.fillRect(x + px, y + py, Math.min(size, w - px), Math.min(size, h - py));
       }
     }
@@ -3901,105 +3861,47 @@
       return;
     }
 
-    dom.structureTreeContainer.innerHTML = '';
-
-    function renderNode(node, depth = 0) {
-      const itemEl = document.createElement('div');
-      itemEl.className = 'structure-tree-item';
-      itemEl.dataset.id = node.id;
-      itemEl.dataset.type = node.type;
-      itemEl.style.paddingLeft = `${depth * 14 + 6}px`;
-
-      const isActive = (state.activeRegionId === node.id || state.activeGroupId === node.id || state.activeLayerId === node.id);
-      if (isActive) itemEl.classList.add('active');
-      if (state.isolatedNodeId === node.id) itemEl.classList.add('isolated');
-      if (node.locked) itemEl.classList.add('is-locked');
-      if (node.visible === false) itemEl.classList.add('is-hidden');
-
-      let iconClass = 'fa-solid fa-vector-square';
-      if (node.type === 'layer') iconClass = 'fa-solid fa-layer-group';
-      else if (node.type === 'group') iconClass = 'fa-solid fa-folder';
-
-      let tagsHtml = '';
-      if (Array.isArray(node.tags) && node.tags.length > 0) {
-        tagsHtml = node.tags.map(t => `<span class="structure-node-tag">${escapeHTML(t)}</span>`).join('');
-      }
-
-      let opacityHtml = '';
-      if (node.type === 'layer') {
-        const pct = Math.round((node.opacity !== undefined ? node.opacity : 1) * 100);
-        opacityHtml = `<input type="number" min="0" max="100" class="structure-opacity-input" value="${pct}" title="Layer Opacity (%)">`;
-      }
-
-      itemEl.innerHTML = `
-        <i class="${iconClass} structure-node-icon"></i>
-        <span class="structure-node-name" title="${escapeHTML(node.name || node.id)}">${escapeHTML(node.name || node.id)}</span>
-        ${tagsHtml}
-        ${opacityHtml}
-        <button class="structure-action-btn btn-vis" title="Toggle Visibility"><i class="fa-solid ${node.visible !== false ? 'fa-eye' : 'fa-eye-slash'}"></i></button>
-        <button class="structure-action-btn btn-lock" title="Toggle Lock"><i class="fa-solid ${node.locked ? 'fa-lock' : 'fa-lock-open'}"></i></button>
-        <button class="structure-action-btn btn-del" title="Delete Node"><i class="fa-solid fa-trash"></i></button>
-      `;
-
-      itemEl.addEventListener('click', (e) => {
-        if (e.target.closest('.structure-action-btn') || e.target.closest('.structure-opacity-input')) return;
-        if (node.type === 'region') {
-          const match = state.findNode(cell.id, node.id);
-          state.activeLayerId = match && match.layer ? match.layer.id : state.activeLayerId;
-          state.activeRegionId = node.id;
+    EditorOutliner.render(dom.structureTreeContainer, cell, state, {
+      before: commitFloatingSelection,
+      selected: () => regionSelection.resolve(cell, state.activeLayerId, state.isolatedNodeId).map(node => node.id),
+      focus: ({ node }, extend) => {
+        if (extend && node.type !== 'layer') {
+          selectTool('region-select');
+          const selected = regionSelection.toggle(cell, state.activeLayerId, state.isolatedNodeId, node.id);
+          renderCellOverlay();
+          return selected;
         }
-        else if (node.type === 'group') state.activeGroupId = node.id;
-        else if (node.type === 'layer') state.selectLayer(cell.id, node.id);
-        renderStructureLayersTree();
-      });
-
-      itemEl.addEventListener('dblclick', (e) => {
-        if (e.target.closest('.structure-action-btn') || e.target.closest('.structure-opacity-input')) return;
-        const newIso = (state.isolatedNodeId === node.id) ? null : node.id;
-        state.setIsolation(cell.id, newIso);
+        const ids = node.type === 'layer' ? [] : [node.id];
+        regionSelection.focus(cell, state.activeLayerId, state.isolatedNodeId, ids);
+        renderCellOverlay();
+        return ids;
+      },
+      change: label => {
+        state.syncCellComposite(cell.id);
+        state.saveSnapshot(label);
+        triggerEventAutosave();
         refreshAll();
-        showToast(newIso ? `Isolated ${node.type}: "${node.name || node.id}"` : 'Exited Isolation Mode');
-      });
-
-      const btnVis = itemEl.querySelector('.btn-vis');
-      btnVis?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.setNodeVisibility(cell.id, node.id, !(node.visible !== false));
+      },
+      isolate: node => {
+        commitFloatingSelection();
+        state.setIsolation(cell.id, node.id);
+        selectTool('region-select');
         refreshAll();
-      });
-
-      const btnLock = itemEl.querySelector('.btn-lock');
-      btnLock?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.setNodeLocked(cell.id, node.id, !node.locked);
-        refreshAll();
-      });
-
-      const btnDel = itemEl.querySelector('.btn-del');
-      btnDel?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (confirm(`Delete ${node.type} "${node.name || node.id}"?`)) {
-          state.removeNode(cell.id, node.id);
-          refreshAll();
-        }
-      });
-
-      const inputOpacity = itemEl.querySelector('.structure-opacity-input');
-      inputOpacity?.addEventListener('change', (e) => {
-        e.stopPropagation();
-        const val = Math.max(0, Math.min(100, Number(inputOpacity.value) || 100)) / 100;
-        state.setLayerOpacity(cell.id, node.id, val);
+      },
+      exitIsolation: () => {
+        exitRegionIsolation(cell);
         renderCellEditor();
-      });
-
-      dom.structureTreeContainer.appendChild(itemEl);
-
-      if (Array.isArray(node.children)) {
-        node.children.forEach(child => renderNode(child, depth + 1));
+        updateIsolationBannerUI();
+      },
+      selectContent: ({ node }) => {
+        const bounds = StructureOps.bounds(node);
+        if (!bounds) return;
+        commitFloatingSelection();
+        selectTool('select');
+        state.selection = bounds;
+        renderCellOverlay();
       }
-    }
-
-    cell.layers.forEach(l => renderNode(l, 0));
+    });
   }
 
   // ===========================================================================
@@ -4292,7 +4194,7 @@
     }
   }
 
-  function renderImportSliceView() {
+  function renderImportSliceView(refreshList = true) {
     if (!dom.views['import-slice']) return;
     const canvas = dom.importSliceCanvas;
     const overlay = dom.importSliceOverlay;
@@ -4316,7 +4218,7 @@
         octx.clearRect(0, 0, 320, 240);
       }
       if (dom.sliceZoomLevel) dom.sliceZoomLevel.textContent = '100%';
-      renderImportSlicesList();
+      if (refreshList) renderImportSlicesList();
       return;
     }
 
@@ -4507,7 +4409,7 @@
       dom.btnSliceDeleteSelected.disabled = (importSliceState.selectedSliceIndex < 0 || importSliceState.selectedSliceIndex >= frames.length);
     }
 
-    renderImportSlicesList();
+    if (refreshList) renderImportSlicesList();
   }
 
   function renderImportSlicesList() {
@@ -4590,36 +4492,38 @@
     });
 
     dom.importSlicesList.querySelectorAll('.slice-name-input').forEach(input => {
-      input.addEventListener('input', (e) => {
+      input.addEventListener('change', (e) => {
         const idx = parseInt(e.target.dataset.sliceIdx, 10);
         if (importSliceState.frames[idx]) {
           importSliceState.frames[idx].name = e.target.value.trim() || `slice_${idx}`;
-          const canvas = dom.importSliceCanvas;
-          if (canvas && importSliceState.image) {
-            renderImportSliceView();
-          }
+          input.value = importSliceState.frames[idx].name;
+          renderImportSliceView(false);
         }
       });
     });
 
     dom.importSlicesList.querySelectorAll('.slice-tag-input').forEach(input => {
-      input.addEventListener('input', (e) => {
+      input.addEventListener('change', (e) => {
         const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        if (importSliceState.frames[idx]) {
-          importSliceState.frames[idx].tag = e.target.value.trim();
-          renderImportSliceView();
+        const frame = importSliceState.frames[idx];
+        const tag = input.value.trim();
+        if (frame && frame.tag !== tag) {
+          frame.tag = tag;
+          delete frame.row;
+          renderImportSliceView(false);
         }
       });
     });
 
     dom.importSlicesList.querySelectorAll('.slice-col-input').forEach(input => {
-      input.addEventListener('input', (e) => {
+      input.addEventListener('change', (e) => {
         const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+        const val = Math.max(0, Math.min(PIX2.PROFILES.studio.maxGridCols - 1, parseInt(e.target.value, 10) || 0));
         if (importSliceState.frames[idx]) {
           importSliceState.frames[idx].col = val;
           importSliceState.frames[idx].frameIndex = val;
-          renderImportSliceView();
+          input.value = val;
+          renderImportSliceView(false);
         }
       });
     });
@@ -4628,9 +4532,12 @@
       input.addEventListener('change', (e) => {
         const idx = parseInt(e.target.dataset.sliceIdx, 10);
         const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-        if (importSliceState.frames[idx]) {
-          importSliceState.frames[idx].frame.w = val;
-          renderImportSliceView();
+        const slice = importSliceState.frames[idx];
+        if (slice) {
+          slice.frame.w = Math.min(val, importSliceState.image.width - slice.frame.x);
+          syncUntrimmedSliceSize(slice);
+          input.value = slice.frame.w;
+          renderImportSliceView(false);
         }
       });
     });
@@ -4639,9 +4546,12 @@
       input.addEventListener('change', (e) => {
         const idx = parseInt(e.target.dataset.sliceIdx, 10);
         const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-        if (importSliceState.frames[idx]) {
-          importSliceState.frames[idx].frame.h = val;
-          renderImportSliceView();
+        const slice = importSliceState.frames[idx];
+        if (slice) {
+          slice.frame.h = Math.min(val, importSliceState.image.height - slice.frame.y);
+          syncUntrimmedSliceSize(slice);
+          input.value = slice.frame.h;
+          renderImportSliceView(false);
         }
       });
     });
@@ -4685,11 +4595,39 @@
     }
   }
 
+  function syncUntrimmedSliceSize(slice) {
+    if (slice.rotated || slice.trimmed || slice.spriteSourceSize?.x || slice.spriteSourceSize?.y) return;
+    const { w, h } = slice.frame;
+    slice.sourceSize = { w, h };
+    slice.spriteSourceSize = { x: 0, y: 0, w, h };
+  }
+
   function initInspectorDeckResizer() {
     const resizer = document.getElementById('import-slices-deck-resizer');
     const deck = document.getElementById('import-slices-deck');
     const mainArea = document.querySelector('.import-slice-main-area');
     if (!resizer || !deck) return;
+
+    const widthResizer = document.getElementById('slice-config-resizer');
+    if (widthResizer && mainArea) {
+      const settings = widthResizer.previousElementSibling;
+      function resizeSettings(width) {
+        mainArea.style.setProperty('--slice-config-width', `${Math.round(width)}px`);
+      }
+      widthResizer.addEventListener('pointerdown', event => {
+        if (event.button === 0) widthResizer.setPointerCapture(event.pointerId);
+      });
+      widthResizer.addEventListener('pointermove', event => {
+        if (widthResizer.hasPointerCapture(event.pointerId)) {
+          resizeSettings(event.clientX - mainArea.getBoundingClientRect().left);
+        }
+      });
+      widthResizer.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        resizeSettings(settings.getBoundingClientRect().width + (event.key === 'ArrowLeft' ? -16 : 16));
+      });
+    }
 
     let isDragging = false;
     let startY = 0;
@@ -4827,8 +4765,8 @@
       let hitIdx = -1;
       for (let i = frames.length - 1; i >= 0; i--) {
         const f = frames[i];
-        if (coords.x >= f.frame.x && coords.x <= f.frame.x + f.frame.w &&
-            coords.y >= f.frame.y && coords.y <= f.frame.y + f.frame.h) {
+        if (coords.x >= f.frame.x && coords.x < f.frame.x + f.frame.w &&
+            coords.y >= f.frame.y && coords.y < f.frame.y + f.frame.h) {
           hitIdx = i;
           break;
         }
@@ -4909,25 +4847,16 @@
           const dx = coords.x - importSliceState.dragStartX;
           const dy = coords.y - importSliceState.dragStartY;
           const orig = importSliceState.dragOriginRect;
-          const h = importSliceState.activeHandle;
-
-          if (h === 'se') {
-            slice.frame.w = Math.max(2, orig.w + dx);
-            slice.frame.h = Math.max(2, orig.h + dy);
-          } else if (h === 'sw') {
-            slice.frame.x = Math.min(orig.x + orig.w - 2, orig.x + dx);
-            slice.frame.w = Math.max(2, orig.w - dx);
-            slice.frame.h = Math.max(2, orig.h + dy);
-          } else if (h === 'ne') {
-            slice.frame.y = Math.min(orig.y + orig.h - 2, orig.y + dy);
-            slice.frame.w = Math.max(2, orig.w + dx);
-            slice.frame.h = Math.max(2, orig.h - dy);
-          } else if (h === 'nw') {
-            slice.frame.x = Math.min(orig.x + orig.w - 2, orig.x + dx);
-            slice.frame.y = Math.min(orig.y + orig.h - 2, orig.y + dy);
-            slice.frame.w = Math.max(2, orig.w - dx);
-            slice.frame.h = Math.max(2, orig.h - dy);
-          }
+          const handle = importSliceState.activeHandle;
+          const right = orig.x + orig.w;
+          const bottom = orig.y + orig.h;
+          const left = handle.endsWith('w') ? Math.max(0, Math.min(right - 1, orig.x + dx)) : orig.x;
+          const top = handle.startsWith('n') ? Math.max(0, Math.min(bottom - 1, orig.y + dy)) : orig.y;
+          const nextRight = handle.endsWith('e')
+            ? Math.max(left + 1, Math.min(importSliceState.image.width, right + dx)) : right;
+          const nextBottom = handle.startsWith('s')
+            ? Math.max(top + 1, Math.min(importSliceState.image.height, bottom + dy)) : bottom;
+          slice.frame = { x: left, y: top, w: nextRight - left, h: nextBottom - top };
           renderImportSliceView();
         }
         return;
@@ -4960,8 +4889,8 @@
         }
         for (let i = frames.length - 1; i >= 0; i--) {
           const f = frames[i];
-          if (coords.x >= f.frame.x && coords.x <= f.frame.x + f.frame.w &&
-              coords.y >= f.frame.y && coords.y <= f.frame.y + f.frame.h) {
+          if (coords.x >= f.frame.x && coords.x < f.frame.x + f.frame.w &&
+              coords.y >= f.frame.y && coords.y < f.frame.y + f.frame.h) {
             canvas.style.cursor = 'pointer';
             return;
           }
@@ -4979,7 +4908,7 @@
 
       if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
         const dr = importSliceState.currentDragRect;
-        if (dr.w >= 4 && dr.h >= 4) {
+        if (importSliceState.activeTool === 'draw' || dr.w > 1 || dr.h > 1) {
           const nextIdx = importSliceState.frames.length;
           const newSlice = {
             name: `slice_${String(nextIdx).padStart(3, '0')}`,
@@ -4999,6 +4928,8 @@
       }
 
       if (importSliceState.isDraggingSlice || importSliceState.isResizingSlice) {
+        const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
+        if (slice && importSliceState.isResizingSlice) syncUntrimmedSliceSize(slice);
         importSliceState.isDraggingSlice = false;
         importSliceState.isResizingSlice = false;
         importSliceState.activeHandle = null;
@@ -5006,6 +4937,24 @@
         renderImportSliceView();
       }
     });
+
+    function cancelSliceGesture() {
+      const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
+      if (slice && importSliceState.dragOriginRect) slice.frame = importSliceState.dragOriginRect;
+      importSliceState.dragOriginRect = null;
+      importSliceState.currentDragRect = null;
+      importSliceState.activeHandle = null;
+      importSliceState.isDrawingSlice = false;
+      importSliceState.isDraggingSlice = false;
+      importSliceState.isResizingSlice = false;
+      if (importSliceState.isPanning) document.body.style.cursor = '';
+      importSliceState.isPanning = false;
+      isSpacebarHeld = false;
+      container.style.cursor = importSliceState.activeTool === 'hand' ? 'grab' : 'default';
+      if (state.activeTabId === 'tab-import-slice') renderImportSliceView();
+    }
+    window.addEventListener('pointercancel', cancelSliceGesture);
+    window.addEventListener('blur', cancelSliceGesture);
 
     window.addEventListener('keydown', (e) => {
       if (state.activeTabId !== 'tab-import-slice') return;
@@ -5028,8 +4977,8 @@
           deleteImportSlice(importSliceState.selectedSliceIndex);
         }
       } else if (e.key === 'Escape') {
-        importSliceState.selectedSliceIndex = -1;
-        renderImportSliceView();
+        if (!importSliceState.dragOriginRect && !importSliceState.currentDragRect) importSliceState.selectedSliceIndex = -1;
+        cancelSliceGesture();
       } else if (e.key === '+' || e.key === '=') {
         setSliceZoom(importSliceState.zoom * 1.25);
       } else if (e.key === '-' || e.key === '_') {
@@ -5142,33 +5091,38 @@
       showToast('No slices to import', 'error');
       return;
     }
-    const canvas = document.createElement('canvas');
-    canvas.width = importSliceState.image.width;
-    canvas.height = importSliceState.image.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(importSliceState.image, 0, 0);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
     const layerName = dom.inputSliceLayerName ? dom.inputSliceLayerName.value.trim() || 'Imported' : 'Imported';
     const autoAnimate = dom.chkSliceAutoAnimate ? dom.chkSliceAutoAnimate.checked : true;
 
     try {
-      if (!state.doc) {
-        createBlankProject('imported_sprites.pix2', 'Imported Sprites', 4, 4, 16, 16);
-      }
-      state.beginStroke(`Import ${importSliceState.frames.length} Slices`);
-      ImportSlice.importFramesToDoc(state.doc, importSliceState.frames, imgData, {
-        layerName: layerName,
+      const canvas = document.createElement('canvas');
+      canvas.width = importSliceState.image.width;
+      canvas.height = importSliceState.image.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(importSliceState.image, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const draft = PIX2.createDocument('Imported Sprites', 1, 1, 16, 16);
+      const candidate = PIX2.createDocument('Imported Sprites', 1, 1, 16, 16);
+      candidate.cells = {};
+      ImportSlice.importFramesToDoc(candidate, importSliceState.frames, imgData, {
+        layerName,
         createAnimations: autoAnimate,
-        useGridCellIds: true
+        useGridCellIds: true,
+        rejectDuplicateCells: true
       });
+      const validation = PIX2.validate(candidate, { strict: true });
+      if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid imported document');
+      const fileName = sanitizeSafeFilename(dom.importSliceFileName?.textContent.replace(/\.png$/i, ''), '.pix2', 'imported_sprites');
+      createProjectSession(draft, fileName);
+      state.beginStroke();
+      state.doc = candidate;
       state.endStroke(`Import ${importSliceState.frames.length} Slices`);
       triggerEventAutosave();
       state.activeTabId = 'tab-grid-overview';
       updateResolutionButtons();
       centerGridCanvas();
       refreshAll();
-      showToast(`Imported ${importSliceState.frames.length} frames into project!`, 'success');
+      showToast(`Imported ${importSliceState.frames.length} frames into a new project`, 'success');
     } catch (err) {
       showToast(`Import error: ${err.message}`, 'error');
     }
@@ -5875,142 +5829,132 @@
   let dragStartX = null;
   let dragStartY = null;
 
-  function renderCellEditor() {
+  const cellArtwork = document.createElement('canvas');
+  let bufferedCell = null;
+  let bufferedPixels = null;
+  let bufferedIsolation = null;
+
+  function sizeCellCanvases(w, h, zoom) {
+    const width = Math.max(1, Math.round(w * zoom));
+    const height = Math.max(1, Math.round(h * zoom));
+    EditorCanvas.resize(dom.cellCanvas, width, height);
+    EditorCanvas.resize(dom.cellOverlay, width, height);
+    if (state.showRulers) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      EditorRulers.sizeRuler(dom.rulerTop, width, false, dpr);
+      EditorRulers.sizeRuler(dom.rulerLeft, height, true, dpr);
+    }
+  }
+
+  function renderCellEditor(reuseArtwork = false) {
     const cell = state.getActiveCell();
     if (!cell || !state.doc) return;
+    if (state.isolatedNodeId && !StructureOps.findNode(cell, state.isolatedNodeId)) state.isolatedNodeId = null;
 
     const cw = state.doc.meta.cellSize.w;
     const ch = state.doc.meta.cellSize.h;
-    const zoom = state.cellZoom;
-
-    dom.cellCanvas.width = cw * zoom;
-    dom.cellCanvas.height = ch * zoom;
-    dom.cellOverlay.width = cw * zoom;
-    dom.cellOverlay.height = ch * zoom;
+    const limit = NoiraViewport.artworkZoomLimit(cw, ch);
+    const zoom = state.cellZoom = Math.min(state.cellZoom, limit);
+    sizeCellCanvases(cw, ch, zoom);
+    if (dom.statusZoomLabel) {
+      const label = `Zoom: ${NoiraViewport.formatArtworkZoom(zoom)} / ${limit}×`;
+      if (dom.statusZoomLabel.textContent !== label) dom.statusZoomLabel.textContent = label;
+      dom.statusZoomLabel.title = 'Current zoom / maximum for this frame';
+    }
 
     const ctx = dom.cellCanvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-
-    // 1. Checkerboard
-    if (state.checkerboardBg) {
-      drawChecker(ctx, 0, 0, cw * zoom, ch * zoom, zoom);
-    } else {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, cw * zoom, ch * zoom);
+    if (!reuseArtwork || bufferedCell !== cell || bufferedPixels !== cell.pixels ||
+        bufferedIsolation !== state.isolatedNodeId || cellArtwork.width !== cw || cellArtwork.height !== ch) {
+      if (cellArtwork.width !== cw) cellArtwork.width = cw;
+      if (cellArtwork.height !== ch) cellArtwork.height = ch;
+      const source = cellArtwork.getContext('2d');
+      source.clearRect(0, 0, cw, ch);
+      const pixels = state.isolatedNodeId
+        ? PIX2.compositeCellLayers(cell, { w: cw, h: ch }, { isolatedNodeId: state.isolatedNodeId, dimNonIsolated: 0 })
+        : cell.pixels;
+      EditorCanvas.drawPixels(source, pixels, cw, ch);
+      bufferedCell = cell;
+      bufferedPixels = cell.pixels;
+      bufferedIsolation = state.isolatedNodeId;
     }
-
-    // 2. Draw non-transparent pixels
-    if (state.isolatedNodeId && cell.layers && cell.layers.length > 0) {
-      const match = state.findNode(cell.id, state.isolatedNodeId);
-      const isoPixels = {};
-      if (match && match.node) {
-        const collectPixels = (n) => {
-          if (n.type === 'region' && n.pixels) {
-            for (const k in n.pixels) isoPixels[k] = n.pixels[k];
-          }
-          if (n.children) n.children.forEach(collectPixels);
-        };
-        collectPixels(match.node);
-      }
-
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      for (const coord in cell.pixels) {
-        if (!isoPixels[coord]) {
-          const [x, y] = coord.split(',').map(Number);
-          ctx.fillStyle = cell.pixels[coord];
-          ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-        }
-      }
-      ctx.restore();
-
-      for (const coord in isoPixels) {
-        const [x, y] = coord.split(',').map(Number);
-        ctx.fillStyle = isoPixels[coord];
-        ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-      }
-    } else {
-      for (const coord in cell.pixels) {
-        const [x, y] = coord.split(',').map(Number);
-        ctx.fillStyle = cell.pixels[coord];
-        ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-      }
-    }
+    const bounds = EditorCanvas.visibleBounds(dom.cellCanvas, dom.canvasViewport, cw, ch, zoom);
+    const slice = EditorCanvas.artworkSlice(bounds, cw, ch, zoom);
+    if (slice.width <= 0 || slice.height <= 0) return;
+    const isDark = document.body.classList.contains('dark-theme');
+    const background = state.checkerboardBg ? EditorCanvas.checker(ctx, zoom, isDark) : '#ffffff';
+    EditorCanvas.paintArtwork(ctx, cellArtwork, slice, background);
 
     // 3. Grid lines
     if (state.showGridLines && zoom >= 8) {
-      const isDark = document.body.classList.contains('dark-theme');
       ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
       ctx.lineWidth = 1;
-      for (let x = 0; x <= cw; x++) {
-        ctx.beginPath();
-        ctx.moveTo(x * zoom - 0.5, 0);
-        ctx.lineTo(x * zoom - 0.5, ch * zoom);
-        ctx.stroke();
+      ctx.beginPath();
+      for (let x = bounds.minX; x <= bounds.maxX; x++) {
+        ctx.moveTo(x * zoom - 0.5, slice.y);
+        ctx.lineTo(x * zoom - 0.5, slice.y + slice.height);
       }
-      for (let y = 0; y <= ch; y++) {
-        ctx.beginPath();
-        ctx.moveTo(0, y * zoom - 0.5);
-        ctx.lineTo(cw * zoom, y * zoom - 0.5);
-        ctx.stroke();
+      for (let y = bounds.minY; y <= bounds.maxY; y++) {
+        ctx.moveTo(slice.x, y * zoom - 0.5);
+        ctx.lineTo(slice.x + slice.width, y * zoom - 0.5);
       }
+      ctx.stroke();
     }
 
-    // 4. Symmetry Guide line
-    if (state.symmetry) {
-      const axisX = (cw - 1) / 2;
-      const screenAxisX = (axisX + 0.5) * zoom;
+    if (state.symmetry || state.symmetryVertical) {
       ctx.strokeStyle = '#a855f7';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(screenAxisX, 0);
-      ctx.lineTo(screenAxisX, ch * zoom);
+      if (state.symmetry) {
+        ctx.moveTo(cw * zoom / 2, 0);
+        ctx.lineTo(cw * zoom / 2, ch * zoom);
+      }
+      if (state.symmetryVertical) {
+        ctx.moveTo(0, ch * zoom / 2);
+        ctx.lineTo(cw * zoom, ch * zoom / 2);
+      }
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    if (dom.labelResolution) {
-      dom.labelResolution.textContent = `${cw} × ${ch} px`;
+    const resolution = `${cw} × ${ch} px`;
+    if (dom.labelResolution && dom.labelResolution.textContent !== resolution) {
+      dom.labelResolution.textContent = resolution;
     }
+    if (!reuseArtwork && state.currentTool === 'region-select') renderCellOverlay();
   }
 
+  const cellRulerBaseline = {
+    top: document.createElement('canvas'),
+    left: document.createElement('canvas')
+  };
+  let rulerHoverX = null, rulerHoverY = null;
+  let cellRulerHighlightKey = null;
+
   function renderCellRulers() {
-    if (!state.doc || !state.showRulers) {
-      dom.rulerTop.style.display = 'none';
-      dom.rulerLeft.style.display = 'none';
-      return;
-    }
-    dom.rulerTop.style.display = 'flex';
-    dom.rulerLeft.style.display = 'flex';
-
-    const cw = state.doc.meta.cellSize.w;
-    const ch = state.doc.meta.cellSize.h;
+    const show = Boolean(state.doc && state.showRulers);
+    dom.canvasContainerWithRulers.classList.toggle('hide-rulers', !show);
+    if (!show) return;
+    const { w, h } = state.doc.meta.cellSize;
     const zoom = state.cellZoom;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dark = document.body.classList.contains('dark-theme');
+    EditorRulers.paintRuler(cellRulerBaseline.top, w, zoom, false, dpr, dark);
+    EditorRulers.paintRuler(cellRulerBaseline.left, h, zoom, true, dpr, dark);
+    cellRulerHighlightKey = null;
+    drawCellRulerHighlights();
+  }
 
-    // Top ruler ticks
-    dom.rulerTop.innerHTML = '';
-    for (let x = 0; x < cw; x++) {
-      const tick = document.createElement('div');
-      tick.className = 'ruler-tick';
-      tick.style.width = `${zoom}px`;
-      if (x % 4 === 0 || x === cw - 1) {
-        tick.textContent = x;
-      }
-      dom.rulerTop.appendChild(tick);
-    }
-
-    // Left ruler ticks
-    dom.rulerLeft.innerHTML = '';
-    for (let y = 0; y < ch; y++) {
-      const tick = document.createElement('div');
-      tick.className = 'ruler-tick-v';
-      tick.style.height = `${zoom}px`;
-      if (y % 4 === 0 || y === ch - 1) {
-        tick.textContent = y;
-      }
-      dom.rulerLeft.appendChild(tick);
-    }
+  function drawCellRulerHighlights() {
+    if (!state.doc || !state.showRulers) return;
+    const { w, h } = state.doc.meta.cellSize;
+    const { cellZoom: zoom, selection } = state;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const key = [w, h, zoom, dpr, rulerHoverX, rulerHoverY, selection?.x, selection?.y, selection?.w, selection?.h].join('/');
+    if (key === cellRulerHighlightKey) return;
+    cellRulerHighlightKey = key;
+    EditorRulers.drawOverlay(dom.rulerTop, cellRulerBaseline.top, w, zoom, false, dpr, rulerHoverX, selection?.x, selection?.w);
+    EditorRulers.drawOverlay(dom.rulerLeft, cellRulerBaseline.left, h, zoom, true, dpr, rulerHoverY, selection?.y, selection?.h);
   }
 
   function renderMiniPreview() {
@@ -6019,20 +5963,38 @@
 
     const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
     const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-    const scale = miniPreviewScale || 6;
-
-    dom.miniPreviewCanvas.width = cw * scale;
-    dom.miniPreviewCanvas.height = ch * scale;
+    dom.miniPreviewCanvas.width = cw;
+    dom.miniPreviewCanvas.height = ch;
     const ctx = dom.miniPreviewCanvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-
-    drawChecker(ctx, 0, 0, cw * scale, ch * scale, 6);
-
     for (const coord in cell.pixels) {
       const [x, y] = coord.split(',').map(Number);
       ctx.fillStyle = cell.pixels[coord];
-      ctx.fillRect(x * scale, y * scale, scale, scale);
+      ctx.fillRect(x, y, 1, 1);
     }
+    updateMiniPreviewZoom();
+  }
+
+  function getMiniPreviewScale() {
+    if (miniPreviewScale !== 'fit') return miniPreviewScale;
+    const canvas = dom.miniPreviewCanvas;
+    const viewport = canvas.parentElement;
+    return window.NoiraViewport.computeFitZoom(viewport.clientWidth, viewport.clientHeight,
+      canvas.width, canvas.height, MINI_PREVIEW_ZOOMS, 18);
+  }
+
+  function updateMiniPreviewZoom() {
+    const canvas = dom.miniPreviewCanvas;
+    const scale = getMiniPreviewScale();
+    canvas.style.width = canvas.width * scale + 'px';
+    canvas.style.height = canvas.height * scale + 'px';
+    document.getElementById('preview-zoom-value').value = scale + '×';
+    document.getElementById('preview-zoom-fit').classList.toggle('active', miniPreviewScale === 'fit');
+  }
+
+  function stepMiniPreviewZoom(direction) {
+    const index = MINI_PREVIEW_ZOOMS.indexOf(getMiniPreviewScale());
+    miniPreviewScale = MINI_PREVIEW_ZOOMS[Math.max(0, Math.min(MINI_PREVIEW_ZOOMS.length - 1, index + direction))];
+    updateMiniPreviewZoom();
   }
 
   // ===========================================================================
@@ -6278,39 +6240,25 @@
     floatingSelectionTargetId = cell.layers && cell.layers.length ? target.id : null;
     floatingCurrentX = floatingOriginalSel.x;
     floatingCurrentY = floatingOriginalSel.y;
-    floatingSelectionPixels = {};
     state.beginStroke();
-    for (let py = 0; py < floatingOriginalSel.h; py++) {
-      for (let px = 0; px < floatingOriginalSel.w; px++) {
-        const key = `${floatingOriginalSel.x + px},${floatingOriginalSel.y + py}`;
-        if (target.pixels && target.pixels[key]) {
-          floatingSelectionPixels[`${px},${py}`] = target.pixels[key];
-          delete target.pixels[key];
-        }
-      }
-    }
-    floatingBaselinePixels = { ...floatingSelectionPixels };
-    floatingBaselineSel = { ...floatingOriginalSel };
+    const lifted = SelectionTransform.liftPixels(target, floatingOriginalSel);
+    floatingSelectionPixels = lifted.pixels;
+    floatingBaselinePixels = lifted.baselinePixels;
+    floatingBaselineSel = lifted.baselineBounds;
     if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
     renderCellEditor();
   }
 
-  function commitFloatingSelection() {
+  function commitFloatingSelection(label = 'Move Selection') {
     if (!floatingSelectionPixels || !floatingOriginalSel) return;
     const cell = getFloatingSelectionCell();
     const target = getSelectionTarget(cell, floatingSelectionTargetId);
     if (cell && target) {
       const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
       const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-      if (!target.pixels) target.pixels = {};
-      for (const relKey in floatingSelectionPixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const destX = floatingCurrentX + rx;
-        const destY = floatingCurrentY + ry;
-        if (destX >= 0 && destX < cw && destY >= 0 && destY < ch) {
-          target.pixels[`${destX},${destY}`] = floatingSelectionPixels[relKey];
-        }
-      }
+      SelectionTransform.placePixels(target, floatingSelectionPixels, {
+        x: floatingCurrentX, y: floatingCurrentY
+      }, { w: cw, h: ch });
       state.selection = {
         x: floatingCurrentX,
         y: floatingCurrentY,
@@ -6318,8 +6266,7 @@
         h: floatingOriginalSel.h
       };
       if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
-      state.endStroke('Move Selection');
-      triggerEventAutosave();
+      if (state.endStroke(label)) triggerEventAutosave();
       renderCellEditor();
       renderMiniPreview();
     }
@@ -6335,17 +6282,8 @@
     const cell = getFloatingSelectionCell();
     const target = getSelectionTarget(cell, floatingSelectionTargetId);
     if (target && floatingBaselinePixels && floatingBaselineSel) {
-      if (!target.pixels) target.pixels = {};
-      const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
-      const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-      for (const relKey in floatingBaselinePixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const x = floatingBaselineSel.x + rx;
-        const y = floatingBaselineSel.y + ry;
-        if (x >= 0 && x < cw && y >= 0 && y < ch) {
-          target.pixels[`${x},${y}`] = floatingBaselinePixels[relKey];
-        }
-      }
+      const size = cell.size || state.doc.meta.cellSize;
+      SelectionTransform.placePixels(target, floatingBaselinePixels, floatingBaselineSel, size);
       if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
     }
     // beginStroke() captured the pre-lift document. Cancellation leaves no
@@ -6407,18 +6345,70 @@
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(sx, sy, sw, sh);
     ctx.setLineDash([]);
+    SelectionTransform.drawHandles(ctx, { ...floatingOriginalSel, x: floatingCurrentX, y: floatingCurrentY }, zoom);
+  }
+
+  function editorPointerView(event, canvas, zoom) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top, zoom, shift: event.shiftKey };
+  }
+
+  function paintCellStroke(cell, tool, x0, y0, x1, y1) {
+    const target = Tools.getTargetForPlot(cell);
+    if (!target) return;
+    const isEraser = tool === 'eraser';
+    const color = isEraser ? null : Tools.brushColor(state.primaryColor, brushSettings.opacity);
+    if (!isEraser && !color) return;
+    const size = isEraser ? brushSettings.eraserSize : brushSettings.size;
+    const dimensions = state.doc.meta.cellSize;
+    const changed = new Set();
+    Tools.brushStroke(x0, y0, x1, y1, size, { ...dimensions, symH: state.symmetry, symV: state.symmetryVertical }, (x, y) => {
+      const key = `${x},${y}`;
+      if ((target.pixels[key] ?? null) === color) return;
+      if (isEraser) delete target.pixels[key];
+      else target.pixels[key] = color;
+      changed.add(key);
+    });
+    if (!changed.size) return;
+    const display = EditorCanvas.updateComposite(PIX2, cell, dimensions, changed, state.isolatedNodeId);
+    const reuse = bufferedCell === cell && bufferedPixels === cell.pixels && bufferedIsolation === state.isolatedNodeId;
+    const source = reuse ? cellArtwork.getContext('2d') : null;
+    const preview = dom.miniPreviewCanvas?.getContext('2d');
+    for (const key of changed) {
+      const [x, y] = key.split(',').map(Number);
+      if (source) EditorCanvas.writePixel(source, x, y, display[key]);
+      if (preview) EditorCanvas.writePixel(preview, x, y, cell.pixels[key]);
+    }
+    renderCellEditor(reuse);
+  }
+
+  function getBrushPoint(event) {
+    const size = state.currentTool === 'pen' ? brushSettings.size : brushSettings.eraserSize;
+    return Tools.brushPoint(editorPointerView(event, dom.cellOverlay, state.cellZoom), size, state.doc.meta.cellSize);
   }
 
   function handleCellMouseDown(e) {
-    if (e.button === 1 || e.spaceKey || state.currentTool === 'pan') return;
-    if (e.button === 2) return; // Right-click handled by contextmenu listener
+    if (e.button !== 0 || state.currentTool === 'pan' || dom.canvasViewport.classList.contains('space-held')) return;
 
-    const coords = getPixelCoords(e);
+    let coords = getPixelCoords(e);
     if (!coords) return;
 
     const cell = state.getActiveCell();
     if (!cell) return;
     const tool = state.currentTool;
+    if (tool === 'region-select') {
+      if (e.altKey) return;
+      const view = editorPointerView(e, dom.cellOverlay, state.cellZoom);
+      const hit = regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, coords, e.shiftKey || e.ctrlKey || e.metaKey, view);
+      if (hit && !state.activeLayerId) {
+        state.activeLayerId = hit.layer.id;
+        regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, coords, e.shiftKey || e.ctrlKey || e.metaKey, view);
+      }
+      if (hit) state.activeRegionId = hit.node.id;
+      renderStructureLayersTree();
+      renderCellOverlay();
+      return;
+    }
 
     // Check if clicking on selection transform handles (Rotation or Scale)
     if (state.selection && typeof SelectionTransform !== 'undefined') {
@@ -6476,6 +6466,7 @@
       renderCellOverlay(coords.x, coords.y);
     }
 
+    if (tool === 'pen' || tool === 'eraser') coords = getBrushPoint(e);
     isPointerDown = true;
     dragStartX = coords.x;
     dragStartY = coords.y;
@@ -6488,14 +6479,8 @@
 
     const color = (e.button === 2) ? state.secondaryColor : state.primaryColor;
 
-    if (tool === 'pen') {
-      Tools.plotPixel(cell, coords.x, coords.y, color, state.symmetry, state.doc.meta.cellSize.w);
-      renderCellEditor();
-      renderMiniPreview();
-    } else if (tool === 'eraser') {
-      Tools.erasePixel(cell, coords.x, coords.y, state.symmetry, state.doc.meta.cellSize.w);
-      renderCellEditor();
-      renderMiniPreview();
+    if (tool === 'pen' || tool === 'eraser') {
+      paintCellStroke(cell, tool, coords.x, coords.y, coords.x, coords.y);
     } else if (tool === 'picker') {
       const picked = cell.pixels[`${coords.x},${coords.y}`] || 'transparent';
       if (picked !== 'transparent') {
@@ -6509,74 +6494,13 @@
       state.endStroke('Paint Bucket Fill');
       triggerEventAutosave();
       refreshAll();
-    } else if (tool === 'region-select') {
-      if (cell.layers && cell.layers.length > 0) {
-        let hitRegion = null;
-        const findHit = (nodes) => {
-          if (!nodes || hitRegion) return;
-          for (let i = nodes.length - 1; i >= 0; i--) {
-            const n = nodes[i];
-            if (n.type === 'region' && n.visible !== false && n.pixels && n.pixels[`${coords.x},${coords.y}`]) {
-              hitRegion = n;
-              return;
-            }
-            if (n.children) findHit(n.children);
-          }
-        };
-        findHit(cell.layers);
-
-        if (hitRegion) {
-          state.activeRegionId = hitRegion.id;
-          renderStructureLayersTree();
-          renderRegionOverlay(hitRegion);
-          showToast(`Selected Region: "${hitRegion.name || hitRegion.id}"`);
-        }
-      }
-      return;
     } else if (tool === 'line' || tool === 'rect' || tool === 'rect-fill' || tool === 'circle' || tool === 'circle-fill' || tool === 'select') {
-      renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color);
+      renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color, e);
     }
-  }
-
-  function renderRegionOverlay(region) {
-    if (!dom.cellOverlay || !region || !region.pixels) return;
-    const ctx = dom.cellOverlay.getContext('2d');
-    const zoom = state.cellZoom;
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    let count = 0;
-    for (const k in region.pixels) {
-      const [x, y] = k.split(',').map(Number);
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-      count++;
-    }
-    if (count === 0) return;
-
-    ctx.save();
-    ctx.strokeStyle = '#6366f1';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    const rx = minX * zoom;
-    const ry = minY * zoom;
-    const rw = (maxX - minX + 1) * zoom;
-    const rh = (maxY - minY + 1) * zoom;
-    ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh);
-
-    const name = region.name || region.id;
-    ctx.fillStyle = '#6366f1';
-    ctx.font = 'bold 11px sans-serif';
-    const textW = ctx.measureText(name).width;
-    ctx.fillRect(rx, Math.max(0, ry - 18), textW + 8, 18);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(name, rx + 4, Math.max(0, ry - 18) + 13);
-    ctx.restore();
   }
 
   function handleCellMouseMove(e) {
-    const coords = getPixelCoords(e);
+    let coords = getPixelCoords(e);
     updateStatusBarCoords(coords ? coords.x : null, coords ? coords.y : null);
 
     if (state.currentTool === 'pan') {
@@ -6584,28 +6508,11 @@
       return;
     }
 
-    if (state.currentTool === 'region-select' && !isPointerDown) {
-      dom.cellOverlay.style.cursor = 'crosshair';
-      const cell = state.getActiveCell();
-      if (coords && cell && cell.layers) {
-        let hitRegion = null;
-        const findHit = (nodes) => {
-          if (!nodes || hitRegion) return;
-          for (let i = nodes.length - 1; i >= 0; i--) {
-            const n = nodes[i];
-            if (n.type === 'region' && n.visible !== false && n.pixels && n.pixels[`${coords.x},${coords.y}`]) {
-              hitRegion = n;
-              return;
-            }
-            if (n.children) findHit(n.children);
-          }
-        };
-        findHit(cell.layers);
-        renderCellOverlay();
-        if (hitRegion) {
-          renderRegionOverlay(hitRegion);
-        }
-      }
+    if (state.currentTool === 'region-select') {
+      regionSelection.move(coords, editorPointerView(e, dom.cellOverlay, state.cellZoom));
+      const hit = coords && StructureOps.hitRegion(state.getActiveCell(), coords.x, coords.y, state.activeLayerId, state.isolatedNodeId);
+      dom.cellOverlay.style.cursor = hit ? 'move' : 'crosshair';
+      renderCellOverlay();
       return;
     }
 
@@ -6639,6 +6546,7 @@
       }
     }
 
+    if (coords && state.doc && (state.currentTool === 'pen' || state.currentTool === 'eraser')) coords = getBrushPoint(e);
     if (!isPointerDown) {
       if (coords) renderCellOverlay(coords.x, coords.y);
       return;
@@ -6684,6 +6592,10 @@
         deltaAngle
       );
       floatingSelectionPixels = rotated.pixels;
+      floatingCurrentX = Math.round(rotationBaseSel.x + (rotationBaseSel.w - rotated.w) / 2);
+      floatingCurrentY = Math.round(rotationBaseSel.y + (rotationBaseSel.h - rotated.h) / 2);
+      floatingOriginalSel = { x: floatingCurrentX, y: floatingCurrentY, w: rotated.w, h: rotated.h };
+      state.selection = { ...floatingOriginalSel };
       renderMovingSelectionOverlay();
       return;
     }
@@ -6702,28 +6614,31 @@
     const color = (e.buttons === 2) ? state.secondaryColor : state.primaryColor;
     const tool = state.currentTool;
 
-    if (tool === 'pen') {
+    if (tool === 'pen' || tool === 'eraser') {
       if (coords.x !== lastPixelX || coords.y !== lastPixelY) {
-        Tools.plotLine(cell, lastPixelX, lastPixelY, coords.x, coords.y, color, state.symmetry, state.doc.meta.cellSize.w);
+        paintCellStroke(cell, tool, lastPixelX, lastPixelY, coords.x, coords.y);
+        renderCellOverlay(coords.x, coords.y);
         lastPixelX = coords.x;
         lastPixelY = coords.y;
-        renderCellEditor();
-        renderMiniPreview();
-      }
-    } else if (tool === 'eraser') {
-      if (coords.x !== lastPixelX || coords.y !== lastPixelY) {
-        Tools.eraseLine(cell, lastPixelX, lastPixelY, coords.x, coords.y, state.symmetry, state.doc.meta.cellSize.w);
-        lastPixelX = coords.x;
-        lastPixelY = coords.y;
-        renderCellEditor();
-        renderMiniPreview();
       }
     } else if (tool === 'line' || tool === 'rect' || tool === 'rect-fill' || tool === 'circle' || tool === 'circle-fill' || tool === 'select') {
-      renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color);
+      renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color, e);
     }
   }
 
   function handleCellMouseUp(e) {
+    if (state.currentTool === 'region-select' && e.button === 0) {
+      const cell = state.getActiveCell();
+      if (cell && regionSelection.release(cell, state.activeLayerId, state.isolatedNodeId,
+        cell.size || state.doc.meta.cellSize, () => state.beginStroke(), showToast)) {
+        state.syncCellComposite(cell.id);
+        state.endStroke('Move regions');
+        triggerEventAutosave();
+        refreshAll();
+      }
+      renderCellOverlay();
+      return;
+    }
     if (!isPointerDown) return;
     isPointerDown = false;
 
@@ -6756,38 +6671,31 @@
 
     const coords = getPixelCoords(e);
     const cell = state.getActiveCell();
+    const tool = state.currentTool;
+    if (tool === 'pen' || tool === 'eraser') {
+      if (state.endStroke(tool === 'pen' ? 'Pencil Stroke' : 'Eraser Stroke')) {
+        triggerEventAutosave();
+        refreshAll();
+      }
+      renderCellOverlay();
+      return;
+    }
     if (!cell || !coords) {
       renderCellOverlay();
       return;
     }
 
     const color = (e.button === 2) ? state.secondaryColor : state.primaryColor;
-    const tool = state.currentTool;
 
-    if (tool === 'line') {
-      Tools.plotLine(cell, dragStartX, dragStartY, coords.x, coords.y, color, state.symmetry, state.doc.meta.cellSize.w);
-      state.endStroke('Line Draw');
-      triggerEventAutosave();
-      refreshAll();
-    } else if (tool === 'rect') {
-      Tools.plotRect(cell, dragStartX, dragStartY, coords.x, coords.y, color, false, state.symmetry, state.doc.meta.cellSize.w);
-      state.endStroke('Rectangle Draw');
-      triggerEventAutosave();
-      refreshAll();
-    } else if (tool === 'rect-fill') {
-      Tools.plotRect(cell, dragStartX, dragStartY, coords.x, coords.y, color, true, state.symmetry, state.doc.meta.cellSize.w);
-      state.endStroke('Filled Rectangle Draw');
-      triggerEventAutosave();
-      refreshAll();
-    } else if (tool === 'circle') {
-      Tools.plotCircle(cell, dragStartX, dragStartY, coords.x, coords.y, color, false, state.symmetry, state.doc.meta.cellSize.w);
-      state.endStroke('Circle Draw');
-      triggerEventAutosave();
-      refreshAll();
-    } else if (tool === 'circle-fill') {
-      Tools.plotCircle(cell, dragStartX, dragStartY, coords.x, coords.y, color, true, state.symmetry, state.doc.meta.cellSize.w);
-      state.endStroke('Filled Circle Draw');
-      triggerEventAutosave();
+    if (['line', 'rect', 'rect-fill', 'circle', 'circle-fill'].includes(tool)) {
+      const target = Tools.getTargetForPlot(cell);
+      if (target) {
+        Tools.shapePixels(tool, dragStartX, dragStartY, coords.x, coords.y, cellShapeOptions(e), (x, y) => {
+          target.pixels[`${x},${y}`] = color;
+        });
+        state.syncCellComposite(cell.id);
+      }
+      if (state.endStroke('Draw ' + tool)) triggerEventAutosave();
       refreshAll();
     } else if (tool === 'select') {
       const minX = Math.min(dragStartX, coords.x);
@@ -6798,10 +6706,6 @@
       state.selection = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
       renderCellOverlay();
       showToast(`Selected region: ${state.selection.w}×${state.selection.h}`);
-    } else if (tool === 'pen' || tool === 'eraser') {
-      state.endStroke(tool === 'pen' ? 'Pencil Stroke' : 'Eraser Stroke');
-      triggerEventAutosave();
-      refreshAll();
     }
     renderCellOverlay();
   }
@@ -6813,6 +6717,7 @@
   }
 
   function renderCellOverlay(hoverPx = null, hoverPy = null) {
+    drawCellRulerHighlights();
     clearOverlay();
     if (!dom.cellOverlay) return;
     const ctx = dom.cellOverlay.getContext('2d');
@@ -6826,6 +6731,10 @@
         ctx.strokeRect(hoverPx * zoom, hoverPy * zoom, zoom, zoom);
       }
       return;
+    }
+
+    if (state.currentTool === 'region-select') {
+      regionSelection.draw(ctx, zoom, state.getActiveCell(), state.activeLayerId, state.isolatedNodeId);
     }
 
     // 1. Draw Active Selection Marquee (Persistent across tool & tab switches)
@@ -6864,139 +6773,41 @@
         ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
         ctx.setLineDash([]);
 
-        // 8 Grip handles + Rotation Stem using SelectionTransform
-        if (typeof SelectionTransform !== 'undefined' && state.selection.w > 1 && state.selection.h > 1) {
-          const handles = SelectionTransform.getSelectionHandles(state.selection, zoom);
-          if (handles) {
-            // Draw rotation stem + knob
-            const rotY = handles.rot.y;
-            ctx.beginPath();
-            ctx.moveTo(handles.rot.x, sy);
-            ctx.lineTo(handles.rot.x, rotY);
-            ctx.strokeStyle = '#4f46e5';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(handles.rot.x, rotY, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-            ctx.strokeStyle = '#4f46e5';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // 8 Scale handle squares
-            ctx.fillStyle = '#6366f1';
-            const hSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
-            for (const k of ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w']) {
-              const pt = handles[k];
-              if (pt) {
-                ctx.fillRect(Math.round(pt.x - hSize / 2), Math.round(pt.y - hSize / 2), hSize, hSize);
-              }
-            }
-          }
-        } else {
-          // 4 Corner grip handles fallback
-          const handleSize = Math.max(3, Math.min(6, Math.floor(zoom / 3)));
-          ctx.fillStyle = '#6366f1';
-          ctx.fillRect(sx - handleSize/2, sy - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(sx + sw - handleSize/2, sy - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(sx - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(sx + sw - handleSize/2, sy + sh - handleSize/2, handleSize, handleSize);
-        }
       }
+      SelectionTransform.drawHandles(ctx, state.selection, zoom);
     }
 
-    // 2. Draw Hover Preview (Pixel cursor)
-    if (hoverPx !== null && hoverPy !== null) {
-      ctx.strokeStyle = '#6366f1';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([]);
-      ctx.strokeRect(hoverPx * zoom, hoverPy * zoom, zoom, zoom);
+    if (hoverPx !== null && hoverPy !== null && state.doc) {
+      const size = state.currentTool === 'pen' ? brushSettings.size
+        : (state.currentTool === 'eraser' ? brushSettings.eraserSize : 1);
+      Tools.drawBrushOutline(ctx, hoverPx, hoverPy, size, state.doc.meta.cellSize, zoom);
     }
   }
 
-  function renderShapeOverlay(x0, y0, x1, y1, tool, color) {
+  function cellShapeOptions(event) {
+    return { ...state.doc.meta.cellSize, symH: state.symmetry, symV: state.symmetryVertical,
+      shift: event.shiftKey, center: event.altKey };
+  }
+
+  function renderShapeOverlay(x0, y0, x1, y1, tool, color, event) {
     clearOverlay();
     if (!dom.cellOverlay || !state.doc) return;
     const ctx = dom.cellOverlay.getContext('2d');
     const zoom = state.cellZoom;
-    const cw = state.doc.meta.cellSize.w;
-    const ch = state.doc.meta.cellSize.h;
-
     const minX = Math.min(x0, x1);
     const maxX = Math.max(x0, x1);
     const minY = Math.min(y0, y1);
     const maxY = Math.max(y0, y1);
 
-    if (tool === 'rect') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(minX * zoom, minY * zoom, (maxX - minX + 1) * zoom, (maxY - minY + 1) * zoom);
-
-      if (state.symmetry) {
-        const symMinX = cw - 1 - maxX;
-        const symMaxX = cw - 1 - minX;
-        ctx.strokeRect(symMinX * zoom, minY * zoom, (symMaxX - symMinX + 1) * zoom, (maxY - minY + 1) * zoom);
-      }
-    } else if (tool === 'rect-fill') {
+    if (tool !== 'select') {
       ctx.fillStyle = color;
-      ctx.fillRect(minX * zoom, minY * zoom, (maxX - minX + 1) * zoom, (maxY - minY + 1) * zoom);
-
-      if (state.symmetry) {
-        const symMinX = cw - 1 - maxX;
-        const symMaxX = cw - 1 - minX;
-        ctx.fillRect(symMinX * zoom, minY * zoom, (symMaxX - symMinX + 1) * zoom, (maxY - minY + 1) * zoom);
-      }
-    } else if (tool === 'circle' || tool === 'circle-fill') {
-      ctx.fillStyle = color;
-      const plot = (px, py) => {
-        if (px >= 0 && px < cw && py >= 0 && py < ch) {
-          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
-        }
-        if (state.symmetry) {
-          const symX = cw - 1 - px;
-          if (symX >= 0 && symX < cw && py >= 0 && py < ch) {
-            ctx.fillRect(symX * zoom, py * zoom, zoom, zoom);
-          }
-        }
-      };
-      if (typeof Tools !== 'undefined' && typeof Tools.ellipse === 'function') {
-        Tools.ellipse(x0, y0, x1, y1, plot, tool === 'circle-fill');
-      }
-    } else if (tool === 'line') {
-      ctx.fillStyle = color;
-      const plot = (x, y) => {
-        if (x >= 0 && x < cw && y >= 0 && y < ch) {
-          ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-        }
-        if (state.symmetry) {
-          const symX = cw - 1 - x;
-          if (symX >= 0 && symX < cw && y >= 0 && y < ch) {
-            ctx.fillRect(symX * zoom, y * zoom, zoom, zoom);
-          }
-        }
-      };
-
-      if (typeof Tools !== 'undefined' && typeof Tools.line === 'function') {
-        Tools.line(x0, y0, x1, y1, plot);
-      } else if (typeof PIX2 !== 'undefined' && typeof PIX2.drawLineBresenham === 'function') {
-        PIX2.drawLineBresenham(x0, y0, x1, y1, plot);
-      } else {
-        let dx = Math.abs(x1 - x0);
-        let dy = Math.abs(y1 - y0);
-        let sx = (x0 < x1) ? 1 : -1;
-        let sy = (y0 < y1) ? 1 : -1;
-        let err = dx - dy;
-        let curX = x0, curY = y0;
-        while (true) {
-          plot(curX, curY);
-          if (curX === x1 && curY === y1) break;
-          let e2 = 2 * err;
-          if (e2 > -dy) { err -= dy; curX += sx; }
-          if (e2 < dx) { err += dx; curY += sy; }
-        }
-      }
+      const drawn = new Set();
+      Tools.shapePixels(tool, x0, y0, x1, y1, cellShapeOptions(event), (x, y) => {
+        const key = `${x},${y}`;
+        if (drawn.has(key)) return;
+        drawn.add(key);
+        ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+      });
     } else if (tool === 'select') {
       ctx.fillStyle = 'rgba(99, 102, 241, 0.16)';
       ctx.fillRect(minX * zoom, minY * zoom, (maxX - minX + 1) * zoom, (maxY - minY + 1) * zoom);
@@ -7020,14 +6831,25 @@
     const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
     const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
     const sel = state.selection || { x: 0, y: 0, w: cw, h: ch };
+    if (floatingSelectionPixels && floatingOriginalSel) {
+      state.clipboard = {
+        w: floatingOriginalSel.w, h: floatingOriginalSel.h,
+        pixels: { ...floatingSelectionPixels },
+        originCellId: cell.id, originX: floatingCurrentX, originY: floatingCurrentY
+      };
+      showToast('Copied floating selection', 'success');
+      return;
+    }
+    const target = getSelectionTarget(cell);
+    if (!target) return;
     const copiedPixels = {};
     let count = 0;
 
     for (let py = 0; py < sel.h; py++) {
       for (let px = 0; px < sel.w; px++) {
         const key = `${sel.x + px},${sel.y + py}`;
-        if (cell.pixels && cell.pixels[key]) {
-          copiedPixels[`${px},${py}`] = cell.pixels[key];
+        if (target.pixels && target.pixels[key]) {
+          copiedPixels[`${px},${py}`] = target.pixels[key];
           count++;
         }
       }
@@ -7052,17 +6874,28 @@
       return;
     }
 
+    if (!getSelectionTarget(cell) && !floatingSelectionPixels) return;
     executeSelectionCopy();
+    if (floatingSelectionPixels) {
+      executeSelectionDelete();
+      return;
+    }
 
+    const target = getSelectionTarget(cell);
+    if (!target) {
+      showToast('Select an editable layer or region');
+      return;
+    }
     state.beginStroke();
     const sel = state.selection;
     for (let py = 0; py < sel.h; py++) {
       for (let px = 0; px < sel.w; px++) {
         const key = `${sel.x + px},${sel.y + py}`;
-        if (cell.pixels) delete cell.pixels[key];
+        if (target.pixels) delete target.pixels[key];
       }
     }
 
+    state.syncCellComposite(cell.id);
     state.endStroke('Cut Selection');
     triggerEventAutosave();
     refreshAll();
@@ -7081,6 +6914,7 @@
       return;
     }
 
+    commitFloatingSelection();
     const clip = state.clipboard;
     const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
     const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
@@ -7091,8 +6925,13 @@
     px = Math.max(0, Math.min(cw - 1, px));
     py = Math.max(0, Math.min(ch - 1, py));
 
+    const target = getSelectionTarget(cell);
+    if (!target) {
+      showToast('Select an editable layer or region');
+      return;
+    }
     state.beginStroke();
-    if (!cell.pixels) cell.pixels = {};
+    if (!target.pixels) target.pixels = {};
 
     let pastedCount = 0;
     for (const relKey in clip.pixels) {
@@ -7100,7 +6939,7 @@
       const destX = px + rx;
       const destY = py + ry;
       if (destX >= 0 && destX < cw && destY >= 0 && destY < ch) {
-        cell.pixels[`${destX},${destY}`] = clip.pixels[relKey];
+        target.pixels[`${destX},${destY}`] = clip.pixels[relKey];
         pastedCount++;
       }
     }
@@ -7112,6 +6951,7 @@
       h: Math.min(clip.h, ch - py)
     };
 
+    state.syncCellComposite(cell.id);
     state.endStroke('Paste Selection');
     triggerEventAutosave();
     refreshAll();
@@ -7130,6 +6970,10 @@
       // Original location was already cleared when lifted.
       floatingSelectionPixels = null;
       floatingOriginalSel = null;
+      floatingBaselinePixels = null;
+      floatingBaselineSel = null;
+      floatingSelectionCellId = null;
+      floatingSelectionTargetId = null;
       state.selection = null;
       state.endStroke('Delete Floating Selection');
       triggerEventAutosave();
@@ -7140,26 +6984,33 @@
       return;
     }
 
+    const target = getSelectionTarget(cell);
+    if (!target) {
+      showToast('Select an editable layer or region');
+      return;
+    }
     if (state.selection) {
       state.beginStroke();
       const sel = state.selection;
       for (let py = 0; py < sel.h; py++) {
         for (let px = 0; px < sel.w; px++) {
           const key = `${sel.x + px},${sel.y + py}`;
-          if (cell.pixels) delete cell.pixels[key];
+          if (target.pixels) delete target.pixels[key];
         }
       }
       state.selection = null;
+      state.syncCellComposite(cell.id);
       state.endStroke('Delete Selection');
       triggerEventAutosave();
       refreshAll();
       renderCellOverlay();
       showToast(`Deleted selection (${sel.w}×${sel.h}) (Del)`);
     } else {
-      if (confirm(`Clear all pixels in ${cell.name || cell.id}?`)) {
+      if (confirm(`Clear all pixels in ${target.name || target.id}?`)) {
         state.beginStroke();
-        cell.pixels = {};
-        state.endStroke('Clear Cell');
+        target.pixels = {};
+        state.syncCellComposite(cell.id);
+        state.endStroke('Clear Artwork');
         triggerEventAutosave();
         refreshAll();
         showToast(`Cleared ${cell.name || cell.id}`);
@@ -7173,15 +7024,22 @@
       showToast('Select a region to fill.');
       return;
     }
+    commitFloatingSelection();
+    const target = getSelectionTarget(cell);
+    if (!target) {
+      showToast('Select an editable layer or region');
+      return;
+    }
     state.beginStroke();
     const sel = state.selection;
     for (let py = 0; py < sel.h; py++) {
       for (let px = 0; px < sel.w; px++) {
         const key = `${sel.x + px},${sel.y + py}`;
-        if (!cell.pixels) cell.pixels = {};
-        cell.pixels[key] = state.primaryColor;
+        if (!target.pixels) target.pixels = {};
+        target.pixels[key] = state.primaryColor;
       }
     }
+    state.syncCellComposite(cell.id);
     state.endStroke('Fill Selection');
     triggerEventAutosave();
     refreshAll();
@@ -7211,6 +7069,11 @@
       showToast('Select a region to flip.');
       return;
     }
+    const target = getSelectionTarget(cell);
+    if (!target) {
+      showToast('Select an editable layer or region');
+      return;
+    }
     state.beginStroke();
     const sel = state.selection;
     const temp = {};
@@ -7218,9 +7081,9 @@
     for (let py = 0; py < sel.h; py++) {
       for (let px = 0; px < sel.w; px++) {
         const key = `${sel.x + px},${sel.y + py}`;
-        if (cell.pixels && cell.pixels[key]) {
-          temp[`${px},${py}`] = cell.pixels[key];
-          delete cell.pixels[key];
+        if (target.pixels && target.pixels[key]) {
+          temp[`${px},${py}`] = target.pixels[key];
+          delete target.pixels[key];
         }
       }
     }
@@ -7229,9 +7092,10 @@
       const [rx, ry] = relKey.split(',').map(Number);
       const newRx = horizontal ? (sel.w - 1 - rx) : rx;
       const newRy = horizontal ? ry : (sel.h - 1 - ry);
-      cell.pixels[`${sel.x + newRx},${sel.y + newRy}`] = temp[relKey];
+      target.pixels[`${sel.x + newRx},${sel.y + newRy}`] = temp[relKey];
     }
 
+    state.syncCellComposite(cell.id);
     state.endStroke(horizontal ? 'Flip Horizontal' : 'Flip Vertical');
     triggerEventAutosave();
     refreshAll();
@@ -7258,80 +7122,56 @@
   function executeSelectionRotate() {
     const cell = state.getActiveCell();
     if (!cell) return;
+    const size = cell.size || state.doc.meta.cellSize;
 
-    if (floatingSelectionPixels && floatingOriginalSel) {
-      const temp = { ...floatingSelectionPixels };
-      floatingSelectionPixels = {};
-      const oldW = floatingOriginalSel.w;
-      const oldH = floatingOriginalSel.h;
-      for (const relKey in temp) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const newRx = oldH - 1 - ry;
-        const newRy = rx;
-        floatingSelectionPixels[`${newRx},${newRy}`] = temp[relKey];
+    if (state.currentTool === 'region-select' && regionSelection.resolve(cell, state.activeLayerId, state.isolatedNodeId).length) {
+      if (!regionSelection.rotate90(cell, state.activeLayerId, state.isolatedNodeId, size, () => state.beginStroke())) {
+        showToast('Selected regions cannot rotate within this frame');
+        return;
       }
-      floatingOriginalSel.w = oldH;
-      floatingOriginalSel.h = oldW;
-      if (state.selection) {
-        state.selection.w = oldH;
-        state.selection.h = oldW;
-      }
-      renderMovingSelectionOverlay();
-      showToast(`Rotated selection 90° CW (${state.selection ? state.selection.w : oldH}×${state.selection ? state.selection.h : oldW})`);
+      state.syncCellComposite(cell.id);
+      if (state.endStroke('Rotate regions 90°')) triggerEventAutosave();
+      refreshAll();
       return;
     }
 
-    if (!state.selection) {
-      if (state.doc) {
-        const cw = (cell.size && cell.size.w) || state.doc.meta.cellSize.w;
-        const ch = (cell.size && cell.size.h) || state.doc.meta.cellSize.h;
-        Tools.rotate90CW(cell, cw, ch);
-        state.saveSnapshot('Rotate 90° Clockwise');
+    if (!state.selection && !floatingSelectionPixels) {
+      state.beginStroke();
+      Tools.rotate90Clockwise(cell, size.w, size.h);
+      if (state.endStroke('Rotate cell 90°')) {
         triggerEventAutosave();
         refreshAll();
-        showToast('Rotated cell 90° CW (R)');
       }
       return;
     }
 
-    // Active selection on canvas (or full canvas via Ctrl+A)
-    state.beginStroke();
-    const sel = state.selection;
-    const temp = {};
-    for (let py = 0; py < sel.h; py++) {
-      for (let px = 0; px < sel.w; px++) {
-        const key = `${sel.x + px},${sel.y + py}`;
-        if (cell.pixels && cell.pixels[key]) {
-          temp[`${px},${py}`] = cell.pixels[key];
-          delete cell.pixels[key];
-        }
-      }
+    const wasFloating = Boolean(floatingSelectionPixels);
+    const bounds = wasFloating
+      ? { ...floatingOriginalSel, x: floatingCurrentX, y: floatingCurrentY }
+      : state.selection;
+    const next = SelectionTransform.quarterTurnBounds(bounds, size);
+    if (!next) {
+      showToast('Rotated selection would exceed the frame size');
+      return;
     }
-
-    const oldW = sel.w;
-    const oldH = sel.h;
-    sel.w = oldH;
-    sel.h = oldW;
-
-    const cellW = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
-    const cellH = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-
-    for (const relKey in temp) {
-      const [rx, ry] = relKey.split(',').map(Number);
-      const newRx = oldH - 1 - ry;
-      const newRy = rx;
-      const destX = sel.x + newRx;
-      const destY = sel.y + newRy;
-      if (destX >= 0 && destX < cellW && destY >= 0 && destY < cellH) {
-        cell.pixels[`${destX},${destY}`] = temp[relKey];
-      }
+    ensureFloatingSelection();
+    if (!floatingSelectionPixels) {
+      showToast('Select an editable layer or region');
+      return;
     }
-
-    state.endStroke('Rotate Selection 90° CW');
-    triggerEventAutosave();
-    refreshAll();
+    floatingSelectionPixels = SelectionTransform.rotatePixelsNearestNeighbor(
+      floatingSelectionPixels, bounds.w, bounds.h, Math.PI / 2
+    ).pixels;
+    floatingOriginalSel = { ...next };
+    floatingCurrentX = next.x;
+    floatingCurrentY = next.y;
+    state.selection = { ...next };
+    if (!wasFloating) {
+      commitFloatingSelection('Rotate selection 90°');
+      refreshAll();
+    }
     renderCellOverlay();
-    showToast(`Rotated selection 90° CW (${sel.w}×${sel.h}) (R)`);
+    showToast(`Rotated selection 90° CW (${next.w}×${next.h})`);
   }
 
   function executeDeselect() {
@@ -7476,15 +7316,7 @@
   function openContextMenu(x, y) {
     closeGridContextMenu();
     if (!contextMenu) return;
-    contextMenu.classList.remove('hidden');
-
-    const menuW = 210;
-    const menuH = 340;
-    const posX = Math.min(x, window.innerWidth - menuW - 10);
-    const posY = Math.min(y, window.innerHeight - menuH - 10);
-
-    contextMenu.style.left = `${posX}px`;
-    contextMenu.style.top = `${posY}px`;
+    EditorMenu.position(contextMenu, x, y);
   }
 
   function closeContextMenu() {
@@ -7534,6 +7366,11 @@
   }
 
   function updateStatusBarCoords(px, py) {
+    if (rulerHoverX !== px || rulerHoverY !== py) {
+      rulerHoverX = px;
+      rulerHoverY = py;
+      drawCellRulerHighlights();
+    }
     if (px === null || py === null) {
       if (dom.labelCoords) dom.labelCoords.textContent = 'X: -, Y: -';
       if (dom.statusCoordLabel) dom.statusCoordLabel.textContent = 'Pixel: [X: -, Y: -]';
@@ -7556,11 +7393,8 @@
     if (dom.statusToolLabel) {
       dom.statusToolLabel.textContent = `Tool: ${state.currentTool.toUpperCase()}`;
     }
-    if (dom.statusZoomLabel) {
-      dom.statusZoomLabel.textContent = `Zoom: ${state.cellZoom}×`;
-    }
     if (dom.statusSymmetryLabel) {
-      dom.statusSymmetryLabel.textContent = `Symmetry: ${state.symmetry ? 'ON (S)' : 'OFF (S)'}`;
+      dom.statusSymmetryLabel.textContent = `Symmetry: ${state.symmetry ? 'H ' : ''}${state.symmetryVertical ? 'V' : (state.symmetry ? '' : 'OFF')}`;
     }
   }
 
@@ -7586,6 +7420,20 @@
     applyCanvasTransform();
   }
 
+  function fitCellCanvas() {
+    if (!state.getActiveCell()) return;
+    const { w, h } = state.doc.meta.cellSize;
+    const padding = state.showRulers ? 64 : 40;
+    const { clientWidth, clientHeight } = dom.canvasViewport;
+    if (clientWidth <= padding || clientHeight <= padding) return;
+    state.cellZoom = NoiraViewport.fitArtworkZoom(clientWidth, clientHeight, w, h, padding);
+    centerCellCanvas();
+    renderCellEditor(true);
+    renderCellRulers();
+    renderCellOverlay();
+    updateStatusBarCoords(null, null);
+  }
+
   function initCanvasPanningAndZoom() {
     if (!dom.canvasViewport) return;
 
@@ -7593,9 +7441,30 @@
     let isPanning = false;
     let startX = 0, startY = 0;
     let dragStartPanX = 0, dragStartPanY = 0;
+    let viewportPaintPending = false;
+    function requestViewportPaint() {
+      if (viewportPaintPending) return;
+      viewportPaintPending = true;
+      requestAnimationFrame(() => {
+        viewportPaintPending = false;
+        renderCellEditor(true);
+      });
+    }
+    new ResizeObserver(requestViewportPaint).observe(dom.canvasViewport);
 
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+      if (e.code === 'Space' && e.shiftKey && state.activeTabId === 'tab-grid-overview') {
+        e.preventDefault();
+        if (!e.repeat) fitGridCanvas();
+        return;
+      }
+      if (e.code === 'Space' && e.shiftKey && state.getActiveCell()) {
+        e.preventDefault();
+        if (e.repeat) return;
+        fitCellCanvas();
+        return;
+      }
       if (e.code === 'Space' && !isSpacePressed) {
         isSpacePressed = true;
         dom.canvasViewport.classList.add('space-held');
@@ -7611,6 +7480,12 @@
         }
         dom.canvasViewport.classList.remove('space-held');
       }
+    });
+
+    window.addEventListener('blur', () => {
+      isSpacePressed = false;
+      isPanning = false;
+      dom.canvasViewport.classList.remove('space-held', 'is-panning');
     });
 
     dom.canvasViewport.addEventListener('mousedown', (e) => {
@@ -7633,6 +7508,7 @@
       panX = Math.round(dragStartPanX + dx);
       panY = Math.round(dragStartPanY + dy);
       applyCanvasTransform();
+      requestViewportPaint();
     });
 
     window.addEventListener('mouseup', () => {
@@ -7645,14 +7521,12 @@
     // Anchor-Centered Wheel Zoom
     dom.canvasViewport.addEventListener('wheel', (e) => {
       e.preventDefault();
+      if (!state.getActiveCell() || !e.deltaY) return;
       const rect = dom.cellOverlay.getBoundingClientRect();
       const oldZoom = state.cellZoom;
-      const delta = e.deltaY < 0 ? 2 : -2;
-      const newZoom = Math.max(4, Math.min(64, oldZoom + delta));
+      const { w, h } = state.doc.meta.cellSize;
+      const newZoom = NoiraViewport.stepArtworkZoom(oldZoom, e.deltaY < 0 ? 1 : -1, w, h);
       if (newZoom === oldZoom) return;
-
-      const cw = state.doc ? state.doc.meta.cellSize.w : 16;
-      const ch = state.doc ? state.doc.meta.cellSize.h : 16;
 
       // Unscaled point under mouse cursor
       const mx = e.clientX - rect.left;
@@ -7661,19 +7535,16 @@
       const unscaledY = my / oldZoom;
 
       state.cellZoom = newZoom;
-      renderCellEditor();
+      sizeCellCanvases(w, h, newZoom);
       renderCellRulers();
-      updateStatusBarCoords(null, null);
-
-      // Keep pixel under mouse cursor stationary:
-      const deltaW = (cw * (newZoom - oldZoom)) / 2;
-      const deltaH = (ch * (newZoom - oldZoom)) / 2;
-      const pixelShiftX = unscaledX * (newZoom - oldZoom);
-      const pixelShiftY = unscaledY * (newZoom - oldZoom);
-
-      panX += Math.round(deltaW - pixelShiftX);
-      panY += Math.round(deltaH - pixelShiftY);
+      const resized = dom.cellOverlay.getBoundingClientRect();
+      const { dx, dy } = EditorCanvas.wheelAnchor(resized, e.clientX, e.clientY, unscaledX, unscaledY, newZoom);
+      panX += dx;
+      panY += dy;
       applyCanvasTransform();
+      renderCellEditor(true);
+      renderCellOverlay();
+      updateStatusBarCoords(null, null);
     }, { passive: false });
   }
 
@@ -8513,426 +8384,23 @@ const outText = PIX2.serialize(doc);</code></pre>
 
   function copyAiPrompt() {
     if (!state.doc) return;
-    const mode = (dom.selectAiPromptMode && dom.selectAiPromptMode.value) || 'all-in-one';
-    const serialized = PIX2.serialize(state.doc);
-    const meta = state.doc.meta;
-    const cw = meta.cellSize.w;
-    const ch = meta.cellSize.h;
-    const cols = meta.grid.cols;
-    const rows = meta.grid.rows;
-    const m = getSpriteMath(cw, ch);
-
-    let paletteSummary = '';
-    if (state.doc.palette && Object.keys(state.doc.palette).length > 0) {
-      paletteSummary = Object.entries(state.doc.palette)
-        .filter(([id, col]) => {
-          const raw = typeof col === 'string' ? col : (col && typeof col.hex === 'string' ? col.hex : '');
-          return /^#?[0-9a-fA-F]{3,8}$/.test(raw.trim());
-        })
-        .map(([id, col]) => {
-          const raw = typeof col === 'string' ? col : col.hex;
-          const hex = PIX2.normalizeHex(raw);
-          const name = (typeof col === 'object' && col && col.name) ? col.name : `Color ${id}`;
-          return `  ${id}: ${hex}  # ${name}`;
-        })
-        .join('\n');
-    } else {
-      paletteSummary = `  1: #181425  # Outline Dark Charcoal
-  2: #2e2842  # Core Deep Shadow
-  3: #5a4e7c  # Midtone Body Base
-  4: #9d8ec2  # Highlight Rim Light
-  5: #00ffff  # Glowing Accent / Eyes`;
-    }
-
-    let cellInventory = Object.keys(state.doc.cells || {}).join(', ') || 'none';
-
-    let specializedInstructions = '';
-
-    if (mode === 'all-in-one') {
-      specializedInstructions = `### MASTER SPECIALIZATION: ALL-IN-ONE COGNITIVE GUIDE & ALL PRODUCTION RECIPES
-You are equipped with the full suite of NOIRADIX Studio production capabilities. You can create complete characters, synthesize animations, craft equipment overlays, or execute surgical patches as requested:
-
-#### PRODUCTION RECIPE 1: COMPLETE 4-DIRECTIONAL & 8-DIRECTIONAL CHARACTER CREATION
-1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):
-   - Center Axis: axisX = ${m.axisXStr}
-   - Head & Hair: Top Y in [${m.head.y[0]}..${m.head.y[1]}], Width = ${m.head.w}px (X in [${m.head.x[0]}..${m.head.x[1]}])
-   - Eyes: Y in [${m.eyes.y[0]}..${m.eyes.y[1]}], spaced across center (Left Eye X ~ ${m.eyes.leftX}, Right Eye X ~ ${m.eyes.rightX})
-   - Torso & Garments: Y in [${m.torso.y[0]}..${m.torso.y[1]}], Width = ${m.torso.w}px (X in [${m.torso.x[0]}..${m.torso.x[1]}])
-   - Legs / Ghost Wisps: Y in [${m.legs.y[0]}..${m.legs.y[1]}]. Leave transparent margin at bottom.
-   - Ground Shadow: Y = ${m.groundY}
-2. DIRECTIONAL PERSPECTIVES:
-   - 'down_0': Frontal view with bilateral center symmetry on axisX = ${m.axisXStr}. Both eyes clearly visible.
-   - 'up_0': Back view showing back of head, hair, and cloak. NO eyes, nose, or mouth visible.
-   - 'right_0': 3/4 side profile facing right. Eyes shifted toward right edge (X ~ ${cw - 5}).
-   - 'left_0': Facing left. STRICT INVARIANT: Exact horizontal mirror of 'right_0' (x_left = ${cw - 1} - x_right).
-3. SOLID ACCELERATION MACROS:
-   - Use 'sym_dot x,y ${m.axisXStr} <color>' for bilateral frontal symmetry.
-   - Use 'rect x,y w,h <color> fill' to instantly fill solid rectangular body mass in 1 line.
-   - Use 'p x,y <pal_id>' for compact sparse pixel placement.
-4. ANIMATION BINDINGS (CANONICAL MULTI-LINE SYNTAX):
-   - Hook up all walk animation cycles at 6fps loop:
-@animation walk_down
-  name: "Walk Down"
-  direction: down
-  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
-  fps: 6
-  loop: true
-
-@animation walk_up
-  name: "Walk Up"
-  direction: up
-  frames: [cell_1_0, cell_1_1, cell_1_2, cell_1_3]
-  fps: 6
-  loop: true
-
-@animation walk_right
-  name: "Walk Right"
-  direction: right
-  frames: [cell_2_0, cell_2_1, cell_2_2, cell_2_3]
-  fps: 6
-  loop: true
-
-@animation walk_left
-  name: "Walk Left"
-  direction: left
-  frames: [cell_3_0, cell_3_1, cell_3_2, cell_3_3]
-  fps: 6
-  loop: true
-
-#### PRODUCTION RECIPE 2: DISCRETE 4-FRAME WALK & GHOST LOCOMOTION FORMULAS
-1. 4-FRAME MATHEMATICAL WALK FORMULA:
-   - Frame 0 (Contact): Neutral standing contact pose, both feet grounded.
-   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up: Y - 1). Left foot forward, right foot trailing back.
-   - Frame 2 (Passing): Neutral torso height. Legs passing each other in center.
-   - Frame 3 (Step Right): Bob torso by 1px (Y - 1). Right foot forward, left foot trailing back.
-2. 4-FRAME GHOST / FLOATING / FLYING FORMULA:
-   - Frame 0 (Hover High): Body at top baseline. Tail wisps centered.
-   - Frame 1 (Sway Right + Dip): Body bobs DOWN by 1px (Y + 1). Tail wisps trail and curl to the right (+1..+2px X shift).
-   - Frame 2 (Hover Low): Body at lowest dip. Tail wisps stretch vertically. Eyes/core pulse brighter.
-   - Frame 3 (Sway Left + Rise): Body rises up. Tail wisps trail and curl to the left (-1..-2px X shift).
-3. SECONDARY MOTION PHYSICS:
-   - Trailing capes, hair tails, antennae, and held weapons MUST lag 1 frame behind primary body bobbing.
-
-#### PRODUCTION RECIPE 3: NON-DESTRUCTIVE ACCESSORY & EQUIPMENT OVERLAY
-1. NON-DESTRUCTIVE OVERLAY INVARIANT:
-   - Preserve existing character silhouette and facial pixels underneath unless intentionally obscured.
-   - Hats / Helmets / Crowns: Draw on top crown Y in [0..${m.head.y[0] + 3}].
-   - Weapons (Swords, Staves, Bows): Position at hand level (X in [1..${m.torso.x[0]}] or [${m.torso.x[1]}..${cw - 1}]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
-   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..${m.torso.x[0]}] and [${m.torso.x[1]}..${cw - 1}]) and behind back frames.
-2. PALETTE EXPANSION:
-   - Introduce new equipment material color IDs in '@palette' (e.g. gold '#ffd700', steel '#94a3b8', ruby '#ef4444').
-
-#### PRODUCTION RECIPE 4: SURGICAL FRAME & COLOR PATCH DIRECTIVES
-1. SURGICAL SPECIFICATION:
-   - When requested to modify existing art, do NOT regenerate or output unchanged cells or animations.
-   - Output ONLY the modified '@cell <id>' or '@palette' lines to conserve tokens and prevent regressions.
-   - To ERASE a pixel, simply omit its coordinate from the cell record.
-2. RECOLORING:
-   - Modify the '@palette' hex value or remap palette IDs inside targeted cells.`;
-    } else if (mode === 'full-character') {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: COMPLETE 4-DIRECTIONAL & 8-DIRECTIONAL CHARACTER CREATION
-You are tasked with generating a complete game character from scratch in all cardinal directions:
-1. ANATOMY & SILHOUETTE GUIDE (${cw}x${ch} discrete pixels):
-   - Center Axis: axisX = ${m.axisXStr}
-   - Head & Hair: Top Y in [${m.head.y[0]}..${m.head.y[1]}], Width = ${m.head.w}px (X in [${m.head.x[0]}..${m.head.x[1]}])
-   - Eyes: Y in [${m.eyes.y[0]}..${m.eyes.y[1]}], spaced across center (Left Eye X ~ ${m.eyes.leftX}, Right Eye X ~ ${m.eyes.rightX})
-   - Torso & Clothing: Y in [${m.torso.y[0]}..${m.torso.y[1]}], Width = ${m.torso.w}px (X in [${m.torso.x[0]}..${m.torso.x[1]}])
-   - Legs & Shadow: Y in [${m.legs.y[0]}..${m.legs.y[1]}]. Leave transparent margin below feet.
-   - Ground Contact: Y = ${m.groundY}
-2. DIRECTIONAL PERSPECTIVES:
-   - 'down_0': Frontal view with bilateral center symmetry on axisX = ${m.axisXStr}. Both eyes clearly visible.
-   - 'up_0': Back view showing back of head, hair, and cloak. NO eyes, nose, or mouth visible.
-   - 'right_0': 3/4 side profile facing right. Eyes and nose shifted toward right edge (X ~ ${cw - 5}).
-   - 'left_0': Facing left. STRICT INVARIANT: Exact horizontal mirror of 'right_0' (x_left = ${cw - 1} - x_right).
-3. SOLID ACCELERATION MACROS:
-   - Use 'sym_dot x,y ${m.axisXStr} <color>' for bilateral frontal symmetry.
-   - Use 'rect x,y w,h <color> fill' to instantly fill solid rectangular body mass in 1 line.
-   - Use 'p x,y <pal_id>' for compact sparse pixel placement.
-4. ANIMATION BINDINGS (CANONICAL MULTI-LINE SYNTAX):
-   - Hook up all walk animation cycles at 6fps loop:
-@animation walk_down
-  name: "Walk Down"
-  direction: down
-  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
-  fps: 6
-  loop: true
-
-@animation walk_up
-  name: "Walk Up"
-  direction: up
-  frames: [cell_1_0, cell_1_1, cell_1_2, cell_1_3]
-  fps: 6
-  loop: true
-
-@animation walk_right
-  name: "Walk Right"
-  direction: right
-  frames: [cell_2_0, cell_2_1, cell_2_2, cell_2_3]
-  fps: 6
-  loop: true
-
-@animation walk_left
-  name: "Walk Left"
-  direction: left
-  frames: [cell_3_0, cell_3_1, cell_3_2, cell_3_3]
-  fps: 6
-  loop: true`;
-    } else if (mode === 'walk-animation') {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: DISCRETE WALK & GHOST LOCOMOTION ANIMATION
-You are tasked with transforming static character poses into fluid, natural animations:
-1. 4-FRAME MATHEMATICAL WALK FORMULA:
-   - Frame 0 (Contact): Neutral standing contact pose, both feet grounded at Y = ${m.legs.y[1]}.
-   - Frame 1 (Step Left): Bob the torso down by 1px (or bob up: Y - 1). Left foot forward, right foot trailing back.
-   - Frame 2 (Passing): Neutral torso height. Legs passing each other in center.
-   - Frame 3 (Step Right): Bob torso by 1px (Y - 1). Right foot forward, left foot trailing back.
-2. 4-FRAME GHOST / FLOATING / FLYING FORMULA:
-   - Frame 0 (Hover High): Body at top baseline. Tail wisps centered.
-   - Frame 1 (Sway Right + Dip): Body bobs DOWN by 1px (Y + 1). Tail wisps trail and curl to the right (+1..+2px X shift).
-   - Frame 2 (Hover Low): Body at lowest dip. Tail wisps stretch vertically. Eyes/core pulse brighter.
-   - Frame 3 (Sway Left + Rise): Body rises up. Tail wisps trail and curl to the left (-1..-2px X shift).
-3. SECONDARY MOTION PHYSICS:
-   - Trailing capes, hair tails, antennae, and held weapons MUST lag 1 frame behind primary body bobbing.
-4. OUTPUT FORMAT:
-   - Provide the complete '@animation' definitions and corresponding '@cell' frame records.`;
-    } else if (mode === 'accessory-equipment') {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: NON-DESTRUCTIVE ACCESSORY & EQUIPMENT OVERLAY
-You are tasked with adding equipment, costumes, weapons, or cosmetics onto existing character sprites:
-1. NON-DESTRUCTIVE OVERLAY INVARIANT:
-   - Preserve existing character silhouette and facial pixels underneath unless intentionally obscured.
-   - Hats / Helmets / Crowns: Draw on top crown Y in [0..${m.head.y[0] + 3}].
-   - Weapons (Swords, Staves, Bows): Position at hand level (X in [1..${m.torso.x[0]}] or [${m.torso.x[1]}..${cw - 1}]). Use 'line x0,y0 x1,y1 <color>' for blades and shafts.
-   - Cloaks, Wings, Shields: Attach to flanking sides (X in [0..${m.torso.x[0]}] and [${m.torso.x[1]}..${cw - 1}]) and behind back frames.
-2. PALETTE EXPANSION:
-   - Introduce new equipment material color IDs in '@palette' (e.g. gold '#ffd700', steel '#94a3b8', ruby '#ef4444').`;
-    } else if (mode === 'surgical-patch') {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: SURGICAL FRAME / COLOR PATCH
-You are tasked with making surgical, highly-targeted corrections with zero token waste:
-1. SURGICAL SPECIFICATION:
-   - Do NOT regenerate or output unchanged cells or animations.
-   - Output ONLY the modified '@cell <id>' or '@palette' lines.
-   - To ERASE a pixel, simply omit its coordinate from the cell record.
-2. RECOLORING:
-   - Modify the '@palette' hex value or remap palette IDs inside targeted cells.`;
-    } else {
-      specializedInstructions = `### SPECIALIZED OBJECTIVE: STUDIO ARCHITECTURE & PROGRAMMATIC API
-You are tasked with programmatic interaction, compilation, or automated processing of PIX2 files:
-1. JavaScript API: Parse via 'PIX2.parse(text)', mutate 'doc.cells[id].pixels', serialize via 'PIX2.serialize(doc)'.
-2. Exporter Integration: Output spritesheet atlases formatted for Unity 2D (with 'Pix2UnityImporter.cs') or TexturePacker.`;
-    }
-
-    const prompt = `# SYSTEM PROMPT: NOIRADIX STUDIO & PIX2 SPRITE ENGINE SPECIALIST
-
-## 1. WHAT IS NOIRADIX STUDIO?
-NOIRADIX Studio is a desktop-grade, zero-dependency, AI-native structured pixel art editor and animation suite.
-It bridges human game artists and AI coding assistants through deterministic sprite code:
-- **Grid Matrix Overview:** Multi-cell grid matrix (e.g. ${cols} columns x ${rows} rows = ${cols * rows} cells) where each cell has a unique identifier (\`cell_0_0\`, \`down_0\`).
-- **Animation Studio:** Real-time preview player supporting 4-direction (Down, Up, Right, Left) and 8-direction compass modes with configurable frame sequence strips, FPS control, and loop toggle.
-- **Cell Editor:** High-precision canvas with anchor-centered zoom (4x to 64x), pixel rulers, bilateral symmetry mirror axis, and discrete drawing tools (Pencil, Eraser, Eyedropper, Paint Bucket, Line, Rectangle, Marquee Selection).
-- **Real-Time Live Hot-Reload Engine:** Watches the active \`.pix2\` file on disk. When you (the AI) or an external script writes to the file on disk, Studio automatically reloads the canvas and animation timeline in real-time without user intervention.
-- **Engine Exporters:** Automatically compiles sprite sheets into Unity 2D Spritesheet Packages (Atlas PNG + Metadata JSON + C# \`Pix2UnityImporter.cs\` script for 1-click automatic sprite slicing and \`.anim\` AnimationClip generation), TexturePacker JSON, and PNG Atlas with bleed protection.
-
-## 2. THE PIX2 LANGUAGE PHILOSOPHY & SYNTAX SPECIFICATION
-PIX2 is a deterministic, coordinate-addressed plain-text sprite format. Unlike raster PNGs or fuzzy diffusion images, PIX2 code is discrete, mathematically exact, and human/AI readable.
-
-### Canonical Document Anatomy:
-Every complete PIX2 document must follow this exact section structure:
-\`\`\`pix2
-@pix2 1.0
-
-@meta
-  title: "${meta.title || 'Hero'}"
-  author: "User"
-  version: "1.0"
-  color_mode: RGBA
-  coordinate_origin: top-left
-
-@grid
-  columns: ${cols}
-  rows: ${rows}
-  cell_size: ${cw}x${ch}
-  gap: 0
-  margin: 0
-
-@palette
-${paletteSummary}
-
-@cell cell_0_0
-  name: "Down 0"
-  direction: down
-  frame: 0
-  grid_pos: 0,0
-  p ${Math.floor(m.axisX)},${m.eyes.y[0]} 1
-
-@animation walk_down
-  name: "Walk Down"
-  direction: down
-  frames: [cell_0_0, cell_0_1, cell_0_2, cell_0_3]
-  fps: 6
-  loop: true
-
-@end
-\`\`\`
-
-### Core Invariants:
-1. SOLID SPRITE MASS MANDATE (ABSOLUTELY NO HOLLOW WIREFRAME SHELLS):
-   - Pixel art sprites are SOLID game entities with mass, volume, and depth.
-   - Drawing an empty outline loop with a hollow transparent inside is a CATASTROPHIC FAILURE.
-   - The interior of the head, face, hair, chest, body, robes, cape, armor, and limbs MUST be 100% solidly packed with color pixels.
-   - Transparent pixels exist ONLY as the empty air outside the character's outer boundary.
-2. PURE CANVAS TRANSPARENCY:
-   - Transparent pixels do NOT exist in the file. Only explicitly drawn pixels are saved.
-   - NEVER output a background layer, black canvas fill, or transparent placeholder dots.
-3. DISCRETE INTEGER COORDINATES:
-   - Origin (0,0) is at the top-left corner.
-   - Valid coordinates strictly satisfy non-negative integers: 0 <= x < ${cw} and 0 <= y < ${ch}.
-   - Floating-point coordinates (e.g. 4.5, 7.2) or trailing characters (e.g. 1abc) are STRICTLY FORBIDDEN.
-4. COLOR PALETTE ARCHITECTURE:
-   - Pixels reference palette IDs defined in \`@palette\` (e.g. \`1\`, \`2\`, \`outline\`) or direct hex (\`#RRGGBB\` or \`#RRGGBBAA\` for semi-transparency).
-   - Always define a cohesive 5-6 tone palette with:
-     * 1: Outline / Silhouette (Dark Slate / Charcoal e.g. #181425)
-     * 2: Deep Shadow / Ambient Shading (Muted tone e.g. #2e2842)
-     * 3: Midtone Primary Body / Robe / Skin (Base color e.g. #5a4e7c)
-     * 4: Highlight / Rim Light (Bright tone e.g. #9d8ec2)
-     * 5: Glowing Accent / Eyes / Gem (Vivid saturated e.g. #00ffff, #ff0055, #ffd700)
-5. MATHEMATICAL MACROS & DRAWING COMMANDS:
-   - \`p x,y <pal_id|hex>\` or \`pixel x,y <pal_id|hex>\`: Plots a single discrete pixel at integer coordinates (x,y). Multiple pixel tokens can be placed on one line: \`p 5,2 1  p 6,2 2  p 7,2 #ffffff\`.
-   - \`dot x,y <pal_id|hex>\` or \`d x,y <pal_id|hex>\`: Discrete dot drawing macro.
-   - \`sym_dot x,y axisX <col>\`: Plots (x,y) and its bilateral reflection at Math.round(2*axisX - x, y). For cell width ${cw}, center axis is ${m.axisXStr}.
-   - \`line x0,y0 x1,y1 <col>\`: Draws a Bresenham discrete line (weapons, outlines, diagonal borders).
-   - \`rect x,y w,h <col> fill\`: Instantly fills a solid rectangular region of width w and height h. Highly recommended for filling solid torso, robe, and cloak bodies in a single line!
-   - \`rect x,y w,h <col> outline\`: Draws a rectangular boundary box.
-   - \`fill x,y <col>\`: 4-way flood fill inside bounded pixels.
-   - \`; comment\` or \`# comment\`: Explanatory commentary.
-
-6. CANONICAL MULTI-LINE ANIMATION SPECIFICATION:
-   - Animations MUST use the canonical multi-line format with ordered frame arrays:
-     @animation <id>
-       name: "<Display Title>"
-       direction: <down|up|right|left|none>
-       frames: [cell_id_0, cell_id_1, ...]
-       fps: 6
-       loop: true
-
-7. TOOL BOUNDARY & DIVISION OF LABOR:
-   - NOIRADIX Studio does NOT perform raster autotracing or convert PNG/JPG images into pixel art.
-   - You (the AI) compute discrete coordinate logic, spatial proportions, and walk cycle mathematics.
-   - The human artist loads your .pix2 code into NOIRADIX Studio to visually retouch pixels, refine facial expressions, and export 1-click packages to Unity 2D.
-
-## 3. CANONICAL RESOLUTION REFERENCE TABLE & DISCRETE MATHEMATICS
-In PIX2, coordinates and center axes are calculated with exact discrete mathematics:
-
-| Cell Resolution | Valid Coordinate Range | Center Axis (axisX) | Bilateral Symmetry Command | Mirror Reflection Formula |
-|:---|:---|:---|:---|:---|
-| 16 × 16 | X, Y in [0..15] | X = 7.5 | \`sym_dot x,y 7.5 <color>\` | \`x_mirror = 15 - x\` |
-| 24 × 24 | X, Y in [0..23] | X = 11.5 | \`sym_dot x,y 11.5 <color>\` | \`x_mirror = 23 - x\` |
-| 32 × 32 | X, Y in [0..31] | X = 15.5 | \`sym_dot x,y 15.5 <color>\` | \`x_mirror = 31 - x\` |
-| 64 × 64 | X, Y in [0..63] | X = 31.5 | \`sym_dot x,y 31.5 <color>\` | \`x_mirror = 63 - x\` |
-| Custom W × H | X in [0..W-1], Y in [0..H-1] | \`axisX = (W - 1) / 2\` | \`sym_dot x,y axisX <color>\` | \`x_mirror = (W - 1) - x\` |
-
-### Universal Proportional Scaling Formulas (For Any Resolution W × H):
-If asked to generate or scale to any resolution W × H, use these exact proportional ratios:
-- Horizontal Center Axis: \`axisX = (W - 1) / 2\`
-- Horizontal Bounding Box: Width ≈ 60% to 75% of W.
-  * \`startX = Math.floor(W * 0.15)\`
-  * \`endX = Math.floor(W * 0.85)\`
-- Vertical Anatomy Landmarks (from top Y = 0 to bottom Y = H - 1):
-  * Margin Top (Headroom): \`Y = 0 .. Math.max(1, Math.round(H * 0.05))\`
-  * Head & Hair:           \`Y = Math.max(1, Math.round(H * 0.05)) .. Math.round(H * 0.38)\`
-  * Eyes & Visor:          \`Y = Math.round(H * 0.28) .. Math.round(H * 0.36)\`
-  * Torso, Robe & Arms:    \`Y = Math.round(H * 0.40) .. Math.round(H * 0.72)\`
-  * Legs / Feet / Wisps:   \`Y = Math.round(H * 0.74) .. (H - 2)\`
-  * Ground Shadow / Base:  \`Y = H - 1\`
-
-## 4. CURRENT PROJECT CONTEXT & COMPUTED BOUNDS (${cw}x${ch})
-- Project Title: "${meta.title || 'Sprite'}"
-- Grid Matrix: ${cols} columns x ${rows} rows (Total ${cols * rows} cells)
-- Active Cell Dimensions: ${cw}x${ch} pixels
-- **Exact Computed Center Axis:** \`axisX = ${m.axisXStr}\`
-- **Computed Anatomy Bounds for ${cw}x${ch}:**
-  * Head & Hair: Y in [${m.head.y[0]}..${m.head.y[1]}], Width = ${m.head.w}px (X in [${m.head.x[0]}..${m.head.x[1]}])
-  * Eyes: Y in [${m.eyes.y[0]}..${m.eyes.y[1]}], spaced across center (Left Eye X ~ ${m.eyes.leftX}, Right Eye X ~ ${m.eyes.rightX})
-  * Torso & Robe: Y in [${m.torso.y[0]}..${m.torso.y[1]}], Width = ${m.torso.w}px (X in [${m.torso.x[0]}..${m.torso.x[1]}])
-  * Legs / Wisps: Y in [${m.legs.y[0]}..${m.legs.y[1]}]
-  * Ground Contact / Shadow: Y = ${m.groundY}
-- Existing Cells: [${cellInventory}]
-- Current Palette:
-${paletteSummary}
-
-## 5. SOLID PIXEL ART CRAFTING PRINCIPLES & DYNAMIC CODE EXAMPLE
-A pixel art character has mass, volume, and depth.
-How to code a solid character in PIX2:
-1. **Never leave hollow rings.** When drawing a head at Y = ${m.eyes.y[0]} from X = ${m.head.x[0]} to ${m.head.x[1]}:
-   - Outline at left and right extremes.
-   - Solid face/hair/skin pixels completely filling every coordinate in between!
-2. **Speed Tip for Solid Fills:**
-   - Use \`rect x,y w,h <col> fill\` to fill solid chest/torso rectangles in 1 line.
-   - Use \`sym_dot\` across horizontal rows to fill both halves simultaneously.
-3. **Example of Solid Cell Structure (${cw}x${ch}):**
-\`\`\`pix2
-@cell cell_0_0
-  name: "Down 0"
-  direction: down
-  frame: 0
-  ; Solid Crown & Hair (symmetric outline + solid fill)
-  sym_dot ${Math.round(m.axisX - 2)},${m.head.y[0] + 1} ${m.axisXStr} 1  sym_dot ${Math.round(m.axisX - 1)},${m.head.y[0] + 1} ${m.axisXStr} 3  sym_dot ${Math.floor(m.axisX)},${m.head.y[0] + 1} ${m.axisXStr} 4
-  sym_dot ${Math.round(m.axisX - 3)},${m.head.y[0] + 2} ${m.axisXStr} 1  sym_dot ${Math.round(m.axisX - 2)},${m.head.y[0] + 2} ${m.axisXStr} 3  sym_dot ${Math.round(m.axisX - 1)},${m.head.y[0] + 2} ${m.axisXStr} 3  sym_dot ${Math.floor(m.axisX)},${m.head.y[0] + 2} ${m.axisXStr} 3
-  ; Eyes & Face (solid skin + glowing eyes)
-  sym_dot ${Math.round(m.axisX - 3)},${m.eyes.y[0]} ${m.axisXStr} 1  p ${m.eyes.leftX},${m.eyes.y[0]} 5  p ${m.eyes.leftX + 1},${m.eyes.y[0]} 3  p ${m.eyes.rightX - 1},${m.eyes.y[0]} 3  p ${m.eyes.rightX},${m.eyes.y[0]} 5  sym_dot ${Math.floor(m.axisX)},${m.eyes.y[0]} ${m.axisXStr} 3
-  ; Solid Torso / Cloak (using rect fill for instant solid mass)
-  rect ${m.torso.x[0] + 1},${m.torso.y[0]} ${m.torso.w - 2},${m.torso.y[1] - m.torso.y[0] + 1} 3 fill
-  line ${m.torso.x[0]},${m.torso.y[0]} ${m.torso.x[0]},${m.torso.y[1]} 1
-  line ${m.torso.x[1]},${m.torso.y[0]} ${m.torso.x[1]},${m.torso.y[1]} 1
-  ; Legs / Wisps / Feet
-  sym_dot ${Math.round(m.axisX - 2)},${m.legs.y[0]} ${m.axisXStr} 1  sym_dot ${Math.round(m.axisX - 1)},${m.legs.y[0]} ${m.axisXStr} 2  sym_dot ${Math.floor(m.axisX)},${m.legs.y[0]} ${m.axisXStr} 3
-  sym_dot ${Math.round(m.axisX - 1)},${m.legs.y[1]} ${m.axisXStr} 1  sym_dot ${Math.floor(m.axisX)},${m.legs.y[1]} ${m.axisXStr} 2
-\`\`\`
-
-## 6. ANTI-LAZY 4-FRAME & 8-FRAME LOCOMOTION ENGINE
-CRITICAL RULE: NEVER output 4 identical cells in an animation row! In game engines, identical frames make the character look frozen and dead. Each frame MUST have visible changes:
-
-### A. BIPEDAL / HUMANOID WALK CYCLE (6 FPS LOOP):
-- Frame 0 (Neutral Contact): Standing baseline pose. Both feet grounded at Y = ${m.legs.y[1]}.
-- Frame 1 (Step Left): Torso & head bob down by 1px (or bob up: shift Y - 1). Left foot steps forward (shift X by -1..-2px), right foot trails back.
-- Frame 2 (Passing Pose): Body returns to neutral vertical height. Feet pass each other at center axis.
-- Frame 3 (Step Right): Torso & head bob down by 1px (Y - 1). Right foot steps forward (shift X by +1..+2px), left foot trails back.
-
-### B. GHOST / WISP / FLOATING / FLYING / SLIME CYCLE (6 FPS LOOP):
-- Frame 0 (Hover High): Body at top vertical baseline. Tail wisps centered.
-- Frame 1 (Sway Right + Dip): Body bobs down by 1px (Y + 1). Tail wisps curve to the right (shift bottom X by +1..+2px).
-- Frame 2 (Hover Low): Body at lowest dip. Tail wisps stretch vertically. Glowing eyes or core pulse with brighter tone.
-- Frame 3 (Sway Left + Rise): Body rises back up. Tail wisps curve to the left (shift bottom X by -1..-2px).
-
-### C. DIRECTIONAL PERSPECTIVES:
-- Down ('down_0..3'): Front view with bilateral symmetry on axisX = ${m.axisXStr}. Both eyes clearly visible.
-- Up ('up_0..3'): Back view with bilateral symmetry on axisX = ${m.axisXStr}. NO facial features, only back of head, hair, cloak, and shoulders.
-- Right ('right_0..3'): 3/4 profile facing right. Head and body shifted toward right edge (X ~ ${cw - 5}). Right eye prominent, nose/chin facing right edge, cloak trailing left.
-- Left ('left_0..3'): STRICT INVARIANT: Exact horizontal mirror of 'right_0..3'.
-  For every pixel at (x,y) in right_N, plot at ((${cw - 1}) - x, y) in left_N.
-
-## 7. ${specializedInstructions}
-
-## 8. CURRENT SOURCE CODE
-\`\`\`pix2
-${serialized}
-\`\`\`
-
-## 9. STRICT OUTPUT PROTOCOL (NO CONVERSATIONAL FILLER):
-- Output ONLY valid, executable .pix2 DSL code enclosed inside a single \`\`\`pix2 ... \`\`\` code block.
-- For complete characters / projects: return the entire .pix2 document starting with \`@pix2 1.0\` and terminating with \`@end\`.
-- For surgical patches / edits: output ONLY the targeted \`@cell <id>\` or \`@palette\` blocks to conserve tokens.
-- NEVER prefix your response with chatty conversational introductions like "Sure, here is your sprite:".
-- NEVER append markdown explanations, prose, or design rationales after the code block.
-- Any non-code prose will corrupt direct clipboard imports into NOIRADIX Studio (<kbd>Ctrl</kbd> + <kbd>I</kbd>) and trigger parser errors.
-
-## 10. USER INSTRUCTION
-[Please formulate your design, animation, or character modification request here.]
-`;
-
-    navigator.clipboard.writeText(prompt).then(() => {
-      showToast(`Copied AI Prompt [${mode.toUpperCase()}] to clipboard!`, 'success');
-    }).catch(() => {
-      alert('Could not copy automatically. You can copy the code manually.');
+    const mode = dom.selectAiPromptMode?.value || 'all-in-one';
+    const { version, cellSize, grid } = state.doc.meta;
+    const briefs = {
+      'full-character': 'Design a consistent full character across the requested facing directions and preserve anchors across the sheet.',
+      'walk-animation': 'Create a readable walk cycle with consistent foot contacts and frame timing. Preserve unrelated clips.',
+      'accessory-equipment': 'Add the requested accessory in independently editable Regions aligned to each existing pose.',
+      'surgical-patch': 'Apply the requested localized frame or color repair. Leave all other cells and hierarchy intact.',
+      'raw-spec': 'Use the canonical source and format rules as a reference when validating the requested output.'
+    };
+    const brief = briefs[mode] || 'Edit or extend the sprite sheet according to the user brief. Keep frame alignment, dimensions and palette continuity.';
+    const prompt = Pix2AiPrompt.build({
+      brief, source: PIX2.serialize(state.doc), version,
+      width: cellSize.w, height: cellSize.h, cols: grid.cols, rows: grid.rows,
+      detailed: mode !== 'compact'
     });
+    navigator.clipboard.writeText(prompt).then(() => showToast('Copied PIX2 AI prompt', 'success'))
+      .catch(() => showToast('Clipboard unavailable', 'error'));
   }
 
   // ===========================================================================
@@ -10036,7 +9504,30 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
   // EVENT BINDINGS
   // ===========================================================================
 
+  function exitRegionIsolation(cell, id = state.isolatedNodeId) {
+    state.setIsolation(cell.id, null);
+    const match = StructureOps.findNode(cell, id);
+    if (match) {
+      state.activeLayerId = match.layer.id;
+      if (match.node.type === 'region') state.activeRegionId = id;
+      regionSelection.focus(cell, state.activeLayerId, null, [(match.path[1] || match.node).id]);
+    }
+  }
+
   function bindEvents() {
+    if (contextMenu) EditorMenu.populate(contextMenu);
+    const inspector = document.querySelector('#view-cell-editor .right-sidebar');
+    const inspectorWidth = Number(localStorage.getItem('noiradix_cell_inspector_width'));
+    if (inspectorWidth >= 220) inspector.style.width = inspectorWidth + 'px';
+    window.NoiraViewport.bindInspectorResize(document.getElementById('cell-inspector-resizer'), inspector,
+      220, 240, 'noiradix_cell_inspector_width');
+    brushSettings = Tools.bindBrushSettings();
+    RegionSelection.bindActions(regionSelection, () => state.getActiveCell(), state, (cell, label) => {
+      state.syncCellComposite(cell.id);
+      state.saveSnapshot(label);
+      triggerEventAutosave();
+      refreshAll();
+    }, showToast);
     if (dom.btnThemeToggle) dom.btnThemeToggle.addEventListener('click', toggleTheme);
 
     // Tool buttons
@@ -10044,6 +9535,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       btn.addEventListener('click', () => {
         dom.toolButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        regionSelection.cancel();
         state.currentTool = btn.dataset.tool;
         if (dom.canvasViewport) {
           dom.canvasViewport.classList.toggle('tool-pan', state.currentTool === 'pan');
@@ -10069,40 +9561,23 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     window.addEventListener('mousemove', handleCellMouseMove);
     window.addEventListener('mouseup', handleCellMouseUp);
     dom.cellOverlay.addEventListener('pointercancel', () => {
+      if (regionSelection.cancel()) renderCellOverlay();
       if (isMovingSelection || isScalingSelection || isRotatingSelection) {
         isPointerDown = false;
         cancelFloatingSelection();
       }
     });
     dom.cellOverlay.addEventListener('dblclick', (e) => {
-      if (state.currentTool === 'region-select') {
-        const coords = getPixelCoords(e);
-        const cell = state.getActiveCell();
-        if (coords && cell && cell.layers) {
-          let hitRegion = null;
-          const findHit = (nodes) => {
-            if (!nodes || hitRegion) return;
-            for (let i = nodes.length - 1; i >= 0; i--) {
-              const n = nodes[i];
-              if (n.type === 'region' && n.visible !== false && n.pixels && n.pixels[`${coords.x},${coords.y}`]) {
-                hitRegion = n;
-                return;
-              }
-              if (n.children) findHit(n.children);
-            }
-          };
-          findHit(cell.layers);
-          if (hitRegion) {
-            const newIso = (state.isolatedNodeId === hitRegion.id) ? null : hitRegion.id;
-            state.setIsolation(cell.id, newIso);
-            refreshAll();
-            showToast(newIso ? `Isolated Region: "${hitRegion.name || hitRegion.id}"` : 'Exited Isolation Mode');
-          } else if (state.isolatedNodeId) {
-            state.setIsolation(cell.id, null);
-            refreshAll();
-            showToast('Exited Isolation Mode');
-          }
-        }
+      if (state.currentTool !== 'region-select' || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      const point = getPixelCoords(e);
+      const cell = state.getActiveCell();
+      const hit = point && StructureOps.pickIsolationRegion(cell, point, state, e.altKey);
+      if (hit && hit.node.id !== state.isolatedNodeId) {
+        state.activeLayerId = hit.layer.id;
+        state.activeRegionId = hit.node.id;
+        state.setIsolation(cell.id, hit.node.id);
+        regionSelection.focus(cell, state.activeLayerId, state.isolatedNodeId, [hit.node.id]);
+        refreshAll();
       }
     });
     dom.cellOverlay.addEventListener('mouseleave', () => {
@@ -10405,6 +9880,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           case 'copy': executeSelectionCopy(); break;
           case 'paste': executeSelectionPaste(); break;
           case 'fill': executeSelectionFill(); break;
+          case 'rotate-90': executeSelectionRotate(); break;
+          case 'align-center': document.getElementById('btn-align-center')?.click(); break;
           case 'flip-h': executeSelectionFlip(true); break;
           case 'flip-v': executeSelectionFlip(false); break;
           case 'select-all': executeSelectAll(); break;
@@ -10629,8 +10106,9 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     dom.btnQuick8dir?.addEventListener('click', () => openActionTemplateModal(8));
 
     // Grid Overview Zoom Controls
-    dom.btnGridZoomOut?.addEventListener('click', zoomGridOut);
-    dom.btnGridZoomIn?.addEventListener('click', zoomGridIn);
+    dom.btnGridZoomOut?.addEventListener('click', () => zoomGridOut());
+    dom.btnGridZoomIn?.addEventListener('click', () => zoomGridIn());
+    document.getElementById('btn-grid-zoom-fit')?.addEventListener('click', fitGridCanvas);
     dom.btnGridZoomReset?.addEventListener('click', () => setGridZoom(4));
 
     // Action Template Modal Event Handlers (2-Dir Platformer, 4-Dir, 8-Dir)
@@ -10730,7 +10208,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
     dom.btnExitIsolation?.addEventListener('click', () => {
       const cell = state.getActiveCell();
-      if (cell) state.setIsolation(cell.id, null);
+      if (cell) exitRegionIsolation(cell);
       else state.isolatedNodeId = null;
       refreshAll();
     });
@@ -11607,15 +11085,19 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     }
 
     // Action Toolbar buttons
-    bindAction('btn-align-center', () => {
-      const cell = state.getActiveCell();
-      if (cell && state.doc) {
-        Tools.centerContent(cell, state.doc.meta.cellSize.w, state.doc.meta.cellSize.h);
-        state.saveSnapshot('Center Cell Pixels');
+    for (const direction of ['center', 'left', 'right', 'top', 'bottom']) {
+      bindAction('btn-align-' + direction, () => {
+        const cell = state.getActiveCell();
+        if (!cell) return;
+        commitFloatingSelection();
+        const target = getSelectionTarget(cell);
+        if (!Tools.alignRaster(target, cell.size || state.doc.meta.cellSize, direction)) return;
+        state.syncCellComposite(cell.id);
+        state.saveSnapshot('Align ' + direction);
         triggerEventAutosave();
         refreshAll();
-      }
-    });
+      });
+    }
 
     bindAction('btn-flip-h', () => {
       if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
@@ -11682,36 +11164,38 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       showToast(`Symmetry mode: ${state.symmetry ? 'ON (S)' : 'OFF (S)'}`);
     });
 
+    bindAction('btn-toggle-sym-v', (btn) => {
+      state.symmetryVertical = !state.symmetryVertical;
+      btn.classList.toggle('active', state.symmetryVertical);
+      renderCellEditor();
+      updateStatusBarCoords(null, null);
+    });
+    bindAction('btn-undo', () => restoreEditorHistory('undo'));
+    bindAction('btn-redo', () => restoreEditorHistory('redo'));
+
     bindAction('btn-grid-lines-toggle', (btn) => {
       state.showGridLines = !state.showGridLines;
       btn.classList.toggle('active', state.showGridLines);
       renderCellEditor();
     });
 
-    bindAction('btn-clear-cell', () => {
-      const cell = state.getActiveCell();
-      if (cell) {
-        cell.pixels = {};
-        state.saveSnapshot('Clear Cell');
-        triggerEventAutosave();
-        refreshAll();
-      }
-    });
+    bindAction('btn-clear-cell', executeSelectionDelete);
 
     // Zoom buttons
-    bindAction('btn-zoom-in', () => {
-      state.cellZoom = Math.min(64, state.cellZoom + 4);
-      renderCellEditor();
+    const stepCellZoom = direction => {
+      if (!state.getActiveCell()) return;
+      const { w, h } = state.doc.meta.cellSize;
+      const zoom = NoiraViewport.stepArtworkZoom(state.cellZoom, direction, w, h);
+      if (zoom === state.cellZoom) return;
+      state.cellZoom = zoom;
+      renderCellEditor(true);
       renderCellRulers();
+      renderCellOverlay();
       updateStatusBarCoords(null, null);
-    });
-
-    bindAction('btn-zoom-out', () => {
-      state.cellZoom = Math.max(4, state.cellZoom - 4);
-      renderCellEditor();
-      renderCellRulers();
-      updateStatusBarCoords(null, null);
-    });
+    };
+    bindAction('btn-zoom-in', () => stepCellZoom(1));
+    bindAction('btn-zoom-out', () => stepCellZoom(-1));
+    bindAction('btn-cell-zoom-fit', fitCellCanvas);
 
     // Top Header File Actions (Desktop-native)
     bindAction('btn-new-file', openNewFileModal);
@@ -11805,15 +11289,25 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
     bindAction('btn-reload-file', handleManualFileReload);
 
-    // Mini Preview Zoom level buttons
-    document.querySelectorAll('#preview-zoom-group [data-scale]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#preview-zoom-group [data-scale]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        miniPreviewScale = parseInt(btn.dataset.scale, 10);
-        renderMiniPreview();
-      });
+    const previewViewport = document.getElementById('mini-preview-viewport');
+    const savedPreviewHeight = Number(localStorage.getItem('noiradix_preview_height'));
+    if (savedPreviewHeight >= 120) previewViewport.style.height = savedPreviewHeight + 'px';
+    window.NoiraViewport.bindInspectorResize(document.getElementById('mini-preview-resizer'), previewViewport,
+      120, 190, 'noiradix_preview_height', undefined, true);
+    new ResizeObserver(() => {
+      if (miniPreviewScale === 'fit') updateMiniPreviewZoom();
+    }).observe(previewViewport);
+    bindAction('preview-zoom-out', () => stepMiniPreviewZoom(-1));
+    bindAction('preview-zoom-in', () => stepMiniPreviewZoom(1));
+    bindAction('preview-zoom-fit', () => {
+      miniPreviewScale = 'fit';
+      updateMiniPreviewZoom();
     });
+    previewViewport.addEventListener('wheel', event => {
+      if (event.ctrlKey || event.shiftKey || !event.deltaY) return;
+      event.preventDefault();
+      stepMiniPreviewZoom(event.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
 
     // Floating Animation Preview Zoom level buttons
     document.querySelectorAll('#anim-zoom-group [data-scale]').forEach(btn => {
@@ -11967,69 +11461,11 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     }
 
     // Generic Horizontal Drag-to-Scroll & Wheel-Scroll Helper
-    function enableHorizontalDragScroll(container) {
-      if (!container) return;
-      let isDown = false;
-      let isDragging = false;
-      let startX = 0;
-      let startScrollLeft = 0;
-
-      container.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        if (['BUTTON', 'SELECT', 'INPUT'].includes(e.target.tagName)) return;
-        if (e.target.closest('button, select, input, .timeline-mini-btn')) return;
-        isDown = true;
-        isDragging = false;
-        startX = e.clientX;
-        startScrollLeft = container.scrollLeft;
-      });
-
-      container.addEventListener('pointermove', (e) => {
-        if (!isDown) return;
-        const dx = e.clientX - startX;
-        if (!isDragging && Math.abs(dx) > 4) {
-          isDragging = true;
-          container.classList.add('is-dragging');
-          try { container.setPointerCapture(e.pointerId); } catch (_) {}
-        }
-        if (isDragging) {
-          container.scrollLeft = startScrollLeft - dx;
-        }
-      });
-
-      const stopDrag = (e) => {
-        if (isDown) {
-          if (isDragging) {
-            container.classList.remove('is-dragging');
-            try { if (e && e.pointerId) container.releasePointerCapture(e.pointerId); } catch (_) {}
-          }
-          isDown = false;
-          setTimeout(() => { isDragging = false; }, 40);
-        }
-      };
-
-      container.addEventListener('pointerup', stopDrag);
-      container.addEventListener('pointercancel', stopDrag);
-      container.addEventListener('click', (e) => {
-        if (isDragging) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
-      }, true);
-
-      container.addEventListener('wheel', (e) => {
-        const deltaY = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-        const deltaX = e.deltaMode === 1 ? e.deltaX * 33 : e.deltaX;
-        if (Math.abs(deltaY) > Math.abs(deltaX)) {
-          e.preventDefault();
-          container.scrollLeft += deltaY;
-        } else if (Math.abs(deltaX) > 0) {
-          container.scrollLeft += deltaX;
-        }
-      }, { passive: false });
-    }
-
+    const { enableHorizontalDragScroll } = window.NoiraViewport;
     enableHorizontalDragScroll(document.querySelector('.cell-top-bar'));
+    window.NoiraViewport.enableVerticalDragScroll(document.getElementById('studio-tool-rail'),
+      'is-dragging', { dragFromButtons: true });
+    enableHorizontalDragScroll(document.querySelector('.structure-action-group'), 'is-dragging', { dragFromButtons: true });
     enableHorizontalDragScroll(document.querySelector('.timeline-header'));
     enableHorizontalDragScroll(document.getElementById('timeline-frames-strip'));
     enableHorizontalDragScroll(document.getElementById('slice-viewport-header'));
@@ -12197,7 +11633,21 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
   // KEYBOARD SHORTCUTS SUITE (Photoshop / Aseprite Standards)
   // ===========================================================================
 
+  function restoreEditorHistory(direction) {
+    if (floatingSelectionPixels) cancelFloatingSelection();
+    state.selection = null;
+    regionSelection.cancel();
+    if (state[direction]()) {
+      triggerEventAutosave();
+      refreshAll();
+    }
+  }
+
   function bindKeyboardShortcuts() {
+    window.addEventListener('pagehide', () => {
+      if (floatingSelectionPixels) cancelFloatingSelection();
+      persistAllProjectSessions();
+    });
     window.addEventListener('beforeunload', (e) => {
       if (isDocumentDirty || (state.doc && !currentFileHandle && Object.keys(state.doc.cells).length > 0)) {
         e.preventDefault();
@@ -12208,6 +11658,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     // Losing focus during a drag is equivalent to cancelling that gesture.
     // Do not leave lifted pixels detached from the artwork document.
     window.addEventListener('blur', () => {
+      if (regionSelection.cancel()) renderCellOverlay();
       if (isMovingSelection || isScalingSelection || isRotatingSelection) {
         isPointerDown = false;
         cancelFloatingSelection();
@@ -12217,6 +11668,14 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     window.addEventListener('keydown', (e) => {
       const isInputActive = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
       const key = e.key.toLowerCase();
+
+      if (!isInputActive && key === 'enter' && floatingSelectionPixels) {
+        e.preventDefault();
+        commitFloatingSelection();
+        refreshAll();
+        renderCellOverlay();
+        return;
+      }
 
       // Save (Ctrl + S) & Save As (Ctrl + Shift + S) - Universal shortcut, active even inside inputs
       if ((e.ctrlKey || e.metaKey) && key === 's') {
@@ -12238,8 +11697,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         return;
       }
 
-      // New (Alt + N, Ctrl + Alt + N, or Ctrl + N)
-      if ((e.altKey && key === 'n') || ((e.ctrlKey || e.metaKey) && key === 'n')) {
+      // New (Alt + N)
+      if (e.altKey && key === 'n') {
         e.preventDefault();
         openNewFileModal();
         return;
@@ -12253,34 +11712,9 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       }
 
       // Undo / Redo
-      if ((e.ctrlKey || e.metaKey) && key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && (key === 'z' || key === 'y')) {
         e.preventDefault();
-        floatingSelectionPixels = null;
-        floatingOriginalSel = null;
-        isMovingSelection = false;
-        state.selection = null;
-        if (e.shiftKey) {
-          if (state.redo()) {
-            triggerEventAutosave();
-            refreshAll();
-          }
-        } else {
-          if (state.undo()) {
-            triggerEventAutosave();
-            refreshAll();
-          }
-        }
-        return;
-      } else if ((e.ctrlKey || e.metaKey) && key === 'y') {
-        e.preventDefault();
-        floatingSelectionPixels = null;
-        floatingOriginalSel = null;
-        isMovingSelection = false;
-        state.selection = null;
-        if (state.redo()) {
-          triggerEventAutosave();
-          refreshAll();
-        }
+        restoreEditorHistory(key === 'y' || e.shiftKey ? 'redo' : 'undo');
         return;
       }
 
@@ -12307,12 +11741,15 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           showToast('Animation Studio centered (Ctrl+0)');
           return;
         }
-        state.cellZoom = 24;
+        if (!state.getActiveCell()) return;
+        const { w, h } = state.doc.meta.cellSize;
+        state.cellZoom = Math.min(24, NoiraViewport.artworkZoomLimit(w, h));
         centerCellCanvas();
         renderCellEditor();
         renderCellRulers();
+        renderCellOverlay();
         updateStatusBarCoords(null, null);
-        showToast('Zoom reset to 24× and centered (Ctrl+0)');
+        showToast(`Zoom reset to ${NoiraViewport.formatArtworkZoom(state.cellZoom)} and centered (Ctrl+0)`);
         return;
       }
 
@@ -12378,16 +11815,29 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         closeAboutModal();
         return;
       }
+      if (e.key === 'Escape' && state.activeTabId === 'tab-import-slice') return;
 
       // Deselect (Ctrl + D) or (Escape)
       if (((e.ctrlKey || e.metaKey) && key === 'd') || e.key === 'Escape') {
         e.preventDefault();
+        if (e.key === 'Escape' && regionSelection.cancel()) {
+          renderCellOverlay();
+          return;
+        }
         if (e.key === 'Escape' && state.isolatedNodeId) {
+          const selectedId = state.isolatedNodeId;
           const activeCell = state.getActiveCell();
-          if (activeCell) state.setIsolation(activeCell.id, null);
+          if (floatingSelectionPixels) cancelFloatingSelection();
+          if (activeCell) exitRegionIsolation(activeCell, selectedId);
           else state.isolatedNodeId = null;
+          selectTool('region-select');
           showToast('Exited Isolation Mode');
           refreshAll();
+          return;
+        }
+        if (state.currentTool === 'region-select' && !state.selection) {
+          regionSelection.reset();
+          renderCellOverlay();
           return;
         }
         if (e.key === 'Escape' && (isScalingSelection || isRotatingSelection)) {
@@ -12447,6 +11897,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         else if (key === 'g') selectTool('bucket');
         else if (key === 'l') selectTool('line');
         else if (key === 'u') selectTool('rect');
+        else if (key === 'v' && e.shiftKey) document.getElementById('btn-toggle-sym-v').click();
+        else if (key === 'h' && e.shiftKey) document.getElementById('btn-symmetry-toggle').click();
         else if (key === 'v' || key === 'm') selectTool('select');
         else if (key === 'h') selectTool('pan');
         else if (key === 'r') {
@@ -12504,6 +11956,17 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       // Arrow keys nudge
       const cell = state.getActiveCell();
       if (cell && state.doc) {
+        if (state.currentTool === 'region-select' && e.key.startsWith('Arrow')) {
+          e.preventDefault();
+          if (regionSelection.nudge(cell, state.activeLayerId, state.isolatedNodeId,
+            cell.size || state.doc.meta.cellSize, e.key, () => state.beginStroke())) {
+            state.syncCellComposite(cell.id);
+            state.endStroke('Nudge regions');
+            triggerEventAutosave();
+            refreshAll();
+          }
+          return;
+        }
         const cw = state.doc.meta.cellSize.w;
         const ch = state.doc.meta.cellSize.h;
         if (e.key === 'ArrowUp') { Tools.nudge(cell, 0, -1, cw, ch); triggerEventAutosave(); refreshAll(); }

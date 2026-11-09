@@ -13,6 +13,8 @@
 
   <!-- PixelArt Stylesheet -->
   <link rel="stylesheet" href="css/pixelart.css">
+  <link rel="stylesheet" href="../css/editor-tools.css">
+  <link rel="stylesheet" href="../css/tab-strip.css">
 </head>
 <body class="light-theme">
 
@@ -51,7 +53,7 @@
       </div>
       <div id="pa-autosave-status-pill" class="pa-autosave-pill saved" title="Automatic Local Persistence &amp; Recovery Snapshot">
         <i class="fa-solid fa-cloud-arrow-up"></i>
-        <span id="pa-autosave-status-text">Autosaved</span>
+        <span id="pa-autosave-status-text">Browser autosave</span>
       </div>
     </div>
 
@@ -101,7 +103,7 @@
   </header>
 
   <!-- ================= DOCUMENT BAR (artwork sessions) ================= -->
-  <div class="pa-docbar" id="pa-docbar">
+  <div class="project-docbar" id="pa-docbar">
     <div class="project-tabs-strip" id="pa-project-tabs-strip" title="Open Artwork Sessions">
       <!-- [artwork.pix2] -->
     </div>
@@ -143,111 +145,7 @@
     </section>
 
     <!-- LEFT TOOLBAR -->
-    <aside class="pa-toolbar" id="pa-toolbar">
-      <button class="pa-tool-btn active" data-tool="pen" title="Pencil (B) — Draw pixels">
-        <i class="fa-solid fa-pencil"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="eraser" title="Eraser (E) — Erase pixels">
-        <i class="fa-solid fa-eraser"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="bucket" title="Paint Bucket (G) — 4-way flood fill">
-        <i class="fa-solid fa-fill-drip"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="line" title="Line Tool (L) — Bresenham straight line">
-        <i class="fa-solid fa-slash"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="rect" title="Rectangle Outline Tool (U) [Hold Shift for 1:1 Square, Alt for Center]">
-        <i class="fa-regular fa-square"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="rect-fill" title="Filled Rectangle Tool (Shift+U) [Hold Shift for 1:1 Square, Alt for Center]">
-        <i class="fa-solid fa-square"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="circle" title="Circle / Ellipse Outline Tool (C) [Hold Shift for 1:1 Circle, Alt for Center]">
-        <i class="fa-regular fa-circle"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="circle-fill" title="Filled Circle / Ellipse Tool (Shift+C) [Hold Shift for 1:1 Circle, Alt for Center]">
-        <i class="fa-solid fa-circle"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (V or M) — Drag to move selection">
-        <i class="fa-solid fa-crop-simple"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="region-select" id="btn-pa-tool-region-select" title="Region Select Tool (R) — Inspect, select, and isolate structural regions">
-        <i class="fa-solid fa-object-group"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="picker" title="Eyedropper (I) — Sample color">
-        <i class="fa-solid fa-eye-dropper"></i>
-      </button>
-      <button class="pa-tool-btn" data-tool="pan" title="Hand / Pan Tool (H or Space+Drag)">
-        <i class="fa-solid fa-hand"></i>
-      </button>
-
-      <div class="pa-tool-sep"></div>
-
-      <!-- Symmetry Toggles (Custom Visual Mirror Axis SVGs) -->
-      <button id="btn-toggle-sym-h" class="pa-tool-btn" title="Horizontal Symmetry Guide (Shift+H) [Mirror Left ↔ Right across vertical center]">
-        <svg class="pa-sym-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="3 3"/>
-          <circle cx="6" cy="12" r="3" fill="currentColor"/>
-          <circle cx="18" cy="12" r="3" fill="currentColor"/>
-        </svg>
-      </button>
-      <button id="btn-toggle-sym-v" class="pa-tool-btn" title="Vertical Symmetry Guide (Shift+V) [Mirror Top ↕ Bottom across horizontal center]">
-        <svg class="pa-sym-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="3 3"/>
-          <circle cx="12" cy="6" r="3" fill="currentColor"/>
-          <circle cx="12" cy="18" r="3" fill="currentColor"/>
-        </svg>
-      </button>
-
-      <div class="pa-tool-sep"></div>
-
-      <!-- Transform Tools (Selection or Full Canvas) -->
-      <button id="btn-rotate-90" class="pa-tool-btn" title="Rotate 90° Clockwise (R) [Selection or Canvas]">
-        <svg class="pa-tool-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.5 2.7L21 8"/>
-          <polyline points="21 3 21 8 16 8"/>
-          <text x="12" y="15.5" font-size="7.5" font-weight="900" fill="currentColor" stroke="none" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">90°</text>
-        </svg>
-      </button>
-      <button id="btn-flip-h" class="pa-tool-btn" title="Flip Horizontal (Mirror X) [Selection or Canvas]">
-        <i class="fa-solid fa-arrows-left-right"></i>
-      </button>
-      <button id="btn-flip-v" class="pa-tool-btn" title="Flip Vertical (Mirror Y) [Selection or Canvas]">
-        <i class="fa-solid fa-arrows-up-down"></i>
-      </button>
-
-      <div class="pa-tool-sep"></div>
-
-      <!-- Align Tools -->
-      <button id="btn-align-center" class="pa-tool-btn" title="Align Center (Both Axes)">
-        <i class="fa-solid fa-crosshairs"></i>
-      </button>
-      <button id="btn-align-left" class="pa-tool-btn" title="Align Left (Snap to Left Canvas Edge)">
-        <i class="fa-solid fa-align-left"></i>
-      </button>
-      <button id="btn-align-right" class="pa-tool-btn" title="Align Right (Snap to Right Canvas Edge)">
-        <i class="fa-solid fa-align-right"></i>
-      </button>
-      <button id="btn-align-top" class="pa-tool-btn" title="Align Top (Snap to Top Canvas Edge)">
-        <i class="fa-solid fa-arrows-up-to-line"></i>
-      </button>
-      <button id="btn-align-bottom" class="pa-tool-btn" title="Align Bottom (Snap to Bottom Canvas Edge)">
-        <i class="fa-solid fa-arrows-down-to-line"></i>
-      </button>
-
-      <div class="pa-tool-sep"></div>
-
-      <!-- History & Clear -->
-      <button id="btn-undo" class="pa-tool-btn" title="Undo (Ctrl+Z)">
-        <i class="fa-solid fa-arrow-rotate-left"></i>
-      </button>
-      <button id="btn-redo" class="pa-tool-btn" title="Redo (Ctrl+Y)">
-        <i class="fa-solid fa-arrow-rotate-right"></i>
-      </button>
-      <button id="btn-clear-canvas" class="pa-tool-btn pa-tool-danger" title="Clear Canvas">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
-    </aside>
+    <aside class="pa-toolbar editor-tool-rail" id="pa-toolbar" aria-label="Drawing tools"></aside>
 
     <!-- CENTER CANVAS PANE -->
     <section class="pa-canvas-pane" id="pa-canvas-pane">
@@ -273,8 +171,8 @@
         </button>
       </div>
 
-      <div class="pa-canvas-viewport" id="pa-canvas-viewport">
-        <div class="pa-canvas-container" id="pa-canvas-container">
+      <div class="pa-canvas-viewport editor-artboard-viewport" id="pa-canvas-viewport">
+        <div class="pa-canvas-container editor-artboard-container" id="pa-canvas-container">
           <div class="pa-ruler-corner" id="pa-ruler-corner">px</div>
           <canvas id="pa-ruler-top" class="pa-ruler-top-bar" height="24"></canvas>
           <canvas id="pa-ruler-left" class="pa-ruler-left-bar" width="24"></canvas>
@@ -369,7 +267,7 @@
     </section>
 
     <!-- DRAGGABLE SPLIT RESIZER (HORIZONTAL RESIZE) -->
-    <div class="pa-split-resizer" id="pa-split-resizer" title="Drag horizontally to resize panel width" role="separator" aria-orientation="vertical"></div>
+    <div class="pa-split-resizer" id="pa-split-resizer" title="Drag horizontally to resize panel width" role="separator" aria-label="Inspector width" aria-orientation="vertical" tabindex="0"></div>
 
     <!-- RIGHT PIX2 SOURCE CODE PANE -->
     <section class="pa-code-pane side-layers-active" id="pa-code-pane">
@@ -411,12 +309,19 @@
 
       <!-- Structure & Layers View -->
       <div id="pa-layers-view" class="pa-layers-container">
-        <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px;">
-          <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim, #94a3b8);"><i class="fa-solid fa-layer-group"></i> Artwork Layers</span>
+        <div class="editor-structure-header">
+          <span><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Structure &amp; Layers</span>
           <div class="pa-structure-actions" style="display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding: 2px 0;">
             <button id="btn-pa-add-layer" class="pa-btn-xs pa-btn-accent" title="Add New Layer"><i class="fa-solid fa-plus"></i> Layer</button>
-            <button id="btn-pa-add-group" class="pa-btn-xs" title="Add Group"><i class="fa-solid fa-folder-plus"></i> Group</button>
+            <button id="btn-pa-add-group" class="pa-btn-xs" title="Create an empty group"><i class="fa-solid fa-folder-plus"></i> New Group</button>
             <button id="btn-pa-add-region" class="pa-btn-xs" title="Add Region"><i class="fa-solid fa-vector-square"></i> Region</button>
+            <span class="editor-structure-divider" aria-hidden="true"></span>
+            <button type="button" class="pa-btn-xs editor-structure-icon" data-region-action="group" aria-label="Group" title="Group selected regions (Ctrl/Cmd-click to add)">
+            <i class="fa-solid fa-folder-tree" aria-hidden="true"></i>
+          </button>
+            <button type="button" class="pa-btn-xs editor-structure-icon" data-region-action="ungroup" aria-label="Ungroup" title="Ungroup selected group">
+            <i class="fa-solid fa-object-ungroup" aria-hidden="true"></i>
+          </button>
           </div>
         </div>
         <div id="pa-layers-tree" style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
@@ -447,6 +352,24 @@
 
   <!-- ================= BOTTOM PALETTE DECK ================= -->
   <footer class="pa-palette-deck">
+          <div class="editor-brush-options" aria-label="Brush settings">
+            <div class="editor-brush-setting">
+              <label class="editor-tool-option" for="brush-size"><i class="fa-solid fa-pencil" aria-hidden="true"></i> Brush</label>
+              <input class="editor-brush-slider" id="brush-size-slider" type="range" min="1" max="32" value="1" aria-label="Brush size slider">
+              <input id="brush-size" type="number" min="1" max="32" value="1">
+            </div>
+            <div class="editor-brush-setting">
+              <label class="editor-tool-option" for="eraser-size"><i class="fa-solid fa-eraser" aria-hidden="true"></i> Eraser</label>
+              <input class="editor-brush-slider" id="eraser-size-slider" type="range" min="1" max="32" value="1" aria-label="Eraser size slider">
+              <input id="eraser-size" type="number" min="1" max="32" value="1">
+            </div>
+            <div class="editor-brush-setting">
+              <label class="editor-tool-option" for="brush-opacity"><i class="fa-solid fa-droplet" aria-hidden="true"></i> Ink %</label>
+              <input class="editor-brush-slider" id="brush-opacity-slider" type="range" min="0" max="100" value="100" aria-label="Ink opacity slider">
+              <input id="brush-opacity" type="number" min="0" max="100" value="100">
+            </div>
+          </div>
+
     <div class="pa-active-colors">
       <div class="pa-color-slot primary" id="pa-color-primary-slot" title="Primary Color (Left Click). Press X to swap with Secondary.">
         <div class="pa-color-preview" id="pa-color-primary-preview" style="background-color: #4f46e5;"></div>
@@ -489,65 +412,7 @@
   </footer>
 
   <!-- ================= RIGHT-CLICK CONTEXT MENU ================= -->
-  <div id="pa-context-menu" class="studio-context-menu hidden">
-    <div class="context-menu-item" data-action="cut">
-      <i class="fa-solid fa-scissors"></i>
-      <span>Cut</span>
-      <span class="context-shortcut">Ctrl+X</span>
-    </div>
-    <div class="context-menu-item" data-action="copy">
-      <i class="fa-solid fa-copy"></i>
-      <span>Copy</span>
-      <span class="context-shortcut">Ctrl+C</span>
-    </div>
-    <div class="context-menu-item" data-action="paste">
-      <i class="fa-solid fa-paste"></i>
-      <span>Paste</span>
-      <span class="context-shortcut">Ctrl+V</span>
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item" data-action="select-all">
-      <i class="fa-solid fa-border-all"></i>
-      <span>Select All</span>
-      <span class="context-shortcut">Ctrl+A</span>
-    </div>
-    <div class="context-menu-item" data-action="deselect">
-      <i class="fa-solid fa-xmark"></i>
-      <span>Deselect</span>
-      <span class="context-shortcut">Esc</span>
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item" data-action="fill">
-      <i class="fa-solid fa-fill-drip"></i>
-      <span>Fill Selection</span>
-      <span class="context-shortcut">F</span>
-    </div>
-    <div class="context-menu-item" data-action="flip-h">
-      <i class="fa-solid fa-arrows-left-right"></i>
-      <span>Flip Horizontal</span>
-      <span class="context-shortcut">H</span>
-    </div>
-    <div class="context-menu-item" data-action="flip-v">
-      <i class="fa-solid fa-arrows-up-down"></i>
-      <span>Flip Vertical</span>
-      <span class="context-shortcut">Shift+H</span>
-    </div>
-    <div class="context-menu-item" data-action="rotate-90">
-      <i class="fa-solid fa-rotate-right"></i>
-      <span>Rotate 90° Clockwise</span>
-      <span class="context-shortcut">R</span>
-    </div>
-    <div class="context-menu-item" data-action="align-center">
-      <i class="fa-solid fa-crosshairs"></i>
-      <span>Center Content</span>
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item text-danger" data-action="delete">
-      <i class="fa-solid fa-trash-can"></i>
-      <span>Delete Selection</span>
-      <span class="context-shortcut">Del</span>
-    </div>
-  </div>
+  <div id="pa-context-menu" class="studio-context-menu hidden"></div>
 
   <!-- ================= MODALS ================= -->
 
@@ -727,7 +592,7 @@
       </div>
       <div class="pa-modal-body">
         <p class="pa-modal-hint">
-          Generate complete <strong>PIX2 v1.0 standard</strong> specifications with embedded grammar rules, coordinates, and color indexing for ChatGPT, Claude, and AI assistants.
+          Generate a <strong>PIX2 1.1</strong> prompt with grammar, coordinates, and layering rules for AI assistants.
         </p>
 
         <!-- Interactive Dimension & Mode Controls -->
@@ -817,6 +682,8 @@
             <tr><td><kbd>B</kbd></td><td>Pencil (Continuous drawing)</td></tr>
             <tr><td><kbd>E</kbd></td><td>Eraser</td></tr>
             <tr><td><kbd>G</kbd></td><td>Paint Bucket (Flood Fill)</td></tr>
+            <tr><td><kbd>Ctrl/Cmd+G</kbd></td><td>Group selected regions</td></tr>
+            <tr><td><kbd>Ctrl/Cmd+Shift+G</kbd></td><td>Ungroup the selected group</td></tr>
             <tr><td><kbd>L</kbd></td><td>Line Tool (Bresenham)</td></tr>
             <tr><td><kbd>U</kbd></td><td>Rectangle Outline Tool</td></tr>
             <tr><td><kbd>Shift+U</kbd></td><td>Filled Rectangle Tool</td></tr>
@@ -842,7 +709,7 @@
             <tr><td><kbd>Ctrl+S</kbd></td><td>Save File (Direct Disk or Download)</td></tr>
             <tr><td><kbd>Ctrl+Shift+S</kbd></td><td>Save As... (Choose File Name / Location)</td></tr>
             <tr><td><kbd>Ctrl+O</kbd></td><td>Open File (.pix2, image)</td></tr>
-            <tr><td><kbd>Alt+N</kbd> / <kbd>Ctrl+N</kbd></td><td>New Canvas Modal</td></tr>
+            <tr><td><kbd>Alt+N</kbd></td><td>New Canvas Modal</td></tr>
             <tr><td><kbd>Wheel</kbd></td><td>Cursor-Centered Integer Zoom (Pixel Anchor Invariant)</td></tr>
           </tbody>
         </table>
@@ -934,6 +801,11 @@
   <script src="../js/pix2-format.js"></script>
   <script src="../js/selection-transform.js"></script>
   <script src="../js/structure-operations.js"></script>
+  <script src="../js/region-selection.js"></script>
+  <script src="../js/pix2-ai-prompt.js"></script>
+  <script src="../js/editor-menu.js"></script>
+  <script src="../js/editor-outliner.js"></script>
+  <script src="../js/editor-toolbar.js"></script>
   <script src="../js/editor-state.js"></script>
 
   <!-- Tools Algorithm Library (Reused from parent) -->
@@ -945,6 +817,9 @@
   <script src="../js/tab-strip.js"></script>
   <!-- Shared viewport pan & zoom controller -->
   <script src="../js/viewport-pan-zoom.js"></script>
+  <script src="../js/editor-rulers.js"></script>
+  <script src="../js/editor-canvas.js"></script>
+  <script src="../js/editor-workspace-storage.js"></script>
   <!-- System upgrade & maintenance banner -->
   <script src="../js/maintenance-banner.js"></script>
 

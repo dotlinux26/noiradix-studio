@@ -83,6 +83,8 @@
 
   <!-- Studio Custom CSS -->
   <link rel="stylesheet" href="css/style.css?v=1.1.12">
+  <link rel="stylesheet" href="css/editor-tools.css">
+  <link rel="stylesheet" href="css/tab-strip.css">
 </head>
 <body class="light-theme">
 
@@ -107,7 +109,7 @@
 
       <div id="autosave-status-pill" class="autosave-pill saved" title="Automatic Background Recovery & Cloudless Autosave">
         <i class="fa-solid fa-cloud-arrow-up"></i>
-        <span id="autosave-status-text">Autosaved</span>
+        <span id="autosave-status-text">Browser autosave</span>
       </div>
     </div>
 
@@ -174,7 +176,7 @@
   </header>
 
   <!-- ================= DOCUMENT BAR (project sessions) ================= -->
-  <div class="studio-docbar" id="studio-docbar">
+  <div class="project-docbar" id="studio-docbar">
     <div class="project-tabs-strip" id="project-tabs-strip" title="Open Project Sessions">
       <!-- Rendered dynamically by app.js: [player.pix2] [boss.pix2] -->
     </div>
@@ -248,6 +250,7 @@
               <span id="grid-zoom-level" class="btn btn-sm btn-secondary" style="pointer-events: none; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums;" title="Current Grid Zoom">4×</span>
               <button type="button" id="btn-grid-zoom-in" class="btn btn-sm btn-secondary" title="Zoom In Grid (+)"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
               <button type="button" id="btn-grid-zoom-reset" class="btn btn-sm btn-secondary" title="Reset Grid Zoom (4×)">4×</button>
+              <button type="button" id="btn-grid-zoom-fit" class="btn btn-sm btn-secondary" title="Fit entire sheet (Shift+Space)">Fit</button>
             </div>
 
             <div class="bar-separator"></div>
@@ -337,90 +340,30 @@
     <!-- 2. VIEW: CELL EDITOR -->
     <section id="view-cell-editor" class="view-panel">
       <!-- Left Drawing Tools Column -->
-      <aside class="tools-sidebar">
-        <div class="tool-btn-group">
-          <button class="tool-btn active" data-tool="pen" title="Pencil (B) - 1px pixel draw">
-            <i class="fa-solid fa-pencil"></i>
-          </button>
-          <button class="tool-btn" data-tool="eraser" title="Eraser (E) - Transparent pixel">
-            <i class="fa-solid fa-eraser"></i>
-          </button>
-          <button class="tool-btn" data-tool="picker" title="Eyedropper (I) - Pick color">
-            <i class="fa-solid fa-eye-dropper"></i>
-          </button>
-          <button class="tool-btn" data-tool="bucket" title="Paint Bucket (G) - Flood fill">
-            <i class="fa-solid fa-fill-drip"></i>
-          </button>
-          <button class="tool-btn" data-tool="line" title="Line Tool (L) - Straight pixel line">
-            <i class="fa-solid fa-slash"></i>
-          </button>
-          <button class="tool-btn" data-tool="rect" title="Rectangle Tool (U) - Outline box">
-            <i class="fa-regular fa-square"></i>
-          </button>
-          <button class="tool-btn" data-tool="rect-fill" title="Filled Rectangle Tool (Shift+U)">
-            <i class="fa-solid fa-square"></i>
-          </button>
-          <button class="tool-btn" data-tool="circle" title="Circle Tool (C) - Outline ellipse">
-            <i class="fa-regular fa-circle"></i>
-          </button>
-          <button class="tool-btn" data-tool="circle-fill" title="Filled Circle Tool (Shift+C)">
-            <i class="fa-solid fa-circle"></i>
-          </button>
-          <button class="tool-btn" data-tool="select" title="Selection Marquee (V / M)">
-            <i class="fa-solid fa-crop-simple"></i>
-          </button>
-          <button class="tool-btn" data-tool="region-select" id="btn-tool-region-select" title="Region Select Tool (R) - Select, Move & Isolate Named Regions">
-            <i class="fa-solid fa-object-group"></i>
-          </button>
-          <button class="tool-btn" data-tool="pan" title="Hand / Pan Tool (H) - Drag workspace freely (Double-click to center)">
-            <i class="fa-solid fa-arrows-alt"></i>
-          </button>
-        </div>
-
-        <div class="tool-divider"></div>
-
-        <div class="tool-btn-group">
-          <button id="btn-symmetry-toggle" class="tool-btn" title="Toggle Symmetry Mirror (S) - Vertical Axis">
-            <i class="fa-solid fa-arrows-split-up-and-left"></i>
-          </button>
-        </div>
-      </aside>
+      <aside class="tools-sidebar editor-tool-rail" id="studio-tool-rail" aria-label="Drawing tools"></aside>
 
       <!-- Center Canvas Work Area -->
       <div class="cell-editor-center">
         <!-- Top Cell Action Toolbar -->
         <div class="cell-top-bar">
           <div class="cell-action-group">
-            <button id="btn-align-center" class="icon-action-btn" title="Align bounding box to center">
-              <i class="fa-solid fa-align-center"></i>
-            </button>
-            <button id="btn-flip-h" class="icon-action-btn" title="Flip Horizontal">
-              <i class="fa-solid fa-arrows-left-right"></i>
-            </button>
-            <button id="btn-flip-v" class="icon-action-btn" title="Flip Vertical">
-              <i class="fa-solid fa-arrows-up-down"></i>
-            </button>
-            <button id="btn-rotate-90" class="icon-action-btn" title="Rotate 90° Clockwise">
-              <i class="fa-solid fa-rotate-right"></i>
-            </button>
-          </div>
-
-          <div class="bar-separator"></div>
-
-          <div class="cell-action-group">
             <button id="btn-grid-lines-toggle" class="icon-action-btn active" title="Toggle Pixel Grid Lines">
               <i class="fa-solid fa-border-all"></i>
             </button>
-            <button id="btn-zoom-out" class="icon-action-btn" title="Zoom Out (Alt+Wheel / Minus)">
+            <button id="btn-zoom-out" class="icon-action-btn" title="Zoom Out">
               <i class="fa-solid fa-magnifying-glass-minus"></i>
             </button>
-            <button id="btn-zoom-in" class="icon-action-btn" title="Zoom In (Alt+Wheel / Plus)">
+            <button id="btn-zoom-in" class="icon-action-btn" title="Zoom In">
               <i class="fa-solid fa-magnifying-glass-plus"></i>
             </button>
-            <button id="btn-clear-cell" class="icon-action-btn text-danger" title="Clear all pixels in cell">
-              <i class="fa-solid fa-trash-can"></i>
+            <button id="btn-cell-zoom-fit" class="icon-action-btn" title="Fit frame (Shift+Space)" aria-label="Fit frame">
+              <i class="fa-solid fa-expand"></i>
             </button>
+
           </div>
+
+
+
 
           <div class="bar-spacer"></div>
 
@@ -434,7 +377,7 @@
         </div>
 
         <!-- Centered Canvas Viewport with Perfectly Attached Rulers -->
-        <div class="canvas-viewport" id="canvas-viewport">
+        <div class="canvas-viewport editor-artboard-viewport" id="canvas-viewport">
           <!-- Isolation Breadcrumb Banner -->
           <div id="isolation-banner" class="isolation-breadcrumb-banner hidden" style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 100; background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(99, 102, 241, 0.5); border-radius: 6px; padding: 4px 12px; display: none; align-items: center; gap: 8px; font-size: 11.5px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(4px);">
             <span style="color: #818cf8; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
@@ -446,10 +389,10 @@
             </button>
           </div>
 
-          <div class="canvas-container-with-rulers" id="canvas-container-with-rulers">
-            <div class="ruler-corner"></div>
-            <div id="ruler-top" class="ruler-top-bar"></div>
-            <div id="ruler-left" class="ruler-left-bar"></div>
+          <div class="canvas-container-with-rulers editor-artboard-container" id="canvas-container-with-rulers">
+            <div class="ruler-corner">px</div>
+            <canvas id="ruler-top" class="ruler-top-bar" aria-hidden="true"></canvas>
+            <canvas id="ruler-left" class="ruler-left-bar" aria-hidden="true"></canvas>
             <div class="canvas-stack" id="canvas-stack">
               <canvas id="cell-canvas" class="pixel-art-canvas"></canvas>
               <canvas id="cell-overlay" class="pixel-art-canvas"></canvas>
@@ -458,6 +401,7 @@
         </div>
       </div>
 
+      <div id="cell-inspector-resizer" class="editor-inspector-resizer" role="separator" aria-label="Inspector width" aria-orientation="vertical" tabindex="0"></div>
       <!-- Right Sidebar: Palettes, Info & Preview -->
       <aside class="right-sidebar">
         <!-- Mini Preview -->
@@ -465,15 +409,16 @@
           <div class="card-header flex-between">
             <span><i class="fa-regular fa-eye"></i> Preview</span>
             <div class="preview-zoom-pills" id="preview-zoom-group" title="Preview Zoom Level">
-              <button class="pill-btn-xs" data-scale="2">2×</button>
-              <button class="pill-btn-xs" data-scale="4">4×</button>
-              <button class="pill-btn-xs active" data-scale="6">6×</button>
-              <button class="pill-btn-xs" data-scale="8">8×</button>
+              <button type="button" class="pill-btn-xs" id="preview-zoom-out" aria-label="Zoom preview out">−</button>
+              <output id="preview-zoom-value" aria-label="Preview zoom">6×</output>
+              <button type="button" class="pill-btn-xs" id="preview-zoom-in" aria-label="Zoom preview in">+</button>
+              <button type="button" class="pill-btn-xs" id="preview-zoom-fit" title="Fit artwork in preview">Fit</button>
             </div>
           </div>
-          <div class="card-body preview-body">
+          <div class="card-body preview-body" id="mini-preview-viewport">
             <canvas id="mini-preview-canvas" class="pixel-art-canvas"></canvas>
           </div>
+          <div id="mini-preview-resizer" class="preview-resizer" role="separator" aria-label="Preview height" aria-orientation="horizontal" tabindex="0"></div>
         </div>
 
         <!-- Structure & Layers (PIX2 1.1) -->
@@ -484,12 +429,19 @@
               <button id="btn-add-layer" class="btn btn-xs btn-secondary structure-create-btn" title="Add Layer">
                 <i class="fa-solid fa-plus"></i> Layer
               </button>
-              <button id="btn-add-group" class="btn btn-xs btn-secondary structure-create-btn" title="Add Group">
-                <i class="fa-solid fa-folder-plus"></i> Group
+              <button id="btn-add-group" class="btn btn-xs btn-secondary structure-create-btn" title="Create an empty group">
+                <i class="fa-solid fa-folder-plus"></i> New Group
               </button>
               <button id="btn-add-region" class="btn btn-xs btn-secondary structure-create-btn" title="Add Region">
                 <i class="fa-solid fa-vector-square"></i> Region
               </button>
+            <span class="editor-structure-divider" aria-hidden="true"></span>
+            <button type="button" class="btn btn-xs btn-secondary editor-structure-icon" data-region-action="group" aria-label="Group" title="Group selected regions (Ctrl/Cmd-click to add)">
+            <i class="fa-solid fa-folder-tree" aria-hidden="true"></i>
+          </button>
+            <button type="button" class="btn btn-xs btn-secondary editor-structure-icon" data-region-action="ungroup" aria-label="Ungroup" title="Ungroup selected group">
+            <i class="fa-solid fa-object-ungroup" aria-hidden="true"></i>
+          </button>
             </div>
           </div>
           <div class="card-body structure-card-body">
@@ -499,6 +451,24 @@
 
         <!-- Color Palette Card -->
         <div class="sidebar-card palette-card">
+          <div class="editor-brush-options" aria-label="Brush settings">
+            <div class="editor-brush-setting">
+              <label class="editor-tool-option" for="brush-size"><i class="fa-solid fa-pencil" aria-hidden="true"></i> Brush</label>
+              <input class="editor-brush-slider" id="brush-size-slider" type="range" min="1" max="32" value="1" aria-label="Brush size slider">
+              <input id="brush-size" type="number" min="1" max="32" value="1">
+            </div>
+            <div class="editor-brush-setting">
+              <label class="editor-tool-option" for="eraser-size"><i class="fa-solid fa-eraser" aria-hidden="true"></i> Eraser</label>
+              <input class="editor-brush-slider" id="eraser-size-slider" type="range" min="1" max="32" value="1" aria-label="Eraser size slider">
+              <input id="eraser-size" type="number" min="1" max="32" value="1">
+            </div>
+            <div class="editor-brush-setting">
+              <label class="editor-tool-option" for="brush-opacity"><i class="fa-solid fa-droplet" aria-hidden="true"></i> Ink %</label>
+              <input class="editor-brush-slider" id="brush-opacity-slider" type="range" min="0" max="100" value="100" aria-label="Ink opacity slider">
+              <input id="brush-opacity" type="number" min="0" max="100" value="100">
+            </div>
+          </div>
+
           <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-palette"></i> Palette</span>
             <div style="display: inline-flex; align-items: center; gap: 4px;">
@@ -827,12 +797,12 @@
           </div>
           <div class="toolbar-section">
             <button id="btn-import-slice-commit" class="btn btn-sm btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
-              <i class="fa-solid fa-file-import"></i> Commit Slices to Project
+              <i class="fa-solid fa-file-import"></i> Import Slices to New Project
             </button>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 340px 1fr; gap: 14px; flex: 1; min-height: 0; width: 100%; overflow: hidden;">
+        <div class="import-slice-main-area">
           <!-- Left Configuration Sidebar -->
           <div style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 4px;">
             <!-- File Input / Drop Area -->
@@ -954,6 +924,8 @@
               </div>
             </div>
           </div>
+
+          <div id="slice-config-resizer" role="separator" aria-label="Slice settings width" aria-orientation="vertical" tabindex="0"></div>
 
           <!-- Right Interactive Preview Area -->
           <div class="sidebar-card" style="display: flex; flex-direction: column; overflow: hidden; flex: 1; height: 100%; min-width: 0;">
@@ -1229,53 +1201,7 @@
   </button>
 
   <!-- ================= RIGHT-CLICK CONTEXT MENU ================= -->
-  <div id="studio-context-menu" class="studio-context-menu hidden">
-    <div class="context-menu-item" data-action="cut">
-      <i class="fa-solid fa-scissors"></i>
-      <span>Cut</span>
-      <span class="context-shortcut">Ctrl+X</span>
-    </div>
-    <div class="context-menu-item" data-action="copy">
-      <i class="fa-solid fa-copy"></i>
-      <span>Copy</span>
-      <span class="context-shortcut">Ctrl+C</span>
-    </div>
-    <div class="context-menu-item" data-action="paste">
-      <i class="fa-solid fa-paste"></i>
-      <span>Paste</span>
-      <span class="context-shortcut">Ctrl+V</span>
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item" data-action="fill">
-      <i class="fa-solid fa-fill-drip"></i>
-      <span>Fill Selection</span>
-    </div>
-    <div class="context-menu-item" data-action="flip-h">
-      <i class="fa-solid fa-arrows-left-right"></i>
-      <span>Flip Horizontal</span>
-    </div>
-    <div class="context-menu-item" data-action="flip-v">
-      <i class="fa-solid fa-arrows-up-down"></i>
-      <span>Flip Vertical</span>
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item" data-action="select-all">
-      <i class="fa-solid fa-border-all"></i>
-      <span>Select All</span>
-      <span class="context-shortcut">Ctrl+A</span>
-    </div>
-    <div class="context-menu-item" data-action="deselect">
-      <i class="fa-solid fa-xmark"></i>
-      <span>Deselect</span>
-      <span class="context-shortcut">Esc</span>
-    </div>
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item text-danger" data-action="delete">
-      <i class="fa-solid fa-trash-can"></i>
-      <span>Delete Selection</span>
-      <span class="context-shortcut">Del</span>
-    </div>
-  </div>
+  <div id="studio-context-menu" class="studio-context-menu hidden"></div>
 
   <!-- ================= GRID OVERVIEW CELL CONTEXT MENU ================= -->
   <div id="grid-context-menu" class="studio-context-menu hidden">
@@ -2061,6 +1987,11 @@
   <script src="js/pix2-format.js?v=2.0.0"></script>
   <script src="js/selection-transform.js?v=2.0.0"></script>
   <script src="js/structure-operations.js?v=2.0.0"></script>
+  <script src="js/region-selection.js?v=2.0.0"></script>
+  <script src="js/pix2-ai-prompt.js?v=2.0.0"></script>
+  <script src="js/editor-menu.js?v=2.0.0"></script>
+  <script src="js/editor-outliner.js?v=2.0.0"></script>
+  <script src="js/editor-toolbar.js?v=2.0.0"></script>
   <script src="js/editor-state.js?v=2.0.0"></script>
   <script src="js/tools.js?v=2.0.0"></script>
   <script src="js/modular-export.js?v=2.0.0"></script>
@@ -2068,6 +1999,9 @@
   <script src="js/animation-player.js?v=2.0.0"></script>
   <script src="js/tab-strip.js?v=2.0.0"></script>
   <script src="js/viewport-pan-zoom.js?v=2.0.0"></script>
+  <script src="js/editor-rulers.js"></script>
+  <script src="js/editor-canvas.js"></script>
+  <script src="js/editor-workspace-storage.js"></script>
   <script src="js/maintenance-banner.js?v=2.0.0"></script>
   <script src="js/app.js?v=2.0.0"></script>
 

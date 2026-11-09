@@ -4,7 +4,7 @@
  *
  * Requirements:
  * - Bilingual: Top Vietnamese, Bottom English (no toggle switch, both displayed).
- * - Periodic: Re-displays every 15 minutes after dismissal.
+ * - Periodic: Re-displays every 30 minutes after dismissal.
  * - Responsive: Works smoothly on desktop, tablet, and mobile without obstructing core tools.
  * - Dismissible: User can close/dismiss anytime.
  * - Modular & Toggable: Master toggle (enabled: true/false) to enable/disable cleanly without dirtying code.
@@ -67,7 +67,7 @@
           box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
-          z-index: 999999;
+          z-index: 300;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           box-sizing: border-box;
           opacity: 0;
@@ -80,6 +80,9 @@
         .noira-maintenance-banner.is-visible {
           opacity: 1;
           transform: translateY(0) scale(1);
+        }
+
+        .noira-maintenance-banner.is-visible button {
           pointer-events: auto;
         }
 

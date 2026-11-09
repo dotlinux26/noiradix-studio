@@ -12,6 +12,13 @@
 
 ---
 
+## Editor stabilization
+
+- [Requirements and verification ledger](discussion/STABILIZATION_LEDGER.md)
+- [Shared editor behavior and implementation decisions](discussion/EDITOR_BEHAVIOR.md)
+- [Studio and PixelArt editor engine audit](discussion/EDITOR_ENGINE_AUDIT.md)
+- [Repository workflow for agents](../AGENTS.md)
+
 ## 📸 Studio Visual Tour
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:

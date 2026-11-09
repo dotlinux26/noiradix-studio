@@ -121,17 +121,12 @@ async function runSuite() {
   // -----------------------------------------------------------------------------
   console.log('\nTest 4: P1-02 Ruler Viewport Ticks Culling Range');
   {
-    function computeRulerTickRange(cw, interval, minX, maxX) {
-      const startX = Math.max(0, Math.floor((minX - interval) / interval) * interval);
-      const endX = Math.min(cw, Math.ceil((maxX + interval) / interval) * interval);
-      const ticks = [];
-      for (let x = startX; x <= endX; x += interval) {
-        ticks.push(x);
-      }
-      return ticks;
-    }
-
-    const ticks = computeRulerTickRange(1024, 16, 100, 200);
+    const { labelInterval, tickRange } = require('../js/editor-rulers.js');
+    assert.equal(labelInterval(6), 8);
+    assert.equal(labelInterval(0.5), 128);
+    const { start, end } = tickRange(1024, 16, 100, 200);
+    const ticks = [];
+    for (let x = start; x <= end; x += 16) ticks.push(x);
     assert(ticks[0] <= 100, 'First tick must cover margin before minX');
     assert(ticks[ticks.length - 1] >= 200, 'Last tick must cover margin after maxX');
     assert(ticks.length < 20, `Visible ticks count must be under 20 (got ${ticks.length}), not full 64`);
@@ -332,7 +327,7 @@ async function runSuite() {
     PixelArtApp.applyPixelDiff(testPixels, diff, 'backward');
     assert.deepStrictEqual(testPixels, prev, 'Backward diff application must restore prev pixels');
 
-    PixelArtApp.createNewDocument(64, 64, 'Diff Test Doc');
+    PixelArtApp.createNewDocument(64, 64, 'Diff Test Doc', { version: '1.0' });
     const cell = PixelArtApp.getArtworkCell();
     assert(cell, 'Artwork cell must exist');
 
@@ -365,7 +360,7 @@ async function runSuite() {
   // -----------------------------------------------------------------------------
   console.log('\nTest 14: Phase 4 History Budget Pruning & Oldest Entry Re-Basing');
   {
-    PixelArtApp.createNewDocument(32, 32, 'Budget Test');
+    PixelArtApp.createNewDocument(32, 32, 'Budget Test', { version: '1.0' });
     const cell = PixelArtApp.getArtworkCell();
 
     cell.pixels['1,1'] = '#111111';
@@ -546,7 +541,7 @@ async function runSuite() {
   // -----------------------------------------------------------------------------
   console.log('\nTest 20: History Transaction & Baseline Continuity for Non-stroke Operations');
   {
-    PixelArtApp.createNewDocument(32, 32, 'History Baseline Continuity');
+    PixelArtApp.createNewDocument(32, 32, 'History Baseline Continuity', { version: '1.0' });
     const cell = PixelArtApp.getArtworkCell();
     assert(cell, 'Cell must exist');
 
@@ -771,7 +766,7 @@ async function runSuite() {
     );
 
     // Behavioral test of first-check divergence detection on unverified recovery:
-    PixelArtApp.createNewDocument(16, 16, 'UnverifiedSession');
+    PixelArtApp.createNewDocument(16, 16, 'UnverifiedSession', { version: '1.0' });
     const cell = PixelArtApp.getArtworkCell();
     cell.pixels['0,0'] = '#ff0000'; // Canvas has unverified edit
     PixelArtApp.setDirty(true);
@@ -807,7 +802,7 @@ async function runSuite() {
   // -----------------------------------------------------------------------------
   console.log('\nTest 25: Selection Escape Restore Invariant');
   {
-    PixelArtApp.createNewDocument(8, 8, 'Selection cancel');
+    PixelArtApp.createNewDocument(8, 8, 'Selection cancel', { version: '1.0' });
     const cell = PixelArtApp.getArtworkCell();
     cell.pixels = { '2,2': '#ff0000', '3,2': '#00ff00' };
     PixelArtApp.state.selection = { x: 2, y: 2, w: 2, h: 1 };
@@ -829,7 +824,7 @@ async function runSuite() {
     const studioSource = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
     assert(studioSource.includes('state.cellZoom'), 'Studio selection controller must use EditorState.cellZoom');
     assert(studioSource.includes('function cancelFloatingSelection()'), 'Studio must provide cancellation restoration logic');
-    assert(studioSource.includes('ensureFloatingSelection();\n      renderMovingSelectionOverlay();'),
+    assert(/ensureFloatingSelection\(\);\s+renderMovingSelectionOverlay\(\);/.test(studioSource),
       'Studio move interaction must use the shared lift transaction with a cancellation baseline');
     assert(studioSource.includes("addEventListener('pointercancel'"),
       'Studio must cancel interrupted selection gestures');
@@ -867,7 +862,7 @@ async function runSuite() {
     assert.deepStrictEqual(regionB.pixels, { '1,1': '#00ff00' }, 'Esc must not write into a newly selected sibling region');
 
     const source = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
-    assert(source.includes('invalidateRulerCache();\n    repaintCanvas();\n    renderRulers();'),
+    assert(/invalidateRulerCache\(\);\s+repaintCanvas\(\);\s+renderRulers\(\);/.test(source),
       'Theme changes must invalidate and repaint cached rulers immediately');
     console.log('  [PASS] Selection transactions keep their structural target and theme changes repaint ruler caches');
   }

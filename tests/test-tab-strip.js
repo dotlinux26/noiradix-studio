@@ -61,6 +61,7 @@ assert.deepStrictEqual(TabStrip.computeReorder(ids, 'd', null, true), ['a', 'b',
 console.log('  [PASS] null reference appends deterministically');
 
 assert.strictEqual(TabStrip.attach(null, {}), null);
+assert.doesNotThrow(() => TabStrip.render(null, [], null, {}));
 console.log('  [PASS] adapter tolerates a missing strip');
 
 for (const entry of ['index.html', 'pixelart/index.html']) {
@@ -75,8 +76,8 @@ console.log('  [PASS] both static entry points load the shared module in control
 
 for (const file of ['js/app.js', 'pixelart/js/pixelart-app.js']) {
   const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-  assert.ok(source.includes('tab.dataset.tabId = session.id'), `${file} exposes stable tab IDs`);
-  assert.ok(source.includes('window.NoiraTabStrip.attach'), `${file} attaches the shared controller`);
+  assert.ok(source.includes('NoiraTabStrip.render('), `${file} uses the shared renderer`);
+  assert.ok(!source.includes('tab.dataset.tabId = session.id'), `${file} delegates tab markup to the shared renderer`);
   // New-tab button is now in HTML (pinned outside the strip). Render only iterates sessions.
   assert.ok(!source.includes('const newBtn = document.createElement'), `${file} no longer creates new-tab button in JS`);
 }

@@ -1627,6 +1627,7 @@ const PIX2 = (function () {
     }
     const isolatedId = options.isolatedNodeId || null;
     const dimFactor = options.dimNonIsolated !== undefined ? options.dimNonIsolated : 1.0;
+    const coordinates = options.coordinates;
     const resultPixels = {};
 
     function nodeIsIsolatedOrChild(node, inIsolatedPath) {
@@ -1638,33 +1639,22 @@ const PIX2 = (function () {
       const isVisible = parentVisible && (node.visible !== false);
       if (!isVisible) return;
       const isIsolated = nodeIsIsolatedOrChild(node, inIsolatedPath);
-      let effectiveNodeOpacity = parentOpacity;
-      if (isolatedId && !isIsolated) {
-        effectiveNodeOpacity *= dimFactor;
-      }
       const localOpacity = node.type === 'layer' && node.opacity !== undefined ? node.opacity : 1.0;
-      const contentOpacity = effectiveNodeOpacity * localOpacity;
+      const inheritedOpacity = parentOpacity * localOpacity;
+      const contentOpacity = isolatedId && !isIsolated ? inheritedOpacity * dimFactor : inheritedOpacity;
 
-      if (node.pixels) {
-        if (isolatedId && !isIsolated && dimFactor <= 0.0) {
-          // dimmed out completely
-        } else {
-          for (const coord in node.pixels) {
-            const hex = node.pixels[coord];
-            if (!hex) continue;
-            if (contentOpacity <= 0.0) {
-              // invisible
-            } else {
-              const composited = compositeColorsSourceOver(resultPixels[coord], hex, contentOpacity);
-              if (composited) resultPixels[coord] = composited;
-            }
-          }
+      if (node.pixels && contentOpacity > 0) {
+        for (const coord of coordinates || Object.keys(node.pixels)) {
+          const hex = node.pixels[coord];
+          if (!hex) continue;
+          const composited = compositeColorsSourceOver(resultPixels[coord], hex, contentOpacity);
+          if (composited) resultPixels[coord] = composited;
         }
       }
 
       const childList = node.children || node.layers;
       if (childList && Array.isArray(childList)) {
-        const nextOpacity = contentOpacity;
+        const nextOpacity = inheritedOpacity;
         for (const child of childList) {
           renderNode(child, isVisible, nextOpacity, isIsolated);
         }
@@ -1674,7 +1664,7 @@ const PIX2 = (function () {
     for (const layer of cell.layers) {
       renderNode(layer, true, 1.0, false);
     }
-    cell.pixels = resultPixels;
+    if (!isolatedId && !coordinates) cell.pixels = resultPixels;
     return resultPixels;
   }
 

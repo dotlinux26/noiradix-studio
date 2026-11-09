@@ -19,6 +19,49 @@
   'use strict';
 
   const DEFAULT_ZOOM_LADDER = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+  const ARTWORK_ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+
+  function artworkZoomLimit(width, height) {
+    const longestSide = Math.max(width, height);
+    if (longestSide >= 512) return 8;
+    if (longestSide >= 256) return 16;
+    if (longestSide >= 128) return 32;
+    return 64;
+  }
+
+  function artworkZoomLadder(width, height) {
+    const limit = artworkZoomLimit(width, height);
+    return ARTWORK_ZOOM_LADDER.filter(zoom => zoom <= limit);
+  }
+
+  function stepArtworkZoom(zoom, direction, width, height) {
+    const ladder = artworkZoomLadder(width, height);
+    if (direction > 0) return ladder.find(step => step > zoom + 0.001) ?? ladder.at(-1);
+    return ladder.reverse().find(step => step < zoom - 0.001) ?? ladder.at(-1);
+  }
+
+  function fitArtworkZoom(viewportW, viewportH, width, height, padding) {
+    return computeFitZoom(viewportW, viewportH, width, height, artworkZoomLadder(width, height), padding);
+  }
+
+  function formatArtworkZoom(zoom) {
+    return zoom < 1 ? `${Math.round(zoom * 100)}%` : `${zoom}×`;
+  }
+
+  function gridFitZoom(viewportW, viewportH, artworkW, artworkH, fixedW, fixedH) {
+    const scale = Math.min((viewportW - fixedW) / artworkW, (viewportH - fixedH) / artworkH, 16);
+    return scale > 0 ? scale : null;
+  }
+
+  function gridZoomOffset(offset, header, cellSize, gap, oldZoom, newZoom, count) {
+    if (offset <= header) return offset;
+    const oldCell = cellSize * oldZoom;
+    const span = oldCell + gap;
+    const index = Math.min(count, Math.floor((offset - header) / span));
+    const within = offset - header - index * span;
+    return header + index * (cellSize * newZoom + gap)
+      + (index === count ? within : Math.min(within, oldCell) * newZoom / oldZoom + Math.max(0, within - oldCell));
+  }
 
   /**
    * Pure anchor-centered zoom formula (exported for Node testing)
@@ -308,13 +351,135 @@
     return new ViewportController(viewport, content, options);
   }
 
+  function enableHorizontalDragScroll(container, dragClass = 'is-dragging', { dragFromButtons = false } = {}) {
+    bindDragScroll(container, false, dragClass, dragFromButtons);
+  }
+
+  function enableVerticalDragScroll(container, dragClass = 'is-dragging', { dragFromButtons = false } = {}) {
+    bindDragScroll(container, true, dragClass, dragFromButtons);
+  }
+
+  function bindDragScroll(container, vertical, dragClass, dragFromButtons) {
+    if (!container) return;
+    let gesture = null;
+    let suppressClick = false;
+    const scrollOffset = vertical ? 'scrollTop' : 'scrollLeft';
+    const contentExtent = vertical ? 'scrollHeight' : 'scrollWidth';
+    const viewportExtent = vertical ? 'clientHeight' : 'clientWidth';
+    const pointer = vertical ? 'clientY' : 'clientX';
+    const hasOverflow = () => container[contentExtent] > container[viewportExtent];
+    container.addEventListener('pointerenter', () => {
+      container.classList.toggle('can-drag-scroll', hasOverflow());
+    });
+    container.addEventListener('pointerdown', event => {
+      suppressClick = false;
+      if (event.button !== 0 || !hasOverflow() ||
+          (!dragFromButtons && event.target.closest('button, [role="button"]')) ||
+          event.target.closest('a, input, select, textarea, [contenteditable], .studio-tab, .project-tabs-strip, .pa-dim-badge, .pa-swatch, .pa-color-slot, .file-path-pill')) return;
+      gesture = { id: event.pointerId, start: event[pointer], scroll: container[scrollOffset] };
+    });
+    container.addEventListener('pointermove', event => {
+      if (gesture?.id !== event.pointerId) return;
+      const distance = event[pointer] - gesture.start;
+      if (!suppressClick && Math.abs(distance) < 4) return;
+      if (!suppressClick) {
+        suppressClick = true;
+        container.setPointerCapture(event.pointerId);
+        container.classList.add(dragClass);
+      }
+      container[scrollOffset] = gesture.scroll - distance;
+    });
+    function end(event) {
+      if (gesture?.id !== event.pointerId) return;
+      gesture = null;
+      container.classList.remove(dragClass);
+    }
+    container.addEventListener('pointerup', end);
+    container.addEventListener('pointercancel', end);
+    container.addEventListener('lostpointercapture', end);
+    container.addEventListener('pointerleave', event => {
+      if (!suppressClick) end(event);
+    });
+    container.addEventListener('click', event => {
+      if (suppressClick && event.detail > 0) {
+        suppressClick = false;
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    }, true);
+    container.addEventListener('wheel', event => {
+      if (!hasOverflow() || event.ctrlKey) return;
+      const delta = vertical || Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      if (!delta) return;
+      const unit = event.deltaMode === 1 ? 33 : (event.deltaMode === 2 ? container[viewportExtent] : 1);
+      container[scrollOffset] += delta * unit;
+      event.preventDefault();
+    }, { passive: false });
+  }
+
   const NoiraViewport = {
     DEFAULT_ZOOM_LADDER,
+    artworkZoomLimit,
+    stepArtworkZoom,
+    fitArtworkZoom,
+    formatArtworkZoom,
+    gridFitZoom,
+    gridZoomOffset,
     computeAnchorZoomPan,
     computeCenterPan,
     computeFitZoom,
+    enableHorizontalDragScroll,
+    enableVerticalDragScroll,
+    bindInspectorResize,
     attach
   };
+
+  function bindInspectorResize(handle, panel, minSize, minWorkspace, storageKey, onResize, vertical = false) {
+    if (!handle || !panel) return;
+    const offset = vertical ? 'offsetHeight' : 'offsetWidth';
+    const property = vertical ? 'height' : 'width';
+    const pointer = vertical ? 'clientY' : 'clientX';
+    function resize(size, persist = false) {
+      const extent = vertical ? innerHeight : handle.parentElement.clientWidth;
+      const maxSize = Math.max(minSize, extent - minWorkspace);
+      const next = Math.max(minSize, Math.min(maxSize, Math.round(size)));
+      panel.style[property] = next + 'px';
+      handle.setAttribute('aria-valuenow', next);
+      handle.setAttribute('aria-valuemin', minSize);
+      handle.setAttribute('aria-valuemax', maxSize);
+      onResize?.(next);
+      if (persist) localStorage.setItem(storageKey, String(next));
+    }
+    let start;
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      start = { id: event.pointerId, position: event[pointer], size: panel[offset] };
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add('dragging');
+      event.preventDefault();
+    });
+    handle.addEventListener('pointermove', event => {
+      if (start?.id === event.pointerId) {
+        const delta = event[pointer] - start.position;
+        resize(start.size + (vertical ? delta : -delta));
+      }
+    });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      handle.addEventListener(type, event => {
+        if (start?.id !== event.pointerId) return;
+        start = null;
+        handle.classList.remove('dragging');
+        resize(panel[offset], true);
+      });
+    }
+    handle.addEventListener('keydown', event => {
+      const [increase, decrease] = vertical ? ['ArrowDown', 'ArrowUp'] : ['ArrowLeft', 'ArrowRight'];
+      if (event.key !== increase && event.key !== decrease) return;
+      event.preventDefault();
+      event.stopPropagation();
+      resize(panel[offset] + (event.key === increase ? 16 : -16), true);
+    });
+  }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = NoiraViewport;

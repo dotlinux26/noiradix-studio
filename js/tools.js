@@ -5,6 +5,139 @@
 const Tools = (function () {
   'use strict';
 
+  const structure = typeof StructureOps !== 'undefined' ? StructureOps
+    : (typeof require === 'function' ? require('./structure-operations.js') : null);
+
+  function brushBounds(x, y, size, width, height) {
+    const offset = Math.floor(size / 2);
+    const left = Math.max(0, x - offset);
+    const top = Math.max(0, y - offset);
+    return { x: left, y: top, w: Math.min(width, x - offset + size) - left, h: Math.min(height, y - offset + size) - top };
+  }
+
+  // Odd footprints center on pixel centers. Even footprints center on grid
+  // intersections so the preview and raster are equally spaced on both sides.
+  function brushPoint(view, size, dimensions) {
+    const snap = size % 2 ? Math.floor : Math.round;
+    return {
+      x: Math.max(0, Math.min(dimensions.w - (size % 2), snap(view.x / view.zoom))),
+      y: Math.max(0, Math.min(dimensions.h - (size % 2), snap(view.y / view.zoom)))
+    };
+  }
+
+  function drawBrushOutline(ctx, x, y, size, dimensions, zoom) {
+    const box = brushBounds(x, y, size, dimensions.w, dimensions.h);
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#312e81';
+    ctx.strokeRect(box.x * zoom + 0.5, box.y * zoom + 0.5, box.w * zoom - 1, box.h * zoom - 1);
+    ctx.strokeStyle = '#fff';
+    ctx.setLineDash([3, 3]);
+    ctx.strokeRect(box.x * zoom + 0.5, box.y * zoom + 0.5, box.w * zoom - 1, box.h * zoom - 1);
+    ctx.restore();
+  }
+
+  function alignRaster(target, size, direction) {
+    const box = target && structure.bounds(target);
+    if (!box || box.w > size.w || box.h > size.h) return false;
+    const dx = {
+      left: -box.x, right: size.w - box.w - box.x,
+      center: Math.floor((size.w - box.w) / 2) - box.x
+    }[direction] ?? 0;
+    const dy = {
+      top: -box.y, bottom: size.h - box.h - box.y,
+      center: Math.floor((size.h - box.h) / 2) - box.y
+    }[direction] ?? 0;
+    if (!dx && !dy) return false;
+    const pixels = {};
+    for (const [key, color] of Object.entries(target.pixels)) {
+      const [x, y] = key.split(',').map(Number);
+      pixels[`${x + dx},${y + dy}`] = color;
+    }
+    target.pixels = pixels;
+    return true;
+  }
+
+  function brushStroke(x0, y0, x1, y1, size, options, plot) {
+    const width = options.w;
+    const height = options.h;
+    const visited = new Set();
+    function emit(x, y) {
+      const key = y * width + x;
+      if (visited.has(key)) return;
+      visited.add(key);
+      plot(x, y);
+    }
+    line(x0, y0, x1, y1, (x, y) => {
+      const box = brushBounds(x, y, size, width, height);
+      for (let py = box.y; py < box.y + box.h; py++) {
+        for (let px = box.x; px < box.x + box.w; px++) {
+          symmetricPixels(px, py, options, emit);
+        }
+      }
+    });
+  }
+
+  function symmetricPixels(x, y, options, plot) {
+    if (x < 0 || y < 0 || x >= options.w || y >= options.h) return;
+    plot(x, y);
+    if (options.symH) plot(options.w - 1 - x, y);
+    if (options.symV) plot(x, options.h - 1 - y);
+    if (options.symH && options.symV) plot(options.w - 1 - x, options.h - 1 - y);
+  }
+
+  function shapePixels(tool, x0, y0, x1, y1, options, plot) {
+    const emit = (x, y) => symmetricPixels(x, y, options, plot);
+    if (tool === 'line') {
+      line(x0, y0, x1, y1, emit);
+      return;
+    }
+    let dx = x1 - x0;
+    let dy = y1 - y0;
+    if (options.shift) {
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = (dx < 0 ? -1 : 1) * side;
+      dy = (dy < 0 ? -1 : 1) * side;
+    }
+    const xa = options.center ? x0 - Math.abs(dx) : Math.min(x0, x0 + dx);
+    const xb = options.center ? x0 + Math.abs(dx) : Math.max(x0, x0 + dx);
+    const ya = options.center ? y0 - Math.abs(dy) : Math.min(y0, y0 + dy);
+    const yb = options.center ? y0 + Math.abs(dy) : Math.max(y0, y0 + dy);
+    if (tool.startsWith('rect')) rect(xa, ya, xb - xa + 1, yb - ya + 1, tool.endsWith('-fill'), emit);
+    else ellipse(xa, ya, xb, yb, tool.endsWith('-fill'), emit);
+  }
+
+  function brushColor(color, opacity) {
+    if (opacity === 100 || opacity === 0) return opacity ? color : null;
+    const hex = color.slice(1);
+    const expanded = hex.length <= 4 ? [...hex].map(ch => ch + ch).join('') : hex;
+    const alpha = expanded.length === 8 ? parseInt(expanded.slice(6), 16) : 255;
+    const value = Math.round(alpha * opacity / 100);
+    return value ? `#${expanded.slice(0, 6)}${value.toString(16).padStart(2, '0')}` : null;
+  }
+
+  function bindBrushSettings() {
+    const settings = { size: 1, eraserSize: 1, opacity: 100 };
+    for (const [id, key, min, max] of [
+      ['brush-size', 'size', 1, 32], ['eraser-size', 'eraserSize', 1, 32], ['brush-opacity', 'opacity', 0, 100]
+    ]) {
+      const input = document.getElementById(id);
+      const slider = document.getElementById(id + '-slider');
+      input.addEventListener('change', () => {
+        if (Number.isFinite(input.valueAsNumber)) {
+          settings[key] = Math.max(min, Math.min(max, Math.round(input.valueAsNumber)));
+        }
+        input.value = settings[key];
+        if (slider) slider.value = settings[key];
+      });
+      slider?.addEventListener('input', () => {
+        settings[key] = slider.valueAsNumber;
+        input.value = settings[key];
+      });
+    }
+    return settings;
+  }
+
   // Bresenham's line algorithm with guard counter
   function line(x0, y0, x1, y1, callback) {
     if (isNaN(x0) || isNaN(y0) || isNaN(x1) || isNaN(y1)) return;
@@ -44,50 +177,21 @@ const Tools = (function () {
   // PIX2 1.1 STRUCTURAL TARGET RESOLUTION HELPERS
   // ===========================================================================
 
-  function findFirstEditableRegion(node, ancestorsEditable = true) {
-    if (!node || !ancestorsEditable || node.locked || node.visible === false) return null;
-    if (node.type === 'region') return node;
-    for (const child of (node.children || [])) {
-      const region = findFirstEditableRegion(child, true);
-      if (region) return region;
-    }
-    return null;
-  }
-
   function getTargetForPlot(cell, explicitTargetId) {
     if (!cell) return null;
     if (cell.layers && cell.layers.length > 0) {
       if (explicitTargetId) {
         const targetId = (typeof explicitTargetId === 'object' && explicitTargetId !== null) ? explicitTargetId.id : explicitTargetId;
-        for (const layer of cell.layers) {
-          function findInNode(n) {
-            if (n.id === targetId) return n;
-            for (const c of (n.children || [])) {
-              const res = findInNode(c);
-              if (res) return res;
-            }
-            return null;
-          }
-          const found = findInNode(layer);
-          if (found) {
-            if (found.locked || found.visible === false) return null;
-            // PIX2 1.1 raster data belongs to Region nodes. Selecting a Layer
-            // or Group changes focus, but drawing must resolve to an editable
-            // descendant instead of silently creating layer.pixels.
-            return found.type === 'region' ? found : findFirstEditableRegion(found);
-          }
-        }
+        const match = structure?.findNode(cell, targetId);
+        return structure?.isEditable(match) ? structure.firstEditableRegion(match.node) : null;
       }
       const activeState = (typeof window !== 'undefined' && window.state) ? window.state : (typeof global !== 'undefined' && global.state) ? global.state : null;
-      if (activeState && typeof activeState.getActiveRegion === 'function') {
+      if (activeState?.doc?.cells?.[cell.id] === cell && typeof activeState.getActiveRegion === 'function') {
         const reg = activeState.getActiveRegion(cell.id);
-        if (reg) {
-          if (reg.locked || reg.visible === false) return null;
-          return reg;
-        }
+        return structure?.isEditable(structure.findNode(cell, reg?.id)) ? reg : null;
       }
       for (const layer of cell.layers) {
-        const region = findFirstEditableRegion(layer);
+        const region = structure?.firstEditableRegion(layer);
         if (region) return region;
       }
       return null;
@@ -103,21 +207,21 @@ const Tools = (function () {
       return target ? [target] : [];
     }
     const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
-    if (activeState && activeState.activeRegionId) {
-      const found = activeState.findNode(cell.id, activeState.activeRegionId);
-      if (found && found.node.type === 'region' && !found.node.locked && found.node.visible !== false) {
-        return [found.node];
-      }
+    if (activeState?.getActiveCell?.() === cell &&
+        (activeState.isolatedNodeId || activeState.activeRegionId || activeState.activeLayerId)) {
+      const target = getTargetForPlot(cell);
+      return target ? [target] : [];
     }
     const list = [];
     function collect(nodes) {
       for (const n of nodes || []) {
-        if (n.type === 'region' && !n.locked && n.visible !== false) list.push(n);
-        if (n.children) collect(n.children);
+        if (n.locked || n.visible === false) continue;
+        if (n.type === 'region') list.push(n);
+        else collect(n.children);
       }
     }
     collect(cell.layers);
-    return list.length > 0 ? list : [cell];
+    return list;
   }
 
   function syncCompositeIfStructured(cell) {
@@ -187,6 +291,10 @@ const Tools = (function () {
     const maxX = Math.max(x0, x1);
     const minY = Math.min(y0, y1);
     const maxY = Math.max(y0, y1);
+    if (minX === maxX || minY === maxY) {
+      line(minX, minY, maxX, maxY, callback);
+      return;
+    }
     let a = Math.abs(maxX - minX);
     let b = Math.abs(maxY - minY);
     let b1 = b & 1;
@@ -195,8 +303,8 @@ const Tools = (function () {
     let err = dx + dy + b1 * a * a;
     let e2;
 
-    let y_top = minY;
-    let y_bot = maxY;
+    let y_top = minY + Math.floor((b + 1) / 2);
+    let y_bot = y_top - b1;
     let x_left = minX;
     let x_right = maxX;
 
@@ -233,7 +341,7 @@ const Tools = (function () {
       if (e2 >= dx || 2 * err > dy) { x_left++; x_right--; err += dx += b1; }
     } while (x_left <= x_right);
 
-    while (y_top - y_bot <= b) {
+    while (y_top - y_bot < b) {
       plot4(x_left - 1, x_right + 1, y_top, y_bot);
       y_top++; y_bot--;
     }
@@ -458,6 +566,14 @@ const Tools = (function () {
   }
 
   return {
+    brushStroke,
+    brushPoint,
+    symmetricPixels,
+    shapePixels,
+    drawBrushOutline,
+    alignRaster,
+    brushColor,
+    bindBrushSettings,
     line,
     rect,
     floodFill,

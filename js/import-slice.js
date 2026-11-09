@@ -344,7 +344,7 @@
     const cellIdPrefix = options.cellPrefix || 'imported_';
 
     // Grouping for auto-animation detection (e.g. walk_0, walk_1)
-    const animGroups = {};
+    const animGroups = Object.create(null);
 
     // Ensure document cell dimensions accommodate the imported frames
     let maxImportW = 0, maxImportH = 0;
@@ -390,21 +390,28 @@
     function inferRowFromTag(tag, customTagMap) {
       if (!tag) return null;
       const t = tag.trim().toLowerCase();
+      for (const [index, direction] of ['down_right', 'up_right', 'up_left', 'down_left'].entries()) {
+        if (t.startsWith(direction) || t.startsWith(`walk_${direction}`)) return index + 4;
+      }
       if (t === 'down' || t === 'walk_down' || t.startsWith('down') || t.startsWith('walk_down')) return 0;
       if (t === 'up' || t === 'walk_up' || t.startsWith('up') || t.startsWith('walk_up')) return 1;
       if (t === 'right' || t === 'walk_right' || t.startsWith('right') || t.startsWith('walk_right')) return 2;
       if (t === 'left' || t === 'walk_left' || t.startsWith('left') || t.startsWith('walk_left')) return 3;
-      if (t === 'down_right' || t.startsWith('down_right')) return 4;
-      if (t === 'up_right' || t.startsWith('up_right')) return 5;
-      if (t === 'up_left' || t.startsWith('up_left')) return 6;
-      if (t === 'down_left' || t.startsWith('down_left')) return 7;
       if (customTagMap && customTagMap.has(t)) return customTagMap.get(t);
       return null;
     }
 
     const customTagMap = new Map();
+    const assignedRows = new Set();
     let nextAvailableRow = 0;
     frames.forEach(f => {
+      const inferred = inferRowFromTag(f.tag);
+      if (f.row !== undefined) {
+        assignedRows.add(f.row);
+        if (f.tag?.trim() && inferred === null) customTagMap.set(f.tag.trim().toLowerCase(), f.row);
+      } else if (inferred !== null) {
+        assignedRows.add(inferred);
+      }
       if (f.row !== undefined && f.row >= nextAvailableRow) {
         nextAvailableRow = f.row + 1;
       }
@@ -428,9 +435,8 @@
         } else if (f.tag && f.tag.trim()) {
           const tKey = f.tag.trim().toLowerCase();
           if (!customTagMap.has(tKey)) {
-            while (nextAvailableRow === 0 || nextAvailableRow === 1 || nextAvailableRow === 2 || nextAvailableRow === 3) {
-              nextAvailableRow = 4;
-            }
+            nextAvailableRow = Math.max(4, nextAvailableRow);
+            while (assignedRows.has(nextAvailableRow)) nextAvailableRow++;
             customTagMap.set(tKey, nextAvailableRow++);
           }
           targetRow = customTagMap.get(tKey);
@@ -464,6 +470,9 @@
       const cellId = (options.useGridCellIds && !options.cellPrefix)
         ? `cell_${targetRow}_${targetCol}`
         : `${cellIdPrefix}${f.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      if (options.rejectDuplicateCells && Object.hasOwn(doc.cells, cellId)) {
+        throw new Error(`Multiple slices target row ${targetRow + 1}, frame ${targetCol}`);
+      }
 
       const targetDir = inferDirectionFromTagOrRow(f.tag, targetRow);
 
@@ -487,7 +496,7 @@
             type: 'layer',
             id: layerId,
             cell: cellId,
-            name: 'Artwork',
+            name: options.layerName || 'Artwork',
             visible: true,
             locked: false,
             opacity: 1.0,

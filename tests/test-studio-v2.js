@@ -326,9 +326,9 @@ console.log('\nTest 8: Studio 2.0 Structure & Layers DOM Contract Verification')
   const fs = require('fs');
   const path = require('path');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const toolbar = fs.readFileSync(path.join(__dirname, '../js/editor-toolbar.js'), 'utf8');
 
   const requiredIds = [
-    'btn-tool-region-select',
     'isolation-banner',
     'isolation-breadcrumb-text',
     'btn-exit-isolation',
@@ -346,6 +346,8 @@ console.log('\nTest 8: Studio 2.0 Structure & Layers DOM Contract Verification')
   for (const id of requiredIds) {
     assert(indexHtml.includes(`id="${id}"`), `index.html must define DOM element #${id}`);
   }
+  assert(indexHtml.includes('src="js/editor-toolbar.js') && toolbar.includes("'btn-tool-region-select'"),
+    'Studio loads its Region Select control from the shared toolbar');
 
   pass('Studio 2.0 Structure & Layers UI contract verified in production index.html');
 }
@@ -467,11 +469,11 @@ console.log('\nTest 12: Empty Workspace State & Adjacent Tab Placement Invariant
   assert(stripIdx !== -1 && newBtnIdx !== -1 && stripIdx < newBtnIdx,
     'pixelart/index.html must place #pa-project-tabs-strip before #pa-btn-project-new-tab for adjacent [tab][+] layout');
 
-  // 4. Tab Strip shrink-wrap styles in both Studio and PixelArt CSS
-  assert(styleCss.includes('.project-tabs-strip') && styleCss.includes('max-width: calc(100% - 36px);'),
-    'css/style.css must shrink-wrap .project-tabs-strip with max-width: calc(100% - 36px)');
-  assert(paStyleCss.includes('.project-tabs-strip') && paStyleCss.includes('max-width: calc(100% - 36px);'),
-    'pixelart.css must shrink-wrap .project-tabs-strip with max-width: calc(100% - 36px)');
+  // 4. Both applications use a single shrink-wrapped tab component.
+  const tabCss = fs.readFileSync(path.join(__dirname, '../css/tab-strip.css'), 'utf8');
+  assert(tabCss.includes('.project-tabs-strip') && tabCss.includes('max-width: calc(100% - 36px);'));
+  assert(indexHtml.includes('href="css/tab-strip.css"') && paIndexHtml.includes('href="../css/tab-strip.css"'));
+  assert(!styleCss.includes('.project-tab {') && !paStyleCss.includes('.project-tab {'));
 
   // 5. Studio closeProjectSession empty workspace transition & RAM purge
   assert(appJs.includes('activeProjectId = null;') && appJs.includes('studio-empty-workspace'),

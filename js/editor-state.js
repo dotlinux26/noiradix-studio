@@ -20,6 +20,7 @@ class EditorState {
     // Tool options
     this.rectFill = false; // outline vs fill
     this.symmetry = false; // vertical symmetry mirror
+    this.symmetryVertical = false;
     this.showGridLines = true;
     this.showRulers = true;
     this.checkerboardBg = true;
@@ -93,6 +94,10 @@ class EditorState {
     if (!preserveTabs) {
       this.openCellTabs = [];
       this.activeTabId = 'tab-grid-overview';
+      this.activeLayerId = null;
+      this.activeGroupId = null;
+      this.activeRegionId = null;
+      this.isolatedNodeId = null;
     } else {
       if (this.doc && this.doc.cells) {
         this.openCellTabs = (this.openCellTabs || []).filter(cid => Boolean(this.doc.cells[cid]));
@@ -119,12 +124,14 @@ class EditorState {
 
   // End stroke and record single undo step if anything changed
   endStroke(strokeName = 'Draw Stroke') {
-    if (!this.doc || !this.strokePreState || !_PIX2) return;
+    if (!this.doc || !this.strokePreState || !_PIX2) return false;
     const currentState = _PIX2.serialize(this.doc);
-    if (currentState !== this.strokePreState) {
+    const changed = currentState !== this.strokePreState;
+    if (changed) {
       this.saveSnapshot(strokeName);
     }
     this.strokePreState = null;
+    return changed;
   }
 
   // Record undo snapshot
@@ -354,23 +361,8 @@ class EditorState {
     // In isolation mode: target the isolated node
     if (this.isolatedNodeId) {
       const match = this.findNode(cell.id, this.isolatedNodeId);
-      if (match && match.node) {
-        if (match.node.type === 'region') return match.node;
-        if (match.node.children) {
-          function findInNode(nodes) {
-            for (const n of nodes || []) {
-              if (n.type === 'region' && n.visible !== false && !n.locked) return n;
-              if (n.children) {
-                const sub = findInNode(n.children);
-                if (sub) return sub;
-              }
-            }
-            return null;
-          }
-          const res = findInNode(match.node.children);
-          if (res) return res;
-        }
-      }
+      if (!_StructureOps.isEditable(match)) return null;
+      return _StructureOps.firstEditableRegion(match.node);
     }
 
     // Verify activeLayerId belongs to this cell; invalidate if stale across cell tabs
@@ -390,7 +382,7 @@ class EditorState {
         if (!this.activeLayerId && match.layer) {
           this.activeLayerId = match.layer.id;
         }
-        return match.node;
+        return _StructureOps.isEditable(match) ? match.node : null;
       }
     }
 
@@ -401,38 +393,17 @@ class EditorState {
       if (layerMatch && layerMatch.node.type === 'layer') {
         const layer = layerMatch.node;
         if (layer.visible === false || layer.locked) return null;
-        function findEditableInLayer(nodes) {
-          for (const node of nodes || []) {
-            if (node.visible === false || node.locked) continue;
-            if (node.type === 'region') return node;
-            const nested = findEditableInLayer(node.children);
-            if (nested) return nested;
-          }
-          return null;
-        }
-        const target = findEditableInLayer(layer.children);
+        const target = _StructureOps.firstEditableRegion(layer);
         if (target) {
           this.activeRegionId = target.id;
           return target;
         }
+        return null;
       }
     }
 
     // Default to first unlocked, visible region
-    function findFirstEditable(nodes) {
-      for (const node of nodes || []) {
-        if (node.type === 'region' && node.visible !== false && !node.locked) {
-          return node;
-        }
-        if (node.children) {
-          const res = findFirstEditable(node.children);
-          if (res) return res;
-        }
-      }
-      return null;
-    }
-
-    const first = findFirstEditable(cell.layers);
+    const first = cell.layers.map(_StructureOps.firstEditableRegion).find(Boolean);
     if (first) {
       this.activeRegionId = first.id;
       const firstMatch = this.findNode(cell.id, first.id);
