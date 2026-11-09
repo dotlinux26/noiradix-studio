@@ -268,11 +268,24 @@
     const trimX = (frame.spriteSourceSize && frame.spriteSourceSize.x !== undefined) ? frame.spriteSourceSize.x : (frame.trimX || 0);
     const trimY = (frame.spriteSourceSize && frame.spriteSourceSize.y !== undefined) ? frame.spriteSourceSize.y : (frame.trimY || 0);
 
+    const getPixel = typeof getPixelRgba === 'function' ? getPixelRgba : (x, y) => {
+      if (getPixelRgba && getPixelRgba.data && x >= 0 && x < getPixelRgba.width && y >= 0 && y < getPixelRgba.height) {
+        const idx = (y * getPixelRgba.width + x) * 4;
+        return {
+          r: getPixelRgba.data[idx],
+          g: getPixelRgba.data[idx + 1],
+          b: getPixelRgba.data[idx + 2],
+          a: getPixelRgba.data[idx + 3]
+        };
+      }
+      return null;
+    };
+
     for (let fy = 0; fy < fh; fy++) {
       for (let fx = 0; fx < fw; fx++) {
         const atlasX = fx_pos + fx;
         const atlasY = fy_pos + fy;
-        const rgba = getPixelRgba(atlasX, atlasY);
+        const rgba = getPixel(atlasX, atlasY);
         if (!rgba || rgba.a === 0) continue;
 
         let destX, destY;
@@ -349,7 +362,7 @@
                 cell: cellId,
                 parent: layerId,
                 name: f.name,
-                tags: [],
+                tags: f.tag ? [f.tag] : (Array.isArray(f.tags) ? f.tags : []),
                 visible: true,
                 locked: false,
                 pixels: { ...extracted.pixels },
@@ -371,8 +384,9 @@
         }
       }
 
-      // Detect animation frame sequence: <name>_<index>
-      const match = f.name.match(/^(.*?)[_-](\d+)$/);
+      // Detect animation frame sequence: <tag_or_name>_<index>
+      const seqSource = f.tag || f.name;
+      const match = seqSource.match(/^(.*?)[_-](\d+)$/);
       if (match) {
         const animName = match[1];
         const idx = parseInt(match[2], 10);

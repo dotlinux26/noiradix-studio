@@ -766,10 +766,10 @@
     </section>
 
     <!-- 5. VIEW: IMPORT & SLICE -->
-    <section id="view-import-slice" class="view-panel">
-      <div class="import-slice-layout" style="display: flex; flex-direction: column; height: 100%; padding: 16px; gap: 16px; box-sizing: border-box; overflow-y: auto;">
+    <section id="view-import-slice" class="view-panel" style="width: 100%; height: 100%; display: none; flex-direction: column; overflow: hidden;">
+      <div class="import-slice-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; padding: 12px 16px; gap: 12px; box-sizing: border-box; overflow: hidden; flex: 1;">
         <!-- Top Toolbar / Header -->
-        <div class="view-sub-toolbar" style="margin-bottom: 0;">
+        <div class="view-sub-toolbar" style="margin-bottom: 0; flex-shrink: 0;">
           <div class="toolbar-section">
             <span class="toolbar-title"><i class="fa-solid fa-scissors"></i> Import &amp; Slice Studio</span>
             <span class="sub-text">Ingest PNG Spritesheets &amp; Atlas Metadata into PIX2 1.1 Document</span>
@@ -781,9 +781,9 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 340px 1fr; gap: 16px; flex: 1; min-height: 480px;">
+        <div style="display: grid; grid-template-columns: 340px 1fr; gap: 14px; flex: 1; min-height: 0; width: 100%; overflow: hidden;">
           <!-- Left Configuration Sidebar -->
-          <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 4px;">
             <!-- File Input / Drop Area -->
             <div class="sidebar-card">
               <div class="card-header">
@@ -815,9 +815,17 @@
                 <label class="form-label">Slicing Method:</label>
                 <select id="select-slice-method" class="modern-select full-width">
                   <option value="grid" selected>Uniform Grid Slicing</option>
+                  <option value="manual">Manual Slice &amp; Tagging Editor</option>
                   <option value="alpha">Alpha Island Auto-Detect</option>
                   <option value="atlas">TexturePacker / NOIRADIX JSON</option>
                 </select>
+
+                <!-- Manual Slicing Options -->
+                <div id="slice-opts-manual" style="display: none; flex-direction: column; gap: 8px;">
+                  <div style="font-size: 11px; color: var(--text-muted); background: var(--bg-card); padding: 8px; border-radius: 4px; border: 1px solid var(--border-subtle);">
+                    <span><i class="fa-solid fa-mouse-pointer text-accent"></i> Click and drag directly on the image to draw slice boxes. Click on any slice to resize, move, tag, or delete it.</span>
+                  </div>
+                </div>
 
                 <!-- Grid Options -->
                 <div id="slice-opts-grid" style="display: flex; flex-direction: column; gap: 8px;">
@@ -897,17 +905,106 @@
           </div>
 
           <!-- Right Interactive Preview Area -->
-          <div class="sidebar-card" style="display: flex; flex-direction: column; overflow: hidden;">
-            <div class="card-header flex-between" style="display: flex; justify-content: space-between; align-items: center;">
-              <span><i class="fa-regular fa-eye"></i> Slicing Viewport &amp; Rectangles</span>
-              <span id="slice-count-badge" class="badge-tag">0 slices detected</span>
+          <div class="sidebar-card" style="display: flex; flex-direction: column; overflow: hidden; flex: 1; height: 100%; min-width: 0;">
+            <!-- Viewport Header Toolbar -->
+            <div class="card-header flex-between" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; flex-shrink: 0;">
+              <!-- Title & Badge -->
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span><i class="fa-regular fa-eye"></i> Slicing Viewport</span>
+                <span id="slice-count-badge" class="badge-tag">0 slices detected</span>
+              </div>
+
+              <!-- Tools & Actions Strip -->
+              <div class="slice-viewport-toolbar" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <!-- Tool Mode Buttons -->
+                <div class="btn-group" role="group" aria-label="Tool Selection">
+                  <button type="button" id="btn-slice-tool-select" class="btn btn-xs btn-secondary active" title="Select &amp; Move Slice (V)">
+                    <i class="fa-solid fa-arrow-pointer"></i> Select
+                  </button>
+                  <button type="button" id="btn-slice-tool-draw" class="btn btn-xs btn-secondary" title="Draw New Slice Marquee (D)">
+                    <i class="fa-solid fa-vector-square"></i> Draw Slice
+                  </button>
+                  <button type="button" id="btn-slice-tool-hand" class="btn btn-xs btn-secondary" title="Pan Viewport / Hand (H / Space+Drag)">
+                    <i class="fa-solid fa-hand"></i> Pan
+                  </button>
+                </div>
+
+                <span style="height: 16px; width: 1px; background: var(--border-subtle); margin: 0 2px;"></span>
+
+                <!-- Zoom Controls -->
+                <div class="btn-group" role="group" aria-label="Zoom Controls">
+                  <button type="button" id="btn-slice-zoom-out" class="btn btn-xs btn-secondary" title="Zoom Out (-)">
+                    <i class="fa-solid fa-magnifying-glass-minus"></i>
+                  </button>
+                  <span id="slice-zoom-level" class="btn btn-xs btn-secondary" style="pointer-events: none; min-width: 48px; text-align: center; font-variant-numeric: tabular-nums;" title="Current Zoom">100%</span>
+                  <button type="button" id="btn-slice-zoom-in" class="btn btn-xs btn-secondary" title="Zoom In (+)">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                  </button>
+                  <button type="button" id="btn-slice-zoom-fit" class="btn btn-xs btn-secondary" title="Fit to Viewport">
+                    <i class="fa-solid fa-arrows-to-eye"></i> Fit
+                  </button>
+                  <button type="button" id="btn-slice-zoom-reset" class="btn btn-xs btn-secondary" title="100% Scale (1:1)">
+                    1:1
+                  </button>
+                </div>
+
+                <span style="height: 16px; width: 1px; background: var(--border-subtle); margin: 0 2px;"></span>
+
+                <!-- Selection Actions -->
+                <div class="btn-group" role="group" aria-label="Selection Actions">
+                  <button type="button" id="btn-slice-select-all" class="btn btn-xs btn-secondary" title="Select All Slices (Ctrl+A)">
+                    Select All
+                  </button>
+                  <button type="button" id="btn-slice-deselect" class="btn btn-xs btn-secondary" title="Deselect Slice (Esc)">
+                    Deselect
+                  </button>
+                  <button type="button" id="btn-slice-delete-selected" class="btn btn-xs btn-secondary text-danger" title="Delete Selected Slice (Del)" disabled>
+                    <i class="fa-solid fa-trash"></i> Delete
+                  </button>
+                  <button type="button" id="btn-slice-clear-all" class="btn btn-xs btn-secondary" title="Clear All Slices">
+                    <i class="fa-solid fa-eraser"></i> Clear All
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="card-body" style="flex: 1; position: relative; overflow: auto; background: var(--bg-canvas-area); display: flex; align-items: center; justify-content: center; min-height: 380px;">
-              <canvas id="import-slice-canvas" style="box-shadow: 0 4px 16px rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
-              <div id="import-slice-empty-prompt" style="position: absolute; text-align: center; color: var(--text-dim);">
+
+            <!-- Viewport Container -->
+            <div class="card-body" id="import-slice-viewport-container" style="position: relative; overflow: auto; background: var(--bg-canvas-area); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 220px; cursor: default; user-select: none;">
+              <canvas id="import-slice-canvas" style="box-shadow: 0 4px 16px rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); image-rendering: pixelated; image-rendering: crisp-edges;"></canvas>
+              <div id="import-slice-empty-prompt" style="position: absolute; text-align: center; color: var(--text-dim); pointer-events: none;">
                 <i class="fa-solid fa-image" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
                 <p style="margin: 0; font-size: 13px;">No spritesheet loaded yet</p>
                 <p style="margin: 4px 0 0; font-size: 11px; opacity: 0.7;">Drop a PNG image here or choose one to begin slicing</p>
+              </div>
+            </div>
+
+            <!-- Slices & Tagging Inspector Deck -->
+            <div class="import-slices-deck" id="import-slices-deck" style="border-top: 1px solid var(--border-subtle); background: var(--bg-card); display: flex; flex-direction: column; height: 260px; max-height: 40%; flex-shrink: 0;">
+              <!-- Inspector Header with Quick Tagging Tools -->
+              <div style="padding: 6px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; flex-shrink: 0; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span><i class="fa-solid fa-tags"></i> Slices &amp; Tagging Inspector</span>
+                  <span id="import-slices-count-text" style="font-weight: normal; color: var(--text-dim);">(0 items)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <button type="button" id="btn-batch-tag-prefix" class="btn btn-xs btn-secondary" title="Assign a common tag prefix to all slices (e.g. 'walk', 'idle')">
+                    <i class="fa-solid fa-tag"></i> Batch Tag Prefix...
+                  </button>
+                  <button type="button" id="btn-auto-tag-4dir" class="btn btn-xs btn-secondary" title="Auto-assign 4-dir tags (down, up, right, left) based on slice positions">
+                    <i class="fa-solid fa-compass"></i> Auto 4-Dir Tags
+                  </button>
+                  <button type="button" id="btn-auto-tag-8dir" class="btn btn-xs btn-secondary" title="Auto-assign 8-dir tags based on slice positions">
+                    <i class="fa-solid fa-arrows-to-dot"></i> Auto 8-Dir
+                  </button>
+                  <button type="button" id="btn-clear-all-tags" class="btn btn-xs btn-secondary" title="Clear all tags">
+                    <i class="fa-solid fa-ban"></i> Clear Tags
+                  </button>
+                </div>
+              </div>
+
+              <!-- Table list -->
+              <div id="import-slices-list" class="import-slices-table-container" style="overflow-y: auto; flex: 1; min-height: 80px;">
+                <!-- Populated dynamically -->
               </div>
             </div>
           </div>
@@ -1569,25 +1666,25 @@
         </div>
 
         <!-- Pre-create Summary Card -->
-        <div id="new-file-summary-card" style="margin-top: 14px; padding: 12px 14px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)); border-radius: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
-          <div style="font-weight: 600; color: var(--text-main, #f8fafc); margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+        <div id="new-file-summary-card" class="new-file-summary-card">
+          <div class="summary-card-header">
             <i class="fa-solid fa-circle-info text-accent"></i> Project Specification Summary
           </div>
-          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+          <div class="summary-card-row">
             <span>Frame Resolution:</span>
-            <strong id="new-file-summary-size" style="color: var(--text-main, #f8fafc);">16 × 16 px (256 px/frame)</strong>
+            <strong id="new-file-summary-size">16 × 16 px (256 px/frame)</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+          <div class="summary-card-row">
             <span>Sheet Layout:</span>
-            <strong id="new-file-summary-cells" style="color: var(--text-main, #f8fafc);">4 cols × 4 rows (16 cells)</strong>
+            <strong id="new-file-summary-cells">4 cols × 4 rows (16 cells)</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+          <div class="summary-card-row">
             <span>Template &amp; Logic:</span>
-            <strong id="new-file-summary-template" style="color: var(--text-main, #f8fafc);">4-Direction Character (4 tracks)</strong>
+            <strong id="new-file-summary-template">4-Direction Character (4 tracks)</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; color: var(--text-dim, #94a3b8);">
+          <div class="summary-card-row">
             <span>Resource Profile:</span>
-            <span style="color: #34d399; font-weight: 500;">Studio Standard (Max 512×512, 4096 cells)</span>
+            <span class="summary-profile-badge">Studio Standard (Max 512×512, 4096 cells)</span>
           </div>
         </div>
       </div>

@@ -411,6 +411,7 @@ const PIX2 = (function () {
    */
   function createDocument(title = 'New Sprite', cols = 4, rows = 4, cellW = 16, cellH = 16, options = {}) {
     const profile = resolveResourceProfile(options);
+    const requestedVersion = (options && options.version) ? String(options.version) : '1.1';
     cols = Math.min(Math.max(1, parseStrictInt(cols) || 4), profile.maxGridCols);
     rows = Math.min(Math.max(1, parseStrictInt(rows) || 4), profile.maxGridRows);
     cellW = Math.min(Math.max(profile.minCellDim, parseStrictInt(cellW) || 16), profile.maxCellDim);
@@ -419,7 +420,7 @@ const PIX2 = (function () {
     const meta = {
       title: String(title || 'New Sprite').normalize('NFC').slice(0, 256),
       author: 'User',
-      version: '1.0',
+      version: requestedVersion,
       color_mode: 'RGBA',
       coordinate_origin: 'top-left',
       grid: { cols, rows },
@@ -445,7 +446,7 @@ const PIX2 = (function () {
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const id = `cell_${r}_${c}`;
-        doc.cells[id] = {
+        const cell = {
           id: id,
           name: `Frame ${r},${c}`,
           row: r,
@@ -454,6 +455,37 @@ const PIX2 = (function () {
           frame: c,
           pixels: {}
         };
+        if (requestedVersion === '1.1') {
+          const layerId = `layer_default_${id}`;
+          const regionId = `region_default_${id}`;
+          cell.layers = [
+            {
+              type: 'layer',
+              id: layerId,
+              cell: id,
+              name: 'Layer 1',
+              visible: true,
+              locked: false,
+              opacity: 1.0,
+              blend: 'normal',
+              children: [
+                {
+                  type: 'region',
+                  id: regionId,
+                  cell: id,
+                  parent: layerId,
+                  name: 'Artwork',
+                  tags: [],
+                  visible: true,
+                  locked: false,
+                  pixels: {},
+                  primitives: []
+                }
+              ]
+            }
+          ];
+        }
+        doc.cells[id] = cell;
       }
     }
 
@@ -1665,6 +1697,7 @@ const PIX2 = (function () {
     } catch (error) {
       return { success: false, error: `Unable to clone source document: ${error.message}` };
     }
+    attachCellSizeAlias(upgraded.meta);
 
     const sourcePixelsByCell = Object.create(null);
     const convertedCellIds = [];

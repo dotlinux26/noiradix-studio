@@ -42,7 +42,23 @@
     imageInfo: null,
     rawBytes: null,
     jsonAtlas: null,
-    frames: []
+    frames: [],
+    selectedSliceIndex: -1,
+    activeTool: 'select', // 'select' | 'draw' | 'hand'
+    zoom: 1,
+    isDrawingSlice: false,
+    isDraggingSlice: false,
+    isResizingSlice: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    currentDragRect: null,
+    activeHandle: null,
+    dragOriginRect: null,
+    isPanning: false,
+    panStartX: 0,
+    panStartY: 0,
+    scrollStartX: 0,
+    scrollStartY: 0
   };
 
   // DOM Elements cache
@@ -125,6 +141,7 @@
     bindEvents();
     bindKeyboardShortcuts();
     initCanvasPanningAndZoom();
+    initImportSliceCanvasEvents();
     initAutosave();
 
     // Populate custom palette presets library
@@ -137,6 +154,7 @@
     populatePaletteDropdown();
 
     await initAppSession();
+    renderProjectTabs();
     updateAutosaveIndicator('saved', Date.now());
     initFileWatcher();
     updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
@@ -252,6 +270,7 @@
         }
 
         if (docLoaded) {
+          syncOrRegisterProjectSession(state.doc, currentFileName, savedHandle, currentFilePath);
           setDirty(false);
           refreshAll();
           showToast(`Resumed local file: ${savedHandle.name}`, 'info');
@@ -317,6 +336,7 @@
     dom.importSliceImgDims = document.getElementById('import-slice-img-dims');
     dom.selectSliceMethod = document.getElementById('select-slice-method');
     dom.sliceOptsGrid = document.getElementById('slice-opts-grid');
+    dom.sliceOptsManual = document.getElementById('slice-opts-manual');
     dom.sliceOptsAlpha = document.getElementById('slice-opts-alpha');
     dom.sliceOptsAtlas = document.getElementById('slice-opts-atlas');
     dom.inputSliceCellW = document.getElementById('input-slice-cell-w');
@@ -329,12 +349,33 @@
     dom.inputSliceMinSize = document.getElementById('input-slice-min-size');
     dom.atlasDetectedInfo = document.getElementById('atlas-detected-info');
     dom.btnRunSlicePreview = document.getElementById('btn-run-slice-preview');
+    dom.btnSliceModeDrag = document.getElementById('btn-slice-mode-drag');
+    dom.btnSliceToolSelect = document.getElementById('btn-slice-tool-select');
+    dom.btnSliceToolDraw = document.getElementById('btn-slice-tool-draw');
+    dom.btnSliceToolHand = document.getElementById('btn-slice-tool-hand');
+    dom.btnSliceZoomOut = document.getElementById('btn-slice-zoom-out');
+    dom.sliceZoomLevel = document.getElementById('slice-zoom-level');
+    dom.btnSliceZoomIn = document.getElementById('btn-slice-zoom-in');
+    dom.btnSliceZoomFit = document.getElementById('btn-slice-zoom-fit');
+    dom.btnSliceZoomReset = document.getElementById('btn-slice-zoom-reset');
+    dom.btnSliceSelectAll = document.getElementById('btn-slice-select-all');
+    dom.btnSliceDeselect = document.getElementById('btn-slice-deselect');
+    dom.btnSliceDeleteSelected = document.getElementById('btn-slice-delete-selected');
+    dom.btnSliceClearAll = document.getElementById('btn-slice-clear-all');
     dom.chkSliceAutoAnimate = document.getElementById('chk-slice-auto-animate');
     dom.inputSliceLayerName = document.getElementById('input-slice-layer-name');
     dom.btnImportSliceCommit = document.getElementById('btn-import-slice-commit');
     dom.sliceCountBadge = document.getElementById('slice-count-badge');
     dom.importSliceCanvas = document.getElementById('import-slice-canvas');
     dom.importSliceEmptyPrompt = document.getElementById('import-slice-empty-prompt');
+    dom.importSliceViewportContainer = document.getElementById('import-slice-viewport-container');
+    dom.importSlicesDeck = document.getElementById('import-slices-deck');
+    dom.importSlicesList = document.getElementById('import-slices-list');
+    dom.importSlicesCountText = document.getElementById('import-slices-count-text');
+    dom.btnBatchTagPrefix = document.getElementById('btn-batch-tag-prefix');
+    dom.btnAutoTag4Dir = document.getElementById('btn-auto-tag-4dir');
+    dom.btnAutoTag8Dir = document.getElementById('btn-auto-tag-8dir');
+    dom.btnClearAllTags = document.getElementById('btn-clear-all-tags');
 
     // Direction 2-dir button
     dom.btnMode2dir = document.getElementById('btn-mode-2dir');
@@ -674,6 +715,36 @@
     const session = new ProjectSession(newId, title, doc, fileHandle, title, title);
     projectSessions.push(session);
     switchProjectSession(newId);
+    return session;
+  }
+
+  function syncOrRegisterProjectSession(doc, fileName = null, fileHandle = null, filePath = null) {
+    if (!doc) return null;
+    const name = fileName || currentFileName || (fileHandle ? fileHandle.name : null) || sanitizeSafeFilename(doc.meta?.title, '.pix2', 'untitled');
+    const path = filePath || currentFilePath || name;
+    const title = (doc.meta && doc.meta.title) || name;
+
+    let session = projectSessions.find(p => p.id === activeProjectId);
+    if (!session) {
+      session = projectSessions.find(p => (p.filePath && p.filePath === path) || (p.fileName && p.fileName === name));
+    }
+
+    if (!session) {
+      const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      session = new ProjectSession(newId, title, doc, fileHandle, name, path);
+      projectSessions.push(session);
+      activeProjectId = newId;
+    } else {
+      session.doc = doc;
+      session.title = title;
+      session.fileName = name;
+      session.filePath = path;
+      if (fileHandle) session.fileHandle = fileHandle;
+      activeProjectId = session.id;
+    }
+
+    session.isDirty = isDocumentDirty;
+    renderProjectTabs();
     return session;
   }
 
@@ -1118,6 +1189,12 @@
       updateAutosaveIndicator('saved', Date.now());
     }
 
+    const cur = getActiveSession();
+    if (cur) {
+      cur.isDirty = dirty;
+      renderProjectTabs();
+    }
+
     updateFileStatusUI();
   }
 
@@ -1327,6 +1404,7 @@
         centerGridCanvas();
         refreshAll();
         setDirty(false);
+        syncOrRegisterProjectSession(state.doc, currentFileName, null, currentFilePath);
         showToast(`Resumed in-memory draft "${fileName}". (Unsaved to disk - Press Ctrl+S)`, 'info');
         return true;
       }
@@ -1346,6 +1424,7 @@
           centerGridCanvas();
           refreshAll();
           setDirty(false);
+          syncOrRegisterProjectSession(state.doc, currentFileName, null, currentFilePath);
           showToast(`Restored in-memory draft "${fileName}". Press Ctrl+S to save to disk.`, 'info');
           return true;
         } else {
@@ -1386,6 +1465,7 @@
     centerCellCanvas();
     centerGridCanvas();
     setDirty(false);
+    syncOrRegisterProjectSession(state.doc, currentFileName, null, currentFilePath);
     refreshAll();
   }
 
@@ -1440,6 +1520,7 @@
     localStorage.setItem('noiradix_session_type', 'draft');
     localStorage.setItem('noiradix_active_file_name', currentFileName);
     localStorage.setItem('noiradix_active_file_path', currentFilePath);
+    syncOrRegisterProjectSession(doc, currentFileName, null, currentFilePath);
   }
 
   function openNewFileModal() {
@@ -3591,6 +3672,195 @@
   // ===========================================================================
   // IMPORT & SLICE STUDIO CONTROLLER (PIX2 1.1)
   // ===========================================================================
+
+  let isSpacebarHeld = false;
+
+  function setSliceTool(tool) {
+    importSliceState.activeTool = tool; // 'select' | 'draw' | 'hand'
+    if (dom.btnSliceToolSelect) dom.btnSliceToolSelect.classList.toggle('active', tool === 'select');
+    if (dom.btnSliceToolDraw) dom.btnSliceToolDraw.classList.toggle('active', tool === 'draw');
+    if (dom.btnSliceToolHand) dom.btnSliceToolHand.classList.toggle('active', tool === 'hand');
+
+    const canvas = dom.importSliceCanvas;
+    const container = dom.importSliceViewportContainer;
+    if (tool === 'hand') {
+      if (canvas) canvas.style.cursor = 'grab';
+      if (container) container.style.cursor = 'grab';
+    } else if (tool === 'draw') {
+      if (canvas) canvas.style.cursor = 'crosshair';
+      if (container) container.style.cursor = 'crosshair';
+    } else {
+      if (canvas) canvas.style.cursor = 'default';
+      if (container) container.style.cursor = 'default';
+    }
+  }
+
+  function setSliceZoom(newZoom) {
+    if (!importSliceState.image) return;
+    const clamped = Math.max(0.25, Math.min(32, Math.round(newZoom * 100) / 100));
+    importSliceState.zoom = clamped;
+    applySliceZoom();
+  }
+
+  function applySliceZoom() {
+    const canvas = dom.importSliceCanvas;
+    if (!canvas || !importSliceState.image) return;
+    const z = importSliceState.zoom || 1;
+    canvas.style.width = `${Math.round(importSliceState.image.width * z)}px`;
+    canvas.style.height = `${Math.round(importSliceState.image.height * z)}px`;
+    canvas.style.imageRendering = 'pixelated';
+    if (dom.sliceZoomLevel) {
+      dom.sliceZoomLevel.textContent = `${Math.round(z * 100)}%`;
+    }
+  }
+
+  function fitSliceZoom() {
+    const container = dom.importSliceViewportContainer;
+    const img = importSliceState.image;
+    if (!container || !img) return;
+    const cw = container.clientWidth - 40;
+    const ch = container.clientHeight - 40;
+    if (cw <= 0 || ch <= 0) return;
+    const scaleX = cw / img.width;
+    const scaleY = ch / img.height;
+    let fitScale = Math.min(scaleX, scaleY);
+    if (fitScale >= 1) {
+      fitScale = Math.floor(fitScale);
+    } else {
+      fitScale = Math.max(0.25, Math.round(fitScale * 100) / 100);
+    }
+    setSliceZoom(Math.max(0.25, fitScale));
+  }
+
+  function batchTagPrefix() {
+    const frames = importSliceState.frames || [];
+    if (frames.length === 0) {
+      showToast('No slices to tag', 'error');
+      return;
+    }
+    const hasSelection = (importSliceState.selectedSliceIndex >= 0 && importSliceState.selectedSliceIndex < frames.length);
+    const targetDesc = hasSelection ? `selected slice #${importSliceState.selectedSliceIndex + 1}` : `all ${frames.length} slices`;
+    const prefix = prompt(`Enter tag / animation prefix for ${targetDesc} (e.g. "idle", "walk_down", "attack"):`, hasSelection ? (frames[importSliceState.selectedSliceIndex].tag || 'idle') : 'idle');
+    if (!prefix || !prefix.trim()) return;
+    const cleanPrefix = prefix.trim();
+
+    if (hasSelection) {
+      frames[importSliceState.selectedSliceIndex].tag = cleanPrefix;
+      showToast(`Tagged slice #${importSliceState.selectedSliceIndex + 1} with "${cleanPrefix}"`, 'success');
+    } else {
+      frames.forEach((f, idx) => {
+        f.tag = `${cleanPrefix}_${idx}`;
+      });
+      showToast(`Tagged ${frames.length} slices with prefix "${cleanPrefix}"`, 'success');
+    }
+    renderImportSliceView();
+  }
+
+  function autoTag4Dir() {
+    const frames = importSliceState.frames || [];
+    if (frames.length === 0) {
+      showToast('No slices to auto-tag', 'error');
+      return;
+    }
+    // Sort frames geometrically: top to bottom, then left to right
+    const sorted = [...frames].sort((a, b) => {
+      if (Math.abs(a.frame.y - b.frame.y) > 8) return a.frame.y - b.frame.y;
+      return a.frame.x - b.frame.x;
+    });
+
+    const rows = [];
+    sorted.forEach(f => {
+      let r = rows.find(row => Math.abs(row[0].frame.y - f.frame.y) <= 8);
+      if (!r) {
+        r = [];
+        rows.push(r);
+      }
+      r.push(f);
+    });
+
+    const dirNames = ['down', 'up', 'right', 'left'];
+    rows.forEach((row, rowIdx) => {
+      const dir = dirNames[rowIdx % 4];
+      row.sort((a, b) => a.frame.x - b.frame.x);
+      row.forEach((f, colIdx) => {
+        f.tag = `walk_${dir}_${colIdx}`;
+        f.name = `${dir}_${colIdx}`;
+      });
+    });
+
+    showToast(`Auto-tagged ${frames.length} slices with 4-direction locomotion tags`, 'success');
+    renderImportSliceView();
+  }
+
+  function autoTag8Dir() {
+    const frames = importSliceState.frames || [];
+    if (frames.length === 0) {
+      showToast('No slices to auto-tag', 'error');
+      return;
+    }
+    const sorted = [...frames].sort((a, b) => {
+      if (Math.abs(a.frame.y - b.frame.y) > 8) return a.frame.y - b.frame.y;
+      return a.frame.x - b.frame.x;
+    });
+
+    const rows = [];
+    sorted.forEach(f => {
+      let r = rows.find(row => Math.abs(row[0].frame.y - f.frame.y) <= 8);
+      if (!r) {
+        r = [];
+        rows.push(r);
+      }
+      r.push(f);
+    });
+
+    const dirNames = ['down', 'down_right', 'right', 'up_right', 'up', 'up_left', 'left', 'down_left'];
+    rows.forEach((row, rowIdx) => {
+      const dir = dirNames[rowIdx % 8];
+      row.sort((a, b) => a.frame.x - b.frame.x);
+      row.forEach((f, colIdx) => {
+        f.tag = `walk_${dir}_${colIdx}`;
+        f.name = `${dir}_${colIdx}`;
+      });
+    });
+
+    showToast(`Auto-tagged ${frames.length} slices with 8-direction locomotion tags`, 'success');
+    renderImportSliceView();
+  }
+
+  function clearAllTags() {
+    const frames = importSliceState.frames || [];
+    if (frames.length === 0) return;
+    frames.forEach(f => {
+      f.tag = '';
+    });
+    showToast('Cleared all slice tags', 'info');
+    renderImportSliceView();
+  }
+
+  function getSliceCanvasCoords(e) {
+    const canvas = dom.importSliceCanvas;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.max(0, Math.min(canvas.width, Math.round((e.clientX - rect.left) * scaleX)));
+    const y = Math.max(0, Math.min(canvas.height, Math.round((e.clientY - rect.top) * scaleY)));
+    return { x, y };
+  }
+
+  function hitTestSliceHandles(slice, cx, cy) {
+    if (!slice || !slice.frame) return null;
+    const { x, y, w, h } = slice.frame;
+    const hitR = 8;
+    if (Math.abs(cx - x) <= hitR && Math.abs(cy - y) <= hitR) return 'nw';
+    if (Math.abs(cx - (x + w)) <= hitR && Math.abs(cy - y) <= hitR) return 'ne';
+    if (Math.abs(cx - (x + w)) <= hitR && Math.abs(cy - (y + h)) <= hitR) return 'se';
+    if (Math.abs(cx - x) <= hitR && Math.abs(cy - (y + h)) <= hitR) return 'sw';
+    if (cx >= x && cx <= x + w && cy >= y && cy <= y + h) return 'move';
+    return null;
+  }
+
   function renderImportSliceView() {
     if (!dom.views['import-slice']) return;
     const canvas = dom.importSliceCanvas;
@@ -3600,8 +3870,12 @@
       if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'block';
       canvas.width = 320;
       canvas.height = 240;
+      canvas.style.width = '320px';
+      canvas.style.height = '240px';
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (dom.sliceZoomLevel) dom.sliceZoomLevel.textContent = '100%';
+      renderImportSlicesList();
       return;
     }
 
@@ -3610,6 +3884,8 @@
     const img = importSliceState.image;
     canvas.width = img.width;
     canvas.height = img.height;
+    applySliceZoom();
+
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
@@ -3632,30 +3908,531 @@
     if (dom.sliceCountBadge) {
       dom.sliceCountBadge.textContent = `${frames.length} slice${frames.length === 1 ? '' : 's'} detected`;
     }
+    if (dom.btnSliceDeleteSelected) {
+      dom.btnSliceDeleteSelected.disabled = (importSliceState.selectedSliceIndex < 0 || importSliceState.selectedSliceIndex >= frames.length);
+    }
 
     ctx.save();
     frames.forEach((f, idx) => {
       const rect = f.frame;
-      ctx.strokeStyle = '#6366f1';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
+      const isSelected = (idx === importSliceState.selectedSliceIndex);
 
-      // Label
-      ctx.fillStyle = 'rgba(99, 102, 241, 0.85)';
-      const labelW = Math.min(rect.w, 90);
-      ctx.fillRect(rect.x, Math.max(0, rect.y - 14), labelW, 14);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '10px monospace';
-      ctx.fillText(f.name || `frame_${idx}`, rect.x + 3, Math.max(0, rect.y - 14) + 10);
+      if (isSelected) {
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+        const handleSize = 6;
+        ctx.fillStyle = '#10b981';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        const corners = [
+          [rect.x, rect.y],
+          [rect.x + rect.w, rect.y],
+          [rect.x + rect.w, rect.y + rect.h],
+          [rect.x, rect.y + rect.h]
+        ];
+        corners.forEach(([hx, hy]) => {
+          ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+          ctx.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+        });
+
+        const labelText = `${f.name || `frame_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''} (${rect.w}×${rect.h})`;
+        ctx.font = 'bold 10px monospace';
+        const labelW = Math.min(Math.max(rect.w, 90), ctx.measureText(labelText).width + 8);
+        ctx.fillStyle = '#10b981';
+        ctx.fillRect(rect.x, Math.max(0, rect.y - 15), labelW, 15);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(labelText, rect.x + 4, Math.max(0, rect.y - 15) + 11);
+      } else {
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
+
+        const labelText = `${f.name || `frame_${idx}`}${f.tag ? ' [' + f.tag + ']' : ''}`;
+        ctx.font = '10px monospace';
+        const labelW = Math.min(rect.w, 90);
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.85)';
+        ctx.fillRect(rect.x, Math.max(0, rect.y - 14), labelW, 14);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(labelText, rect.x + 3, Math.max(0, rect.y - 14) + 10);
+      }
     });
+
+    if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
+      const dr = importSliceState.currentDragRect;
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(dr.x + 0.5, dr.y + 0.5, dr.w, dr.h);
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+      ctx.fillRect(dr.x, dr.y, dr.w, dr.h);
+
+      const dimText = `${dr.w} × ${dr.h} px`;
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(dr.x, Math.max(0, dr.y - 16), 84, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(dimText, dr.x + 4, Math.max(0, dr.y - 16) + 12);
+    }
+
     ctx.restore();
+    renderImportSlicesList();
+  }
+
+  function renderImportSlicesList() {
+    if (!dom.importSlicesList) return;
+    const frames = importSliceState.frames || [];
+    if (dom.importSlicesCountText) {
+      dom.importSlicesCountText.textContent = `(${frames.length} item${frames.length === 1 ? '' : 's'})`;
+    }
+
+    if (frames.length === 0) {
+      dom.importSlicesList.innerHTML = `
+        <div style="padding: 16px; text-align: center; color: var(--text-dim); font-size: 11px;">
+          No slices created yet. Click "Update Slice Preview" or use Draw Slice tool to draw boxes!
+        </div>
+      `;
+      return;
+    }
+
+    let html = `
+      <div style="display: grid; grid-template-columns: 28px 36px 1.2fr 1.2fr 130px 48px; gap: 6px; padding: 4px 10px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2;">
+        <span>#</span>
+        <span>Thumb</span>
+        <span>Slice Name</span>
+        <span>Animation Tag</span>
+        <span>Rect (X, Y, W, H)</span>
+        <span style="text-align: right;">Actions</span>
+      </div>
+    `;
+
+    frames.forEach((f, idx) => {
+      const isSel = (idx === importSliceState.selectedSliceIndex);
+      html += `
+        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}">
+          <span style="font-weight: 600; color: var(--text-dim);">${idx + 1}</span>
+          <canvas class="slice-thumb-canvas" id="slice-thumb-${idx}" width="24" height="24"></canvas>
+          <input type="text" class="slice-input-sm slice-name-input" data-slice-idx="${idx}" value="${escapeHTML(f.name)}" placeholder="Frame Name">
+          <input type="text" class="slice-input-sm slice-tag-input" data-slice-idx="${idx}" value="${escapeHTML(f.tag || '')}" placeholder="Tag (e.g. idle_0, eyes)">
+          <div style="display: flex; gap: 3px; align-items: center;">
+            <input type="number" class="slice-input-sm slice-coord-w" data-slice-idx="${idx}" value="${f.frame.w}" style="width: 36px;" title="Width (px)">
+            <span>×</span>
+            <input type="number" class="slice-input-sm slice-coord-h" data-slice-idx="${idx}" value="${f.frame.h}" style="width: 36px;" title="Height (px)">
+            <span style="color: var(--text-dim); font-size: 9px;">@${f.frame.x},${f.frame.y}</span>
+          </div>
+          <div style="display: flex; gap: 4px; justify-content: flex-end;">
+            <button type="button" class="btn btn-xs btn-focus-slice" data-slice-idx="${idx}" title="Center slice in viewport" style="padding: 0; width: 20px; height: 20px; border: none; background: transparent; cursor: pointer; color: var(--accent-primary);">
+              <i class="fa-solid fa-crosshairs"></i>
+            </button>
+            <button type="button" class="btn btn-xs btn-del-slice" data-slice-idx="${idx}" title="Delete Slice" style="padding: 0; width: 20px; height: 20px; color: #ef4444; border: none; background: transparent; cursor: pointer;">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    dom.importSlicesList.innerHTML = html;
+
+    if (importSliceState.image) {
+      frames.forEach((f, idx) => {
+        const thumbCanvas = document.getElementById(`slice-thumb-${idx}`);
+        if (thumbCanvas && f.frame.w > 0 && f.frame.h > 0) {
+          const tctx = thumbCanvas.getContext('2d');
+          tctx.imageSmoothingEnabled = false;
+          tctx.clearRect(0, 0, 24, 24);
+          tctx.drawImage(importSliceState.image, f.frame.x, f.frame.y, f.frame.w, f.frame.h, 0, 0, 24, 24);
+        }
+      });
+    }
+
+    dom.importSlicesList.querySelectorAll('.slice-item-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.closest('button')) return;
+        const idx = parseInt(row.dataset.sliceIdx, 10);
+        importSliceState.selectedSliceIndex = idx;
+        renderImportSliceView();
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.slice-name-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.sliceIdx, 10);
+        if (importSliceState.frames[idx]) {
+          importSliceState.frames[idx].name = e.target.value.trim() || `slice_${idx}`;
+          const canvas = dom.importSliceCanvas;
+          if (canvas && importSliceState.image) {
+            renderImportSliceView();
+          }
+        }
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.slice-tag-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.sliceIdx, 10);
+        if (importSliceState.frames[idx]) {
+          importSliceState.frames[idx].tag = e.target.value.trim();
+          renderImportSliceView();
+        }
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.slice-coord-w').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.dataset.sliceIdx, 10);
+        const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+        if (importSliceState.frames[idx]) {
+          importSliceState.frames[idx].frame.w = val;
+          renderImportSliceView();
+        }
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.slice-coord-h').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.dataset.sliceIdx, 10);
+        const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+        if (importSliceState.frames[idx]) {
+          importSliceState.frames[idx].frame.h = val;
+          renderImportSliceView();
+        }
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.btn-focus-slice').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.sliceIdx, 10);
+        importSliceState.selectedSliceIndex = idx;
+        const f = importSliceState.frames[idx];
+        if (f && dom.importSliceViewportContainer) {
+          const z = importSliceState.zoom || 1;
+          const targetX = (f.frame.x + f.frame.w / 2) * z;
+          const targetY = (f.frame.y + f.frame.h / 2) * z;
+          dom.importSliceViewportContainer.scrollLeft = targetX - dom.importSliceViewportContainer.clientWidth / 2;
+          dom.importSliceViewportContainer.scrollTop = targetY - dom.importSliceViewportContainer.clientHeight / 2;
+        }
+        renderImportSliceView();
+      });
+    });
+
+    dom.importSlicesList.querySelectorAll('.btn-del-slice').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.sliceIdx, 10);
+        deleteImportSlice(idx);
+      });
+    });
+  }
+
+  function deleteImportSlice(idx) {
+    if (idx >= 0 && idx < importSliceState.frames.length) {
+      importSliceState.frames.splice(idx, 1);
+      if (importSliceState.selectedSliceIndex >= importSliceState.frames.length) {
+        importSliceState.selectedSliceIndex = importSliceState.frames.length - 1;
+      }
+      renderImportSliceView();
+      showToast('Deleted slice', 'info');
+    }
+  }
+
+  function initImportSliceCanvasEvents() {
+    const canvas = dom.importSliceCanvas;
+    const container = dom.importSliceViewportContainer;
+    if (!canvas || !container) return;
+
+    // Zoom on wheel
+    container.addEventListener('wheel', (e) => {
+      if (!importSliceState.image) return;
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.25 : 0.8;
+      setSliceZoom(importSliceState.zoom * zoomFactor);
+    }, { passive: false });
+
+    // Pointer down on container for panning (middle click or hand tool)
+    container.addEventListener('pointerdown', (e) => {
+      if (!importSliceState.image) return;
+      const isHand = (importSliceState.activeTool === 'hand') || e.button === 1 || isSpacebarHeld;
+      if (isHand) {
+        importSliceState.isPanning = true;
+        importSliceState.panStartX = e.clientX;
+        importSliceState.panStartY = e.clientY;
+        importSliceState.scrollStartX = container.scrollLeft;
+        importSliceState.scrollStartY = container.scrollTop;
+        container.style.cursor = 'grabbing';
+        e.preventDefault();
+        return;
+      }
+    });
+
+    // Pointer down on canvas
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!importSliceState.image) return;
+      const isHand = (importSliceState.activeTool === 'hand') || e.button === 1 || isSpacebarHeld;
+      if (isHand) {
+        importSliceState.isPanning = true;
+        importSliceState.panStartX = e.clientX;
+        importSliceState.panStartY = e.clientY;
+        importSliceState.scrollStartX = container.scrollLeft;
+        importSliceState.scrollStartY = container.scrollTop;
+        container.style.cursor = 'grabbing';
+        e.preventDefault();
+        return;
+      }
+
+      const coords = getSliceCanvasCoords(e);
+      if (!coords) return;
+
+      const frames = importSliceState.frames || [];
+      const selected = (importSliceState.selectedSliceIndex >= 0) ? frames[importSliceState.selectedSliceIndex] : null;
+
+      // In draw tool mode: immediately start drawing new marquee
+      if (importSliceState.activeTool === 'draw') {
+        importSliceState.selectedSliceIndex = -1;
+        importSliceState.isDrawingSlice = true;
+        importSliceState.dragStartX = coords.x;
+        importSliceState.dragStartY = coords.y;
+        importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 0, h: 0 };
+        renderImportSliceView();
+        return;
+      }
+
+      // Check handle on currently selected slice
+      if (selected) {
+        const handle = hitTestSliceHandles(selected, coords.x, coords.y);
+        if (handle && handle !== 'move') {
+          importSliceState.isResizingSlice = true;
+          importSliceState.activeHandle = handle;
+          importSliceState.dragStartX = coords.x;
+          importSliceState.dragStartY = coords.y;
+          importSliceState.dragOriginRect = { ...selected.frame };
+          return;
+        }
+      }
+
+      // Hit-test slice bodies (top to bottom)
+      let hitIdx = -1;
+      for (let i = frames.length - 1; i >= 0; i--) {
+        const f = frames[i];
+        if (coords.x >= f.frame.x && coords.x <= f.frame.x + f.frame.w &&
+            coords.y >= f.frame.y && coords.y <= f.frame.y + f.frame.h) {
+          hitIdx = i;
+          break;
+        }
+      }
+
+      if (hitIdx >= 0) {
+        importSliceState.selectedSliceIndex = hitIdx;
+        importSliceState.isDraggingSlice = true;
+        importSliceState.dragStartX = coords.x;
+        importSliceState.dragStartY = coords.y;
+        importSliceState.dragOriginRect = { ...frames[hitIdx].frame };
+        renderImportSliceView();
+        return;
+      }
+
+      // Clicked on empty space: deselect, or if dragged, allow creating a slice
+      importSliceState.selectedSliceIndex = -1;
+      importSliceState.isDrawingSlice = true;
+      importSliceState.dragStartX = coords.x;
+      importSliceState.dragStartY = coords.y;
+      importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 0, h: 0 };
+      renderImportSliceView();
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (importSliceState.isPanning) {
+        const dx = e.clientX - importSliceState.panStartX;
+        const dy = e.clientY - importSliceState.panStartY;
+        container.scrollLeft = importSliceState.scrollStartX - dx;
+        container.scrollTop = importSliceState.scrollStartY - dy;
+        return;
+      }
+
+      if (!importSliceState.image) return;
+      const coords = getSliceCanvasCoords(e);
+      if (!coords) return;
+
+      if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
+        const x1 = Math.min(importSliceState.dragStartX, coords.x);
+        const y1 = Math.min(importSliceState.dragStartY, coords.y);
+        const x2 = Math.max(importSliceState.dragStartX, coords.x);
+        const y2 = Math.max(importSliceState.dragStartY, coords.y);
+        importSliceState.currentDragRect = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+        renderImportSliceView();
+        return;
+      }
+
+      if (importSliceState.isDraggingSlice && importSliceState.selectedSliceIndex >= 0) {
+        const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
+        if (slice && importSliceState.dragOriginRect) {
+          const dx = coords.x - importSliceState.dragStartX;
+          const dy = coords.y - importSliceState.dragStartY;
+          const maxW = importSliceState.image.width;
+          const maxH = importSliceState.image.height;
+          slice.frame.x = Math.max(0, Math.min(maxW - slice.frame.w, importSliceState.dragOriginRect.x + dx));
+          slice.frame.y = Math.max(0, Math.min(maxH - slice.frame.h, importSliceState.dragOriginRect.y + dy));
+          renderImportSliceView();
+        }
+        return;
+      }
+
+      if (importSliceState.isResizingSlice && importSliceState.selectedSliceIndex >= 0) {
+        const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
+        if (slice && importSliceState.dragOriginRect) {
+          const dx = coords.x - importSliceState.dragStartX;
+          const dy = coords.y - importSliceState.dragStartY;
+          const orig = importSliceState.dragOriginRect;
+          const h = importSliceState.activeHandle;
+
+          if (h === 'se') {
+            slice.frame.w = Math.max(4, orig.w + dx);
+            slice.frame.h = Math.max(4, orig.h + dy);
+          } else if (h === 'sw') {
+            slice.frame.x = Math.min(orig.x + orig.w - 4, orig.x + dx);
+            slice.frame.w = Math.max(4, orig.w - dx);
+            slice.frame.h = Math.max(4, orig.h + dy);
+          } else if (h === 'ne') {
+            slice.frame.y = Math.min(orig.y + orig.h - 4, orig.y + dy);
+            slice.frame.w = Math.max(4, orig.w + dx);
+            slice.frame.h = Math.max(4, orig.h - dy);
+          } else if (h === 'nw') {
+            slice.frame.x = Math.min(orig.x + orig.w - 4, orig.x + dx);
+            slice.frame.y = Math.min(orig.y + orig.h - 4, orig.y + dy);
+            slice.frame.w = Math.max(4, orig.w - dx);
+            slice.frame.h = Math.max(4, orig.h - dy);
+          }
+          renderImportSliceView();
+        }
+        return;
+      }
+
+      if (e.target === canvas) {
+        if (importSliceState.activeTool === 'hand' || isSpacebarHeld) {
+          canvas.style.cursor = 'grab';
+          return;
+        }
+        if (importSliceState.activeTool === 'draw') {
+          canvas.style.cursor = 'crosshair';
+          return;
+        }
+
+        const frames = importSliceState.frames || [];
+        const selected = (importSliceState.selectedSliceIndex >= 0) ? frames[importSliceState.selectedSliceIndex] : null;
+        if (selected) {
+          const handle = hitTestSliceHandles(selected, coords.x, coords.y);
+          if (handle === 'nw' || handle === 'se') {
+            canvas.style.cursor = 'nwse-resize';
+            return;
+          } else if (handle === 'ne' || handle === 'sw') {
+            canvas.style.cursor = 'nesw-resize';
+            return;
+          } else if (handle === 'move') {
+            canvas.style.cursor = 'move';
+            return;
+          }
+        }
+        for (let i = frames.length - 1; i >= 0; i--) {
+          const f = frames[i];
+          if (coords.x >= f.frame.x && coords.x <= f.frame.x + f.frame.w &&
+              coords.y >= f.frame.y && coords.y <= f.frame.y + f.frame.h) {
+            canvas.style.cursor = 'pointer';
+            return;
+          }
+        }
+        canvas.style.cursor = 'default';
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (importSliceState.isPanning) {
+        importSliceState.isPanning = false;
+        container.style.cursor = (importSliceState.activeTool === 'hand' || isSpacebarHeld) ? 'grab' : 'default';
+      }
+
+      if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
+        const dr = importSliceState.currentDragRect;
+        if (dr.w >= 4 && dr.h >= 4) {
+          const nextIdx = importSliceState.frames.length;
+          const newSlice = {
+            name: `slice_${String(nextIdx).padStart(3, '0')}`,
+            tag: '',
+            frame: { ...dr },
+            sourceSize: { w: dr.w, h: dr.h },
+            spriteSourceSize: { x: 0, y: 0, w: dr.w, h: dr.h }
+          };
+          importSliceState.frames.push(newSlice);
+          importSliceState.selectedSliceIndex = nextIdx;
+          showToast(`Added Slice #${nextIdx + 1} (${dr.w}×${dr.h}px)`, 'success');
+        }
+        importSliceState.isDrawingSlice = false;
+        importSliceState.currentDragRect = null;
+        renderImportSliceView();
+        return;
+      }
+
+      if (importSliceState.isDraggingSlice || importSliceState.isResizingSlice) {
+        importSliceState.isDraggingSlice = false;
+        importSliceState.isResizingSlice = false;
+        importSliceState.activeHandle = null;
+        importSliceState.dragOriginRect = null;
+        renderImportSliceView();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (state.activeTabId !== 'tab-import-slice') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        if (!isSpacebarHeld) {
+          isSpacebarHeld = true;
+          container.style.cursor = 'grab';
+        }
+        e.preventDefault();
+      } else if (e.key === 'v' || e.key === 'V') {
+        setSliceTool('select');
+      } else if (e.key === 'd' || e.key === 'D') {
+        setSliceTool('draw');
+      } else if (e.key === 'h' || e.key === 'H') {
+        setSliceTool('hand');
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (importSliceState.selectedSliceIndex >= 0) {
+          deleteImportSlice(importSliceState.selectedSliceIndex);
+        }
+      } else if (e.key === 'Escape') {
+        importSliceState.selectedSliceIndex = -1;
+        renderImportSliceView();
+      } else if (e.key === '+' || e.key === '=') {
+        setSliceZoom(importSliceState.zoom * 1.25);
+      } else if (e.key === '-' || e.key === '_') {
+        setSliceZoom(importSliceState.zoom * 0.8);
+      } else if (e.key === '0') {
+        setSliceZoom(1);
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        isSpacebarHeld = false;
+        container.style.cursor = (importSliceState.activeTool === 'hand') ? 'grab' : 'default';
+      }
+    });
   }
 
   function updateImportSlices() {
     if (!importSliceState.image) return;
     const method = dom.selectSliceMethod ? dom.selectSliceMethod.value : 'grid';
 
-    if (method === 'grid') {
+    if (method === 'manual') {
+      if (importSliceState.frames.length === 0) {
+        showToast('Click and drag on the image to draw your first slice!', 'info');
+      }
+    } else if (method === 'grid') {
       const cellW = Math.max(1, parseInt(dom.inputSliceCellW?.value, 10) || 32);
       const cellH = Math.max(1, parseInt(dom.inputSliceCellH?.value, 10) || 32);
       const cols = dom.inputSliceCols?.value ? parseInt(dom.inputSliceCols.value, 10) : undefined;
@@ -3676,6 +4453,7 @@
 
       importSliceState.frames = rects.map((r, i) => ({
         name: `slice_${String(i).padStart(3, '0')}`,
+        tag: '',
         frame: r,
         sourceSize: { w: r.w, h: r.h },
         spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
@@ -3697,6 +4475,7 @@
 
       importSliceState.frames = islands.map((r, i) => ({
         name: `island_${String(i).padStart(3, '0')}`,
+        tag: '',
         frame: r,
         sourceSize: { w: r.w, h: r.h },
         spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
@@ -3757,9 +4536,18 @@
           if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
           if (dom.importSliceFileName) dom.importSliceFileName.textContent = file.name;
           if (dom.importSliceImgDims) dom.importSliceImgDims.textContent = `${img.width}×${img.height}`;
+
+          const maxDim = Math.max(img.width, img.height);
+          if (maxDim <= 64) importSliceState.zoom = 6;
+          else if (maxDim <= 128) importSliceState.zoom = 4;
+          else if (maxDim <= 256) importSliceState.zoom = 2;
+          else if (maxDim > 1024) importSliceState.zoom = 0.5;
+          else importSliceState.zoom = 1;
+
           state.activeTabId = 'tab-import-slice';
           refreshAll();
           updateImportSlices();
+          applySliceZoom();
           showToast(`Loaded ${file.name} for slicing!`);
         };
         img.src = e.target.result;
@@ -3806,9 +4594,18 @@
             if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
             if (dom.importSliceFileName) dom.importSliceFileName.textContent = pngFile.name;
             if (dom.importSliceImgDims) dom.importSliceImgDims.textContent = `${img.width}×${img.height}`;
+
+            const maxDim = Math.max(img.width, img.height);
+            if (maxDim <= 64) importSliceState.zoom = 6;
+            else if (maxDim <= 128) importSliceState.zoom = 4;
+            else if (maxDim <= 256) importSliceState.zoom = 2;
+            else if (maxDim > 1024) importSliceState.zoom = 0.5;
+            else importSliceState.zoom = 1;
+
             state.activeTabId = 'tab-import-slice';
             refreshAll();
             updateImportSlices();
+            applySliceZoom();
             showToast(`Paired ${pngFile.name} + ${jsonFile.name} loaded into Atlas Slicer!`, 'success');
           };
           img.src = pe.target.result;
@@ -6228,6 +7025,7 @@
         localStorage.setItem('noiradix_active_file_name', currentFileName);
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
         state.setDocument(doc);
+        syncOrRegisterProjectSession(doc, file.name, handle, file.name);
         setDirty(false);
         refreshAll();
         showToast(`Opened ${file.name} from disk!`, 'success');
@@ -8377,6 +9175,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         localStorage.setItem('noiradix_active_file_path', currentFilePath);
         localStorage.setItem('pix2_last_saved_content', text);
         state.setDocument(doc);
+        syncOrRegisterProjectSession(doc, file.name, handle, file.name);
         setDirty(false);
         refreshAll();
         showToast(`Linked & opened ${file.name} from disk (Ctrl+S will save directly)!`, 'success');
@@ -8429,6 +9228,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           localStorage.setItem('noiradix_active_file_name', currentFileName);
           localStorage.setItem('noiradix_active_file_path', currentFilePath);
           localStorage.setItem('pix2_last_saved_content', content);
+          syncOrRegisterProjectSession(doc, file.name, null, file.name);
           setDirty(false);
           refreshAll();
           showToast(`Opened ${file.name}!`, 'success');
@@ -9258,6 +10058,48 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
     dom.btnRunSlicePreview?.addEventListener('click', updateImportSlices);
     dom.btnImportSliceCommit?.addEventListener('click', commitImportSlicesToProject);
+
+    // Slicing Viewport Tool mode toggles
+    dom.btnSliceToolSelect?.addEventListener('click', () => setSliceTool('select'));
+    dom.btnSliceToolDraw?.addEventListener('click', () => setSliceTool('draw'));
+    dom.btnSliceToolHand?.addEventListener('click', () => setSliceTool('hand'));
+
+    // Slicing Viewport Zoom controls
+    dom.btnSliceZoomOut?.addEventListener('click', () => setSliceZoom(importSliceState.zoom * 0.8));
+    dom.btnSliceZoomIn?.addEventListener('click', () => setSliceZoom(importSliceState.zoom * 1.25));
+    dom.btnSliceZoomFit?.addEventListener('click', fitSliceZoom);
+    dom.btnSliceZoomReset?.addEventListener('click', () => setSliceZoom(1));
+
+    // Slicing Viewport Selection actions
+    dom.btnSliceSelectAll?.addEventListener('click', () => {
+      if (importSliceState.frames && importSliceState.frames.length > 0) {
+        importSliceState.selectedSliceIndex = 0;
+        renderImportSliceView();
+      }
+    });
+    dom.btnSliceDeselect?.addEventListener('click', () => {
+      importSliceState.selectedSliceIndex = -1;
+      renderImportSliceView();
+    });
+    dom.btnSliceDeleteSelected?.addEventListener('click', () => {
+      if (importSliceState.selectedSliceIndex >= 0) {
+        deleteImportSlice(importSliceState.selectedSliceIndex);
+      }
+    });
+    dom.btnSliceClearAll?.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear all slices?')) {
+        importSliceState.frames = [];
+        importSliceState.selectedSliceIndex = -1;
+        renderImportSliceView();
+        showToast('Cleared all slices', 'info');
+      }
+    });
+
+    // Inspector Deck Batch Tagging Actions
+    dom.btnBatchTagPrefix?.addEventListener('click', batchTagPrefix);
+    dom.btnAutoTag4Dir?.addEventListener('click', autoTag4Dir);
+    dom.btnAutoTag8Dir?.addEventListener('click', autoTag8Dir);
+    dom.btnClearAllTags?.addEventListener('click', clearAllTags);
 
     // Game Export Studio Modal Event Handlers
     dom.exportFormatOptions?.addEventListener('click', (e) => {
