@@ -116,31 +116,37 @@ https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
 
 ---
 
-### 1. PIX2 1.1 Structural Graphics Studio: Arch-Lich Grim Reaper (48×48)
-![Arch-Lich Grim Reaper 48x48 Render in NOIRADIX Studio](docs/arch-lich-48x48-render.png)
-*High-fidelity 48×48 Arch-Lich Grim Reaper boss synthesized under PIX2 1.1 and rendered on the NOIRADIX Studio coordinate grid: Multi-layer Scene Graph with floating soulfire aura, gothic cowl, skeletal ribcage, and curved executioner soul scythe.*
+### 1. AI-Native Coding in Action: Gemini Argon 4.0 Authoring PIX2 1.1
+![Gemini Argon 4.0 Coding PIX2 1.1 in Chat](docs/noiradix-pix2-1.1.png)
+*Live demonstration of Gemini Argon 4.0 authoring structured PIX2 1.1 code directly in chat: Compiling directional animation tracks (`@animation walk_down`, `walk_up`, `walk_right`, `walk_left`), scanline coordinates, and multi-layer Scene Graph hierarchy without hallucinating invalid pixel coordinates.*
 
 ---
 
-### 2. Sprite Sheet Matrix & Boss Locomotion Layout (48×48 Arch-Lich Grim Reaper)
+### 2. High-Fidelity Canvas Rendering: Arch-Lich Grim Reaper (48×48)
+![Arch-Lich Grim Reaper 48x48 Render in NOIRADIX Studio](docs/arch-lich-48x48-render.png)
+*The resulting 48×48 Arch-Lich Grim Reaper boss rendered in NOIRADIX Studio: Crisp coordinate grid, floating soulfire aura (`opacity: 0.9`), gothic tattered cowl, skeletal ribcage, and curved executioner scythe rendered 100% sharp without blur.*
+
+---
+
+### 3. Sprite Sheet Matrix & Boss Locomotion Layout (48×48 Arch-Lich Grim Reaper)
 ![Sprite Sheet Matrix Overview - 48x48 Arch-Lich Grim Reaper](docs/noiradix-grid-overview-pix2-1.1.png)
 *Multi-cell 4×4 matrix featuring the 48×48 Arch-Lich Grim Reaper boss with 4 directional tracks (Down, Up, Right, Left), frame sequences, and real-time Inspector.*
 
 ---
 
-### 3. Precision Pixel Editor with Structure & Layers Hierarchy Deck
+### 4. Precision Pixel Editor with Structure & Layers Hierarchy Deck
 ![Precision Pixel Editor with Structure & Layers](docs/noiradix-editor-pix2-1.1.png)
 *First-class structural graphics: Structure & Layers deck (`+ Layer`, `📁 Group`, `⛶ Region`), Region semantic tags, active cell view, and non-destructive Porter-Duff alpha compositing.*
 
 ---
 
-### 4. Directional Animation Studio (Real-Time Playback)
+### 5. Directional Animation Studio (Real-Time Playback)
 ![Directional Animation Studio](docs/noiradix-grid-animation.png)
 *Floating real-time playback player supporting 4-direction, Platformer 2D, and 8-direction compass previews, variable FPS slider, and loop controls.*
 
 ---
 
-### 5. AI-Native PIX2 Code & 1-Click Prompt Studio
+### 6. AI-Native PIX2 Code & 1-Click Prompt Studio
 ![AI Code & Prompt Generator](docs/noiradix-COPYFORAI.png)
 *1-Click "Copy for AI Prompt" with 600–800 line cognitive guide, token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, live syntax highlighting with swatch preview, safe View-Only mode, and real-time disk hot-reload.*
 
@@ -429,35 +435,42 @@ In 16×16 sprites, a canvas has 256 pixels per frame. An LLM can handle a flat p
 2. **Color Clashing & Diffusion Bleed:** Flat coordinate models accidentally blend translucent aura effects into solid robe pixels, creating noisy, anti-aliased mud and dirty borders.
 3. **Locomotion Desynchronization:** Across 16 frames, floating limbs jitter and change size by 4-5 pixels, destroying the visual cohesion of the character.
 
-### How PIX2 1.1 & Gemini Argon 4.0 Solved This (The 3 Core Lessons)
+### How PIX2 1.1 & Gemini Argon 4.0 Solved This (The 4 Architectural Principles)
 
 ![Gemini Argon 4.0 Architectural Feedback](docs/gemini-argon-feedback.png)
 *Gemini Argon 4.0 technical feedback on scanline rasterization vs. shape fills, layer ordering, and lossless coordinate alignment.*
 
-#### 1. Semantic Hierarchy Acts as Cognitive Scaffolding for AI
-Instead of dumping 36,000 raw pixels into a flat array, PIX2 1.1 gave **Gemini Argon 4.0** a clear mental model:
+#### 1. CRT-Style Scanline Rasterization (`line` & `sym_dot`)
+Instead of guessing organic shapes or relying on unsupported geometric fill commands, Gemini Argon 4.0 formulated pixel art as **scanline mathematics** (`line x1,y x2,y <color>`). By scanning row-by-row like a CRT rasterizer:
+* Fills are guaranteed 100% solid with zero interior voids, pinhole gaps, or stray transparent artifacts.
+* Curves for the pointed gothic hood, bone skull contours, skeletal pauldrons, and curved scythe blade remain mathematically smooth and symmetrical across all 16 frames.
+
+#### 2. Exact Bilateral Axis Coordinates across 48px Grids (`x_left = 47 - x_right`)
+On an even 48×48 coordinate grid `(0..47, 0..47)`, the true center axis lies precisely at `23.5`. Gemini Argon 4.0 mapped bilateral anatomical symmetry using the invariant:
+$$x_{\text{left}} = 47 - x_{\text{right}}$$
+This guarantees that the glowing red soulfire eye sockets (X=21 and X=26), skull temples, and bone pauldrons are anchored with millimeter precision, eliminating the grotesque facial warping common in diffusion models.
+
+#### 3. View-Dependent Dynamic Z-Ordering (`@layer` Inversion)
+The Scene Graph architecture allows direction-aware depth sorting without redrawing character assets:
+* **Frontal & Profile Views (`down`, `right`, `left`):** `@layer weapon` renders after `@layer body`, so the Executioner Scythe overlaps in front of the tattered robes.
+* **Rear Back View (`up`):** The layer order is inverted—`@layer weapon` renders *before* `@layer body`, automatically tucking the scythe shaft behind the billowing cowl and shroud.
+
+#### 4. Semantic Hierarchy (`@layer` → `@group` → `@region`) & Native Alpha
+Instead of dumping 36,000 raw pixels into a flat array, PIX2 1.1 gave **Gemini Argon 4.0** a clear hierarchical scaffold:
 ```
 @cell cell_0_0
   ├── @layer aura_0_0 (Spectral Soulfire, opacity: 0.9)
   │     └── @region reg_aura_0_0 (tags: [aura, fx])
-  └── @layer body_0_0 (Reaper Body)
-        └── @group grp_cloak_0_0 (tags: [cloth, cloak])
-              └── @region reg_robe_0_0 (tags: [cloth, robe])
+  ├── @layer body_0_0 (Reaper Body, opacity: 1.0)
+  │     ├── @group grp_cloak_0_0 (tags: [cloth, cloak])
+  │     │     └── @region reg_robe_0_0 (tags: [cloth, robe])
+  │     └── @group grp_head_0_0 (tags: [head])
+  │           ├── @region reg_hood_0_0 (tags: [hood, cloth])
+  │           └── @region reg_skull_0_0 (tags: [skull, bone])
+  └── @layer weapon_0_0 (Executioner Soul Scythe)
+        └── @region reg_scythe_0_0 (tags: [weapon, blade])
 ```
-Because the model synthesizes each node separately, it reasons about the **skull and shroud anatomy independently from the magical soulfire FX**. Zero cross-region corruption occurred!
-
-#### 2. Declarative Layer Opacity Eliminates Manual Alpha Math
-In traditional flat pixel art, creating a glowing ethereal aura requires manually calculating blended RGB values for every single pixel over every possible background.  
-In PIX2 1.1, Gemini Argon 4.0 simply declared:
-```pix2
-@layer aura_0_0
-  opacity: 0.9
-  blend: normal
-```
-The **NOIRADIX Studio Porter-Duff compositing engine** handles the compound alpha math automatically at runtime. The AI simply plotted the raw soulfire colors (`#00ffcc`, `#00aaff`), and the engine produced flawless semi-translucent floating wisps!
-
-#### 3. Row-Anchored Coordinate Invariants for Flawless Walk Cycles
-By establishing discrete Y-anchors across rows (e.g. cowl baseline at Y=19, cloak hem at Y=44) and applying a 1-pixel vertical bob formula with a 1-frame lag on trailing cloth tatters, Gemini Argon 4.0 generated an eerily smooth, undulating hovering animation that looks like it was hand-crafted by a professional pixel animator over multiple days.
+Because the model synthesizes each node separately, it reasons about the **skull and shroud anatomy independently from the magical soulfire FX**. Declarative opacity (`opacity: 0.9`) offloads Porter-Duff alpha blending to NOIRADIX Studio's compositor, freeing the AI from calculating manual background-color blending math.
 
 > **Takeaway:** PIX2 1.1 proves that **Sprite-as-Structured-Data (SaaD)** scales cleanly from tiny 16×16 retro characters to massive 48×48 boss monsters with production-ready structural fidelity.
 
