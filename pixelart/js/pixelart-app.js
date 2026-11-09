@@ -1384,6 +1384,7 @@
     enableHorizontalDragScroll(document.querySelector('.pa-swatches-scroll'));
     enableHorizontalDragScroll(document.querySelector('.pa-code-header'));
     enableHorizontalDragScroll(document.querySelector('.pa-code-statusbar'));
+    enableHorizontalDragScroll(document.querySelector('.pa-structure-actions'));
 
     // Responsive Drag & Mouse-Wheel Vertical Scroll
     enableVerticalDragScroll(document.getElementById('pa-toolbar'));
