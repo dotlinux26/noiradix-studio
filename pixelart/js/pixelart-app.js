@@ -5920,12 +5920,16 @@
       regionSelection?.cancel();
     }
     state.currentTool = toolName;
-    document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((b) => {
-      b.classList.toggle('active', b.dataset.tool === toolName);
-    });
+    if (_hasDocument) {
+      document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((b) => {
+        b.classList.toggle('active', b.dataset.tool === toolName);
+      });
+    }
 
     if (toolName !== 'select') state.selection = null;
-    renderSelectionMarquee();
+    if (_hasDocument) {
+      renderSelectionMarquee();
+    }
   }
 
   function updateUi() {
