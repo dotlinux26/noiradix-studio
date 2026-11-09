@@ -116,9 +116,9 @@ https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
 
 ---
 
-### 1. PIX2 1.1 Structural Graphics Studio Environment
-![NOIRADIX Studio PIX2 1.1 Interface](docs/noiradix-pix2-1.1.png)
-*The complete NOIRADIX Studio v2.1.0 environment: Multi-layer structural Scene Graph, dynamic directional animation controls, and live coordinate-addressed pixel canvas.*
+### 1. PIX2 1.1 Structural Graphics Studio: Arch-Lich Grim Reaper (48×48)
+![Arch-Lich Grim Reaper 48x48 Render in NOIRADIX Studio](docs/arch-lich-48x48-render.png)
+*High-fidelity 48×48 Arch-Lich Grim Reaper boss synthesized under PIX2 1.1 and rendered on the NOIRADIX Studio coordinate grid: Multi-layer Scene Graph with floating soulfire aura, gothic cowl, skeletal ribcage, and curved executioner soul scythe.*
 
 ---
 
@@ -421,12 +421,18 @@ The **Arch-Lich Grim Reaper** [`samples/Arch-Lich Grim Reaper 48x48.pix2`](sampl
 The synthesis of the **Arch-Lich Grim Reaper 48×48** marked a major breakthrough for NOIRADIX Studio and generative AI in game asset production:
 
 ### Why 48×48 Pixel Art Previously Broke Generative AI
+![Gemini Argon 4.0 Synthesizing PIX2 1.1 Structural Code](docs/noiradix-pix2-1.1.png)
+*Gemini Argon 4.0 generating structured PIX2 1.1 directives, animations (`walk_down`, `walk_up`, `walk_right`, `walk_left`), and Scene Graph layers directly in chat.*
+
 In 16×16 sprites, a canvas has 256 pixels per frame. An LLM can handle a flat pixel list with moderate success. But scaling to **48×48 (2,304 pixels per frame, 36,864 pixels per sheet)** breaks flat formats completely:
 1. **Context Drift & Spatial Confusion:** Without structural hierarchy, the AI loses track of which coordinates belong to the scythe, which belong to the face, and which belong to the floating aura.
 2. **Color Clashing & Diffusion Bleed:** Flat coordinate models accidentally blend translucent aura effects into solid robe pixels, creating noisy, anti-aliased mud and dirty borders.
 3. **Locomotion Desynchronization:** Across 16 frames, floating limbs jitter and change size by 4-5 pixels, destroying the visual cohesion of the character.
 
 ### How PIX2 1.1 & Gemini Argon 4.0 Solved This (The 3 Core Lessons)
+
+![Gemini Argon 4.0 Architectural Feedback](docs/gemini-argon-feedback.png)
+*Gemini Argon 4.0 technical feedback on scanline rasterization vs. shape fills, layer ordering, and lossless coordinate alignment.*
 
 #### 1. Semantic Hierarchy Acts as Cognitive Scaffolding for AI
 Instead of dumping 36,000 raw pixels into a flat array, PIX2 1.1 gave **Gemini Argon 4.0** a clear mental model:
