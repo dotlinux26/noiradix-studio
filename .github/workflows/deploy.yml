@@ -116,8 +116,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:8769/ > /dev/null
-          # Temporarily skip test-editor.cjs pending PixelArt browser event lifecycle stabilization
-          # EDITOR_QA_DENSE=1 EDITOR_QA_DPR=2 node tests/browser/test-editor.cjs
+          EDITOR_QA_DENSE=1 EDITOR_QA_DPR=2 node tests/browser/test-editor.cjs
           node tests/browser/test-workspace.cjs
 
   release:

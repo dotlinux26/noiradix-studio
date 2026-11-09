@@ -4536,6 +4536,7 @@
         triggerAutosave(true);
         saveCurrentPaSession();
         renderPaProjectTabs();
+        fitCanvasToViewport();
         showToast(`Opened ${file.name}`);
       } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name)) {
         await importImageToPixelArt(file);
