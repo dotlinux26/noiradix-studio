@@ -8638,9 +8638,14 @@ const outText = PIX2.serialize(doc);</code></pre>
     let effZoom = exportPreviewZoom;
     if (exportPreviewZoom === 'fit') {
       const vp = document.getElementById('export-preview-viewport');
-      const vpw = vp ? (vp.clientWidth - 32) : 200;
-      const vph = vp ? (vp.clientHeight - 32) : 200;
-      effZoom = Math.max(1, Math.floor(Math.min(vpw / atlasData.width, vph / atlasData.height)));
+      const vpw = vp ? Math.max(64, vp.clientWidth - 24) : 200;
+      const vph = vp ? Math.max(64, vp.clientHeight - 24) : 200;
+      const fitRatio = Math.min(vpw / atlasData.width, vph / atlasData.height);
+      if (fitRatio >= 1) {
+        effZoom = Math.max(1, Math.floor(fitRatio));
+      } else {
+        effZoom = Math.max(0.05, Number(fitRatio.toFixed(3)));
+      }
     } else {
       effZoom = Math.max(1, Number(exportPreviewZoom) || 4);
     }
@@ -10586,18 +10591,21 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
       });
     });
 
-    // Mouse wheel zoom on Export preview viewport
+    // Mouse wheel zoom and drag-to-pan on Export preview viewport
     const exportViewport = document.getElementById('export-preview-viewport');
     if (exportViewport) {
       exportViewport.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const scales = [1, 2, 4, 'fit'];
+        const scales = [1, 2, 4];
         let curIdx = scales.indexOf(exportPreviewZoom);
-        if (curIdx === -1) curIdx = 2; // default 4
-        if (e.deltaY < 0 && curIdx < scales.length - 1) {
-          curIdx++;
-        } else if (e.deltaY > 0 && curIdx > 0) {
-          curIdx--;
+        if (curIdx === -1) {
+          curIdx = e.deltaY < 0 ? 1 : 0;
+        } else {
+          if (e.deltaY < 0 && curIdx < scales.length - 1) {
+            curIdx++;
+          } else if (e.deltaY > 0 && curIdx > 0) {
+            curIdx--;
+          }
         }
         const nextScale = scales[curIdx];
         exportPreviewZoom = nextScale;
@@ -10615,6 +10623,33 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           b.classList.toggle('active', b.dataset.scale === String(nextScale));
         });
         updateExportPreview();
+      });
+
+      let isPanDragging = false;
+      let panStartX = 0;
+      let panStartY = 0;
+      let scrollStartX = 0;
+      let scrollStartY = 0;
+
+      exportViewport.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 && e.button !== 1) return;
+        isPanDragging = true;
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        scrollStartX = exportViewport.scrollLeft;
+        scrollStartY = exportViewport.scrollTop;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isPanDragging) return;
+        const dx = e.clientX - panStartX;
+        const dy = e.clientY - panStartY;
+        exportViewport.scrollLeft = scrollStartX - dx;
+        exportViewport.scrollTop = scrollStartY - dy;
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPanDragging = false;
       });
     }
 

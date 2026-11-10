@@ -3121,12 +3121,14 @@ body {
   padding: 16px 20px;
   max-height: 78vh;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .export-columns-layout {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   gap: 16px;
+  align-items: start;
 }
 
 @media (max-width: 740px) {
@@ -3139,6 +3141,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .export-section {
@@ -3217,6 +3220,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .export-preview-viewport {
@@ -3230,12 +3236,41 @@ body {
   background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  height: 230px;
+  height: 250px;
+  min-height: 250px;
+  max-height: 250px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: auto;
   padding: 12px;
+  position: relative;
+  user-select: none;
+  cursor: grab;
+}
+
+.export-preview-viewport:active {
+  cursor: grabbing;
+}
+
+.export-preview-viewport::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.export-preview-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.export-preview-viewport::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 3px;
+}
+
+.export-preview-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
 }
 
 body.dark-theme .export-preview-viewport {
@@ -3254,7 +3289,9 @@ body.dark-theme .export-preview-viewport {
   display: block;
   margin: auto;
   flex-shrink: 0;
-  transition: width 0.15s, height 0.15s;
+  max-width: none;
+  max-height: none;
+  transition: width 0.1s ease, height 0.1s ease;
 }
 
 .export-metadata-summary {
