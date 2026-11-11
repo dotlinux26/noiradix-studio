@@ -409,6 +409,32 @@ const PIX2 = require('../../js/pix2-format.js');
     await gridPage.waitForFunction(() => state.activeTabId === 'cell_3_3');
     assert.ok(await gridCanvas.evaluate(canvas => Math.max(canvas.width, canvas.height) <= 4096));
     console.log('Studio PASS 4×4 grid of 512×512 frames / Fit / sub-1× zoom / double-click at DPR 2');
+    await gridPage.locator('#btn-export-atlas').click();
+    const preview = gridPage.locator('#export-preview-canvas');
+    await gridPage.locator('#export-zoom-group [data-scale="fit"]').click();
+    await gridPage.waitForFunction(() => {
+      const image = document.querySelector('#export-preview-canvas').getBoundingClientRect();
+      const viewport = document.querySelector('#export-preview-viewport').getBoundingClientRect();
+      return image.width <= viewport.width && image.height <= viewport.height;
+    });
+    const previewBox = await preview.boundingBox();
+    const previewViewport = await gridPage.locator('#export-preview-viewport').boundingBox();
+    assert.ok(previewBox.width <= previewViewport.width && previewBox.height <= previewViewport.height,
+      JSON.stringify({ previewBox, previewViewport }));
+    await preview.evaluate(canvas => {
+      const context = canvas.getContext('2d');
+      const draw = context.drawImage.bind(context);
+      window.previewDraws = 0;
+      context.drawImage = (...args) => { window.previewDraws++; return draw(...args); };
+    });
+    await gridPage.locator('#export-zoom-group [data-scale="2"]').click();
+    assert.equal(await gridPage.evaluate(() => window.previewDraws), 0, 'Zoom reuses the existing raster');
+    await gridPage.locator('#export-scale-select').selectOption('4');
+    assert.ok(await gridPage.locator('#btn-execute-game-export').isDisabled());
+    assert.ok(await gridPage.locator('#btn-quick-export-png').isDisabled());
+    await gridPage.locator('#export-scale-select').selectOption('1');
+    assert.ok(await gridPage.locator('#btn-execute-game-export').isEnabled());
+    console.log('Studio PASS export visible Fit / zoom raster reuse / allocation rejection and recovery');
   } finally {
     await browser.close();
   }

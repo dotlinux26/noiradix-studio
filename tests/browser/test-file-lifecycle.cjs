@@ -27,7 +27,14 @@ const assert = require('node:assert/strict');
             async queryPermission() { return record.denied ? 'denied' : 'granted'; },
             async requestPermission() { return record.denied ? 'denied' : 'granted'; },
             async isSameEntry(other) { return other === record.handle; },
-            async getFile() { return new File([record.content], this.name, { type: 'text/plain', lastModified: 100 }); },
+            async getFile() {
+              const snapshot = record.content;
+              if (record.blockRead) {
+                record.readStarted = true;
+                await new Promise(resolve => { record.releaseRead = resolve; });
+              }
+              return new File([snapshot], this.name, { type: 'text/plain', lastModified: 200 });
+            },
             async createWritable() {
               let pending;
               return {
@@ -70,6 +77,19 @@ const assert = require('node:assert/strict');
       assert.equal(await tabs.count(), initial + 2, 'Different handles with the same filename open independent tabs');
       const focus = id => page.locator('.project-tab[data-tab-id="' + id + '"]').click();
       const dirty = () => page.locator('.project-tab.active .project-tab-dirty-dot').count();
+      // A read started in A must not publish its content into B after switching.
+      await focus(a);
+      await page.evaluate(() => {
+        window.files.A.content = window.files.A.content.replace('title: "A"', 'title: "External A"');
+        window.files.A.blockRead = true;
+        window.dispatchEvent(new Event('focus'));
+      });
+      await page.waitForFunction(() => window.files.A.readStarted);
+      await focus(b);
+      await page.evaluate(() => { window.files.A.blockRead = false; window.files.A.releaseRead(); });
+      await page.waitForTimeout(150);
+      assert.equal(await source(), bText, 'Late watcher A cannot replace B');
+      await page.evaluate(text => { window.files.A.content = text; }, aText);
       await focus(a);
       await page.evaluate(() => { window.files.A.blocked = true; });
       await page.keyboard.press('Control+s');
