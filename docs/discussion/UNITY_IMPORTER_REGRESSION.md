@@ -10,3 +10,10 @@
 - **Format impact:** None. PIX2 grammar and serialization are unchanged.
 - **Verification:** `git diff --check` passed after the fix. Full release-gate results and Unity environment limitation are recorded in the release notes after execution.
 - **Remaining coverage:** Compile the generated importer in a supported Unity Editor version; Unity is not installed in the repository verification environment.
+
+## Compatibility follow-up
+
+- **Modern path:** Unity 2021.1+ builds the slice metadata through `SpriteDataProviderFactories` and `ISpriteEditorDataProvider`; Unity 2021.2+ also registers sprite name/file-ID pairs. Existing sprite IDs are reused by name on reimport.
+- **Legacy fallback:** Older Unity versions compile the `TextureImporter.spritesheet` branch. The obsolete API is excluded from modern Unity builds.
+- **Asset paths:** The generated animation directory is normalized to forward slashes before passing it to `AssetDatabase.CreateAsset`.
+- **Verification:** Source review and PIX2 package-data checks only so far. The generated file was refreshed in the supplied download folder. Unity compilation and import/reimport still need to be exercised in Unity 2021.1, 2021.2+, and a legacy version if those targets are supported.

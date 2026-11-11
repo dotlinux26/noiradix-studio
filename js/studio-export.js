@@ -233,6 +233,9 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEditor;
+#if UNITY_2021_1_OR_NEWER
+using UnityEditor.U2D.Sprites;
+#endif
 
 namespace NOIRADIX.Editor
 {
@@ -328,22 +331,77 @@ namespace NOIRADIX.Editor
                 importer.mipmapEnabled = false;
                 importer.spritePixelsPerUnit = data.meta.cellWidth > 0 ? data.meta.cellWidth : 16;
 
-                List<SpriteMetaData> metas = new List<SpriteMetaData>();
+                List<SpriteFrameMetadata> metas = new List<SpriteFrameMetadata>();
                 int texH = data.meta.size.h;
 
                 foreach (var frame in data.frames)
                 {
-                    SpriteMetaData sm = new SpriteMetaData();
-                    sm.name = frame.name;
                     int unityY = texH - frame.y - frame.h;
-                    sm.rect = new Rect(frame.x, unityY, frame.w, frame.h);
-                    sm.alignment = (int)SpriteAlignment.Custom;
-                    sm.pivot = new Vector2(frame.pivotX, frame.pivotY);
-                    metas.Add(sm);
+                    metas.Add(new SpriteFrameMetadata
+                    {
+                        name = frame.name,
+                        rect = new Rect(frame.x, unityY, frame.w, frame.h),
+                        pivot = new Vector2(frame.pivotX, frame.pivotY),
+                    });
                 }
 
-                importer.spritesheet = metas.ToArray();
+#if UNITY_2021_1_OR_NEWER
+                var factories = new SpriteDataProviderFactories();
+                factories.Init();
+                ISpriteEditorDataProvider dataProvider = factories.GetSpriteEditorDataProviderFromObject(importer);
+                if (dataProvider == null)
+                    throw new InvalidOperationException("Unity Sprite Data Provider is unavailable. Install or enable the 2D Sprite package.");
+
+                dataProvider.InitSpriteEditorDataProvider();
+                var existingRects = dataProvider.GetSpriteRects();
+                Dictionary<string, GUID> existingIds = new Dictionary<string, GUID>(StringComparer.Ordinal);
+                foreach (var existingRect in existingRects)
+                {
+                    if (!string.IsNullOrEmpty(existingRect.name) && !existingIds.ContainsKey(existingRect.name))
+                        existingIds.Add(existingRect.name, existingRect.spriteID);
+                }
+
+                SpriteRect[] spriteRects = new SpriteRect[metas.Count];
+                for (int i = 0; i < metas.Count; i++)
+                {
+                    SpriteFrameMetadata frame = metas[i];
+                    spriteRects[i] = new SpriteRect
+                    {
+                        name = frame.name,
+                        spriteID = existingIds.TryGetValue(frame.name, out GUID existingId) ? existingId : GUID.Generate(),
+                        rect = frame.rect,
+                        alignment = SpriteAlignment.Custom,
+                        pivot = frame.pivot,
+                    };
+                }
+                dataProvider.SetSpriteRects(spriteRects);
+
+#if UNITY_2021_2_OR_NEWER
+                ISpriteNameFileIdDataProvider nameIdProvider = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
+                if (nameIdProvider != null)
+                {
+                    List<SpriteNameFileIdPair> nameIdPairs = new List<SpriteNameFileIdPair>();
+                    foreach (var spriteRect in spriteRects)
+                        nameIdPairs.Add(new SpriteNameFileIdPair(spriteRect.name, spriteRect.spriteID));
+                    nameIdProvider.SetNameFileIdPairs(nameIdPairs);
+                }
+#endif
+                dataProvider.Apply();
+#else
+                List<SpriteMetaData> legacyMetas = new List<SpriteMetaData>(metas.Count);
+                foreach (SpriteFrameMetadata frame in metas)
+                {
+                    legacyMetas.Add(new SpriteMetaData
+                    {
+                        name = frame.name,
+                        rect = frame.rect,
+                        alignment = (int)SpriteAlignment.Custom,
+                        pivot = frame.pivot,
+                    });
+                }
+                importer.spritesheet = legacyMetas.ToArray();
                 EditorUtility.SetDirty(importer);
+#endif
                 importer.SaveAndReimport();
 
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
@@ -356,7 +414,7 @@ namespace NOIRADIX.Editor
                 }
 
                 int createdClips = 0;
-                string animDir = Path.Combine(Path.GetDirectoryName(assetPngPath), "Animations");
+                string animDir = Path.Combine(Path.GetDirectoryName(assetPngPath), "Animations").Replace('\\\\', '/');
                 if (!Directory.Exists(animDir)) Directory.CreateDirectory(animDir);
 
                 if (data.animations != null)
@@ -462,6 +520,13 @@ namespace NOIRADIX.Editor
             public int h;
             public float pivotX = 0.5f;
             public float pivotY = 0f;
+        }
+
+        private class SpriteFrameMetadata
+        {
+            public string name;
+            public Rect rect;
+            public Vector2 pivot;
         }
 
         [Serializable]
