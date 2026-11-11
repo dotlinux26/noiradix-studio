@@ -6,9 +6,12 @@
   <p><strong>A zero-dependency, AI-native structured sprite editor and directional animation suite</strong></p>
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
+    <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
   </p>
 </div>
+
+NOIRADIX Studio is also listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/).
 
 ---
 

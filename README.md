@@ -6,6 +6,7 @@
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
     <a href="https://noiradix.me/pixelart/"><img src="https://img.shields.io/badge/PixelArt%20Studio-noiradix.me%2Fpixelart-ec4899.svg?logo=artstation&logoColor=white" alt="Live PixelArt Studio"></a>
+    <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
@@ -20,6 +21,8 @@
 </div>
 
 **NOIRADIX Studio** is a pure vanilla, offline-first pixel art editor and animation suite built from the ground up for the `.pix2` semantic text standard. It bridges the gap between AI generation, pixel artists, and modern game engines by providing deterministic sparse-pixel serialization, multi-directional character templates, and game-ready atlas export with anti-bleeding protection.
+
+> Listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/) — see the product profile and its PIX2-focused overview.
 
 > [!TIP]
 > **Looking for standalone 2D pixel painting without animation timelines?**  
