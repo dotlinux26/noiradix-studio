@@ -2084,30 +2084,11 @@
 
   function paintRaster(cell, color, emitPixels) {
     const structured = Boolean(cell.layers?.length);
-    const target = _Tools.getTargetForPlot(cell, state.isolatedNodeId || state.activeRegionId || state.activeLayerId);
-    if (!target) return;
-    const changed = structured ? new Set() : null;
-    let didPaint = false;
-    emitPixels((x, y) => {
-      if (x < 0 || x >= state.w || y < 0 || y >= state.h) return;
-      const key = `${x},${y}`;
-      const oldVal = target.pixels[key] || null;
-      if (oldVal === color) return;
-      didPaint = true;
-      if (color === null) delete target.pixels[key];
-      else target.pixels[key] = color;
-      if (changed) {
-        changed.add(key);
-        return;
-      }
-      if (state.activeStrokeChanges) {
-        if (!state.activeStrokeChanges[key]) state.activeStrokeChanges[key] = [oldVal, color];
-        else state.activeStrokeChanges[key][1] = color;
-      }
-      plotPixelOnBuffer(x, y, color);
-      renderPixelDirect(x, y, color);
-    });
-    if (changed?.size) {
+    const target = getActiveEditingTarget(cell);
+    const { keys: changed, diff } = _Tools.editRaster(target,
+      { w: state.w, h: state.h, color, recordDiff: !structured }, emitPixels);
+    if (!changed.size) return false;
+    if (structured) {
       const display = _EditorCanvas.updateComposite(_PIX2, cell, state, changed, state.isolatedNodeId);
       for (const key of changed) {
         const [x, y] = key.split(',').map(Number);
@@ -2115,8 +2096,19 @@
         plotPixelOnBuffer(x, y, displayedColor);
         renderPixelDirect(x, y, displayedColor);
       }
+    } else {
+      for (const key of changed) {
+        const [oldVal, nextVal] = diff[key];
+        if (state.activeStrokeChanges) {
+          if (!state.activeStrokeChanges[key]) state.activeStrokeChanges[key] = [oldVal, nextVal];
+          else state.activeStrokeChanges[key][1] = nextVal;
+        }
+        const [x, y] = key.split(',').map(Number);
+        plotPixelOnBuffer(x, y, nextVal);
+        renderPixelDirect(x, y, nextVal);
+      }
     }
-    return didPaint;
+    return true;
   }
 
   function paintBrush(cell, tool, x0, y0, x1, y1) {
@@ -3160,13 +3152,32 @@
     const cell = getArtworkCell();
     if (!cell) return;
 
+    const currPixels = cell.pixels || {};
+    const previousEntry = state.history[state.historyIndex];
+    let pendingDiff = null;
+    // Decide whether the command changed artwork BEFORE dirtying the document
+    // or discarding redo. View focus and repeated no-op commands are not edits.
+    if (previousEntry && previousEntry.w === state.w && previousEntry.h === state.h &&
+        previousEntry.title === state.title) {
+      let unchanged = false;
+      if (cell.layers?.length) {
+        unchanged = Boolean(previousEntry.structuralLayers) &&
+          JSON.stringify(previousEntry.structuralLayers) === JSON.stringify(cell.layers);
+      } else if (!previousEntry.structuralLayers) {
+        pendingDiff = state.activeStrokeChanges || calculatePixelDiff(state.lastHistoryPixels || {}, currPixels);
+        unchanged = Object.values(pendingDiff).every(([before, after]) => before === after);
+      }
+      if (unchanged) {
+        state.activeStrokeChanges = null;
+        return;
+      }
+    }
+
     if (!initial) markDocumentMutation('history-step');
 
     if (state.historyIndex < state.history.length - 1) {
       state.history = state.history.slice(0, state.historyIndex + 1);
     }
-
-    const currPixels = cell.pixels || {};
 
     // The composite buffer cannot represent layer order, groups, visibility or
     // ownership. Structured documents therefore use complete AST snapshots;
@@ -3181,10 +3192,6 @@
         pixels: { ...currPixels },
         structuralLayers: JSON.parse(JSON.stringify(cell.layers))
       };
-      const previous = state.history[state.historyIndex];
-      if (previous && previous.structuralLayers &&
-          JSON.stringify(previous.structuralLayers) === JSON.stringify(snapshot.structuralLayers) &&
-          previous.title === snapshot.title) return;
       state.history.push(snapshot);
       state.historyIndex = state.history.length - 1;
       state.lastHistoryPixels = { ...currPixels };
@@ -3211,7 +3218,8 @@
     }
 
     const lastEntry = state.history[state.historyIndex];
-    const dimChanged = !lastEntry || (lastEntry.w !== state.w || lastEntry.h !== state.h);
+    const dimChanged = !lastEntry || Boolean(lastEntry.structuralLayers) ||
+      (lastEntry.w !== state.w || lastEntry.h !== state.h);
     const hasStrokeDiff = state.activeStrokeChanges && Object.keys(state.activeStrokeChanges).length > 0;
 
     if (dimChanged) {
@@ -3270,7 +3278,7 @@
         state.lastHistoryPixels = {};
       }
       const prevPixels = state.lastHistoryPixels;
-      const diff = calculatePixelDiff(prevPixels, currPixels);
+      const diff = pendingDiff || calculatePixelDiff(prevPixels, currPixels);
       const diffKeys = Object.keys(diff);
       if (diffKeys.length === 0 && lastEntry && lastEntry.title === state.title) {
         return;

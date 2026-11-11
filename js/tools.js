@@ -8,6 +8,36 @@ const Tools = (function () {
   const structure = typeof StructureOps !== 'undefined' ? StructureOps
     : (typeof require === 'function' ? require('./structure-operations.js') : null);
 
+  /**
+   * Apply one raster command to an explicitly resolved source target.
+   * No DOM, active editor lookup, compositing, history or persistence occurs here.
+   * The adapter owns target permissions and transaction commit/cancel.
+   * emit receives plot(x,y); fractional/outside coordinates are ignored.
+   */
+  function editRaster(target, { w, h, color, recordDiff = false }, emit) {
+    const keys = new Set();
+    const diff = recordDiff ? Object.create(null) : null;
+    let bounds = null;
+    if (!target) return { keys, diff, bounds };
+    const pixels = target.pixels || (target.pixels = {});
+    emit((x, y) => {
+      if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= w || y >= h) return;
+      const key = `${x},${y}`;
+      const previous = pixels[key] ?? null;
+      if (previous === color) return;
+      if (color === null) delete pixels[key];
+      else pixels[key] = color;
+      keys.add(key);
+      if (diff) diff[key] = [previous, color];
+      if (!bounds) bounds = { minX: x, minY: y, maxX: x, maxY: y };
+      else {
+        bounds.minX = Math.min(bounds.minX, x); bounds.minY = Math.min(bounds.minY, y);
+        bounds.maxX = Math.max(bounds.maxX, x); bounds.maxY = Math.max(bounds.maxY, y);
+      }
+    });
+    return { keys, diff, bounds };
+  }
+
   function brushBounds(x, y, size, width, height) {
     const offset = Math.floor(size / 2);
     const left = Math.max(0, x - offset);
@@ -566,6 +596,7 @@ const Tools = (function () {
   }
 
   return {
+    editRaster,
     brushStroke,
     brushPoint,
     symmetricPixels,

@@ -3148,20 +3148,16 @@
   }
 
   function paintCellStroke(cell, tool, x0, y0, x1, y1) {
-    const target = Tools.getTargetForPlot(cell);
+    const target = cell.layers?.length ? state.getActiveRegion(cell.id) : cell;
     if (!target) return;
     const isEraser = tool === 'eraser';
     const color = isEraser ? null : Tools.brushColor(state.primaryColor, brushSettings.opacity);
     if (!isEraser && !color) return;
     const size = isEraser ? brushSettings.eraserSize : brushSettings.size;
-    const dimensions = state.doc.meta.cellSize;
-    const changed = new Set();
-    Tools.brushStroke(x0, y0, x1, y1, size, { ...dimensions, symH: state.symmetry, symV: state.symmetryVertical }, (x, y) => {
-      const key = `${x},${y}`;
-      if ((target.pixels[key] ?? null) === color) return;
-      if (isEraser) delete target.pixels[key];
-      else target.pixels[key] = color;
-      changed.add(key);
+    const dimensions = cell.size || state.doc.meta.cellSize;
+    const { keys: changed } = Tools.editRaster(target, { ...dimensions, color }, plot => {
+      Tools.brushStroke(x0, y0, x1, y1, size,
+        { ...dimensions, symH: state.symmetry, symV: state.symmetryVertical }, plot);
     });
     if (!changed.size) return;
     const display = EditorCanvas.updateComposite(PIX2, cell, dimensions, changed, state.isolatedNodeId);
@@ -3482,10 +3478,10 @@
     const color = (e.button === 2) ? state.secondaryColor : state.primaryColor;
 
     if (['line', 'rect', 'rect-fill', 'circle', 'circle-fill'].includes(tool)) {
-      const target = Tools.getTargetForPlot(cell);
+      const target = cell.layers?.length ? state.getActiveRegion(cell.id) : cell;
       if (target) {
-        Tools.shapePixels(tool, dragStartX, dragStartY, coords.x, coords.y, cellShapeOptions(e), (x, y) => {
-          target.pixels[`${x},${y}`] = color;
+        Tools.editRaster(target, { ...(cell.size || state.doc.meta.cellSize), color }, plot => {
+          Tools.shapePixels(tool, dragStartX, dragStartY, coords.x, coords.y, cellShapeOptions(e), plot);
         });
         state.syncCellComposite(cell.id);
       }

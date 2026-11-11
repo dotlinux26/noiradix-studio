@@ -70,3 +70,15 @@ Không có thay đổi định dạng hay storage schema. Không cài dependency
 ## P2 — Mutation và transaction
 
 Đang bắt đầu: hợp nhất đường ghi raster và phát hiện thay đổi thực; giữ history adapter riêng. Ưu tiên brush/eraser/shapes và lỗi no-op làm tăng revision hoặc mất redo ở PixelArt.
+
+### Kết quả P2
+
+- Shared `Tools.editRaster` nhận source target tường minh, kích thước và emitter; trả changed keys, dirty bounds và diff tùy chọn. Không lookup app global, không DOM/history/autosave. Brush/eraser hai app và shapes Studio đi qua đường này; shapes PixelArt đã đi qua paintRaster adapter.
+- Adapter vẫn xử lý ancestor/visibility qua target resolver hiện có, cập nhật composite/buffer và chốt history. Kích thước dùng cell.size khi có.
+- RF-002 (PixelArt): pushHistory tăng revision/cắt redo trước khi phát hiện no-op. Đã đưa phát hiện thay đổi lên trước các side effect. Test production history xác nhận flat và structural no-op giữ clean/redo. Resize có cùng layers vẫn là thay đổi; bỏ check dư từng làm mất history của resize.
+- 20 Node suites qua, gồm `test-editor-refactor.js`. Browser editor dense DPR2 và native lifecycle qua cả hai app. Wheel p95 mẫu Studio 7.1ms / PixelArt 2.2ms. Benchmark scale p95 15.45ms, max 24.48ms; không coi là mọi sample dưới 16ms.
+- Phạm vi: chuẩn hóa mutation raster và publication no-op; vòng đời floating selection, clipboard và gesture chuyển tiếp P3. History stack/schema giữ riêng.
+
+## P3 — Selection và gesture
+
+Đang bắt đầu khảo sát hợp nhất lifecycle của floating selection và các phép flip/quarter-turn; giữ scope, baseline hủy và dữ liệu gốc khi scale/rotate.

@@ -138,3 +138,7 @@ Both parser distributions must remain byte-identical. Public raster allocations 
 ## Controller boundaries after P1
 
 Studio-specific UI controllers live in `js/studio-grid.js`, `studio-slice.js`, `studio-animation.js` and `studio-source.js`. The app connects their document/view ports and callbacks; they do not import each other. `studio-atlas.js` builds atlas rasters; `studio-export.js` packages them. Shared palette storage/dropdown behavior and immutable built-in color definitions live in `editor-palette-library.js` and `editor-palette-presets.js`; each editor receives separate mutable preset arrays. Core editor gestures and persistence remain app adapters during the next migration phases. See `discussion/EDITOR_REFACTOR_PROGRESS.md` for actual gates and outstanding work.
+
+## Mutation publication after P2
+
+Shared `Tools.editRaster` accepts a resolved source target and bounded integer coordinates and reports changed keys, optional before/after diff and dirty bounds. It does not resolve active application globals or publish history. App adapters resolve permissions, composite affected pixels, update their view and commit history. No-op commands must preserve revision, dirty state and redo. Dimension or structural changes remain edits even if the raster composite is unchanged.
