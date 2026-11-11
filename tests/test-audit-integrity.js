@@ -806,14 +806,11 @@ async function runSuite() {
     const cell = PixelArtApp.getArtworkCell();
     cell.pixels = { '2,2': '#ff0000', '3,2': '#00ff00' };
     PixelArtApp.state.selection = { x: 2, y: 2, w: 2, h: 1 };
-    // Simulate a transformed floating preview after the original pixels have
-    // been lifted out of the document. The baseline must win on Escape.
-    delete cell.pixels['2,2'];
-    delete cell.pixels['3,2'];
+    // Enter through the production lift so the shared session owns the source.
+    // Then simulate a transformed preview; the lift-time baseline must win.
+    PixelArtApp.ensureFloatingSelection();
     PixelArtApp.state.floatingPixels = { '0,0': '#0000ff' };
     PixelArtApp.state.floatingOriginalSel = { x: 4, y: 4, w: 1, h: 1 };
-    PixelArtApp.state.floatingBaselinePixels = { '0,0': '#ff0000', '1,0': '#00ff00' };
-    PixelArtApp.state.floatingBaselineSel = { x: 2, y: 2, w: 2, h: 1 };
 
     PixelArtApp.cancelFloatingSelection();
     assert.deepStrictEqual(cell.pixels, { '2,2': '#ff0000', '3,2': '#00ff00' },

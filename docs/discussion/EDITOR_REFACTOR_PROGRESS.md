@@ -82,3 +82,16 @@ Không có thay đổi định dạng hay storage schema. Không cài dependency
 ## P3 — Selection và gesture
 
 Đang bắt đầu khảo sát hợp nhất lifecycle của floating selection và các phép flip/quarter-turn; giữ scope, baseline hủy và dữ liệu gốc khi scale/rotate.
+
+### Kết quả P3
+
+- `js/editor-floating-selection.js` dùng chung lift/paste/commit/cancel, ownership theo document/cell/target, flip và quarter-turn. Hai app giữ binding field/UI/history riêng qua adapter. Không có engine selection thứ hai thay thế RegionSelection; tiếp tục dùng geometry hiện có.
+- Clipboard extraction dùng chung `SelectionTransform.copyPixels`; Studio giữ paste chốt ngay, PixelArt giữ paste nổi như UX hiện tại. Đây là khác biệt được bảo toàn, không phải hai thuật toán raster.
+- RF-003: hai nút flip selection Studio gọi `flipSelection` không tồn tại, trong khi menu dùng executeSelectionFlip. Browser regression mới bắt ReferenceError; đã nối về canonical command. Flip H/V, rotate, Undo đều qua cả hai app.
+- 20 Node suites qua. Test shared session kiểm tra baseline hủy bất biến, ancestor khóa sau lift, stale document không nhận nhầm pixel, paste-cancel không xóa destination và clipping khi commit. Test Escape cũ được đưa qua production lift thay cho tự tạo một phần state giả.
+- Browser editor dense DPR2 qua hai app, bổ sung pointercancel/blur ngay trong drag, flip hai trục và các luồng region/isolation hiện có. Native lifecycle runner cũng qua hai app.
+- Còn bước render/lifecycle P4: invalidation khi settlement hủy vì scope không còn active và chính sách đóng gói snapshot export/file. Viewport instance/history wiring tiếp tục riêng theo AGENTS.
+
+## P4 — Render và lifecycle
+
+Đang bắt đầu: kiểm tra buffer/cache ownership, invalidation và async snapshot; không đổi giao diện hoặc storage schema.

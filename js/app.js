@@ -874,7 +874,7 @@
       currentFileName = null;
       currentFilePath = null;
       lastSavedContent = '';
-      floatingSelectionPixels = null;
+      floatingSession.clear();
       floatingOriginalSel = null;
 
       // Clear canvas buffers to free GPU/RAM memory
@@ -3035,7 +3035,8 @@
     floatingCurrentX = floatingOriginalSel.x;
     floatingCurrentY = floatingOriginalSel.y;
     state.beginStroke();
-    const lifted = SelectionTransform.liftPixels(target, floatingOriginalSel);
+    const lifted = floatingSession.lift(state.doc, cell, target, floatingOriginalSel);
+    if (!lifted) return;
     floatingSelectionPixels = lifted.pixels;
     floatingBaselinePixels = lifted.baselinePixels;
     floatingBaselineSel = lifted.baselineBounds;
@@ -3043,28 +3044,35 @@
     renderCellEditor();
   }
 
+  const floatingSession = EditorFloatingSelection.create({
+    get pixels() { return floatingSelectionPixels; }, set pixels(value) { floatingSelectionPixels = value; },
+    get originalBounds() { return floatingOriginalSel; }, set originalBounds(value) { floatingOriginalSel = value; },
+    get baselinePixels() { return floatingBaselinePixels; }, set baselinePixels(value) { floatingBaselinePixels = value; },
+    get baselineBounds() { return floatingBaselineSel; }, set baselineBounds(value) { floatingBaselineSel = value; },
+    get targetId() { return floatingSelectionTargetId; }, set targetId(value) { floatingSelectionTargetId = value; },
+    get baselineTargetId() { return floatingSelectionTargetId; }, set baselineTargetId(value) { floatingSelectionTargetId = value; },
+    get x() { return floatingCurrentX; }, set x(value) { floatingCurrentX = value; },
+    get y() { return floatingCurrentY; }, set y(value) { floatingCurrentY = value; }
+  });
+
   function commitFloatingSelection(label = 'Move Selection') {
     if (!floatingSelectionPixels || !floatingOriginalSel) return;
     const cell = getFloatingSelectionCell();
-    const target = getSelectionTarget(cell, floatingSelectionTargetId);
-    if (cell && target) {
-      const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
-      const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-      SelectionTransform.placePixels(target, floatingSelectionPixels, {
-        x: floatingCurrentX, y: floatingCurrentY
-      }, { w: cw, h: ch });
-      state.selection = {
-        x: floatingCurrentX,
-        y: floatingCurrentY,
-        w: floatingOriginalSel.w,
-        h: floatingOriginalSel.h
-      };
+    const size = cell && (cell.size || state.doc.meta.cellSize);
+    const bounds = { x: floatingCurrentX, y: floatingCurrentY, w: floatingOriginalSel.w, h: floatingOriginalSel.h };
+    const result = floatingSession.commit(state.doc, bounds, size);
+    if (result.status === 'committed') {
+      state.selection = { ...result.bounds };
       if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
       if (state.endStroke(label)) triggerEventAutosave();
       renderCellEditor();
       renderMiniPreview();
+    } else {
+      state.strokePreState = null;
+      renderCellEditor();
+      renderMiniPreview();
     }
-    floatingSelectionPixels = null;
+    floatingSession.clear();
     floatingOriginalSel = null;
     floatingBaselinePixels = null;
     floatingBaselineSel = null;
@@ -3074,16 +3082,12 @@
 
   function cancelFloatingSelection() {
     const cell = getFloatingSelectionCell();
-    const target = getSelectionTarget(cell, floatingSelectionTargetId);
-    if (target && floatingBaselinePixels && floatingBaselineSel) {
-      const size = cell.size || state.doc.meta.cellSize;
-      SelectionTransform.placePixels(target, floatingBaselinePixels, floatingBaselineSel, size);
-      if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
-    }
+    floatingSession.cancel();
+    if (cell?.layers?.length) state.syncCellComposite(cell.id);
     // beginStroke() captured the pre-lift document. Cancellation leaves no
     // committed mutation, so discard it rather than recording a false undo.
     state.strokePreState = null;
-    floatingSelectionPixels = null;
+    floatingSession.clear();
     floatingOriginalSel = null;
     floatingBaselinePixels = null;
     floatingBaselineSel = null;
@@ -3632,18 +3636,8 @@
     }
     const target = getSelectionTarget(cell);
     if (!target) return;
-    const copiedPixels = {};
-    let count = 0;
-
-    for (let py = 0; py < sel.h; py++) {
-      for (let px = 0; px < sel.w; px++) {
-        const key = `${sel.x + px},${sel.y + py}`;
-        if (target.pixels && target.pixels[key]) {
-          copiedPixels[`${px},${py}`] = target.pixels[key];
-          count++;
-        }
-      }
-    }
+    const copiedPixels = SelectionTransform.copyPixels(target, sel);
+    const count = Object.keys(copiedPixels).length;
 
     state.clipboard = {
       w: sel.w,
@@ -3758,7 +3752,7 @@
       // Discard floating pixels without writing to destination!
       // Destination background pixels are 100% UNTOUCHED!
       // Original location was already cleared when lifted.
-      floatingSelectionPixels = null;
+      floatingSession.clear();
       floatingOriginalSel = null;
       floatingBaselinePixels = null;
       floatingBaselineSel = null;
@@ -3841,55 +3835,21 @@
     const cell = state.getActiveCell();
     if (!cell) return;
 
-    if (floatingSelectionPixels && floatingOriginalSel) {
-      const temp = { ...floatingSelectionPixels };
-      floatingSelectionPixels = {};
-      for (const relKey in temp) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const newRx = horizontal ? (floatingOriginalSel.w - 1 - rx) : rx;
-        const newRy = horizontal ? ry : (floatingOriginalSel.h - 1 - ry);
-        floatingSelectionPixels[`${newRx},${newRy}`] = temp[relKey];
-      }
-      renderMovingSelectionOverlay();
-      showToast(`Flipped selection ${horizontal ? 'Horizontally' : 'Vertically'}`);
-      return;
-    }
-
-    if (!state.selection) {
+    if (!state.selection && !floatingSelectionPixels) {
       showToast('Select a region to flip.');
       return;
     }
-    const target = getSelectionTarget(cell);
-    if (!target) {
+    const wasFloating = Boolean(floatingSelectionPixels);
+    ensureFloatingSelection();
+    if (!floatingSession.flip(floatingOriginalSel, horizontal)) {
       showToast('Select an editable layer or region');
       return;
     }
-    state.beginStroke();
-    const sel = state.selection;
-    const temp = {};
-
-    for (let py = 0; py < sel.h; py++) {
-      for (let px = 0; px < sel.w; px++) {
-        const key = `${sel.x + px},${sel.y + py}`;
-        if (target.pixels && target.pixels[key]) {
-          temp[`${px},${py}`] = target.pixels[key];
-          delete target.pixels[key];
-        }
-      }
-    }
-
-    for (const relKey in temp) {
-      const [rx, ry] = relKey.split(',').map(Number);
-      const newRx = horizontal ? (sel.w - 1 - rx) : rx;
-      const newRy = horizontal ? ry : (sel.h - 1 - ry);
-      target.pixels[`${sel.x + newRx},${sel.y + newRy}`] = temp[relKey];
-    }
-
-    state.syncCellComposite(cell.id);
-    state.endStroke(horizontal ? 'Flip Horizontal' : 'Flip Vertical');
-    triggerEventAutosave();
-    refreshAll();
-    renderCellOverlay();
+    if (!wasFloating) {
+      commitFloatingSelection(horizontal ? 'Flip Horizontal' : 'Flip Vertical');
+      refreshAll();
+      renderCellOverlay();
+    } else renderMovingSelectionOverlay();
     showToast(`Flipped selection ${horizontal ? 'Horizontally' : 'Vertically'}`);
   }
 
@@ -3949,12 +3909,7 @@
       showToast('Select an editable layer or region');
       return;
     }
-    floatingSelectionPixels = SelectionTransform.rotatePixelsNearestNeighbor(
-      floatingSelectionPixels, bounds.w, bounds.h, Math.PI / 2
-    ).pixels;
-    floatingOriginalSel = { ...next };
-    floatingCurrentX = next.x;
-    floatingCurrentY = next.y;
+    floatingSession.rotate90(bounds, size);
     state.selection = { ...next };
     if (!wasFloating) {
       commitFloatingSelection('Rotate selection 90°');
@@ -6611,7 +6566,7 @@
 
     bindAction('btn-flip-h', () => {
       if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
-        flipSelection(true);
+        executeSelectionFlip(true);
       } else {
         const cell = state.getActiveCell();
         if (cell && state.doc) {
@@ -6625,7 +6580,7 @@
 
     bindAction('btn-flip-v', () => {
       if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
-        flipSelection(false);
+        executeSelectionFlip(false);
       } else {
         const cell = state.getActiveCell();
         if (cell && state.doc) {

@@ -257,6 +257,30 @@ const fixture = `@pix2 1.1
         await page.mouse.up();
       };
       const rotate = page.locator('#btn-rotate-90');
+      for (const horizontal of [true, false]) {
+        await page.locator('[data-tool="select"]').click();
+        await dragPixels(2, 2, 7, 6);
+        await page.locator(horizontal ? '#btn-flip-h' : '#btn-flip-v').click();
+        if (pa) await page.keyboard.press('Enter');
+        assert.deepEqual((await node('red')).pixels,
+          { [horizontal ? '7,2' : '2,6']: '#ff0000' }, name + ' shared selection flip');
+        await page.keyboard.press('Control+z');
+        await page.keyboard.press('Escape');
+      }
+      for (const interruption of ['pointercancel', 'blur']) {
+        await page.locator('[data-tool="select"]').click();
+        await dragPixels(2, 2, 7, 6);
+        const from = await point(3, 5);
+        const to = await point(5, 8);
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(to.x, to.y, { steps: 4 });
+        if (interruption === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+        else await page.locator(pa ? '#pa-canvas-viewport' : '#cell-overlay').dispatchEvent('pointercancel');
+        await page.mouse.up();
+        assert.deepEqual((await node('red')).pixels, { '2,2': '#ff0000' }, name + ' interrupted lift restores source');
+        await page.keyboard.press('Escape');
+      }
       for (const moveFirst of [false, true]) {
         await page.locator('[data-tool="select"]').click();
         await dragPixels(2, 2, 7, 6);

@@ -58,3 +58,48 @@ studio.pico8[0] = '#abcdef';
 assert.equal(Presets.create('studio').pico8[0], '#000000');
 assert.equal(artwork.pico8[0], '#000000');
 console.log('PASS shared raster / no-op dirty and redo / structure resize / preset isolation');
+
+// Floating source identity, cancellation, ancestor locks, paste and stale documents.
+const Floating = require('../js/editor-floating-selection.js');
+const Transform = require('../js/selection-transform.js');
+const PIX2 = require('../js/pix2-format.js');
+const doc = PIX2.createDocument('Floating scope', 1, 1, 8, 8);
+const sourceCell = doc.cells.cell_0_0;
+const region = { id: 'a', type: 'region', pixels: { '1,1': '#ff0000', '2,1': '#00ff00' } };
+const sibling = { id: 'b', type: 'region', pixels: { '1,1': '#0000ff' } };
+const parent = { id: 'layer', type: 'layer', children: [region, sibling] };
+sourceCell.layers = [parent];
+const transient = {};
+const session = Floating.create(transient);
+const box = { x: 1, y: 1, w: 2, h: 1 };
+const originalPixels = { ...region.pixels };
+const copied = Transform.copyPixels(region, box);
+assert.deepEqual(copied, { '0,0': '#ff0000', '1,0': '#00ff00' });
+assert.deepEqual(region.pixels, originalPixels, 'Copy does not lift source');
+session.lift(doc, sourceCell, region, box);
+assert.deepEqual(region.pixels, {});
+session.flip(box, true);
+session.rotate90(box, { w: 8, h: 8 });
+session.cancel();
+assert.deepEqual(region.pixels, originalPixels, 'Cancel restores immutable lift-time raster');
+assert.deepEqual(sibling.pixels, { '1,1': '#0000ff' });
+
+session.lift(doc, sourceCell, region, box);
+parent.locked = true;
+assert.equal(session.commit(doc, { x: 4, y: 4, w: 2, h: 1 }, { w: 8, h: 8 }).status, 'cancelled');
+assert.deepEqual(region.pixels, originalPixels, 'A newly locked ancestor cancels and restores source');
+parent.locked = false;
+session.lift(doc, sourceCell, region, box);
+const otherDoc = PIX2.createDocument('Other document', 1, 1, 8, 8);
+assert.equal(session.commit(otherDoc, box, { w: 8, h: 8 }).status, 'cancelled');
+assert.deepEqual(region.pixels, originalPixels);
+assert.deepEqual(otherDoc.cells.cell_0_0.pixels, {});
+
+session.paste(doc, sourceCell, region, { x: 7, y: 7, w: 2, h: 1 }, copied);
+session.cancel();
+assert.deepEqual(region.pixels, originalPixels, 'Cancelling paste cannot erase destination pixels');
+session.paste(doc, sourceCell, region, { x: 7, y: 7, w: 2, h: 1 }, copied);
+assert.equal(session.commit(doc, { x: 7, y: 7, w: 2, h: 1 }, { w: 8, h: 8 }).status, 'committed');
+assert.equal(region.pixels['7,7'], '#ff0000');
+assert.equal(region.pixels['8,7'], undefined);
+console.log('PASS shared floating selection / immutable cancel / lock / stale scope / paste clipping');

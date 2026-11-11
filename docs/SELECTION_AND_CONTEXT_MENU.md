@@ -84,3 +84,7 @@ Right-clicking on the Cell Editor canvas opens `#studio-context-menu` at cursor 
 - **`Alt + Wheel` Zoom:** Automatically locks zoom anchor to selection center $(x + w/2, y + h/2)$ when selection is active.
 - **HUD Update:** Bottom status bar and top coordinate badge show:  
   `SELECTION: [X: 2, Y: 4, W: 8, H: 6] (48 px)`
+
+## Shared floating selection lifecycle
+
+Both editors bind their transient fields to `js/editor-floating-selection.js`. A lift captures document, cell and source-node identity. Commit may only write that source while it remains attached and editable; a changed document or newly locked/hidden ancestor cancels the settlement. Cancel restores the lift-time source raster, not a transformed preview. App adapters refresh composite/view state and own history publication. Clipboard pixel extraction, flips and quarter-turn raster logic are shared. Studio retains immediate paste/transform commits where previously present; PixelArt retains its floating-preview commit behavior.

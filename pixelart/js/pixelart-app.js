@@ -32,6 +32,7 @@
   const _EditorRulers = typeof EditorRulers !== 'undefined' ? EditorRulers : require('../../js/editor-rulers.js');
   const _SelectionTransform = typeof SelectionTransform !== 'undefined' ? SelectionTransform : require('../../js/selection-transform.js');
   const _PaletteLibrary = typeof EditorPaletteLibrary !== 'undefined' ? EditorPaletteLibrary : require('../../js/editor-palette-library.js');
+  const _FloatingSelection = typeof EditorFloatingSelection !== 'undefined' ? EditorFloatingSelection : require('../../js/editor-floating-selection.js');
   const _FileSave = typeof EditorFileSave !== 'undefined' ? EditorFileSave : require('../../js/editor-file-save.js');
   const _Version = typeof NOIRADIX_VERSION !== 'undefined' ? NOIRADIX_VERSION : require('../../js/version.js');
   const _PalettePresets = typeof EditorPalettePresets !== 'undefined' ? EditorPalettePresets : require('../../js/editor-palette-presets.js');
@@ -663,7 +664,7 @@
       currentFileHandle = null;
       currentFileName = null;
       lastSavedContent = '';
-      state.floatingPixels = null;
+      floatingSession.clear();
       state.floatingOriginalSel = null;
       state.isMovingSelection = false;
 
@@ -2652,19 +2653,29 @@
     }
   }
 
+  const floatingSession = _FloatingSelection.create({
+    get pixels() { return state.floatingPixels; }, set pixels(value) { state.floatingPixels = value; },
+    get originalBounds() { return state.floatingOriginalSel; }, set originalBounds(value) { state.floatingOriginalSel = value; },
+    get baselinePixels() { return state.floatingBaselinePixels; }, set baselinePixels(value) { state.floatingBaselinePixels = value; },
+    get baselineBounds() { return state.floatingBaselineSel; }, set baselineBounds(value) { state.floatingBaselineSel = value; },
+    get targetId() { return state.floatingTargetId; }, set targetId(value) { state.floatingTargetId = value; },
+    get baselineTargetId() { return state.floatingBaselineTargetId; }, set baselineTargetId(value) { state.floatingBaselineTargetId = value; },
+    get x() { return state.floatingCurrentX; }, set x(value) { state.floatingCurrentX = value; },
+    get y() { return state.floatingCurrentY; }, set y(value) { state.floatingCurrentY = value; }
+  });
+
   function commitFloatingSelection() {
     if (!state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
-    const target = getFloatingSelectionTarget(cell);
-    if (target) {
-      _SelectionTransform.placePixels(target, state.floatingPixels, state.selection, state);
+    const result = floatingSession.commit(state.doc, state.selection, state);
+    if (result.status === 'committed') {
       rebuildArtworkBuffer();
       pushHistory();
       repaintCanvas();
       syncCanvasToSource();
       triggerAutosave();
     }
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.floatingOriginalSel = null;
     state.floatingTargetId = null;
     state.floatingBaselinePixels = null;
@@ -2683,18 +2694,10 @@
    */
   function cancelFloatingSelection() {
     const cell = getArtworkCell();
-    const baselinePixels = state.floatingBaselinePixels;
-    const baselineSel = state.floatingBaselineSel;
-    const baselineTarget = state.floatingBaselineTargetId
-      ? findNodeById(cell, state.floatingBaselineTargetId)
-      : getFloatingSelectionTarget(cell);
+    const restored = floatingSession.cancel();
+    if (restored) rebuildArtworkBuffer();
 
-    if (baselineTarget && baselinePixels && baselineSel) {
-      _SelectionTransform.placePixels(baselineTarget, baselinePixels, baselineSel, state);
-      rebuildArtworkBuffer();
-    }
-
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.floatingOriginalSel = null;
     state.floatingTargetId = null;
     state.floatingBaselinePixels = null;
@@ -2754,16 +2757,7 @@
     const y = state.selection ? state.selection.y : 0;
     const w = state.selection ? state.selection.w : state.w;
     const h = state.selection ? state.selection.h : state.h;
-    const copiedPixels = {};
-
-    for (let py = y; py < y + h; py++) {
-      for (let px = x; px < x + w; px++) {
-        const key = `${px},${py}`;
-        if (target.pixels[key]) {
-          copiedPixels[`${px - x},${py - y}`] = target.pixels[key];
-        }
-      }
-    }
+    const copiedPixels = _SelectionTransform.copyPixels(target, { x, y, w, h });
 
     state.clipboard = { w, h, pixels: copiedPixels };
     showToast(`Copied ${Object.keys(copiedPixels).length} pixels (${w}×${h})`);
@@ -2776,7 +2770,7 @@
 
   function deleteSelection() {
     if (state.floatingPixels) {
-      state.floatingPixels = null;
+      floatingSession.clear();
       state.floatingOriginalSel = null;
       state.floatingTargetId = null;
       state.floatingBaselinePixels = null;
@@ -2853,7 +2847,7 @@
     state.floatingBaselineTargetId = null;
     state.floatingCurrentX = startX;
     state.floatingCurrentY = startY;
-    state.floatingPixels = { ...state.clipboard.pixels };
+    floatingSession.paste(state.doc, getArtworkCell(), target, state.selection, state.clipboard.pixels);
     rebuildFloatingBuffer();
 
     renderSelectionMarquee();
@@ -2889,7 +2883,7 @@
       }
     }
 
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.floatingOriginalSel = null;
     state.floatingTargetId = null;
     state.floatingBaselinePixels = null;
@@ -2915,7 +2909,8 @@
     state.floatingCurrentX = state.selection.x;
     state.floatingCurrentY = state.selection.y;
     resetRotationSession();
-    const lifted = _SelectionTransform.liftPixels(target, state.floatingOriginalSel);
+    const lifted = floatingSession.lift(state.doc, cell, target, state.floatingOriginalSel);
+    if (!lifted) return;
     state.floatingPixels = lifted.pixels;
     state.floatingBaselinePixels = lifted.baselinePixels;
     state.floatingBaselineSel = lifted.baselineBounds;
@@ -2953,13 +2948,8 @@
         showToast('Select an editable layer or region');
         return;
       }
-      state.floatingPixels = SelectionTransform.rotatePixelsNearestNeighbor(
-        state.floatingPixels, bounds.w, bounds.h, Math.PI / 2
-      ).pixels;
+      floatingSession.rotate90(bounds, state);
       state.selection = { ...next };
-      state.floatingOriginalSel = { ...next };
-      state.floatingCurrentX = next.x;
-      state.floatingCurrentY = next.y;
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -2984,14 +2974,7 @@
     if (state.selection) {
       resetRotationSession();
       ensureFloatingSelection();
-      const newFloating = {};
-      const sw = state.selection.w;
-      for (const relKey in state.floatingPixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const nx = sw - 1 - rx;
-        newFloating[`${nx},${ry}`] = state.floatingPixels[relKey];
-      }
-      state.floatingPixels = newFloating;
+      if (!floatingSession.flip(state.selection, true)) return;
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3017,14 +3000,7 @@
     if (state.selection) {
       resetRotationSession();
       ensureFloatingSelection();
-      const newFloating = {};
-      const sh = state.selection.h;
-      for (const relKey in state.floatingPixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const ny = sh - 1 - ry;
-        newFloating[`${rx},${ny}`] = state.floatingPixels[relKey];
-      }
-      state.floatingPixels = newFloating;
+      if (!floatingSession.flip(state.selection, false)) return;
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3559,7 +3535,7 @@
     state.h = recovered.h;
     state.title = recovered.title;
     state.selection = null;
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.activeLayerId = payload.activeLayerId || null;
     state.activeRegionId = payload.activeRegionId || null;
     state.isolatedNodeId = payload.isolatedNodeId || null;
