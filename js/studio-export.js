@@ -409,7 +409,7 @@ namespace NOIRADIX.Editor
                 AssetDatabase.Refresh();
 
                 Debug.Log($"[NOIRADIX] Successfully imported '{Path.GetFileName(pngPath)}': Sliced {metas.Count} frames and created {createdClips} Animation Clips!");
-                EditorUtility.DisplayDialog("NOIRADIX Importer", $"Import Complete!\n\nSliced: {metas.Count} frames\nClips Created: {createdClips}\nTarget: {assetPngPath}", "OK");
+                EditorUtility.DisplayDialog("NOIRADIX Importer", $"Import Complete!\\n\\nSliced: {metas.Count} frames\\nClips Created: {createdClips}\\nTarget: {assetPngPath}", "OK");
             }
             catch (Exception ex)
             {
