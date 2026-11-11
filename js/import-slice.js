@@ -175,6 +175,7 @@
    * @param {Object} [options] - { minSize: 1, padding: 0 }
    */
   function sliceAlphaIslands(getPixelRgba, atlasW, atlasH, options = {}) {
+    PIX2.assertRasterSize(atlasW, atlasH);
     const visited = new Uint8Array(atlasW * atlasH);
     const islands = [];
     const minSize = options.minSize || 2;
@@ -287,6 +288,10 @@
 
     const outW = (frame.sourceSize && frame.sourceSize.w) || frame.sourceW || fw;
     const outH = (frame.sourceSize && frame.sourceSize.h) || frame.sourceH || fh;
+
+    PIX2.assertRasterSize(fw, fh);
+    PIX2.assertRasterSize(outW, outH);
+    if (![fx_pos, fy_pos].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('Invalid atlas frame origin');
 
     const trimX = (frame.spriteSourceSize && frame.spriteSourceSize.x !== undefined) ? frame.spriteSourceSize.x : (frame.trimX || 0);
     const trimY = (frame.spriteSourceSize && frame.spriteSourceSize.y !== undefined) ? frame.spriteSourceSize.y : (frame.trimY || 0);

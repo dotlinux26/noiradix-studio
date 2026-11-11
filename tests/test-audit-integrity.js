@@ -728,9 +728,9 @@ async function runSuite() {
   {
     const code = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
     // Ensure setDirty is called before triggerAutosave(true) in saveFileNative
-    const saveNativePattern = /setDirty\(documentRevision !== lastSavedRevision\);\s*triggerAutosave\(true\);/g;
+    const saveNativePattern = /setDirty\(documentRevision !== lastSavedRevision \|\| _PIX2.serialize\(state.doc\) !== text\);\s*triggerAutosave\(true\);/g;
     const matches = code.match(saveNativePattern);
-    assert(matches && matches.length >= 2, 'saveFileNative must update lastSavedRevision and setDirty BEFORE triggerAutosave(true)');
+    assert(matches && matches.length >= 1, 'The shared save publication path must update dirty state before autosave');
 
     // Behavioral state test:
     PixelArtApp.markDocumentMutation('test-edit');

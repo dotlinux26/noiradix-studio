@@ -36,7 +36,8 @@ const PIX2 = (function () {
       maxGroupDepth: 16,
       maxTagsPerNode: 32,
       maxTagLength: 32,
-      maxNameLength: 256
+      maxNameLength: 256,
+      maxRasterOperations: 16777216
     },
     pixelart: {
       name: 'pixelart',
@@ -54,7 +55,8 @@ const PIX2 = (function () {
       maxGroupDepth: 16,
       maxTagsPerNode: 32,
       maxTagLength: 32,
-      maxNameLength: 256
+      maxNameLength: 256,
+      maxRasterOperations: 16777216
     },
     unlimited: {
       name: 'unlimited',
@@ -72,7 +74,8 @@ const PIX2 = (function () {
       maxGroupDepth: 32,
       maxTagsPerNode: 64,
       maxTagLength: 64,
-      maxNameLength: 512
+      maxNameLength: 512,
+      maxRasterOperations: 67108864
     }
   };
 
@@ -81,7 +84,7 @@ const PIX2 = (function () {
     const base = (options.profile && RESOURCE_PROFILES[options.profile])
       ? RESOURCE_PROFILES[options.profile]
       : RESOURCE_PROFILES.studio;
-    if (typeof options.maxCellDim === 'number' || typeof options.maxFileSize === 'number') {
+    if (typeof options.maxCellDim === 'number' || typeof options.maxFileSize === 'number' || typeof options.maxRasterOperations === 'number') {
       return Object.assign({}, base, options);
     }
     return base;
@@ -123,54 +126,29 @@ const PIX2 = (function () {
   // COMMENT & LEXER DISAMBIGUATION
   // ===========================================================================
 
-  /**
-   * Strips comments from a line while strictly preserving HEX colors.
-   * - Lines starting with '#' (ignoring leading whitespace) are always comments.
-   * - Semicolon ';' is always a comment.
-   * - Hash '#' is a comment ONLY if at line start or preceded by whitespace,
-   *   or immediately following a hex color token, and not part of a valid hex color code.
-   */
+  // Comments are recognized outside quoted strings. Whole-line hashes remain
+  // comments even when the first word could also be read as a short hex color.
   function stripComment(rawLine) {
-    if (!rawLine) return '';
-
-    // Whole-line comment starting with '#'
-    const trimmed = rawLine.trim();
-    if (trimmed.startsWith('#')) return '';
-
-    // 1. Strip semicolon comment first
-    const semiIdx = rawLine.indexOf(';');
-    let text = (semiIdx >= 0 ? rawLine.slice(0, semiIdx) : rawLine);
-
-    // 2. Character scan for '#' comment vs hex color
-    let result = '';
-    let inQuote = false;
-
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (ch === '"' || ch === "'") {
-        inQuote = !inQuote;
+    if (!rawLine || rawLine.trimStart().startsWith('#')) return '';
+    let quote = null;
+    for (let i = 0; i < rawLine.length; i++) {
+      const ch = rawLine[i];
+      if (quote) {
+        if (ch === '\\') i++;
+        else if (ch === quote) quote = null;
+        continue;
       }
-
-      if (!inQuote && ch === '#') {
-        const isPrecededByWhitespace = (i === 0 || /\s/.test(text[i - 1]));
-        const rest = text.slice(i);
-        // Valid hex colors: #RGB, #RGBA, #RRGGBB, #RRGGBBAA followed by delimiter (# included) or end
-        const hexMatch = rest.match(/^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"'#]|$)/);
-        if (hexMatch) {
-          // This is an actual hex color! Keep it
-          result += hexMatch[0];
-          i += hexMatch[0].length - 1;
-          continue;
-        } else if (isPrecededByWhitespace || (i > 0 && text[i - 1] !== '\\')) {
-          // Comment token! Discard rest of line
-          break;
-        }
+      if ((ch === '"' || ch === "'") && (i === 0 || /[\s:,[=]/.test(rawLine[i - 1]))) {
+        quote = ch;
+      } else if (ch === ';') {
+        return rawLine.slice(0, i).trim();
+      } else if (ch === '#') {
+        const hex = rawLine.slice(i).match(/^#([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})(?=[\s,;"'#]|$)/i);
+        if (hex) i += hex[0].length - 1;
+        else return rawLine.slice(0, i).trim();
       }
-
-      result += ch;
     }
-
-    return result.trim();
+    return rawLine.trim();
   }
 
   // ===========================================================================
@@ -270,6 +248,14 @@ const PIX2 = (function () {
 
   function isOpacity(value) {
     return Number.isFinite(value) && value >= 0 && value <= 1;
+  }
+
+  function assertRasterSize(width, height) {
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
+        width < 1 || height < 1 || width > 8192 || height > 8192 ||
+        width * height > 16777216) {
+      throw new Error('Raster exceeds the supported dimensions or 16-megapixel allocation limit.');
+    }
   }
 
   function compositeColorsSourceOver(destinationHex, sourceHex, opacity = 1) {
@@ -389,12 +375,9 @@ const PIX2 = (function () {
    */
   function unescapePix2String(str) {
     if (typeof str !== 'string') return '';
-    return str
-      .replace(/^["']|["']$/g, '')
-      .replace(/\\"/g, '"')
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
-      .replace(/\\\\/g, '\\');
+    const quoted = str.length >= 2 && (str[0] === '"' || str[0] === "'") && str.at(-1) === str[0];
+    const text = quoted ? str.slice(1, -1) : str;
+    return text.replace(/\\([\\"'nr])/g, (_, ch) => ch === 'n' ? '\n' : ch === 'r' ? '\r' : ch);
   }
 
   /**
@@ -509,8 +492,14 @@ const PIX2 = (function () {
 
   function parse(text, options = {}) {
     const profile = resolveResourceProfile(options);
+    const MAX_GRID_COLS = profile.maxGridCols;
+    const MAX_GRID_ROWS = profile.maxGridRows;
+    const MAX_FRAMES_PER_ANIM = profile.maxFramesPerAnim;
+    const MAX_ANIM_FPS = profile.maxAnimFps;
+    const MAX_TOTAL_CELLS = profile.maxTotalCells;
+    const MAX_COORD_ABS = profile.maxCoordAbs;
     if (typeof text !== 'string') return createDocument('Untitled', 4, 4, 16, 16, options);
-    if (text.length > profile.maxFileSize) {
+    if (text.length > profile.maxFileSize || new TextEncoder().encode(text).byteLength > profile.maxFileSize) {
       throw new Error(`PIX2 security violation: file size exceeds maximum limit (${profile.maxFileSize} bytes).`);
     }
 
@@ -548,6 +537,19 @@ const PIX2 = (function () {
     let parsedGroupCount = 0;
     let parsedRegionCount = 0;
     const nodeRegistry = new Map();
+    let cellCount = 0;
+    let rasterWork = 0;
+    function spendRasterWork(amount = 1) {
+      rasterWork += amount;
+      if (rasterWork > profile.maxRasterOperations) {
+        throw new Error(`PIX2 security violation: raster work limit exceeded (${profile.maxRasterOperations}).`);
+      }
+    }
+    function boundedGrid(value, max, code, line) {
+      const result = Math.min(Math.max(1, value), max);
+      if (result !== value) diagnostics.push({ code, line, message: `Grid value ${value} clamped to ${result} for profile "${profile.name}"` });
+      return result;
+    }
 
     for (let i = 0; i < lines.length; i++) {
       const line = stripComment(lines[i]);
@@ -558,6 +560,9 @@ const PIX2 = (function () {
         const parts = line.slice(1).trim().split(/\s+/);
         const secName = parts[0].toLowerCase();
 
+        if (['layer', 'group', 'region'].includes(secName) && nodeRegistry.size >= profile.maxStructuralNodes) {
+          throw new Error(`PIX2 security violation: structural node limit exceeded (${profile.maxStructuralNodes}).`);
+        }
         if (secName === 'pix2') {
           hasPix2Header = true;
           if (parts.length >= 2 && parts[1]) {
@@ -747,8 +752,8 @@ const PIX2 = (function () {
           currentLayer = null;
           currentGroup = null;
           currentRegion = null;
-          const rawCellId = parts[1] || `cell_${Object.keys(doc.cells).length}`;
-          const cellId = sanitizeKey(rawCellId, `cell_${Object.keys(doc.cells).length}`);
+          const rawCellId = parts[1] || `cell_${cellCount}`;
+          const cellId = sanitizeKey(rawCellId, `cell_${cellCount}`);
 
           if (doc.cells[cellId]) {
             diagnostics.push({
@@ -759,10 +764,11 @@ const PIX2 = (function () {
           }
 
           // Memory DoS protection: cap maximum cells per document
-          if (Object.keys(doc.cells).length >= MAX_TOTAL_CELLS && !doc.cells[cellId]) {
-            currentCell = null;
-            continue;
+          if (cellCount >= MAX_TOTAL_CELLS && !doc.cells[cellId]) {
+            diagnostics.push({ code: 'PIX2_ERR_RESOURCE_LIMIT', line: i + 1, message: `Cell limit exceeded (${MAX_TOTAL_CELLS})` });
+            break;
           }
+          if (!doc.cells[cellId]) cellCount++;
 
           // Detect row & col if cellId has standard pattern
           let parsedRow = null, parsedCol = null;
@@ -814,7 +820,7 @@ const PIX2 = (function () {
           else if (key === 'columns' || key === 'cols') {
             const num = parseStrictInt(val);
             if (!isNaN(num)) {
-              doc.meta.grid.cols = Math.min(Math.max(1, num), MAX_GRID_COLS);
+              doc.meta.grid.cols = boundedGrid(num, MAX_GRID_COLS, 'PIX2_WARN_CLAMPED_COLS', i + 1);
             } else {
               diagnostics.push({
                 code: 'PIX2_ERR_INVALID_INTEGER',
@@ -825,7 +831,7 @@ const PIX2 = (function () {
           } else if (key === 'rows') {
             const num = parseStrictInt(val);
             if (!isNaN(num)) {
-              doc.meta.grid.rows = Math.min(Math.max(1, num), MAX_GRID_ROWS);
+              doc.meta.grid.rows = boundedGrid(num, MAX_GRID_ROWS, 'PIX2_WARN_CLAMPED_ROWS', i + 1);
             } else {
               diagnostics.push({
                 code: 'PIX2_ERR_INVALID_INTEGER',
@@ -837,8 +843,8 @@ const PIX2 = (function () {
             const dims = parseDimension(val);
             if (dims) {
               doc.meta.grid = {
-                cols: Math.min(Math.max(1, dims[0]), MAX_GRID_COLS),
-                rows: Math.min(Math.max(1, dims[1]), MAX_GRID_ROWS)
+                cols: boundedGrid(dims[0], MAX_GRID_COLS, 'PIX2_WARN_CLAMPED_COLS', i + 1),
+                rows: boundedGrid(dims[1], MAX_GRID_ROWS, 'PIX2_WARN_CLAMPED_ROWS', i + 1)
               };
             } else {
               diagnostics.push({
@@ -1153,6 +1159,7 @@ const PIX2 = (function () {
         }
 
         function plotPixel(px, py, col) {
+          spendRasterWork();
           if (targetPixels) targetPixels[`${px},${py}`] = col;
           if (targetCell && targetPixels !== targetCell.pixels) targetCell.pixels[`${px},${py}`] = col;
         }
@@ -1299,19 +1306,15 @@ const PIX2 = (function () {
                 message: `rect origin (${x}, ${y}) exceeds safety limit (${MAX_COORD_ABS})`
               });
             } else {
-              const maxBoundW = cellW * 2;
-              const maxBoundH = cellH * 2;
-              const clampedW = Math.min(Math.max(0, w), maxBoundW);
-              const clampedH = Math.min(Math.max(0, h), maxBoundH);
-              if (clampedW * clampedH <= 262144) {
-                for (let dy = 0; dy < clampedH; dy++) {
-                  for (let dx = 0; dx < clampedW; dx++) {
-                    if (mode === 'fill' || dx === 0 || dy === 0 || dx === clampedW - 1 || dy === clampedH - 1) {
-                      const px = x + dx, py = y + dy;
-                      if (px >= 0 && px < cellW && py >= 0 && py < cellH) {
-                        plotPixel(px, py, color);
-                      }
-                    }
+              const left = Math.max(0, x);
+              const top = Math.max(0, y);
+              const right = Math.min(cellW, x + w);
+              const bottom = Math.min(cellH, y + h);
+              spendRasterWork(Math.max(0, right - left) * Math.max(0, bottom - top));
+              for (let py = top; py < bottom; py++) {
+                for (let px = left; px < right; px++) {
+                  if (mode === 'fill' || px === x || py === y || px - x === w - 1 || py - y === h - 1) {
+                    plotPixel(px, py, color);
                   }
                 }
               }
@@ -1343,6 +1346,7 @@ const PIX2 = (function () {
             } else {
               const fillTarget = targetCell || currentCell;
               if (fillTarget) {
+                if ((fillTarget.pixels[`${startX},${startY}`] || null) !== color) spendRasterWork(cellW * cellH);
                 floodFillCell(fillTarget, startX, startY, color, { w: cellW, h: cellH }, profile);
                 if (targetPixels && targetPixels !== fillTarget.pixels) {
                   Object.assign(targetPixels, fillTarget.pixels);
@@ -2101,6 +2105,7 @@ const PIX2 = (function () {
   function renderCellToCanvas(cell, defaultCellSize, targetCanvas = null, options = {}) {
     const w = (cell.size && cell.size.w) || defaultCellSize.w;
     const h = (cell.size && cell.size.h) || defaultCellSize.h;
+    assertRasterSize(w, h);
 
     const canvas = targetCanvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
     if (!canvas) return null;
@@ -2145,6 +2150,7 @@ const PIX2 = (function () {
 
     const totalW = margin * 2 + cols * cw + (cols - 1) * gap;
     const totalH = margin * 2 + rows * ch + (rows - 1) * gap;
+    assertRasterSize(totalW, totalH);
 
     const canvas = targetCanvas || document.createElement('canvas');
     canvas.width = totalW;
@@ -2474,7 +2480,8 @@ const PIX2 = (function () {
     upgradeV10ToV11,
     flattenV11ToV10,
     PROFILES: RESOURCE_PROFILES,
-    resolveResourceProfile
+    resolveResourceProfile,
+    assertRasterSize
   };
 })();
 

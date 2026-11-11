@@ -2,7 +2,7 @@ name: CI & GitHub Pages Deployment
 
 on:
   push:
-    branches: [ main, rc ]
+    branches: [ main, rc, rc2 ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: "verify-${{ github.ref }}"
   cancel-in-progress: false
 
 jobs:
@@ -38,6 +38,7 @@ jobs:
           node --check js/pix2-format.js
           node --check js/selection-transform.js
           node --check js/editor-state.js
+          node --check js/editor-file-save.js
           node --check js/animation-player.js
           node --check js/tools.js
           node --check js/modular-export.js
@@ -99,6 +100,11 @@ jobs:
       - name: Run Shared Viewport Pan & Zoom Tests
         run: node tests/test-viewport-pan-zoom.js
 
+      - name: Run AI prompt and RC2 hardening regressions
+        run: |
+          node tests/test-pix2-ai-prompt.js
+          node tests/test-rc2-hardening.js
+
       - name: Run Performance & Latency Benchmark Suite
         run: node tests/benchmark-performance.js
 
@@ -118,6 +124,7 @@ jobs:
           curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:8769/ > /dev/null
           EDITOR_QA_DENSE=1 EDITOR_QA_DPR=2 node tests/browser/test-editor.cjs
           node tests/browser/test-workspace.cjs
+          node tests/browser/test-file-lifecycle.cjs
 
   release:
     name: Publish verified GitHub release
@@ -136,7 +143,9 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           node -e 'const v = require("./js/version.js"); const tag = process.env.RELEASE_TAG; if (v.studio.displayVersion !== tag || v.pixelart.displayVersion !== tag) throw new Error("Tag and app versions differ");'
-          gh release create "$RELEASE_TAG" --verify-tag \
+          prerelease=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$RELEASE_TAG" --verify-tag "${prerelease[@]}" \
             --title "NOIRADIX Studio & PixelArt $RELEASE_TAG" \
             --notes-file "docs/releases/$RELEASE_TAG.md"
 

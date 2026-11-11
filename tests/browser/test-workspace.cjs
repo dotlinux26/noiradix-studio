@@ -266,6 +266,16 @@ const PIX2 = require('../../js/pix2-format.js');
       await page.reload();
       await page.waitForFunction(id => document.querySelector('.project-tab.active')?.dataset.tabId === id, expectedActive);
       assert.equal(await sourceText(), afterQuotaStroke);
+      await page.addInitScript(key => {
+        if (sessionStorage.getItem('qa-corrupt-catalog')) return;
+        sessionStorage.setItem('qa-corrupt-catalog', 'done');
+        localStorage.setItem(key, JSON.stringify({
+          updatedAt: 9999999999999, sessions: 'corrupt catalog'
+        }));
+      }, workspaceKey);
+      await page.reload();
+      await page.waitForFunction(id => document.querySelector('.project-tab.active')?.dataset.tabId === id, expectedActive);
+      assert.equal(await sourceText(), afterQuotaStroke, 'A corrupt local catalog cannot hide the valid IndexedDB backup');
       while (await tabs.count())
         await tabs.last().locator('.project-tab-close').click();
       assert.ok(
@@ -280,6 +290,25 @@ const PIX2 = require('../../js/pix2-format.js');
         .waitFor({ state: 'visible' });
       assert.equal(await tabs.count(), 0);
       assert.equal(await page.title(), versionLabel);
+      if (!pa) {
+        await page.locator('#btn-empty-load-reaper').click();
+        await tabs.first().waitFor();
+        assert.equal(await tabs.count(), 1);
+        const reaper = await sourceText();
+        await page.locator('#btn-load-demo').click();
+        await page.locator('#btn-load-demo-ghost').click();
+        assert.equal(await tabs.count(), 2, 'Demo creates an independent session');
+        await tabs.first().click();
+        assert.equal(await sourceText(), reaper);
+        await tabs.last().click();
+        const ghost = await sourceText();
+        await page.locator('#btn-grid-open-editor').click();
+        const c = await page.locator('#cell-overlay').boundingBox();
+        await page.mouse.click(c.x + c.width * 0.18, c.y + c.height * 0.18);
+        assert.notEqual(await sourceText(), ghost);
+        await page.keyboard.press('Control+z');
+        assert.equal(await sourceText(), ghost, 'The first demo edit can be undone');
+      }
       assert.deepEqual(errs, []);
       console.log(
         (pa ? 'PixelArt' : 'Studio') +

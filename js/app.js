@@ -686,6 +686,8 @@
     cur.revision = documentRevision;
     cur.lastSavedRevision = lastSavedRevision;
     cur.lastSavedContent = lastSavedContent;
+    cur.lastKnownFileModified = lastKnownFileModified;
+    cur.pendingExternalConflict = pendingExternalConflict;
     cur.openCellTabs = state.openCellTabs ? [...state.openCellTabs] : [];
     cur.activeTabId = state.activeTabId || 'tab-grid-overview';
     cur.history = state.history ? [...state.history] : [];
@@ -758,6 +760,8 @@
     documentRevision = target.revision || 0;
     lastSavedRevision = target.lastSavedRevision || 0;
     lastSavedContent = target.lastSavedContent || '';
+    lastKnownFileModified = target.lastKnownFileModified || 0;
+    pendingExternalConflict = target.pendingExternalConflict || null;
     if (target.openCellTabs && Array.isArray(target.openCellTabs)) {
       state.openCellTabs = [...target.openCellTabs];
     } else {
@@ -773,7 +777,7 @@
     }
     state.selection = target.selection ? { ...target.selection } : null;
 
-    setDirty(target.isDirty);
+    setDirty(target.isDirty, false);
     renderProjectTabs();
     refreshAll();
   }
@@ -1249,11 +1253,11 @@
     return `${cleanBase}/${name}`;
   }
 
-  function setDirty(dirty) {
+  function setDirty(dirty, updateRevision = true) {
     isDocumentDirty = dirty;
-    if (dirty) {
+    if (dirty && updateRevision) {
       documentRevision++;
-    } else {
+    } else if (!dirty && updateRevision) {
       lastSavedRevision = documentRevision;
     }
     const title = (state.doc ? state.doc.meta.title : 'NOIRADIX Studio') || 'Untitled';
@@ -1473,44 +1477,9 @@
         localStorage.setItem('pix2_draft_content', text);
         localStorage.setItem('noiradix_active_file_name', snapshot.fileName);
       }
-      let writtenToDisk = false;
-
-      // Direct write to disk file if linked to matching filename
-      const isDirectDiskValid = isDocumentDirty && handle &&
-                                'createWritable' in handle &&
-                                (!fileName || handle.name.normalize('NFC') === fileName.normalize('NFC'));
-
-      if (isDirectDiskValid) {
-        try {
-          let hasPerm = true;
-          if (handle.queryPermission) {
-            const p = await handle.queryPermission({ mode: 'readwrite' });
-            hasPerm = (p === 'granted');
-          }
-          if (hasPerm && state.doc === doc && currentFileHandle === handle && revision === documentRevision) {
-            const writable = await handle.createWritable();
-            await writable.write(text);
-            await writable.close();
-            let modified;
-            try {
-              modified = (await handle.getFile()).lastModified;
-            } catch (_) {}
-            if (state.doc === doc && currentFileHandle === handle) {
-              lastSavedContent = text;
-              if (modified !== undefined) lastKnownFileModified = modified;
-              pendingExternalConflict = null;
-              if (revision === documentRevision) {
-                setDirty(false);
-                persistAllProjectSessions();
-                writtenToDisk = true;
-              }
-            }
-          }
-        } catch (diskErr) {
-          console.debug('Direct disk autosave skipped:', diskErr);
-        }
-      }
-
+      const writtenToDisk = handle && isDocumentDirty && !activeStudioSaves
+        ? await saveStudioSnapshot()
+        : false;
       if (state.doc === doc && revision === documentRevision) {
         updateAutosaveIndicator(writtenToDisk ? 'disk' : cached ? 'browser' : 'failed', now);
       }
@@ -1595,25 +1564,11 @@
     if (source) {
       try {
         const doc = PIX2.parse(source);
-        const active = getActiveSession();
-        if (active && (active.isDirty || (active.fileName !== 'noiradix_ghost.pix2' && active.fileName !== 'new_sprite.pix2'))) {
-          const newId = 'session_' + Date.now();
-          const session = {
-            id: newId,
-            doc,
-            fileName,
-            filePath: fileName,
-            fileHandle: null,
-            isDirty: false,
-            openCellTabs: ['cell_0_0'],
-            activeCellTabId: 'cell_0_0',
-            history: [],
-            historyIndex: -1,
-            savedRevision: 0,
-            currentRevision: 0
-          };
-          projectSessions.push(session);
-          switchProjectSession(newId);
+        if (getActiveSession()) {
+          createProjectSession(doc, fileName);
+          selectedGridCellId = Object.keys(doc.cells)[0] || null;
+          centerCellCanvas();
+          centerGridCanvas();
           showToast('Loaded ' + fileTitle + ' in new tab', 'success');
           return;
         }
@@ -7611,11 +7566,6 @@
     if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
       return;
     }
-    if (isDocumentDirty) {
-      const confirmDiscard = confirm('You have unsaved changes in current project. Discard changes and open new file?');
-      if (!confirmDiscard) return;
-    }
-
     if ('showOpenFilePicker' in window) {
       try {
         const [handle] = await window.showOpenFilePicker({
@@ -7625,26 +7575,7 @@
           }],
           multiple: false
         });
-        const file = await handle.getFile();
-        const text = await file.text();
-        const doc = PIX2.parse(text);
-        currentFileHandle = handle;
-        currentFileName = file.name;
-        currentFilePath = file.name;
-        lastSavedContent = text;
-        lastKnownFileModified = file.lastModified;
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) btnReload.classList.remove('pulse-warning');
-        await persistFileHandle(handle);
-        localStorage.setItem('noiradix_session_type', 'disk');
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        state.setDocument(doc);
-        syncOrRegisterProjectSession(doc, file.name, handle, file.name);
-        setDirty(false);
-        refreshAll();
-        showToast(`Opened ${file.name} from disk!`, 'success');
+        await handleFileOpenFromHandle(handle);
         return;
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -7665,124 +7596,104 @@
     input.click();
   }
 
-  async function saveFileNative(forceSaveAs = false) {
-    if (!state.doc) return;
-    if (typeof commitFloatingSelection === 'function') {
-      commitFloatingSelection();
-    }
+  const enqueueStudioSave = EditorFileSave.createQueue();
+  let activeStudioSaves = 0;
 
-    // If manual code editing is active in the Code tab, ensure edits are parsed into document before saving
+  function saveFileNative(forceSaveAs = false) {
+    if (!state.doc) return Promise.resolve();
+    commitFloatingSelection();
     if (isCodeEditingUnlocked && dom.codeTextarea && state.activeTabId === 'tab-pix2-code') {
       try {
         const parsed = PIX2.parse(dom.codeTextarea.value);
+        if (!PIX2.validate(parsed, { strict: true }).valid) throw new Error('Invalid PIX2');
         state.setDocument(parsed, true);
-      } catch (err) {
-        showToast('Cannot save: PIX2 code has syntax errors. Please fix or lock before saving.', 'error');
-        return;
+        triggerEventAutosave();
+      } catch (_) {
+        showToast('Cannot save invalid PIX2 code. Fix the diagnostics first.', 'error');
+        return Promise.resolve();
       }
     }
-
-    const text = PIX2.serialize(state.doc);
-
-    // Direct Save to existing handle (Only if filename still matches and not forced to Save As)
-    const isDirectHandleValid = currentFileHandle &&
-                                'createWritable' in currentFileHandle &&
-                                (!currentFileName || currentFileHandle.name.normalize('NFC') === currentFileName.normalize('NFC'));
-
-    if (!forceSaveAs && isDirectHandleValid) {
-      try {
-        if (currentFileHandle.queryPermission) {
-          const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
-          if (perm !== 'granted') {
-            const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
-            if (req !== 'granted') {
-              showToast('Write permission to file was denied.', 'error');
-              return;
-            }
-          }
-        }
-        const writable = await currentFileHandle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        setDirty(false);
-        lastSavedContent = text;
-        try {
-          const fresh = await currentFileHandle.getFile();
-          lastKnownFileModified = fresh.lastModified;
-        } catch (_) {}
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) btnReload.classList.remove('pulse-warning');
-        localStorage.setItem('noiradix_session_type', 'disk');
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        localStorage.setItem('pix2_last_saved_content', text);
-        localStorage.removeItem('pix2_recovery_snapshot');
-        showToast(`Saved to ${currentFileHandle.name}!`, 'success');
-        updateFileStatusUI();
-        return;
-      } catch (err) {
-        console.warn('Direct overwrite failed:', err);
-        showToast(`Could not write directly to ${currentFileHandle.name}: ${err.message}`, 'error');
-        return;
-      }
-    }
-
-    // Save As via File System Access API (Only when forceSaveAs is true or no handle exists)
-    if ('showSaveFilePicker' in window) {
-      try {
-        const suggested = currentFileName || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'sprite');
-        const handle = await window.showSaveFilePicker({
-          suggestedName: suggested,
-          types: [{
-            description: 'PIX2 Sprite File (*.pix2)',
-            accept: { 'text/plain': ['.pix2'] }
-          }]
-        });
-        const writable = await handle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        currentFileHandle = handle;
-        currentFileName = handle.name;
-        currentFilePath = handle.name;
-        lastSavedContent = text;
-        try {
-          const fresh = await handle.getFile();
-          lastKnownFileModified = fresh.lastModified;
-        } catch (_) {}
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) btnReload.classList.remove('pulse-warning');
-        await persistFileHandle(handle);
-        localStorage.setItem('noiradix_session_type', 'disk');
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        localStorage.setItem('pix2_last_saved_content', text);
-        setDirty(false);
-        localStorage.removeItem('pix2_recovery_snapshot');
-        refreshAll();
-        showToast(`Saved as ${handle.name}!`, 'success');
-        return;
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        console.warn('Save file picker failed, falling back to download:', err);
-      }
-    }
-
-    fallbackDownloadSave(text);
+    return saveStudioSnapshot({ interactive: true, forceSaveAs });
   }
 
-  function fallbackDownloadSave(text) {
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const fileNameToDownload = currentFileName || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'sprite');
-    a.download = fileNameToDownload;
-    a.click();
-    URL.revokeObjectURL(url);
-    setDirty(false);
-    showToast(`Downloaded ${fileNameToDownload}!`, 'success');
+  function saveStudioSnapshot({ interactive = false, forceSaveAs = false } = {}) {
+    const session = getActiveSession();
+    const doc = state.doc;
+    if (!session || !doc || floatingSelectionPixels) return Promise.resolve(false);
+    const revision = documentRevision;
+    const text = PIX2.serialize(doc);
+    const fileName = currentFileName || sanitizeSafeFilename(doc.meta.title, '.pix2', 'sprite');
+    const direct = !forceSaveAs && currentFileHandle?.createWritable ? currentFileHandle : null;
+    const access = direct ? EditorFileSave.permission(direct, interactive) : Promise.resolve(true);
+    // Open a picker during the original user gesture, before waiting for other writes.
+    let picker;
+    if (!direct && interactive && typeof window.showSaveFilePicker === 'function') {
+      try {
+        picker = window.showSaveFilePicker({ suggestedName: fileName,
+          types: [{ description: 'PIX2 Sprite File', accept: { 'text/plain': ['.pix2'] } }] });
+      } catch (error) {
+        picker = Promise.reject(error);
+      }
+      picker.catch(() => {});
+    }
+    activeStudioSaves++;
+    return enqueueStudioSave(async () => {
+      try {
+        if (!projectSessions.includes(session)) return false;
+        if (!await access) throw new Error('Write permission was denied');
+        const handle = picker ? await picker : direct;
+        let modified = 0;
+        if (handle) modified = await EditorFileSave.write(handle, text);
+        else if (interactive) fallbackDownloadSave(text, fileName);
+        else return false;
+        if (!projectSessions.includes(session)) return true;
+        const active = getActiveSession() === session;
+        if (active) saveCurrentSessionState();
+        session.lastSavedContent = text;
+        session.lastSavedRevision = revision;
+        session.isDirty = session.revision !== revision || PIX2.serialize(session.doc) !== text;
+        session.lastKnownFileModified = modified;
+        session.pendingExternalConflict = null;
+        if (handle) {
+          session.fileHandle = handle;
+          session.fileName = handle.name;
+          session.filePath = handle.name;
+        }
+        if (active) {
+          if (handle) {
+            currentFileHandle = handle;
+            currentFileName = session.fileName;
+            currentFilePath = session.filePath;
+            persistFileHandle(handle);
+          }
+          lastSavedContent = text;
+          lastKnownFileModified = modified;
+          pendingExternalConflict = null;
+          lastSavedRevision = revision;
+          isDocumentDirty = session.isDirty;
+          if (!isDocumentDirty) setDirty(false);
+          updateFileStatusUI();
+          renderProjectTabs();
+          if (interactive) showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName, 'success');
+        }
+        await persistAllProjectSessions();
+        return true;
+      } catch (error) {
+        if (error.name !== 'AbortError') showToast('Save failed: ' + error.message, 'error');
+        return false;
+      } finally {
+        activeStudioSaves--;
+      }
+    });
+  }
+
+  function fallbackDownloadSave(text, fileName) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   // ===========================================================================
@@ -7790,12 +7701,17 @@
   // ===========================================================================
 
   async function checkAndReloadExternalFileChanges(force = false) {
-    if (!currentFileHandle || isExternalReloading) return;
+    if (!currentFileHandle || isExternalReloading || activeStudioSaves) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
+    const watchedHandle = currentFileHandle;
+    const watchedSession = getActiveSession();
+    const watchedRevision = documentRevision;
+    const stillCurrent = () => currentFileHandle === watchedHandle && getActiveSession() === watchedSession && documentRevision === watchedRevision && !activeStudioSaves;
     try {
       isExternalReloading = true;
       const file = await currentFileHandle.getFile();
+      if (!stillCurrent()) return;
       const currentModified = file.lastModified;
 
       // Check if file modified time is newer than our recorded timestamp
@@ -7805,6 +7721,7 @@
       }
 
       const text = await file.text();
+      if (!stillCurrent()) return;
       if (!text || !text.trim()) {
         isExternalReloading = false;
         return;
@@ -8479,8 +8396,8 @@ const outText = PIX2.serialize(doc);</code></pre>
     document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
       b.classList.toggle('active', b.dataset.scale === String(exportPreviewZoom));
     });
-    updateExportPreview();
     dom.modalGameExport.classList.remove('hidden');
+    updateExportPreview();
   }
 
   function closeGameExportModal() {
@@ -8543,8 +8460,10 @@ const outText = PIX2.serialize(doc);</code></pre>
     const atlasW = margin * 2 + cols * scw + Math.max(0, cols - 1) * spacing;
     const atlasH = margin * 2 + rows * sch + Math.max(0, rows - 1) * spacing;
 
-    if (atlasW <= 0 || atlasH <= 0 || atlasW > 16384 || atlasH > 16384) {
-      showToast('Calculated atlas size exceeds browser canvas limits (16384px).', 'error');
+    try {
+      PIX2.assertRasterSize(atlasW, atlasH);
+    } catch (error) {
+      showToast(error.message + ' Reduce the export scale or grid size.', 'error');
       return null;
     }
 
@@ -8622,17 +8541,25 @@ const outText = PIX2.serialize(doc);</code></pre>
     return { canvas, width: atlasW, height: atlasH, frameRects, scale, spacing, margin };
   }
 
-  function updateExportPreview() {
+  function updateExportPreview(reuseRaster = false) {
     if (!state.doc || !dom.exportPreviewCanvas) return;
     const opts = getExportOptions();
-    const atlasData = generateAtlasCanvas(opts);
-    if (!atlasData) return;
-
-    dom.exportPreviewCanvas.width = atlasData.width;
-    dom.exportPreviewCanvas.height = atlasData.height;
-    const pctx = dom.exportPreviewCanvas.getContext('2d');
-    pctx.clearRect(0, 0, atlasData.width, atlasData.height);
-    pctx.drawImage(atlasData.canvas, 0, 0);
+    if (reuseRaster !== true) {
+      const atlasData = generateAtlasCanvas(opts);
+      const invalid = !atlasData;
+      if (dom.btnExecuteGameExport) dom.btnExecuteGameExport.disabled = invalid;
+      if (dom.btnQuickExportPng) dom.btnQuickExportPng.disabled = invalid;
+      if (invalid) {
+        dom.exportPreviewCanvas.width = dom.exportPreviewCanvas.height = 1;
+        if (dom.exportDimensionBadge) dom.exportDimensionBadge.textContent = 'Export size exceeds allocation limit';
+        return;
+      }
+      EditorCanvas.resize(dom.exportPreviewCanvas, atlasData.width, atlasData.height);
+      const pctx = dom.exportPreviewCanvas.getContext('2d');
+      pctx.clearRect(0, 0, atlasData.width, atlasData.height);
+      pctx.drawImage(atlasData.canvas, 0, 0);
+    }
+    const atlasData = { width: dom.exportPreviewCanvas.width, height: dom.exportPreviewCanvas.height };
 
     // Apply Magnifying Zoom scaling to Atlas Preview
     let effZoom = exportPreviewZoom;
@@ -8644,7 +8571,7 @@ const outText = PIX2.serialize(doc);</code></pre>
       if (fitRatio >= 1) {
         effZoom = Math.max(1, Math.floor(fitRatio));
       } else {
-        effZoom = Math.max(0.05, Number(fitRatio.toFixed(3)));
+        effZoom = fitRatio;
       }
     } else {
       effZoom = Math.max(1, Number(exportPreviewZoom) || 4);
@@ -9366,68 +9293,44 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     });
   }
 
-  async function handleFileOpenFromHandle(handle) {
-    if (!handle) return;
-    try {
-      const file = await handle.getFile();
-      if (file.size > 25 * 1024 * 1024) {
-        showToast('File exceeds 25MB safety limit.', 'error');
-        return;
-      }
-      const name = file.name.toLowerCase();
-      if (name.endsWith('.pix2') || name.endsWith('.txt')) {
-        const text = await file.text();
-        const doc = PIX2.parse(text);
-
-        const existing = projectSessions.find(p => p.fileName === file.name || p.filePath === file.name);
-        if (existing) {
-          existing.fileHandle = handle;
-          switchProjectSession(existing.id);
-          showToast(`Switched to open tab "${file.name}"`, 'info');
+  async function openStudioDocument(file, handle = null) {
+    if (handle) {
+      for (const session of projectSessions) {
+        let same = session.fileHandle === handle;
+        if (!same && session.fileHandle?.isSameEntry) {
+          try { same = await session.fileHandle.isSameEntry(handle); } catch (_) {}
+        }
+        if (same) {
+          switchProjectSession(session.id);
           return;
         }
-
-        saveCurrentSessionState();
-        currentFileHandle = handle;
-        currentFileName = file.name;
-        currentFilePath = file.name;
-        lastSavedContent = text;
-        lastKnownFileModified = file.lastModified;
-        pendingExternalConflict = null;
-        await persistFileHandle(handle);
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        localStorage.setItem('pix2_last_saved_content', text);
-
-        const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-        const session = new ProjectSession(newId, file.name, doc, handle, file.name, file.name);
-        session.lastSavedContent = text;
-        session.isDirty = false;
-        session.activeTabId = 'tab-grid-overview';
-        session.openCellTabs = [];
-        projectSessions.push(session);
-        switchProjectSession(newId);
-        persistAllProjectSessions();
-        showToast(`Linked & opened ${file.name} in tab!`, 'success');
-        return;
-      } else if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new Image();
-          img.onload = () => {
-            slicePngToProject(img, file.name);
-          };
-          img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
       }
-    } catch (err) {
-      console.warn('Failed reading from dropped FileSystemHandle, falling back:', err);
-      try {
-        const file = await handle.getFile();
-        handleFileOpen(file);
-      } catch (_) {}
     }
+    const text = await file.text();
+    const doc = PIX2.parse(text);
+    const validation = PIX2.validate(doc, { strict: false });
+    if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid PIX2 document');
+    const session = createProjectSession(doc, file.name, handle);
+    session.lastSavedContent = text;
+    session.lastKnownFileModified = file.lastModified || 0;
+    currentFileHandle = handle;
+    currentFileName = file.name;
+    currentFilePath = file.name;
+    lastSavedContent = text;
+    lastKnownFileModified = session.lastKnownFileModified;
+    pendingExternalConflict = null;
+    setDirty(false);
+    if (handle) persistFileHandle(handle);
+    persistAllProjectSessions();
+    updateFileStatusUI();
+    showToast('Opened ' + file.name + ' in a document tab', 'success');
+  }
+
+  async function handleFileOpenFromHandle(handle) {
+    if (!handle) return;
+    const file = await handle.getFile();
+    if (/\.(pix2|txt)$/i.test(file.name)) return openStudioDocument(file, handle);
+    handleFileOpen(file);
   }
 
   function handleFileOpen(file) {
@@ -9438,45 +9341,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     }
     const name = file.name.toLowerCase();
     if (name.endsWith('.pix2') || name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = e.target.result;
-          const doc = PIX2.parse(content);
-
-          const existing = projectSessions.find(p => p.fileName === file.name || p.filePath === file.name);
-          if (existing) {
-            switchProjectSession(existing.id);
-            showToast(`Switched to open tab "${file.name}"`, 'info');
-            return;
-          }
-
-          saveCurrentSessionState();
-          currentFileHandle = null;
-          currentFileName = file.name;
-          currentFilePath = file.name;
-          lastSavedContent = content;
-          lastKnownFileModified = file.lastModified || Date.now();
-          pendingExternalConflict = null;
-          localStorage.setItem('noiradix_active_file_name', currentFileName);
-          localStorage.setItem('noiradix_active_file_path', currentFilePath);
-          localStorage.setItem('pix2_last_saved_content', content);
-
-          const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-          const session = new ProjectSession(newId, file.name, doc, null, file.name, file.name);
-          session.lastSavedContent = content;
-          session.isDirty = false;
-          session.activeTabId = 'tab-grid-overview';
-          session.openCellTabs = [];
-          projectSessions.push(session);
-          switchProjectSession(newId);
-          persistAllProjectSessions();
-          showToast(`Opened ${file.name} in tab!`, 'success');
-        } catch (err) {
-          alert(`Error reading .pix2 file:\n${err.message}`);
-        }
-      };
-      reader.readAsText(file);
+      openStudioDocument(file).catch(error => showToast('Cannot open file: ' + error.message, 'error'));
     } else if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -10587,7 +10452,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         btn.classList.add('active');
         const scaleVal = btn.dataset.scale;
         exportPreviewZoom = (scaleVal === 'fit') ? 'fit' : parseInt(scaleVal, 10);
-        updateExportPreview();
+        updateExportPreview(true);
       });
     });
 
@@ -10612,7 +10477,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
           b.classList.toggle('active', b.dataset.scale === String(nextScale));
         });
-        updateExportPreview();
+        updateExportPreview(true);
       }, { passive: false });
 
       exportViewport.addEventListener('dblclick', (e) => {
@@ -10622,7 +10487,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
           b.classList.toggle('active', b.dataset.scale === String(nextScale));
         });
-        updateExportPreview();
+        updateExportPreview(true);
       });
 
       let isPanDragging = false;

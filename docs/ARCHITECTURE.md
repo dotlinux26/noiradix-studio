@@ -126,3 +126,11 @@ Player.cell_id.pixel(x, y) = Color
 - **CPU Overhead:** 0% idle; minimal bursts during flood fill or atlas generation (< 16ms per frame, ensuring steady 60 FPS).
 - **GPU Acceleration:** Standard HTML5 Canvas 2D hardware rasterizer.
 - **Storage Requirement:** Zero local installation required; static bundle footprint is under 2 MB.
+
+## RC2 file lifecycle and bounded processing contract
+
+The 2.1.2-beta.1 implementation shares native write ordering, permissions and stream cleanup in `js/editor-file-save.js`. Apps own their session, history and persistence wiring. A save captures text, revision, originating session and handle before asynchronous work. Completion publishes only to that session; later edits remain dirty. Watcher reads are discarded if the handle, active session or revision changes while awaiting I/O.
+
+Workspace catalog selection validates shape before choosing the newest timestamp across localStorage and IndexedDB. This is browser recovery, separate from disk saving; unavailable or cleared browser storage cannot guarantee recovery.
+
+Both parser distributions must remain byte-identical. Public raster allocations require safe positive integer dimensions, at most 8192 per axis and 16,777,216 total pixels. Parser work budgets are implementation resource limits, not PIX2 artwork fields. See `discussion/RC2_AUDIT.md` for evidence and remaining beta coverage.

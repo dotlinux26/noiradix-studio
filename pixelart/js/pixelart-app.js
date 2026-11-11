@@ -31,6 +31,7 @@
   const _EditorCanvas = typeof EditorCanvas !== 'undefined' ? EditorCanvas : require('../../js/editor-canvas.js');
   const _EditorRulers = typeof EditorRulers !== 'undefined' ? EditorRulers : require('../../js/editor-rulers.js');
   const _SelectionTransform = typeof SelectionTransform !== 'undefined' ? SelectionTransform : require('../../js/selection-transform.js');
+  const _FileSave = typeof EditorFileSave !== 'undefined' ? EditorFileSave : require('../../js/editor-file-save.js');
   const _Version = typeof NOIRADIX_VERSION !== 'undefined' ? NOIRADIX_VERSION : require('../../js/version.js');
   const PRESET_PALETTES = {
     noiradix: [
@@ -1957,16 +1958,6 @@
       return dom.codeEditor.value;
     }
 
-    // Ensure cell size metadata is up-to-date before serializing
-    const cell = getArtworkCell();
-    if (cell) {
-      cell.size = { w: state.w, h: state.h };
-      if (state.doc && state.doc.meta) {
-        state.doc.meta.cell_size = { w: state.w, h: state.h };
-        state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${state.w}x${state.h}` };
-      }
-    }
-
     // ALWAYS serialize from authoritative canonical state.doc!
     let serialized = _PIX2.serialize(state.doc);
     if (state.canvasBgMode && state.canvasBgMode !== 'transparent') {
@@ -2046,10 +2037,11 @@
 
       // Extract artwork dimensions
       const cell = getArtworkCell();
-      if (cell && cell.size) {
-        if (cell.size.w !== state.w || cell.size.h !== state.h) {
-          state.w = Math.max(1, Math.min(1024, cell.size.w));
-          state.h = Math.max(1, Math.min(1024, cell.size.h));
+      const size = cell?.size || parsedDoc.meta.cellSize;
+      if (size) {
+        if (size.w !== state.w || size.h !== state.h) {
+          state.w = Math.max(1, Math.min(1024, size.w));
+          state.h = Math.max(1, Math.min(1024, size.h));
           dom.dimBadge.textContent = `${state.w}×${state.h}`;
           resizeCanvasesToZoom();
           renderRulers();
@@ -3841,7 +3833,7 @@
     cell.size = { w: newW, h: newH };
     if (state.doc && state.doc.meta) {
       state.doc.meta.cell_size = { w: newW, h: newH };
-      state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${newW}x${newH}` };
+      state.doc.meta.grid = { cols: 1, rows: 1 };
     }
 
     // Clean out-of-bounds pixels if shrank
@@ -4361,146 +4353,89 @@
     dom.fileInput.click();
   }
 
-  let activeSavePromise = Promise.resolve();
-  let saveSequenceCounter = 0;
-  let lastCompletedSaveSeq = 0;
+  const enqueueArtworkSave = _FileSave.createQueue();
   let activeSaveOperations = 0;
 
   function saveFileNative(forceSaveAs = false) {
+    if (_hasDocument && state.isCodeEditingUnlocked && state.sourcePaneMode !== 'summary') {
+      clearTimeout(state.sourceDebounceTimer);
+      if (!applySourceCodeToCanvas()) return Promise.resolve(false);
+    }
     commitFloatingSelection();
-    const snapshotRevision = documentRevision;
-    const saveSeq = ++saveSequenceCounter;
+    if (!state.doc) return Promise.resolve(false);
+    const doc = state.doc;
+    const session = paProjectSessions.find(item => item.id === activePaProjectId) || null;
+    const revision = documentRevision;
     const text = flushSourceCode();
-    activeSaveOperations++;
-
-    const doSave = async () => {
+    const title = state.title;
+    const fileName = currentFileName || `${sanitizeFilename(title)}.pix2`;
+    const direct = !forceSaveAs && currentFileHandle?.createWritable ? currentFileHandle : null;
+    const access = direct ? _FileSave.permission(direct) : Promise.resolve(true);
+    let picker;
+    if (!direct && typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
       try {
-        // Prevent stale out-of-order writes if a newer queued save already completed
-        if (saveSeq < lastCompletedSaveSeq && !forceSaveAs) {
-          return;
-        }
-
-        // Direct overwrite to existing handle
-        if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
-          try {
-            if (currentFileHandle.queryPermission) {
-              const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
-              if (perm !== 'granted') {
-                const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
-                if (req !== 'granted') {
-                  showToast('Write permission to file was denied.', 'error');
-                  return;
-                }
-              }
-            }
-            const writable = await currentFileHandle.createWritable();
-            await writable.write(text);
-            await writable.close();
-            try {
-              const fresh = await currentFileHandle.getFile();
-              lastKnownFileModified = fresh.lastModified;
-            } catch (_) {
-              lastKnownFileModified = Date.now();
-            }
-            lastSavedContent = text;
-            pendingExternalConflict = null;
-            const btnReload = document.getElementById('btn-reload-file');
-            if (btnReload) {
-              btnReload.classList.remove('pulse-warning');
-              btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-            }
-            await persistFileHandle(currentFileHandle);
-            try {
-              _storage.setItem('noiradix_pixelart_file_name', currentFileName);
-              _storage.setItem('pix2_last_saved_content', text);
-              _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-            } catch (_) {}
-            lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-            lastSavedRevision = snapshotRevision;
-            setDirty(documentRevision !== lastSavedRevision);
-            triggerAutosave(true);
-            showToast(`Saved to ${currentFileHandle.name}!`);
-            return;
-          } catch (err) {
-            console.warn('Direct overwrite failed, prompting Save As:', err);
+        picker = window.showSaveFilePicker({ suggestedName: fileName,
+          types: [{ description: 'PIX2 Sprite File', accept: { 'text/plain': ['.pix2'] } }] });
+      } catch (error) {
+        picker = Promise.reject(error);
+      }
+      picker.catch(() => {});
+    }
+    activeSaveOperations++;
+    return enqueueArtworkSave(async () => {
+      try {
+        if (session && !paProjectSessions.includes(session)) return false;
+        if (!await access) throw new Error('Write permission was denied');
+        const handle = picker ? await picker : direct;
+        let modified = 0;
+        if (handle) modified = await _FileSave.write(handle, text);
+        else savePix2File(text, fileName);
+        if (session && !paProjectSessions.includes(session)) return true;
+        const active = session ? session.id === activePaProjectId : state.doc === doc;
+        if (active) saveCurrentPaSession();
+        if (session) {
+          session.lastSavedContent = text;
+          session.lastSavedRevision = revision;
+          session.isDirty = session.revision !== revision || _PIX2.serialize(session.doc) !== text;
+          session.lastKnownFileModified = modified;
+          session.pendingExternalConflict = null;
+          if (handle) {
+            session.fileHandle = handle;
+            session.fileName = handle.name;
           }
         }
-
-        // Save As via File System Access API
-        if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-          try {
-            const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
-            const handle = await window.showSaveFilePicker({
-              suggestedName: suggested,
-              types: [{
-                description: 'PIX2 Sprite File (*.pix2)',
-                accept: { 'text/plain': ['.pix2'] }
-              }]
-            });
-            const writable = await handle.createWritable();
-            await writable.write(text);
-            await writable.close();
+        if (active) {
+          if (handle) {
             currentFileHandle = handle;
             currentFileName = handle.name;
-            state.title = handle.name.replace(/\.[^/.]+$/, '');
-            if (dom.docTitle) dom.docTitle.value = state.title;
-            try {
-              const fresh = await handle.getFile();
-              lastKnownFileModified = fresh.lastModified;
-            } catch (_) {
-              lastKnownFileModified = Date.now();
-            }
-            lastSavedContent = text;
-            pendingExternalConflict = null;
-            const btnReload = document.getElementById('btn-reload-file');
-            if (btnReload) {
-              btnReload.classList.remove('pulse-warning');
-              btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-            }
-            await persistFileHandle(handle);
-            try {
-              _storage.setItem('noiradix_pixelart_file_name', currentFileName);
-              _storage.setItem('pix2_last_saved_content', text);
-              _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-            } catch (_) {}
-            lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-            lastSavedRevision = snapshotRevision;
-            setDirty(documentRevision !== lastSavedRevision);
-            triggerAutosave(true);
-            showToast(`Saved as ${handle.name}!`);
-            return;
-          } catch (err) {
-            if (err.name === 'AbortError') return;
-            console.warn('Save file picker failed, falling back to download:', err);
+            persistFileHandle(handle);
           }
+          lastKnownFileModified = modified;
+          lastSavedContent = text;
+          pendingExternalConflict = null;
+          lastSavedRevision = revision;
+          setDirty(documentRevision !== lastSavedRevision || _PIX2.serialize(state.doc) !== text);
+          triggerAutosave(true);
+          showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName);
         }
-
-        // Fallback: Blob download
-        savePix2File();
-        lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-        lastSavedRevision = snapshotRevision;
-        setDirty(documentRevision !== lastSavedRevision);
-        triggerAutosave(true);
+        if (_hasDocument) persistPaWorkspace();
+        return true;
+      } catch (error) {
+        if (error.name !== 'AbortError') showToast('Save failed: ' + error.message, 'error');
+        return false;
       } finally {
-        activeSaveOperations = Math.max(0, activeSaveOperations - 1);
+        activeSaveOperations--;
       }
-    };
-
-    activeSavePromise = activeSavePromise.then(doSave, doSave);
-    return activeSavePromise;
+    });
   }
 
-  function savePix2File() {
-    commitFloatingSelection();
-    const text = flushSourceCode();
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${sanitizeFilename(state.title)}.pix2`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`Downloaded ${sanitizeFilename(state.title)}.pix2`);
+  function savePix2File(text = flushSourceCode(), fileName = `${sanitizeFilename(state.title)}.pix2`) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   // ===========================================================================
@@ -4627,15 +4562,21 @@
     if (!currentFileHandle || isExternalReloading || activeSaveOperations > 0) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
+    const watchedHandle = currentFileHandle;
+    const watchedProject = activePaProjectId;
+    const watchedRevision = documentRevision;
+    const stillCurrent = () => currentFileHandle === watchedHandle && activePaProjectId === watchedProject && documentRevision === watchedRevision && !activeSaveOperations;
     try {
       isExternalReloading = true;
       const file = await currentFileHandle.getFile();
+      if (!stillCurrent()) return;
       const currentModified = file.lastModified;
 
       // If baseline timestamp is not yet recorded, record it and baseline content from file
       if (lastKnownFileModified === 0) {
         lastKnownFileModified = currentModified;
         const curText = await file.text();
+        if (!stillCurrent()) return;
         lastSavedContent = curText;
         try { _storage.setItem('pix2_last_saved_content', curText); } catch (_) {}
 
@@ -4665,6 +4606,7 @@
       }
 
       const text = await file.text();
+      if (!stillCurrent()) return;
       if (!text || !text.trim()) {
         isExternalReloading = false;
         return;
