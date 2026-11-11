@@ -1,6 +1,6 @@
 # Kế hoạch tái cấu trúc engine editor sau RC2
 
-Trạng thái: đề xuất để review; chưa triển khai refactor. Mốc code `2d5e751`, nhánh `rc2`, bản `2.1.2-beta.1`. Ngày 2026-11-11.
+Trạng thái: đã được người dùng cho triển khai tuần tự; đang thực hiện. Mốc code `2d5e751`, nhánh `rc2`, bản `2.1.2-beta.1`. Ngày 2026-11-11.
 
 ## Mục tiêu và mốc nghiệm thu
 
@@ -56,7 +56,7 @@ Một thao tác chỉ có một chủ sở hữu commit history và dirty. Engin
 - Tách Studio theo editor, project/file lifecycle, grid, slice, animation, code/AI và export; PixelArt theo editor, project/file lifecycle, palette/source.
 - Mỗi thay đổi chỉ di chuyển một trách nhiệm, giữ thứ tự khởi tạo và điểm gọi. Tránh truyền nguyên app state hoặc hàng chục callback vào một module mới.
 - Chưa đồng thời đổi thuật toán hoặc hợp nhất history. Giữ entry point tương thích để rollback từng phần.
-- Hoàn thành khi app shell chủ yếu khởi tạo/bind và gọi controller; không có vòng phụ thuộc giữa controller.
+- Gate P1: các controller grid/slice/animation/source/export và palette có ranh giới riêng, dependency được khai báo, giữ pipeline hiện có qua regression. Gesture/selection/lifecycle được di chuyển theo P2–P4 để không đổi ownership cùng lúc với thuật toán. App shell chủ yếu khởi tạo/bind là đích cuối P5.
 
 ### P2 — Chuẩn hóa mutation và command
 

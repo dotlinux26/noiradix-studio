@@ -459,9 +459,9 @@ function zipEntries(bytes) {
     assert.ok(await gridPage.locator('#btn-execute-game-export').isEnabled());
     console.log('Studio PASS export visible Fit / zoom raster reuse / allocation rejection and recovery');
     // Verify the extracted export controller through the ordinary modal/download path.
+    const controllerErrors = [];
+    page.on('pageerror', error => controllerErrors.push(error.message));
     for (const format of ['unity', 'texturepacker', 'zip-frames']) {
-      page.on('pageerror', error => console.error('Export page:', error.message));
-      console.log('Checking export', format);
       await page.locator('#btn-export-atlas').click();
       await page.locator('.format-option-card[data-format="' + format + '"]').click();
       const pending = page.waitForEvent('download');
@@ -484,6 +484,19 @@ function zipEntries(bytes) {
       }
     }
     console.log('Studio PASS Unity / TexturePacker / individual frame ZIP downloads');
+    await page.locator('.studio-tab[data-tab-id="tab-grid-overview"]').click();
+    const beforeTemplate = await page.evaluate(() => PIX2.serialize(state.doc));
+    await page.locator('#btn-quick-4dir').click();
+    await page.locator('#template-action-input').fill('qa_template');
+    await page.locator('#template-cols-input').fill('2');
+    await page.locator('#btn-apply-template-modal').click();
+    await page.locator('#modal-action-template').waitFor({ state: 'hidden' });
+    const generated = await page.evaluate(() => state.doc.animations.qa_template_down);
+    assert.equal(generated.frames.length, 2);
+    await page.keyboard.press('Control+z');
+    assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeTemplate);
+    assert.deepEqual(controllerErrors, []);
+    console.log('Studio PASS action template / modal close / Undo / controller wiring');
   } finally {
     await browser.close();
   }

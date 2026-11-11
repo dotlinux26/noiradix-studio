@@ -398,7 +398,7 @@ console.log('\nTest 10: Slicing Inspector Row/Tag & Col/Frame Index Contract Ver
 {
   const fs = require('fs');
   const path = require('path');
-  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/studio-slice.js'), 'utf8');
 
   // Verify Slicing Inspector table headers and inputs
   assert(appJs.includes('Tag (Row)'), 'Inspector must have Tag (Row) column');

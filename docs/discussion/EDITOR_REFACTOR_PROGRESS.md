@@ -52,3 +52,21 @@ P0 hoàn tất bản đồ theo entry point hiện tại và kiểm thử bổ s
 - Studio normal entry point tải được gói Unity, TexturePacker và ZIP từng frame. Test đọc ZIP thực, JSON metadata và chữ ký PNG; không chỉ kiểm tra nút có callback.
 - Workspace browser qua cả hai app, gồm palette library có tên chứa ký tự đặc biệt. 19 Node suites qua. Đã sửa thứ tự nạp preset trước EditorState; kiểm thử browser bắt được dependency khởi tạo này.
 - Module atlas/export không tham chiếu state/DOM toàn app. App cấp request và callback UI. Refactor đang tiếp tục các controller còn lại; chưa đánh dấu P1 hoàn tất.
+
+### P1 — Tách các controller Studio còn lại
+
+Đã tách grid, animation/template, Import & Slice, code/AI và export thành các module Studio riêng. Grid/animation/source nhận document adapter chỉ có doc, active view và những phương thức history/cell cần thiết; view port giữ trạng thái riêng, callback giữa controller được gọi qua app. Không lấy session/file/autosave state vào engine.
+
+Phát hiện RF-001: Apply Action Template gọi `updateStudioUI` không tồn tại. Tái hiện qua nút 4-dir: lỗi ReferenceError và modal không đóng dù tài liệu đã đổi. Đã bỏ lời gọi dư vì refreshAll đã render đúng active view. Thêm regression tạo template, đóng modal và Undo về source trước thao tác.
+
+Quyết định về trình tự: editor gesture, selection và file lifecycle vẫn nằm trong adapter app để xử lý transaction ở P2/P3/P4; không di chuyển chúng cùng lúc với đổi quy tắc. Mục tiêu app shell chủ yếu khởi tạo là đích cuối P5, không phải điều kiện ép mọi closure ra file trong P1. P1 hoàn tất khi các controller trên và pipeline hiện có qua regression; không dựa vào số dòng.
+
+### Kết quả P1
+
+P1 hoàn tất theo ranh giới đã điều chỉnh ở kế hoạch: các controller Studio grid/slice/animation/source/export và palette đã tách; core gesture/history/lifecycle để dành cho các phase tiếp theo. 19 Node suites qua; browser workspace normal entry points cả hai app qua. Các gói Unity/TexturePacker/frame ZIP và action template/Undo qua. RF-001 đã được kiểm chứng sửa bằng thao tác UI thật.
+
+Không có thay đổi định dạng hay storage schema. Không cài dependency runtime; Acorn chỉ dùng trong TEMP để xác định dependency khi di chuyển controller. Các callback giữa feature vẫn do app nối, không import chéo controller.
+
+## P2 — Mutation và transaction
+
+Đang bắt đầu: hợp nhất đường ghi raster và phát hiện thay đổi thực; giữ history adapter riêng. Ưu tiên brush/eraser/shapes và lỗi no-op làm tăng revision hoặc mất redo ở PixelArt.

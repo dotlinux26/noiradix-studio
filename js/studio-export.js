@@ -470,7 +470,7 @@ STEP 3: 1-CLICK AUTOMATIC IMPORT
   - Method A (Right-Click Context Menu):
       In Unity Project Window, RIGHT-CLICK the "${baseName}.pix2.json" file
       -> Select "NOIRADIX > Import Spritesheet & Animations".
-  
+
   - Method B (Top Menu Bar):
       In Unity's top menu bar, click "Tools > NOIRADIX > Import Pix2 Spritesheet JSON..."
       and select the .json file.
