@@ -26,6 +26,10 @@
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
+### 🎥 AI Programming Your Pixel Art Spritesheet Animation with PIX2 language?! | NOIRADIX Studio Demo
+
+[Watch the NOIRADIX Studio demo on YouTube](https://www.youtube.com/watch?v=XikhVI0APQg)
+
 ### 🌟 60-Second Full Walkthrough (From AI Prompt to Unity 2D)
 
 https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
