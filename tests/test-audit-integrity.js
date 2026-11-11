@@ -251,7 +251,7 @@ async function runSuite() {
   {
     PixelArtApp.state.w = 1024;
     PixelArtApp.state.h = 1024;
-    assert.strictEqual(PixelArtApp.getMaxAllowedZoom(), 8, '1024x1024 must cap at 8x zoom');
+    assert.strictEqual(PixelArtApp.getMaxAllowedZoom(), 4, '1024x1024 must cap at 4x within the shared backing budget');
 
     PixelArtApp.state.w = 512;
     PixelArtApp.state.h = 512;
@@ -285,8 +285,8 @@ async function runSuite() {
     PixelArtApp.state.h = 1024;
     PixelArtApp.resizeCanvasesToZoom();
 
-    assert.strictEqual(PixelArtApp.state.zoom, 8, `state.zoom must be clamped from 64 to 8, got ${PixelArtApp.state.zoom}`);
-    console.log('  [PASS] resizeCanvasesToZoom() defensively clamps zoom on dimension change (64x -> 8x)');
+    assert.strictEqual(PixelArtApp.state.zoom, 4, `state.zoom must be clamped from 64 to 4, got ${PixelArtApp.state.zoom}`);
+    console.log('  [PASS] resizeCanvasesToZoom() defensively clamps zoom on dimension change (64x -> 4x)');
   }
 
   // -----------------------------------------------------------------------------
@@ -728,9 +728,9 @@ async function runSuite() {
   {
     const code = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
     // Ensure setDirty is called before triggerAutosave(true) in saveFileNative
-    const saveNativePattern = /setDirty\(documentRevision !== lastSavedRevision\);\s*triggerAutosave\(true\);/g;
+    const saveNativePattern = /setDirty\(documentRevision !== lastSavedRevision \|\| _PIX2.serialize\(state.doc\) !== text\);\s*triggerAutosave\(true\);/g;
     const matches = code.match(saveNativePattern);
-    assert(matches && matches.length >= 2, 'saveFileNative must update lastSavedRevision and setDirty BEFORE triggerAutosave(true)');
+    assert(matches && matches.length >= 1, 'The shared save publication path must update dirty state before autosave');
 
     // Behavioral state test:
     PixelArtApp.markDocumentMutation('test-edit');
@@ -806,14 +806,11 @@ async function runSuite() {
     const cell = PixelArtApp.getArtworkCell();
     cell.pixels = { '2,2': '#ff0000', '3,2': '#00ff00' };
     PixelArtApp.state.selection = { x: 2, y: 2, w: 2, h: 1 };
-    // Simulate a transformed floating preview after the original pixels have
-    // been lifted out of the document. The baseline must win on Escape.
-    delete cell.pixels['2,2'];
-    delete cell.pixels['3,2'];
+    // Enter through the production lift so the shared session owns the source.
+    // Then simulate a transformed preview; the lift-time baseline must win.
+    PixelArtApp.ensureFloatingSelection();
     PixelArtApp.state.floatingPixels = { '0,0': '#0000ff' };
     PixelArtApp.state.floatingOriginalSel = { x: 4, y: 4, w: 1, h: 1 };
-    PixelArtApp.state.floatingBaselinePixels = { '0,0': '#ff0000', '1,0': '#00ff00' };
-    PixelArtApp.state.floatingBaselineSel = { x: 2, y: 2, w: 2, h: 1 };
 
     PixelArtApp.cancelFloatingSelection();
     assert.deepStrictEqual(cell.pixels, { '2,2': '#ff0000', '3,2': '#00ff00' },
@@ -978,8 +975,8 @@ async function runSuite() {
     assert(source.includes('rotationSessionPixels'), 'PixelArt must retain an immutable rotation-session raster');
     assert(source.includes('state.rotationGestureBaseAngle + state.rotationCurrentAngle'),
       'Pointer-up must apply the cumulative angle rather than re-rotating the previous bounding box');
-    assert(source.includes('SelectionTransform.rotatePixelsNearestNeighbor(\n          state.rotationSessionPixels'),
-      'Committed rotation must sample the immutable session pixels');
+    assert(source.includes('floatingSession.rotate(theta)'),
+      'Committed rotation must delegate to the shared immutable sampling session');
     console.log('  [PASS] repeated rotation gestures use a stable source snapshot and cumulative angle');
   }
 

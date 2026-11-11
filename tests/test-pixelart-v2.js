@@ -186,7 +186,7 @@ console.log('\nTest 4: Modular Component Export & Manifest Structure');
 
   const exportResult = ModularExport.exportModularComponents(doc, { mode: 'modular', trimmed: false });
   assert.ok(exportResult.manifest, 'Manifest generated');
-  assert.strictEqual(exportResult.manifest.generator, 'NOIRADIX Studio 2.1.1');
+  assert.strictEqual(exportResult.manifest.generator, 'NOIRADIX Studio 2.1.2-beta.2');
   assert.strictEqual(exportResult.manifest.formatVersion, '1.1');
   assert.strictEqual(exportResult.manifest.components.length, 2, '2 components exported');
   assert.ok(exportResult.zip, 'ZIP archive generated');
@@ -342,7 +342,7 @@ console.log('\nTest 8: PixelArt 2.0 DOM Contract Verification');
   for (const id of requiredIds) {
     assert(html.includes(`id="${id}"`), `pixelart/index.html must define #${id}`);
   }
-  assert(html.includes('src="../js/editor-toolbar.js"') && toolbar.includes('id="btn-pa-tool-region-select"'),
+  assert(/src="\.\.\/js\/editor-toolbar\.js(?:\?[^\"]*)?"/.test(html) && toolbar.includes('id="btn-pa-tool-region-select"'),
     'PixelArt loads its Region Select control from the shared toolbar');
 
   console.log('  [PASS] PixelArt 2.0 Structure, Layers, and Region Select UI contract verified');

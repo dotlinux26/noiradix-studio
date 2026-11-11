@@ -489,3 +489,9 @@ Boolean            ::= "true" | "false"
 Dimension          ::= Integer ("x" | "X" | ",") Integer
 EndMarker          ::= "@end" EOL?
 ```
+
+## RC2 clarification: strings and implementation resource limits
+
+Comment delimiters inside a matching quoted string are literal content. Escaped quote/backslash and newline/carriage-return escapes are decoded once; serialize/parse must preserve literal backslash sequences. Unquoted hexadecimal colors remain valid next to comments.
+
+Parser resource limits depend on the selected Studio or PixelArt profile. File-size limits count UTF-8 bytes. Cell/node limits and raster-work budgets prevent unbounded primitive expansion; a resource-limit error must be handled as rejection, rather than exporting a partial parsed result. Public raster allocation is limited to 8192 pixels per axis and 16,777,216 total pixels. These are runtime limits and do not change the PIX2 1.1 version or add exported view state.

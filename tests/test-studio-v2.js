@@ -32,12 +32,12 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.1.1', 'Studio version must be 2.1.1');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.1.1', 'PixelArt version must be 2.1.1');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.1.2-beta.2', 'Studio version must be 2.1.2-beta.2');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.1.2-beta.2', 'PixelArt version must be 2.1.2-beta.2');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.1 version manifest verified (Studio 2.1.1 / PixelArt 2.1.1 / PIX2 1.1)');
+  pass('NOIRADIX 2.1 version manifest verified (Studio 2.1.2-beta.2 / PixelArt 2.1.2-beta.2 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -398,7 +398,7 @@ console.log('\nTest 10: Slicing Inspector Row/Tag & Col/Frame Index Contract Ver
 {
   const fs = require('fs');
   const path = require('path');
-  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/studio-slice.js'), 'utf8');
 
   // Verify Slicing Inspector table headers and inputs
   assert(appJs.includes('Tag (Row)'), 'Inspector must have Tag (Row) column');

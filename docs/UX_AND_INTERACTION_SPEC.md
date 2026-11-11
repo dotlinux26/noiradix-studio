@@ -1,13 +1,13 @@
 # NOIRADIX Studio 2.0 — UX & Interaction Specification
 
-> **Version:** 2.0.0  
+> **Version:** 2.1.2-beta.2
 > **Format Specification:** PIX2 1.1 Structural Graphics  
 > **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)  
 
 ---
 
 ## 1. Top Navigation & Document Sessions Strip
-- **Branding Badge:** Displays official NOIRADIX logo, brand title "NOIRADIX Studio", and clickable version badge "v2.0.0" opening the About modal.
+- **Branding Badge:** Displays official NOIRADIX logo, brand title "NOIRADIX Studio", and clickable version badge derived from `js/version.js`, opening the About modal.
 - **Project Sessions Tab Strip (`#project-tabs-strip`):**
   - Displays tabs for open `.pix2` projects with document titles, dirty indicators (`*`), and close buttons (`×`).
   - `+` button opens Guided New Project modal.
@@ -81,3 +81,9 @@ NOIRADIX Studio provides 3 dedicated top-level workspaces:
     5. Individual Numbered PNG Frames (.ZIP).
   - Anti-bleed padding controls (spacing, margin, extrude).
   - Live Atlas Preview with 1×, 2×, 4×, and Fit zoom pills.
+
+## RC2 session/save clarification
+
+Version badges and titles derive from `js/version.js`, including the beta suffix. Demo loading creates an independent session. Files with equal display names remain distinct when their native handles identify different entries. Save completion must preserve the active tab and all edits newer than its captured snapshot; failure keeps the unsaved indicator. Export preview Fit uses the visible viewport, and zoom reuses the current raster until export options change.
+
+Verification status and platform gaps are maintained in `discussion/RC2_AUDIT.md`.

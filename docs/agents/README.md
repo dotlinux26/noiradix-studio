@@ -14,3 +14,5 @@ This handbook applies to repository work by coding agents. Read the current chec
 The current upgrade is developed on `rc2`. Use the user's latest branch instruction. A request to publish documentation to `main` applies to that documentation change. Keep feature work on its review branch.
 
 English and Vietnamese are both accepted. Use concrete repro steps, expected behavior, observed behavior, commit IDs and verification results. A historical PASS describes its recorded fixture and commit.
+
+Current refactor: [plan](../discussion/EDITOR_REFACTOR_PLAN.md) and [phase report](../discussion/EDITOR_REFACTOR_PROGRESS.md). Preserve app-specific ports when extending shared editor commands.

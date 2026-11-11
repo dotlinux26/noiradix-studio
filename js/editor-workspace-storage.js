@@ -4,6 +4,11 @@ const EditorWorkspaceStorage = (() => {
   let connection;
   let updatedAt = 0;
 
+  function validCatalog(value) {
+    return value && Array.isArray(value.sessions) &&
+      (value.updatedAt === undefined || (Number.isSafeInteger(value.updatedAt) && value.updatedAt >= 0));
+  }
+
   function open() {
     if (!connection) {
       connection = new Promise((resolve, reject) => {
@@ -33,6 +38,8 @@ const EditorWorkspaceStorage = (() => {
         request.onerror = () => reject(request.error);
       });
     } catch (_) {}
+    if (!validCatalog(local)) local = null;
+    if (!validCatalog(backup)) backup = null;
     const newest = (backup?.updatedAt || 0) > (local?.updatedAt || 0) ? backup : local;
     updatedAt = Math.max(updatedAt, Number(newest?.updatedAt) || 0);
     return newest;

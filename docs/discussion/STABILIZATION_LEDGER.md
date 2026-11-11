@@ -1,5 +1,7 @@
 # Sổ kiểm chứng NOIRADIX Studio và PixelArt
 
+> Historical checkpoint. For the later RC2 refactor, corrections, completed regression gaps and current verification, see [EDITOR_REFACTOR_PROGRESS.md](EDITOR_REFACTOR_PROGRESS.md). Original results below retain their original scope.
+
 Baseline `a955c4d3c5cfa7a1e976df8bd0fc6839c429dc47`, nhánh `codex/editor-stabilization`. Checkout sạch lúc bắt đầu. Origin `dotlinux26/noiradix-studio`. Bộ Node 24.22.1 chạy 17 suite ở baseline, đều exit 0. Các trạng thái bên dưới áp dụng cho working tree trên baseline này.
 
 ## Nguồn và cách dùng

@@ -2,7 +2,7 @@
  * NOIRADIX Studio - Main Application Controller
  * Fully Static & Zero External Dependencies
  * Professional Pixel Art Editor & Structured Sprite Authoring Environment
- * 
+ *
  * Author: Nguyen Duc Canh (dotlinux26)
  * Copyright: (c) 2026 dotlinux26 (Nguyen Duc Canh). All rights reserved.
  * License: Apache-2.0
@@ -71,6 +71,18 @@
 
   // DOM Elements cache
   const dom = {};
+
+  // Narrow document port for Studio-owned controllers; history stays in EditorState.
+  const studioDocumentModel = {
+    get doc() { return state.doc; }, set doc(value) { state.doc = value; },
+    get activeTabId() { return state.activeTabId; }, set activeTabId(value) { state.activeTabId = value; },
+    beginStroke: () => state.beginStroke(),
+    endStroke: label => state.endStroke(label),
+    saveSnapshot: label => state.saveSnapshot(label),
+    openCellTab: id => state.openCellTab(id),
+    applyDocument: (...args) => state.applyDocument(...args)
+  };
+
 
   // Security & Sanitization Utilities
   function escapeHTML(str) {
@@ -686,6 +698,8 @@
     cur.revision = documentRevision;
     cur.lastSavedRevision = lastSavedRevision;
     cur.lastSavedContent = lastSavedContent;
+    cur.lastKnownFileModified = lastKnownFileModified;
+    cur.pendingExternalConflict = pendingExternalConflict;
     cur.openCellTabs = state.openCellTabs ? [...state.openCellTabs] : [];
     cur.activeTabId = state.activeTabId || 'tab-grid-overview';
     cur.history = state.history ? [...state.history] : [];
@@ -739,9 +753,15 @@
     });
   }
 
+  function prepareProjectSwitch() {
+    return !getActiveSession() || state.activeTabId !== 'tab-pix2-code' ||
+      !isCodeEditingUnlocked || handleBeforeLeaveCodeTab();
+  }
+
   function switchProjectSession(sessionId) {
     const target = projectSessions.find(p => p.id === sessionId);
-    if (!target) return;
+    if (!target || activeProjectId === sessionId) return;
+    if (!prepareProjectSwitch()) return;
 
     commitFloatingSelection();
     regionSelection.reset();
@@ -758,6 +778,8 @@
     documentRevision = target.revision || 0;
     lastSavedRevision = target.lastSavedRevision || 0;
     lastSavedContent = target.lastSavedContent || '';
+    lastKnownFileModified = target.lastKnownFileModified || 0;
+    pendingExternalConflict = target.pendingExternalConflict || null;
     if (target.openCellTabs && Array.isArray(target.openCellTabs)) {
       state.openCellTabs = [...target.openCellTabs];
     } else {
@@ -773,12 +795,13 @@
     }
     state.selection = target.selection ? { ...target.selection } : null;
 
-    setDirty(target.isDirty);
+    setDirty(target.isDirty, false);
     renderProjectTabs();
     refreshAll();
   }
 
   function createProjectSession(doc, title = 'Untitled.pix2', fileHandle = null) {
+    if (!prepareProjectSwitch()) return null;
     saveCurrentSessionState();
     const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const session = new ProjectSession(newId, title, doc, fileHandle, title, title);
@@ -826,6 +849,11 @@
       ? sessionOrId
       : projectSessions.find(p => p.id === sessionOrId);
     if (!session) return;
+    if (session.id === activeProjectId) {
+      if (!prepareProjectSwitch()) return;
+      saveCurrentSessionState();
+    }
+
 
     if (session.isDirty) {
       const confirmDiscard = confirm(`Project "${session.fileName || session.title}" has unsaved changes. Discard and close?`);
@@ -858,7 +886,7 @@
       currentFileName = null;
       currentFilePath = null;
       lastSavedContent = '';
-      floatingSelectionPixels = null;
+      floatingSession.clear();
       floatingOriginalSel = null;
 
       // Clear canvas buffers to free GPU/RAM memory
@@ -1249,11 +1277,11 @@
     return `${cleanBase}/${name}`;
   }
 
-  function setDirty(dirty) {
+  function setDirty(dirty, updateRevision = true) {
     isDocumentDirty = dirty;
-    if (dirty) {
+    if (dirty && updateRevision) {
       documentRevision++;
-    } else {
+    } else if (!dirty && updateRevision) {
       lastSavedRevision = documentRevision;
     }
     const title = (state.doc ? state.doc.meta.title : 'NOIRADIX Studio') || 'Untitled';
@@ -1473,44 +1501,9 @@
         localStorage.setItem('pix2_draft_content', text);
         localStorage.setItem('noiradix_active_file_name', snapshot.fileName);
       }
-      let writtenToDisk = false;
-
-      // Direct write to disk file if linked to matching filename
-      const isDirectDiskValid = isDocumentDirty && handle &&
-                                'createWritable' in handle &&
-                                (!fileName || handle.name.normalize('NFC') === fileName.normalize('NFC'));
-
-      if (isDirectDiskValid) {
-        try {
-          let hasPerm = true;
-          if (handle.queryPermission) {
-            const p = await handle.queryPermission({ mode: 'readwrite' });
-            hasPerm = (p === 'granted');
-          }
-          if (hasPerm && state.doc === doc && currentFileHandle === handle && revision === documentRevision) {
-            const writable = await handle.createWritable();
-            await writable.write(text);
-            await writable.close();
-            let modified;
-            try {
-              modified = (await handle.getFile()).lastModified;
-            } catch (_) {}
-            if (state.doc === doc && currentFileHandle === handle) {
-              lastSavedContent = text;
-              if (modified !== undefined) lastKnownFileModified = modified;
-              pendingExternalConflict = null;
-              if (revision === documentRevision) {
-                setDirty(false);
-                persistAllProjectSessions();
-                writtenToDisk = true;
-              }
-            }
-          }
-        } catch (diskErr) {
-          console.debug('Direct disk autosave skipped:', diskErr);
-        }
-      }
-
+      const writtenToDisk = handle && isDocumentDirty && !activeStudioSaves
+        ? await saveStudioSnapshot()
+        : false;
       if (state.doc === doc && revision === documentRevision) {
         updateAutosaveIndicator(writtenToDisk ? 'disk' : cached ? 'browser' : 'failed', now);
       }
@@ -1595,25 +1588,11 @@
     if (source) {
       try {
         const doc = PIX2.parse(source);
-        const active = getActiveSession();
-        if (active && (active.isDirty || (active.fileName !== 'noiradix_ghost.pix2' && active.fileName !== 'new_sprite.pix2'))) {
-          const newId = 'session_' + Date.now();
-          const session = {
-            id: newId,
-            doc,
-            fileName,
-            filePath: fileName,
-            fileHandle: null,
-            isDirty: false,
-            openCellTabs: ['cell_0_0'],
-            activeCellTabId: 'cell_0_0',
-            history: [],
-            historyIndex: -1,
-            savedRevision: 0,
-            currentRevision: 0
-          };
-          projectSessions.push(session);
-          switchProjectSession(newId);
+        if (getActiveSession()) {
+          if (!createProjectSession(doc, fileName)) return;
+          selectedGridCellId = Object.keys(doc.cells)[0] || null;
+          centerCellCanvas();
+          centerGridCanvas();
           showToast('Loaded ' + fileTitle + ' in new tab', 'success');
           return;
         }
@@ -2354,64 +2333,6 @@
 
   const GRID_ZOOM_LEVELS = [0.025, 0.05, 0.075, 0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 2, 3, 4, 6, 8, 12, 16];
 
-  function setGridZoom(newZoom, clientX, clientY) {
-    if (!state.doc) return;
-    const oldZoom = GRID_LAYOUT.zoom;
-    if (newZoom === oldZoom) return;
-    const anchor = Number.isFinite(clientX) && Number.isFinite(clientY)
-      ? dom.gridCanvas.getBoundingClientRect()
-      : null;
-    GRID_LAYOUT.zoom = newZoom;
-    dom.gridZoomLevel.textContent = newZoom < 0.1
-      ? `${Number((newZoom * 100).toFixed(1))}%`
-      : NoiraViewport.formatArtworkZoom(newZoom);
-    renderGridOverview();
-
-    if (anchor?.width && anchor.height) {
-      const { cellSize, grid } = state.doc.meta;
-      const { leftHeaderW, topHeaderH, cellGapX, cellGapY } = GRID_LAYOUT;
-      const resized = dom.gridCanvas.getBoundingClientRect();
-      const x = NoiraViewport.gridZoomOffset(clientX - anchor.left, leftHeaderW, cellSize.w, cellGapX, oldZoom, newZoom, grid.cols);
-      const y = NoiraViewport.gridZoomOffset(clientY - anchor.top, topHeaderH, cellSize.h, cellGapY, oldZoom, newZoom, grid.rows);
-      gridPanX += Math.round(clientX - resized.left - x);
-      gridPanY += Math.round(clientY - resized.top - y);
-      applyGridPan();
-    }
-  }
-
-  function fitGridCanvas() {
-    if (!state.doc) return;
-    const viewport = dom.gridCanvas.parentElement;
-    const style = getComputedStyle(viewport);
-    const paddedWidth = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-    const paddedHeight = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    const { cellSize, grid } = state.doc.meta;
-    const { leftHeaderW, topHeaderH, cellGapX, cellGapY } = GRID_LAYOUT;
-    const zoom = NoiraViewport.gridFitZoom(
-      viewport.clientWidth - paddedWidth, viewport.clientHeight - paddedHeight,
-      grid.cols * cellSize.w, grid.rows * cellSize.h,
-      leftHeaderW + grid.cols * cellGapX + 36,
-      topHeaderH + grid.rows * cellGapY + 40
-    );
-    if (zoom === null) {
-      showToast('The grid controls alone exceed the viewport. Zoom out and pan to browse.');
-      setGridZoom(GRID_ZOOM_LEVELS[0]);
-    } else {
-      setGridZoom(zoom);
-    }
-    centerGridCanvas();
-  }
-
-  function zoomGridIn(clientX, clientY) {
-    const cur = GRID_LAYOUT.zoom;
-    setGridZoom(GRID_ZOOM_LEVELS.find(z => z > cur) ?? cur, clientX, clientY);
-  }
-
-  function zoomGridOut(clientX, clientY) {
-    const cur = GRID_LAYOUT.zoom;
-    const next = GRID_ZOOM_LEVELS.findLast(z => z < cur) ?? cur;
-    setGridZoom(next, clientX, clientY);
-  }
 
   let gridRowDeleteButtons = [];
   let gridRowDuplicateButtons = [];
@@ -2427,1330 +2348,46 @@
   let gridDragStartX = 0, gridDragStartY = 0;
   let gridDragStartPanX = 0, gridDragStartPanY = 0;
 
-  function applyGridPan() {
-    if (!dom.gridCanvas) return;
-    if (gridPanX === 0 && gridPanY === 0) {
-      dom.gridCanvas.style.transform = '';
-    } else {
-      dom.gridCanvas.style.transform = `translate(${gridPanX}px, ${gridPanY}px)`;
-    }
-  }
+  const gridController = StudioGrid.create({
+    state: studioDocumentModel, dom,
+    view: {
+      get gridColDeleteButtons() { return gridColDeleteButtons; }, set gridColDeleteButtons(value) { gridColDeleteButtons = value; },
+      get gridPanX() { return gridPanX; }, set gridPanX(value) { gridPanX = value; },
+      get gridPanY() { return gridPanY; }, set gridPanY(value) { gridPanY = value; },
+      get gridRowCards() { return gridRowCards; }, set gridRowCards(value) { gridRowCards = value; },
+      get gridRowDeleteButtons() { return gridRowDeleteButtons; }, set gridRowDeleteButtons(value) { gridRowDeleteButtons = value; },
+      get gridRowDuplicateButtons() { return gridRowDuplicateButtons; }, set gridRowDuplicateButtons(value) { gridRowDuplicateButtons = value; },
+      get gridRowMoveDownButtons() { return gridRowMoveDownButtons; }, set gridRowMoveDownButtons(value) { gridRowMoveDownButtons = value; },
+      get gridRowMoveUpButtons() { return gridRowMoveUpButtons; }, set gridRowMoveUpButtons(value) { gridRowMoveUpButtons = value; },
+      get marqueeAnimFrameId() { return marqueeAnimFrameId; }, set marqueeAnimFrameId(value) { marqueeAnimFrameId = value; },
+      get selectedGridCellId() { return selectedGridCellId; }, set selectedGridCellId(value) { selectedGridCellId = value; },
+      get rowDragState() { return rowDragState; }, set rowDragState(value) { rowDragState = value; }
+    },
+    GRID_LAYOUT,
+    GRID_ZOOM_LEVELS,
+    populateAnimDropdowns: (...args) => populateAnimDropdowns(...args),
+    refreshAll: (...args) => refreshAll(...args),
+    showToast: (...args) => showToast(...args),
+    triggerEventAutosave: (...args) => triggerEventAutosave(...args),
+    updateGridInspectorUI: (...args) => updateGridInspectorUI(...args)
+  });
+  const { setGridZoom, fitGridCanvas, zoomGridIn, zoomGridOut, applyGridPan, centerGridCanvas, getRowMoveUpHit, getRowMoveDownHit, getRowCardHit, getRowDuplicateHit, getRowDeleteHit, getColDeleteHit, confirmAndDeleteRow, confirmAndDeleteCol, getCellAtGrid, getCellRowCol, renderGridOverview, inferRowTitle, getGridCellFromPos, addGridRow, addGridCol, promptAndDuplicateRow, moveRow, deleteSpecificRow, deleteSpecificCol, removeSelectedRow, removeSelectedCol } = gridController;
 
-  function centerGridCanvas() {
-    gridPanX = 0;
-    gridPanY = 0;
-    applyGridPan();
-  }
-
-  function getRowMoveUpHit(mx, my) {
-    for (const btn of gridRowMoveUpButtons) {
-      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
-        return btn.row;
-      }
-    }
-    return null;
-  }
-
-  function getRowMoveDownHit(mx, my) {
-    for (const btn of gridRowMoveDownButtons) {
-      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
-        return btn.row;
-      }
-    }
-    return null;
-  }
-
-  function getRowCardHit(mx, my) {
-    for (const card of gridRowCards) {
-      if (mx >= card.x && mx <= card.x + card.w && my >= card.y && my <= card.y + card.h) {
-        return card.row;
-      }
-    }
-    return null;
-  }
-
-  function getRowDuplicateHit(mx, my) {
-    for (const btn of gridRowDuplicateButtons) {
-      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
-        return btn.row;
-      }
-    }
-    return null;
-  }
-
-  function getRowDeleteHit(mx, my) {
-    for (const btn of gridRowDeleteButtons) {
-      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
-        return btn.row;
-      }
-    }
-    return null;
-  }
-
-  function getColDeleteHit(mx, my) {
-    for (const btn of gridColDeleteButtons) {
-      if (mx >= btn.x - 3 && mx <= btn.x + btn.w + 3 && my >= btn.y - 3 && my <= btn.y + btn.h + 3) {
-        return btn.col;
-      }
-    }
-    return null;
-  }
-
-  function confirmAndDeleteRow(rowIdx) {
-    if (!state.doc || state.doc.meta.grid.rows <= 1) {
-      showToast('Cannot delete the only remaining row in the sprite sheet.', 'info');
-      return;
-    }
-    const doc = state.doc;
-    const rows = doc.meta.grid.rows;
-    const cols = doc.meta.grid.cols;
-    if (rowIdx < 0 || rowIdx >= rows) return;
-
-    const rowName = inferRowTitle(rowIdx);
-    let paintedCount = 0;
-    for (let c = 0; c < cols; c++) {
-      const cell = doc.cells[`cell_${rowIdx}_${c}`];
-      if (cell && cell.pixels && Object.keys(cell.pixels).length > 0) {
-        paintedCount++;
-      }
-    }
-
-    const artworkWarning = paintedCount > 0
-      ? `⚠️ WARNING: This row contains ${paintedCount} frame(s) with pixel artwork that will be PERMANENTLY deleted!\n\n`
-      : `(This row contains only empty frames).\n\n`;
-
-    const message = `Are you sure you want to delete Row ${rowIdx} ("${rowName}")?\n\n` +
-      artworkWarning +
-      `IMPACT SUMMARY:\n` +
-      `• Row ${rowIdx} and all its ${cols} cells will be removed.\n` +
-      `• Associated animation clip "${rowName}" will be deleted/updated.\n` +
-      `• All rows below (Row ${rowIdx + 1} → ${rows - 1}) will shift up by 1.\n` +
-      `• Total sheet rows will decrease from ${rows} to ${rows - 1}.\n\n` +
-      `Click OK to confirm permanent deletion.`;
-
-    if (confirm(message)) {
-      deleteSpecificRow(rowIdx, true);
-    }
-  }
-
-  function confirmAndDeleteCol(colIdx) {
-    if (!state.doc || state.doc.meta.grid.cols <= 1) {
-      showToast('Cannot delete the only remaining column in the sprite sheet.', 'info');
-      return;
-    }
-    const doc = state.doc;
-    const rows = doc.meta.grid.rows;
-    const cols = doc.meta.grid.cols;
-    if (colIdx < 0 || colIdx >= cols) return;
-
-    let paintedCount = 0;
-    for (let r = 0; r < rows; r++) {
-      const cell = doc.cells[`cell_${r}_${colIdx}`];
-      if (cell && cell.pixels && Object.keys(cell.pixels).length > 0) {
-        paintedCount++;
-      }
-    }
-
-    const artworkWarning = paintedCount > 0
-      ? `⚠️ WARNING: Column ${colIdx} contains ${paintedCount} cell(s) with pixel artwork that will be PERMANENTLY deleted!\n\n`
-      : `(This column contains only empty cells).\n\n`;
-
-    const message = `Are you sure you want to delete Column ${colIdx}?\n\n` +
-      artworkWarning +
-      `IMPACT SUMMARY:\n` +
-      `• Column ${colIdx} will be deleted across ALL ${rows} rows (${rows} cells removed).\n` +
-      `• All columns to the right (Col ${colIdx + 1} → ${cols - 1}) will shift left by 1.\n` +
-      `• All animation sequences will be shortened from ${cols} to ${cols - 1} frames.\n` +
-      `• Total sheet columns will decrease from ${cols} to ${cols - 1}.\n\n` +
-      `Click OK to confirm permanent deletion.`;
-
-    if (confirm(message)) {
-      deleteSpecificCol(colIdx, true);
-    }
-  }
-
-  function getCellAtGrid(doc, r, c) {
-    if (!doc || !doc.cells) return null;
-
-    // 1. Prioritize cell with explicit row & col matching this position
-    for (const cid in doc.cells) {
-      const cell = doc.cells[cid];
-      if (cell && cell.row === r && cell.col === c) return cell;
-    }
-
-    // 2. Standard fallback cell ID cell_r_c (only if row/col match or are unset)
-    const stdId = `cell_${r}_${c}`;
-    if (doc.cells[stdId]) {
-      const cObj = doc.cells[stdId];
-      if (cObj.row === undefined || cObj.row === r) return cObj;
-    }
-
-    // 3. Direction & Frame mapping (0: down, 1: up, 2: right, 3: left, 4..7: diagonals)
-    const directions = ['down', 'up', 'right', 'left', 'down_left', 'down_right', 'up_left', 'up_right'];
-    const targetDir = directions[r];
-    if (targetDir) {
-      for (const cid in doc.cells) {
-        const cell = doc.cells[cid];
-        if (cell && cell.direction === targetDir && cell.frame === c) return cell;
-      }
-    }
-
-    // 4. Animation frame mapping: check if animation mapped to row r contains frame c
-    if (doc.animations) {
-      for (const aKey in doc.animations) {
-        const anim = doc.animations[aKey];
-        if (anim && anim.frames && anim.frames[c]) {
-          if (anim.direction === targetDir || aKey.includes(targetDir || `row_${r}`)) {
-            const fid = anim.frames[c];
-            if (doc.cells[fid]) return doc.cells[fid];
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function getCellRowCol(cellId) {
-    if (!state.doc || !state.doc.cells) return { r: 0, c: 0 };
-    const cell = state.doc.cells[cellId];
-    if (cell) {
-      if (typeof cell.row === 'number' && !isNaN(cell.row) && typeof cell.col === 'number' && !isNaN(cell.col)) {
-        return { r: cell.row, c: cell.col };
-      }
-      const dirMap = { 'down': 0, 'up': 1, 'right': 2, 'left': 3, 'down_left': 4, 'down_right': 5, 'up_left': 6, 'up_right': 7 };
-      if (cell.direction && dirMap[cell.direction] !== undefined) {
-        return { r: dirMap[cell.direction], c: typeof cell.frame === 'number' ? cell.frame : 0 };
-      }
-    }
-    const match = (cellId || '').match(/cell_(\d+)_(\d+)/);
-    if (match) {
-      return { r: parseInt(match[1], 10), c: parseInt(match[2], 10) };
-    }
-    return { r: 0, c: 0 };
-  }
-
-  function renderGridOverview() {
-    if (!state.doc || !dom.gridCanvas) return;
-    const doc = state.doc;
-    const canvas = dom.gridCanvas;
-    const ctx = canvas.getContext('2d');
-    const isDark = document.body.classList.contains('dark-theme');
-
-    const cols = doc.meta.grid.cols;
-    const rows = doc.meta.grid.rows;
-    const cw = doc.meta.cellSize.w;
-    const ch = doc.meta.cellSize.h;
-    const { leftHeaderW, topHeaderH, cellGapX, cellGapY, zoom } = GRID_LAYOUT;
-    let hasMarqueeLabels = false;
-
-    gridColDeleteButtons = [];
-    gridRowDeleteButtons = [];
-    gridRowDuplicateButtons = [];
-    gridRowMoveUpButtons = [];
-    gridRowMoveDownButtons = [];
-    gridRowCards = [];
-
-    const sheetW = leftHeaderW + cols * (cw * zoom + cellGapX) + 36;
-    const sheetH = topHeaderH + rows * (ch * zoom + cellGapY) + 40;
-
-    // High-DPI Razor-Sharp Text & Canvas Rendering
-    const dpr = Math.min(window.devicePixelRatio || 1, 4096 / sheetW, 4096 / sheetH);
-    EditorCanvas.resize(canvas, Math.round(sheetW * dpr), Math.round(sheetH * dpr));
-    canvas.style.width = `${sheetW}px`;
-    canvas.style.height = `${sheetH}px`;
-    ctx.setTransform(canvas.width / sheetW, 0, 0, canvas.height / sheetH, 0, 0);
-
-    ctx.clearRect(0, 0, sheetW, sheetH);
-    ctx.imageSmoothingEnabled = true;
-
-    // 1. Draw Column Headers (High-Contrast Centered Pill Badges with 'x' Delete Button)
-    for (let c = 0; c < cols; c++) {
-      const cx = leftHeaderW + c * (cw * zoom + cellGapX);
-      const colText = `Col ${c}`;
-      const badgeW = Math.max(76, cw * zoom);
-      const badgeH = 26;
-      const badgeX = Math.round(cx + (cw * zoom - badgeW) / 2);
-      const badgeY = 14;
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.fillStyle = isDark ? '#1e2230' : '#ffffff';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
-      else ctx.rect(badgeX, badgeY, badgeW, badgeH);
-      ctx.fill();
-
-      ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-      ctx.font = 'bold 12px "Segoe UI", system-ui, -apple-system, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(colText, badgeX + (badgeW - 18) / 2, badgeY + badgeH / 2);
-
-      // '×' delete button on right of column badge
-      const colBtnW = 18;
-      const colBtnH = 18;
-      const colBtnX = badgeX + badgeW - colBtnW - 4;
-      const colBtnY = badgeY + (badgeH - colBtnH) / 2;
-
-      gridColDeleteButtons.push({ col: c, x: colBtnX, y: colBtnY, w: colBtnW, h: colBtnH });
-
-      ctx.fillStyle = isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.12)';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(colBtnX, colBtnY, colBtnW, colBtnH, 4);
-      else ctx.rect(colBtnX, colBtnY, colBtnW, colBtnH);
-      ctx.fill();
-
-      ctx.strokeStyle = isDark ? '#f87171' : '#ef4444';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(colBtnX + 5, colBtnY + 5);
-      ctx.lineTo(colBtnX + colBtnW - 5, colBtnY + colBtnH - 5);
-      ctx.moveTo(colBtnX + colBtnW - 5, colBtnY + 5);
-      ctx.lineTo(colBtnX + 5, colBtnY + colBtnH - 5);
-      ctx.stroke();
-    }
-
-    // 2. Draw Rows and Cells
-    for (let r = 0; r < rows; r++) {
-      const rowY = topHeaderH + r * (ch * zoom + cellGapY);
-      const rowName = inferRowTitle(r);
-
-      // High-Contrast Row Card on the left (vertically centered relative to sprite cells)
-      const cardW = 152;
-      const cardH = 56;
-      const cardX = 10;
-      const cardY = Math.round(rowY + (ch * zoom - cardH) / 2);
-
-      gridRowCards.push({ row: r, x: cardX, y: cardY, w: cardW, h: cardH });
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.fillStyle = isDark ? '#1e2230' : '#ffffff';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(cardX, cardY, cardW, cardH, 8);
-      else ctx.rect(cardX, cardY, cardW, cardH);
-      ctx.fill();
-
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = isDark ? '#a5b4fc' : '#3730a3';
-      ctx.font = 'bold 12px "Segoe UI", system-ui, -apple-system, sans-serif';
-      ctx.fillText(`Row ${r}:`, cardX + 8, cardY + 8);
-
-      // '×' delete button on top-right of row card
-      const delBtnW = 18;
-      const delBtnH = 18;
-      const delBtnX = cardX + cardW - delBtnW - 6;
-      const delBtnY = cardY + 6;
-
-      gridRowDeleteButtons.push({ row: r, x: delBtnX, y: delBtnY, w: delBtnW, h: delBtnH });
-
-      ctx.fillStyle = isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.12)';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(delBtnX, delBtnY, delBtnW, delBtnH, 4);
-      else ctx.rect(delBtnX, delBtnY, delBtnW, delBtnH);
-      ctx.fill();
-
-      ctx.strokeStyle = isDark ? '#f87171' : '#ef4444';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(delBtnX + 5, delBtnY + 5);
-      ctx.lineTo(delBtnX + delBtnW - 5, delBtnY + delBtnH - 5);
-      ctx.moveTo(delBtnX + delBtnW - 5, delBtnY + 5);
-      ctx.lineTo(delBtnX + 5, delBtnY + delBtnH - 5);
-      ctx.stroke();
-
-      // Duplicate Row button directly to the left of the delete button
-      const dupBtnW = 18;
-      const dupBtnH = 18;
-      const dupBtnX = delBtnX - dupBtnW - 4;
-      const dupBtnY = cardY + 6;
-
-      gridRowDuplicateButtons.push({ row: r, x: dupBtnX, y: dupBtnY, w: dupBtnW, h: dupBtnH });
-
-      ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(dupBtnX, dupBtnY, dupBtnW, dupBtnH, 4);
-      else ctx.rect(dupBtnX, dupBtnY, dupBtnW, dupBtnH);
-      ctx.fill();
-
-      // Duplicate icon: two crisp overlapping squares
-      ctx.strokeStyle = isDark ? '#a5b4fc' : '#4f46e5';
-      ctx.lineWidth = 1.3;
-      ctx.strokeRect(dupBtnX + 6.5, dupBtnY + 3.5, 7, 7);
-      ctx.fillStyle = isDark ? '#1e2230' : '#ffffff';
-      ctx.fillRect(dupBtnX + 4.5, dupBtnY + 6.5, 7, 7);
-      ctx.strokeRect(dupBtnX + 4.5, dupBtnY + 6.5, 7, 7);
-
-      // Move Down button [▼] (if not last row)
-      let downBtnX = dupBtnX;
-      if (r < rows - 1) {
-        const downBtnW = 18;
-        const downBtnH = 18;
-        downBtnX = dupBtnX - downBtnW - 4;
-        const downBtnY = cardY + 6;
-
-        gridRowMoveDownButtons.push({ row: r, x: downBtnX, y: downBtnY, w: downBtnW, h: downBtnH });
-
-        ctx.fillStyle = isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(100, 116, 139, 0.12)';
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(downBtnX, downBtnY, downBtnW, downBtnH, 4);
-        else ctx.rect(downBtnX, downBtnY, downBtnW, downBtnH);
-        ctx.fill();
-
-        // Standard chevron-down icon (matches FontAwesome fa-chevron-down)
-        const midX = downBtnX + downBtnW / 2;
-        const midY = downBtnY + downBtnH / 2;
-        ctx.strokeStyle = isDark ? '#cbd5e1' : '#475569';
-        ctx.lineWidth = 1.6;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(midX - 3.5, midY - 1.5);
-        ctx.lineTo(midX, midY + 2.5);
-        ctx.lineTo(midX + 3.5, midY - 1.5);
-        ctx.stroke();
-      }
-
-      // Move Up button [▲] (if not first row)
-      if (r > 0) {
-        const upBtnW = 18;
-        const upBtnH = 18;
-        const upBtnX = (r < rows - 1 ? downBtnX : dupBtnX) - upBtnW - 4;
-        const upBtnY = cardY + 6;
-
-        gridRowMoveUpButtons.push({ row: r, x: upBtnX, y: upBtnY, w: upBtnW, h: upBtnH });
-
-        ctx.fillStyle = isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(100, 116, 139, 0.12)';
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(upBtnX, upBtnY, upBtnW, upBtnH, 4);
-        else ctx.rect(upBtnX, upBtnY, upBtnW, upBtnH);
-        ctx.fill();
-
-        // Standard chevron-up icon (matches FontAwesome fa-chevron-up)
-        const midX = upBtnX + upBtnW / 2;
-        const midY = upBtnY + upBtnH / 2;
-        ctx.strokeStyle = isDark ? '#cbd5e1' : '#475569';
-        ctx.lineWidth = 1.6;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(midX - 3.5, midY + 1.5);
-        ctx.lineTo(midX, midY - 2.5);
-        ctx.lineTo(midX + 3.5, midY + 1.5);
-        ctx.stroke();
-      }
-
-      // Frame / Display name shifted comfortably lower (generous breathing room below buttons)
-      ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-      ctx.font = '600 12px "Segoe UI", system-ui, -apple-system, sans-serif';
-
-      const rowNameWidth = ctx.measureText(rowName).width;
-      const maxRowNameW = cardW - 20;
-
-      if (rowNameWidth <= maxRowNameW) {
-        ctx.textAlign = 'left';
-        ctx.fillText(rowName, cardX + 8, cardY + 34);
-      } else {
-        hasMarqueeLabels = true;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(cardX + 8, cardY + 32, maxRowNameW, 20);
-        ctx.clip();
-
-        const now = performance.now();
-        const scrollSpeed = 0.035;
-        const textGap = 20;
-        const totalDist = rowNameWidth + textGap;
-        const offset = (now * scrollSpeed) % totalDist;
-        const startX = (cardX + 8) - offset;
-
-        ctx.textAlign = 'left';
-        ctx.fillText(rowName, startX, cardY + 34);
-        ctx.fillText(rowName, startX + totalDist, cardY + 34);
-        ctx.restore();
-      }
-
-      // Draw Cells in Row
-      for (let c = 0; c < cols; c++) {
-        const cell = getCellAtGrid(doc, r, c);
-        const cellId = cell ? cell.id : `cell_${r}_${c}`;
-        const cx = Math.round(leftHeaderW + c * (cw * zoom + cellGapX));
-        const cy = Math.round(rowY);
-
-        const isSelected = (cellId === selectedGridCellId || (!cell && selectedGridCellId === `cell_${r}_${c}`));
-
-        // Checkerboard
-        ctx.fillStyle = EditorCanvas.checker(ctx, zoom, isDark);
-        ctx.fillRect(cx, cy, cw * zoom, ch * zoom);
-
-        // Cell border (selected = bright accent outline)
-        if (isSelected) {
-          ctx.strokeStyle = isDark ? '#818cf8' : '#4f46e5';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(cx - 2, cy - 2, cw * zoom + 4, ch * zoom + 4);
-        } else {
-          ctx.strokeStyle = isDark ? '#4b5563' : '#94a3b8';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(cx - 0.5, cy - 0.5, cw * zoom + 1, ch * zoom + 1);
-        }
-
-        // Draw pixels (crisp pixel art rasterization)
-        if (cell && cell.pixels) {
-          ctx.imageSmoothingEnabled = false;
-          for (const coord in cell.pixels) {
-            const [px, py] = coord.split(',').map(Number);
-            ctx.fillStyle = cell.pixels[coord];
-            ctx.fillRect(cx + px * zoom, cy + py * zoom, zoom, zoom);
-          }
-          // Restore smoothing for subsequent text rendering
-          ctx.imageSmoothingEnabled = true;
-        }
-
-        // Cell label underneath in high-contrast pill (with 24px margin to next row)
-        const labelText = cell ? (cell.name || cellId) : cellId;
-        const pillW = Math.max(54, cw * zoom);
-        const pillH = 20;
-        const pillX = Math.round(cx + (cw * zoom - pillW) / 2);
-        const pillY = cy + ch * zoom + 8;
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.fillStyle = isSelected ? (isDark ? '#312e81' : '#e0e7ff') : (isDark ? '#1e2230' : '#ffffff');
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillW, pillH, 4);
-        else ctx.rect(pillX, pillY, pillW, pillH);
-        ctx.fill();
-        ctx.strokeStyle = isSelected ? (isDark ? '#818cf8' : '#4f46e5') : (isDark ? '#4b5563' : '#cbd5e1');
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.fillStyle = isSelected ? (isDark ? '#c7d2fe' : '#312e81') : (isDark ? '#f8fafc' : '#0f172a');
-        ctx.font = isSelected ? 'bold 11px "Segoe UI", system-ui, sans-serif' : '600 11px "Segoe UI", system-ui, sans-serif';
-        ctx.textBaseline = 'middle';
-
-        const textMetrics = ctx.measureText(labelText);
-        const textWidth = textMetrics.width;
-        const maxVisibleW = pillW - 10; // 5px padding on each side
-
-        if (textWidth <= maxVisibleW) {
-          // Fits normally: statically centered, zero scrolling
-          ctx.textAlign = 'center';
-          ctx.fillText(labelText, pillX + pillW / 2, pillY + pillH / 2);
-        } else {
-          // Label is longer than the pill: clip inside the white box and marquee scroll continuously with a small gap
-          hasMarqueeLabels = true;
-          ctx.save();
-          ctx.beginPath();
-          if (ctx.roundRect) ctx.roundRect(pillX + 3, pillY + 1, pillW - 6, pillH - 2, 3);
-          else ctx.rect(pillX + 3, pillY + 1, pillW - 6, pillH - 2);
-          ctx.clip();
-
-          const now = performance.now();
-          const scrollSpeed = 0.035; // px per millisecond (smooth reading speed)
-          const textGap = 20; // small spacing as requested
-          const totalLoopDist = textWidth + textGap;
-          const offset = (now * scrollSpeed) % totalLoopDist;
-          const startX = (pillX + 5) - offset;
-
-          ctx.textAlign = 'left';
-          ctx.fillText(labelText, startX, pillY + pillH / 2);
-          ctx.fillText(labelText, startX + totalLoopDist, pillY + pillH / 2);
-          ctx.restore();
-        }
-      }
-    }
-
-    // Render row drag indicator if dragging a row card
-    if (rowDragState && rowDragState.isDragging) {
-      const targetR = rowDragState.targetRow;
-      const targetRowY = topHeaderH + targetR * (ch * zoom + cellGapY);
-      const lineY = (targetR > rowDragState.fromRow)
-        ? (targetRowY + ch * zoom + cellGapY / 2)
-        : (targetRowY - cellGapY / 2);
-
-      ctx.save();
-      ctx.strokeStyle = '#6366f1';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(10, lineY);
-      ctx.lineTo(sheetW - 20, lineY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      const badgeText = `Move to Row ${targetR}`;
-      ctx.font = 'bold 11px "Segoe UI", sans-serif';
-      const bTextW = ctx.measureText(badgeText).width;
-      const bW = bTextW + 16;
-      const bH = 22;
-      ctx.fillStyle = '#4f46e5';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(14, lineY - bH / 2, bW, bH, 4);
-      else ctx.rect(14, lineY - bH / 2, bW, bH);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'center';
-      ctx.fillText(badgeText, 14 + bW / 2, lineY);
-      ctx.restore();
-    }
-
-    // Schedule next animation frame if there are long marquee labels in Grid Overview
-    if (hasMarqueeLabels && state.activeTabId === 'tab-grid-overview') {
-      if (marqueeAnimFrameId) cancelAnimationFrame(marqueeAnimFrameId);
-      marqueeAnimFrameId = requestAnimationFrame(() => {
-        if (state.activeTabId === 'tab-grid-overview') {
-          renderGridOverview();
-        }
-      });
-    } else {
-      if (marqueeAnimFrameId) {
-        cancelAnimationFrame(marqueeAnimFrameId);
-        marqueeAnimFrameId = null;
-      }
-    }
-  }
-
-  function inferRowTitle(rowIdx) {
-    if (!state.doc) return 'Default';
-    for (const animName in state.doc.animations) {
-      const anim = state.doc.animations[animName];
-      if (anim && anim.frames) {
-        if (anim.frames.some(fid => {
-          if (fid.startsWith(`cell_${rowIdx}_`)) return true;
-          const { r } = getCellRowCol(fid);
-          return r === rowIdx;
-        })) {
-          return anim.name || animName.replace(/_/g, ' ');
-        }
-      }
-    }
-    const default4 = ['Down (S)', 'Up (W)', 'Right (D)', 'Left (A)'];
-    return default4[rowIdx] || `Action ${rowIdx}`;
-  }
-
-  function drawChecker(ctx, x, y, w, h, size) {
-    const isDark = document.body.classList.contains('dark-theme');
-    const c1 = isDark ? '#1f202e' : '#ffffff';
-    const c2 = isDark ? '#171822' : '#e2e8f0';
-
-    for (let row = 0; row < Math.ceil(h / size); row++) {
-      const py = row * size;
-      for (let col = 0; col < Math.ceil(w / size); col++) {
-        const px = col * size;
-        ctx.fillStyle = (col + row) % 2 === 0 ? c1 : c2;
-        ctx.fillRect(x + px, y + py, Math.min(size, w - px), Math.min(size, h - py));
-      }
-    }
-  }
-
-  function getGridCellFromPos(mx, my) {
-    if (!state.doc) return null;
-    const doc = state.doc;
-    const cols = doc.meta.grid.cols;
-    const rows = doc.meta.grid.rows;
-    const cw = doc.meta.cellSize.w;
-    const ch = doc.meta.cellSize.h;
-    const { leftHeaderW, topHeaderH, cellGapX, cellGapY, zoom } = GRID_LAYOUT;
-    let hasMarqueeLabels = false;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cx = leftHeaderW + c * (cw * zoom + cellGapX);
-        const cy = topHeaderH + r * (ch * zoom + cellGapY);
-        // Generous hit test: covers sprite box + label pill underneath + 8px margins for instant 1-click select
-        const hitLeft = cx - 8;
-        const hitRight = cx + cw * zoom + 8;
-        const hitTop = cy - 6;
-        const hitBottom = cy + ch * zoom + 32;
-        if (mx >= hitLeft && mx <= hitRight && my >= hitTop && my <= hitBottom) {
-          const cell = getCellAtGrid(doc, r, c);
-          return cell ? cell.id : `cell_${r}_${c}`;
-        }
-      }
-    }
-    return null;
-  }
 
   // ===========================================================================
   // INTELLIGENT GRID ROW & COLUMN MANAGEMENT (SELECTION-AWARE & AUTO-FRAME EXTENSION)
   // ===========================================================================
 
-  function addGridRow() {
-    if (!state.doc) return;
-    const doc = state.doc;
-    const newR = doc.meta.grid.rows;
-
-    const defaultName = `action_${newR}`;
-    const inputName = prompt(`Enter Animation State name for new Row ${newR} (e.g. attack, jump, dash, idle_down):`, defaultName);
-    if (inputName === null) {
-      return; // Cancelled by user
-    }
-    const stateKey = (inputName.trim() || defaultName).toLowerCase().replace(/\s+/g, '_');
-    const dispName = inputName.trim() || defaultName;
-
-    doc.meta.grid.rows++;
-    const rowCells = [];
-
-    for (let c = 0; c < doc.meta.grid.cols; c++) {
-      const cid = `cell_${newR}_${c}`;
-      doc.cells[cid] = {
-        id: cid,
-        name: `${dispName} ${c}`,
-        row: newR,
-        col: c,
-        direction: 'none',
-        frame: c,
-        pixels: {}
-      };
-      rowCells.push(cid);
-    }
-
-    // Auto-create and batch-assign animation state for this entire new row
-    doc.animations[stateKey] = {
-      name: dispName,
-      direction: 'none',
-      frames: rowCells,
-      fps: 6,
-      loop: true,
-      mode: 'loop'
-    };
-
-    selectedGridCellId = `cell_${newR}_0`;
-    state.saveSnapshot(`Add Row ${newR} (${stateKey})`);
-    triggerEventAutosave();
-    refreshAll();
-    populateAnimDropdowns();
-    updateGridInspectorUI();
-    showToast(`Added Row ${newR} with State "${dispName}" (${doc.meta.grid.cols} frames)!`, 'success');
-  }
-
-  function addGridCol() {
-    if (!state.doc) return;
-    const doc = state.doc;
-    const newC = doc.meta.grid.cols;
-    doc.meta.grid.cols++;
-
-    for (let r = 0; r < doc.meta.grid.rows; r++) {
-      const cid = `cell_${r}_${newC}`;
-      const prevCid = `cell_${r}_${newC - 1}`;
-      const prevCell = doc.cells[prevCid];
-
-      // Find if this row is part of an animation
-      let rowAnim = null;
-      for (const animName in doc.animations) {
-        const anim = doc.animations[animName];
-        if (anim.frames && Array.isArray(anim.frames) && anim.frames.includes(prevCid)) {
-          rowAnim = anim;
-          break;
-        }
-      }
-
-      // Infer sequential naming: e.g. "Down 3" -> "Down 4"
-      let cellName = `Frame ${r},${newC}`;
-      let cellDir = 'none';
-      if (prevCell && prevCell.name) {
-        const match = prevCell.name.match(/^(.*?)\s*(\d+)$/);
-        if (match) {
-          cellName = `${match[1]} ${newC}`;
-        } else {
-          cellName = `${prevCell.name} ${newC}`;
-        }
-        cellDir = prevCell.direction || 'none';
-      }
-
-      doc.cells[cid] = {
-        id: cid,
-        name: cellName,
-        row: r,
-        col: newC,
-        direction: cellDir,
-        frame: newC,
-        pixels: {}
-      };
-
-      // Automatically append newly added frame to the animation sequence!
-      if (rowAnim && Array.isArray(rowAnim.frames)) {
-        if (!rowAnim.frames.includes(cid)) {
-          rowAnim.frames.push(cid);
-        }
-      }
-    }
-
-    state.saveSnapshot('Add Column');
-    triggerEventAutosave();
-    refreshAll();
-    showToast(`Added Column ${newC} (all row animations extended to ${doc.meta.grid.cols} frames)`, 'success');
-  }
-
-  function promptAndDuplicateRow(rowIdx) {
-    if (!state.doc) return;
-    const doc = state.doc;
-    const rows = doc.meta.grid.rows;
-    if (rowIdx < 0 || rowIdx >= rows) return;
-
-    const sourceTitle = inferRowTitle(rowIdx) || `Row ${rowIdx}`;
-    const defaultName = `${sourceTitle} Copy`;
-    const inputName = prompt(`Enter name for the duplicated row:`, defaultName);
-    if (inputName === null) return; // User pressed Cancel
-    const finalName = inputName.trim() || defaultName;
-
-    duplicateSpecificRow(rowIdx, finalName);
-  }
-
-  function duplicateSpecificRow(sourceRowIdx, newRowName) {
-    if (!state.doc) return;
-    const doc = state.doc;
-    const oldRows = doc.meta.grid.rows;
-    const cols = doc.meta.grid.cols;
-    const newRowIdx = oldRows;
-
-    const sourceTitle = inferRowTitle(sourceRowIdx) || `Row ${sourceRowIdx}`;
-    const finalName = (newRowName || `${sourceTitle} Copy`).trim();
-
-    state.beginStroke();
-
-    // 1. Expand row count
-    doc.meta.grid.rows = oldRows + 1;
-
-    // 2. Derive clean identifier prefix
-    const cleanPrefix = finalName
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, '_')
-      .replace(/^_+|_+$/g, '') || `row_${newRowIdx}`;
-
-    const newFrameIds = [];
-
-    // 3. Clone all cells in the row
-    for (let c = 0; c < cols; c++) {
-      const srcCell = getCellAtGrid(doc, sourceRowIdx, c);
-      const newCellId = `${cleanPrefix}_${c}`;
-
-      const newCell = {
-        id: newCellId,
-        name: `${finalName} - Frame ${c}`,
-        row: newRowIdx,
-        col: c,
-        frame: c,
-        direction: (srcCell && srcCell.direction) ? srcCell.direction : 'none',
-        pixels: {}
-      };
-
-      if (srcCell && srcCell.pixels) {
-        for (const coord in srcCell.pixels) {
-          newCell.pixels[coord] = srcCell.pixels[coord];
-        }
-      }
-
-      doc.cells[newCellId] = newCell;
-      newFrameIds.push(newCellId);
-    }
-
-    // 4. Create animation sequence
-    if (!doc.animations) doc.animations = {};
-    let srcFps = 6;
-    let srcLoop = true;
-    let srcDir = 'none';
-
-    for (const aKey in doc.animations) {
-      const a = doc.animations[aKey];
-      if (a && a.frames && a.frames.some(fid => {
-        const cell = doc.cells[fid];
-        return cell && cell.row === sourceRowIdx;
-      })) {
-        srcFps = a.fps || 6;
-        srcLoop = (a.loop !== undefined) ? a.loop : true;
-        srcDir = a.direction || 'none';
-        break;
-      }
-    }
-
-    let animKey = cleanPrefix;
-    let suffix = 1;
-    while (doc.animations[animKey]) {
-      animKey = `${cleanPrefix}_${suffix++}`;
-    }
-
-    doc.animations[animKey] = {
-      name: finalName,
-      fps: srcFps,
-      loop: srcLoop,
-      direction: srcDir,
-      frames: newFrameIds
-    };
-
-    // 5. Select first cell of new row
-    selectedGridCellId = newFrameIds[0];
-
-    state.endStroke(`Duplicate Row ${sourceRowIdx} as "${finalName}"`);
-    triggerEventAutosave();
-    refreshAll();
-    showToast(`Row ${sourceRowIdx} duplicated as "${finalName}" with ${cols} frames!`, 'success');
-  }
-
-  function moveRow(fromIdx, toIdx) {
-    if (!state.doc) return;
-    const doc = state.doc;
-    const rows = doc.meta.grid.rows;
-    const cols = doc.meta.grid.cols;
-    if (fromIdx < 0 || fromIdx >= rows || toIdx < 0 || toIdx >= rows || fromIdx === toIdx) return;
-
-    state.beginStroke();
-
-    // 1. Calculate row permutation
-    const order = [];
-    for (let r = 0; r < rows; r++) order.push(r);
-    const [moved] = order.splice(fromIdx, 1);
-    order.splice(toIdx, 0, moved);
-
-    const oldToNew = {};
-    order.forEach((oldR, newR) => { oldToNew[oldR] = newR; });
-
-    // 2. Collect cells by existing row
-    const cellsByOldRow = [];
-    for (let r = 0; r < rows; r++) {
-      const rowCells = [];
-      for (let c = 0; c < cols; c++) {
-        const cell = getCellAtGrid(doc, r, c);
-        rowCells.push(cell);
-      }
-      cellsByOldRow.push(rowCells);
-    }
-
-    // 3. Rename standard cells cell_R_C to prevent key collisions
-    const renameMap = {};
-    for (let oldR = 0; oldR < rows; oldR++) {
-      const newR = oldToNew[oldR];
-      if (oldR === newR) continue;
-      for (let c = 0; c < cols; c++) {
-        const cell = cellsByOldRow[oldR][c];
-        if (cell && cell.id.startsWith('cell_')) {
-          renameMap[cell.id] = `cell_${newR}_${c}`;
-        }
-      }
-    }
-
-    if (Object.keys(renameMap).length > 0) {
-      const newCells = {};
-      for (const cid in doc.cells) {
-        if (!renameMap[cid]) {
-          newCells[cid] = doc.cells[cid];
-        }
-      }
-      for (const oldId in renameMap) {
-        const cell = doc.cells[oldId];
-        const newId = renameMap[oldId];
-        cell.id = newId;
-        newCells[newId] = cell;
-      }
-      doc.cells = newCells;
-
-      for (const aName in doc.animations) {
-        const anim = doc.animations[aName];
-        if (anim && Array.isArray(anim.frames)) {
-          anim.frames = anim.frames.map(fid => renameMap[fid] || fid);
-        }
-      }
-
-      if (selectedGridCellId && renameMap[selectedGridCellId]) {
-        selectedGridCellId = renameMap[selectedGridCellId];
-      }
-    }
-
-    // 4. Update row index property on every cell
-    for (let oldR = 0; oldR < rows; oldR++) {
-      const newR = oldToNew[oldR];
-      for (let c = 0; c < cols; c++) {
-        const cell = cellsByOldRow[oldR][c];
-        if (cell) {
-          cell.row = newR;
-          cell.col = c;
-        }
-      }
-    }
-
-    const fromTitle = inferRowTitle(fromIdx) || `Row ${fromIdx}`;
-    state.endStroke(`Move Row ${fromIdx} to Row ${toIdx} ("${fromTitle}")`);
-    triggerEventAutosave();
-    refreshAll();
-    showToast(`Moved "${fromTitle}" to Row ${toIdx}!`, 'success');
-  }
-
-  function deleteSpecificRow(rowIdx, skipConfirm = false) {
-    if (!state.doc || state.doc.meta.grid.rows <= 1) {
-      showToast('Cannot delete the only remaining row.');
-      return;
-    }
-    const doc = state.doc;
-    const rows = doc.meta.grid.rows;
-    const cols = doc.meta.grid.cols;
-
-    if (rowIdx < 0 || rowIdx >= rows) return;
-
-    const rowName = inferRowTitle(rowIdx);
-    if (!skipConfirm) {
-      confirmAndDeleteRow(rowIdx);
-      return;
-    }
-
-    state.beginStroke();
-
-    // 1. Rebuild cells map with shifted rows
-    const newCells = {};
-    const idMapping = {}; // oldCellId -> newCellId
-
-    for (let r = 0; r < rows; r++) {
-      if (r === rowIdx) {
-        for (let c = 0; c < cols; c++) {
-          const doomedCell = getCellAtGrid(doc, r, c);
-          if (doomedCell) idMapping[doomedCell.id] = null;
-          idMapping[`cell_${r}_${c}`] = null;
-        }
-        continue;
-      }
-
-      const newR = (r > rowIdx) ? (r - 1) : r;
-
-      for (let c = 0; c < cols; c++) {
-        const existingCell = getCellAtGrid(doc, r, c);
-        const oldId = existingCell ? existingCell.id : `cell_${r}_${c}`;
-        const newId = `cell_${newR}_${c}`;
-        idMapping[oldId] = newId;
-
-        const cell = existingCell || { id: oldId, name: `Frame ${r},${c}`, pixels: {}, row: r, col: c };
-        cell.id = newId;
-        cell.row = newR;
-        cell.col = c;
-        newCells[newId] = cell;
-      }
-    }
-
-    doc.cells = newCells;
-    doc.meta.grid.rows--;
-
-    // 2. Update animation frames
-    for (const animName in doc.animations) {
-      const anim = doc.animations[animName];
-      if (anim.frames && Array.isArray(anim.frames)) {
-        anim.frames = anim.frames
-          .map(fid => idMapping[fid] !== undefined ? idMapping[fid] : fid)
-          .filter(fid => fid !== null);
-      }
-    }
-
-    // 3. Update selection
-    if (selectedGridCellId && selectedGridCellId.startsWith(`cell_${rowIdx}_`)) {
-      selectedGridCellId = `cell_0_0`;
-    } else if (selectedGridCellId && idMapping[selectedGridCellId]) {
-      selectedGridCellId = idMapping[selectedGridCellId];
-    }
-
-    state.endStroke(`Delete Row ${rowIdx}`);
-    triggerEventAutosave();
-    refreshAll();
-    showToast(`Deleted Row ${rowIdx} ("${rowName}"). Remaining rows: ${doc.meta.grid.rows}`, 'success');
-  }
-
-  function deleteSpecificCol(colIdx, skipConfirm = false) {
-    if (!state.doc || state.doc.meta.grid.cols <= 1) {
-      showToast('Cannot delete the only remaining column.');
-      return;
-    }
-    const doc = state.doc;
-    const rows = doc.meta.grid.rows;
-    const cols = doc.meta.grid.cols;
-
-    if (colIdx < 0 || colIdx >= cols) return;
-
-    if (!skipConfirm) {
-      confirmAndDeleteCol(colIdx);
-      return;
-    }
-
-    state.beginStroke();
-
-    // 1. Rebuild cells map with shifted columns
-    const newCells = {};
-    const idMapping = {}; // oldCellId -> newCellId
-
-    for (let c = 0; c < cols; c++) {
-      if (c === colIdx) {
-        for (let r = 0; r < rows; r++) {
-          const doomedCell = getCellAtGrid(doc, r, c);
-          if (doomedCell) idMapping[doomedCell.id] = null;
-          idMapping[`cell_${r}_${c}`] = null;
-        }
-        continue;
-      }
-
-      const newC = (c > colIdx) ? (c - 1) : c;
-
-      for (let r = 0; r < rows; r++) {
-        const existingCell = getCellAtGrid(doc, r, c);
-        const oldId = existingCell ? existingCell.id : `cell_${r}_${c}`;
-        const newId = `cell_${r}_${newC}`;
-        idMapping[oldId] = newId;
-
-        const cell = existingCell || { id: oldId, name: `Frame ${r},${c}`, pixels: {}, row: r, col: c };
-        cell.id = newId;
-        cell.row = r;
-        cell.col = newC;
-        newCells[newId] = cell;
-      }
-    }
-
-    doc.cells = newCells;
-    doc.meta.grid.cols--;
-
-    // 2. Update animation frames
-    for (const animName in doc.animations) {
-      const anim = doc.animations[animName];
-      if (anim.frames && Array.isArray(anim.frames)) {
-        anim.frames = anim.frames
-          .map(fid => idMapping[fid] !== undefined ? idMapping[fid] : fid)
-          .filter(fid => fid !== null);
-      }
-    }
-
-    // 3. Update selection
-    if (selectedGridCellId && selectedGridCellId.endsWith(`_${colIdx}`)) {
-      selectedGridCellId = `cell_0_0`;
-    } else if (selectedGridCellId && idMapping[selectedGridCellId]) {
-      selectedGridCellId = idMapping[selectedGridCellId];
-    }
-
-    state.endStroke(`Delete Column ${colIdx}`);
-    triggerEventAutosave();
-    refreshAll();
-    showToast(`Deleted Column ${colIdx}. Remaining columns: ${doc.meta.grid.cols}`, 'success');
-  }
-
-  function removeSelectedRow() {
-    if (!state.doc) return;
-    const { r: selR } = getCellRowCol(selectedGridCellId);
-    deleteSpecificRow(selR);
-  }
-
-  function removeSelectedCol() {
-    if (!state.doc) return;
-    const { c: selC } = getCellRowCol(selectedGridCellId);
-    deleteSpecificCol(selC);
-  }
 
   // ===========================================================================
   // FRAME PICKER MODAL (ANIMATION STUDIO)
   // ===========================================================================
 
-  function openFramePickerModal() {
-    if (!dom.modalFramePicker || !state.doc) return;
-    const doc = state.doc;
-    const clip = doc.animations[activeStudioClipId];
-    if (!clip) return;
-
-    let clipRow = 0;
-    if (clip.frames && clip.frames.length > 0) {
-      const { r } = getCellRowCol(clip.frames[0]);
-      clipRow = r;
-    }
-
-    if (dom.framePickerRowFilter) {
-      dom.framePickerRowFilter.innerHTML = '';
-      const optCurrent = document.createElement('option');
-      optCurrent.value = `row_${clipRow}`;
-      optCurrent.textContent = `Current Row (Row ${clipRow}: ${inferRowTitle(clipRow)})`;
-      dom.framePickerRowFilter.appendChild(optCurrent);
-
-      const optAll = document.createElement('option');
-      optAll.value = 'all';
-      optAll.textContent = 'All Sprite Cells';
-      dom.framePickerRowFilter.appendChild(optAll);
-
-      for (let r = 0; r < doc.meta.grid.rows; r++) {
-        if (r === clipRow) continue;
-        const opt = document.createElement('option');
-        opt.value = `row_${r}`;
-        opt.textContent = `Row ${r} (${inferRowTitle(r)})`;
-        dom.framePickerRowFilter.appendChild(opt);
-      }
-      dom.framePickerRowFilter.value = `row_${clipRow}`;
-    }
-
-    if (dom.framePickerSearch) dom.framePickerSearch.value = '';
-    if (dom.framePickerManualId) dom.framePickerManualId.value = selectedGridCellId || '';
-
-    renderFramePickerCards();
-    dom.modalFramePicker.classList.remove('hidden');
-  }
-
-  function closeFramePickerModal() {
-    if (dom.modalFramePicker) {
-      dom.modalFramePicker.classList.add('hidden');
-    }
-  }
-
-  function renderFramePickerCards() {
-    if (!dom.framePickerGrid || !state.doc) return;
-    dom.framePickerGrid.innerHTML = '';
-
-    const doc = state.doc;
-    const filterRowVal = dom.framePickerRowFilter ? dom.framePickerRowFilter.value : 'all';
-    const searchQuery = (dom.framePickerSearch ? dom.framePickerSearch.value.trim().toLowerCase() : '');
-
-    const cellIds = Object.keys(doc.cells);
-    const filteredCells = cellIds.filter(cid => {
-      const cell = doc.cells[cid];
-      if (!cell) return false;
-
-      if (filterRowVal.startsWith('row_')) {
-        const targetRow = parseInt(filterRowVal.split('_')[1], 10);
-        if (cell.row !== targetRow) return false;
-      }
-
-      if (searchQuery) {
-        const nameMatch = (cell.name || '').toLowerCase().includes(searchQuery);
-        const idMatch = cid.toLowerCase().includes(searchQuery);
-        if (!nameMatch && !idMatch) return false;
-      }
-
-      return true;
-    });
-
-    if (filteredCells.length === 0) {
-      dom.framePickerGrid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">No matching cells found</div>`;
-      return;
-    }
-
-    const cw = doc.meta.cellSize.w;
-    const ch = doc.meta.cellSize.h;
-
-    filteredCells.forEach(cid => {
-      const cell = doc.cells[cid];
-      const card = document.createElement('div');
-      card.className = 'frame-picker-card';
-      card.title = `Click to add ${cell.name || cid} to sequence`;
-
-      const thumb = document.createElement('canvas');
-      thumb.className = 'frame-picker-thumb';
-      thumb.width = cw;
-      thumb.height = ch;
-      const tctx = thumb.getContext('2d');
-      if (cell.pixels) {
-        for (const coord in cell.pixels) {
-          const [px, py] = coord.split(',').map(Number);
-          tctx.fillStyle = cell.pixels[coord];
-          tctx.fillRect(px, py, 1, 1);
-        }
-      }
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'card-name';
-      nameEl.textContent = cell.name || cid;
-
-      const idEl = document.createElement('span');
-      idEl.className = 'card-id';
-      idEl.textContent = cid;
-
-      card.appendChild(thumb);
-      card.appendChild(nameEl);
-      card.appendChild(idEl);
-
-      card.addEventListener('click', () => {
-        appendCellToActiveAnimation(cid);
-      });
-
-      dom.framePickerGrid.appendChild(card);
-    });
-  }
-
-  function appendCellToActiveAnimation(cellId) {
-    if (!state.doc || !state.doc.animations[activeStudioClipId]) return;
-    const clip = state.doc.animations[activeStudioClipId];
-    if (!clip.frames) clip.frames = [];
-    clip.frames.push(cellId);
-
-    state.saveSnapshot('Add Animation Frame');
-    triggerEventAutosave();
-    closeFramePickerModal();
-
-    renderTimelineFramesStrip(clip);
-    if (studioAnimPlayer) studioAnimPlayer.render();
-    populateAnimDropdowns();
-
-    const cell = state.doc.cells[cellId];
-    showToast(`Added "${cell ? (cell.name || cellId) : cellId}" to ${clip.name || activeStudioClipId}!`, 'success');
-  }
 
   // ===========================================================================
   // INSPECTOR & ANIMATION TAGGING
   // ===========================================================================
 
-  function populateAnimDropdowns() {
-    if (!state.doc) return;
-    const animNames = Object.keys(state.doc.animations);
-
-    const buildOptions = (selectEl) => {
-      if (!selectEl) return;
-      selectEl.innerHTML = '';
-      animNames.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        selectEl.appendChild(opt);
-      });
-      const newOpt = document.createElement('option');
-      newOpt.value = '__new__';
-      newOpt.textContent = '+ Create New Animation...';
-      selectEl.appendChild(newOpt);
-    };
-
-    buildOptions(dom.gridCellAnim);
-    buildOptions(dom.cellAnimSelect);
-
-    if (dom.floatingAnimSelect) {
-      dom.floatingAnimSelect.innerHTML = '';
-      animNames.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        dom.floatingAnimSelect.appendChild(opt);
-      });
-      if (animPlayer && animPlayer.activeAnimationName) {
-        dom.floatingAnimSelect.value = animPlayer.activeAnimationName;
-      }
-    }
-
-    if (dom.animClipsList) {
-      dom.animClipsList.innerHTML = '';
-      for (const animName in state.doc.animations) {
-        const anim = state.doc.animations[animName];
-        const item = document.createElement('div');
-        item.className = 'anim-clip-item';
-        item.style.cursor = 'pointer';
-
-        const titleSpan = document.createElement('span');
-        const strongEl = document.createElement('strong');
-        strongEl.textContent = animName;
-        titleSpan.appendChild(strongEl);
-        titleSpan.appendChild(document.createTextNode(` (${anim.fps || 6} fps)`));
-
-        const badgeSpan = document.createElement('span');
-        badgeSpan.className = 'anim-clip-badge';
-        badgeSpan.textContent = `${(anim.frames || []).length} frames`;
-
-        item.appendChild(titleSpan);
-        item.appendChild(badgeSpan);
-        item.addEventListener('click', () => {
-          if (state.activeTabId === 'tab-pix2-code') {
-            if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) return;
-          }
-          activeStudioClipId = animName;
-          state.activeTabId = 'tab-anim-studio';
-          refreshAll();
-        });
-        dom.animClipsList.appendChild(item);
-      }
-    }
-  }
 
   function setupBadgeMarquee(badgeEl, text, maxW = 90) {
     if (!badgeEl) return;
@@ -3933,8 +2570,7 @@
       },
       change: label => {
         state.syncCellComposite(cell.id);
-        state.saveSnapshot(label);
-        triggerEventAutosave();
+        if (state.saveSnapshot(label)) triggerEventAutosave();
         refreshAll();
       },
       isolate: node => {
@@ -3965,1461 +2601,25 @@
 
   let isSpacebarHeld = false;
 
-  function setSliceTool(tool) {
-    importSliceState.activeTool = tool; // 'select' | 'draw' | 'hand'
-    if (dom.btnSliceToolSelect) dom.btnSliceToolSelect.classList.toggle('active', tool === 'select');
-    if (dom.btnSliceToolDraw) dom.btnSliceToolDraw.classList.toggle('active', tool === 'draw');
-    if (dom.btnSliceToolHand) dom.btnSliceToolHand.classList.toggle('active', tool === 'hand');
-
-    const canvas = dom.importSliceCanvas;
-    const container = dom.importSliceViewportContainer;
-    if (tool === 'hand') {
-      if (canvas) canvas.style.cursor = 'grab';
-      if (container) container.style.cursor = 'grab';
-    } else if (tool === 'draw') {
-      if (canvas) canvas.style.cursor = 'crosshair';
-      if (container) container.style.cursor = 'crosshair';
-    } else {
-      if (canvas) canvas.style.cursor = 'default';
-      if (container) container.style.cursor = 'default';
-    }
-  }
-
-  function setSliceZoom(newZoom) {
-    if (!importSliceState.image) return;
-    const clamped = Math.max(0.25, Math.min(32, Math.round(newZoom * 100) / 100));
-    importSliceState.zoom = clamped;
-    applySliceZoom();
-    updateSliceTransform();
-    renderImportSliceView();
-  }
-
-  function updateSliceTransform() {
-    const el = document.getElementById('slice-container-with-rulers');
-    if (!el) return;
-    el.style.transform = `translate(${importSliceState.panX || 0}px, ${importSliceState.panY || 0}px)`;
-  }
-
-  function applySliceZoom() {
-    const canvas = dom.importSliceCanvas;
-    const overlay = dom.importSliceOverlay;
-    const wrapper = document.getElementById('import-slice-canvas-wrapper');
-    if (!canvas || !importSliceState.image) return;
-    const z = importSliceState.zoom || 1;
-    const w = Math.round(importSliceState.image.width * z);
-    const h = Math.round(importSliceState.image.height * z);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    canvas.style.imageRendering = 'pixelated';
-    if (overlay) {
-      overlay.style.width = `${w}px`;
-      overlay.style.height = `${h}px`;
-    }
-    if (wrapper) {
-      wrapper.style.width = `${w}px`;
-      wrapper.style.height = `${h}px`;
-    }
-    if (dom.sliceZoomLevel) {
-      dom.sliceZoomLevel.textContent = `${Math.round(z * 100)}%`;
-    }
-  }
-
-  function fitSliceZoom() {
-    const container = dom.importSliceViewportContainer;
-    const img = importSliceState.image;
-    if (!container || !img) return;
-    const cw = container.clientWidth - 40;
-    const ch = container.clientHeight - 40;
-    if (cw <= 0 || ch <= 0) return;
-    const scaleX = cw / img.width;
-    const scaleY = ch / img.height;
-    let fitScale = Math.min(scaleX, scaleY);
-    if (fitScale >= 1) {
-      fitScale = Math.floor(fitScale);
-    } else {
-      fitScale = Math.max(0.25, Math.round(fitScale * 100) / 100);
-    }
-    importSliceState.panX = 0;
-    importSliceState.panY = 0;
-    setSliceZoom(Math.max(0.25, fitScale));
-  }
-
-  function batchTagPrefix() {
-    const frames = importSliceState.frames || [];
-    if (frames.length === 0) {
-      showToast('No slices to tag', 'error');
-      return;
-    }
-    const hasSelection = (importSliceState.selectedSliceIndex >= 0 && importSliceState.selectedSliceIndex < frames.length);
-    const targetDesc = hasSelection ? `selected slice #${importSliceState.selectedSliceIndex + 1}` : `all ${frames.length} slices`;
-    const prefix = prompt(`Enter tag / animation prefix for ${targetDesc} (e.g. "idle", "walk_down", "attack"):`, hasSelection ? (frames[importSliceState.selectedSliceIndex].tag || 'idle') : 'idle');
-    if (!prefix || !prefix.trim()) return;
-    const cleanPrefix = prefix.trim();
-
-    if (hasSelection) {
-      frames[importSliceState.selectedSliceIndex].tag = cleanPrefix;
-      showToast(`Tagged slice #${importSliceState.selectedSliceIndex + 1} with "${cleanPrefix}"`, 'success');
-    } else {
-      frames.forEach((f, idx) => {
-        f.tag = cleanPrefix;
-      });
-      showToast(`Tagged ${frames.length} slices with "${cleanPrefix}"`, 'success');
-    }
-    renderImportSliceView();
-  }
-
-  function autoTag4Dir() {
-    const frames = importSliceState.frames || [];
-    if (frames.length === 0) {
-      showToast('No slices to auto-tag', 'error');
-      return;
-    }
-    // Sort frames geometrically: top to bottom, then left to right
-    const sorted = [...frames].sort((a, b) => {
-      if (Math.abs(a.frame.y - b.frame.y) > 8) return a.frame.y - b.frame.y;
-      return a.frame.x - b.frame.x;
-    });
-
-    const rows = [];
-    sorted.forEach(f => {
-      let r = rows.find(row => Math.abs(row[0].frame.y - f.frame.y) <= 8);
-      if (!r) {
-        r = [];
-        rows.push(r);
-      }
-      r.push(f);
-    });
-
-    const dirNames = ['down', 'up', 'right', 'left'];
-    rows.forEach((row, rowIdx) => {
-      const dir = dirNames[rowIdx % 4];
-      row.sort((a, b) => a.frame.x - b.frame.x);
-      row.forEach((f, colIdx) => {
-        f.tag = `walk_${dir}`;
-        f.row = rowIdx;
-        f.col = colIdx;
-        f.frameIndex = colIdx;
-        f.name = `${dir}_${colIdx}`;
-      });
-    });
-
-    showToast(`Auto-tagged ${frames.length} slices (Row = Tag, Col = Frame #)`, 'success');
-    renderImportSliceView();
-  }
-
-  function autoTag8Dir() {
-    const frames = importSliceState.frames || [];
-    if (frames.length === 0) {
-      showToast('No slices to auto-tag', 'error');
-      return;
-    }
-    const sorted = [...frames].sort((a, b) => {
-      if (Math.abs(a.frame.y - b.frame.y) > 8) return a.frame.y - b.frame.y;
-      return a.frame.x - b.frame.x;
-    });
-
-    const rows = [];
-    sorted.forEach(f => {
-      let r = rows.find(row => Math.abs(row[0].frame.y - f.frame.y) <= 8);
-      if (!r) {
-        r = [];
-        rows.push(r);
-      }
-      r.push(f);
-    });
-
-    const dirNames = ['down', 'down_right', 'right', 'up_right', 'up', 'up_left', 'left', 'down_left'];
-    rows.forEach((row, rowIdx) => {
-      const dir = dirNames[rowIdx % 8];
-      row.sort((a, b) => a.frame.x - b.frame.x);
-      row.forEach((f, colIdx) => {
-        f.tag = `walk_${dir}`;
-        f.row = rowIdx;
-        f.col = colIdx;
-        f.frameIndex = colIdx;
-        f.name = `${dir}_${colIdx}`;
-      });
-    });
-
-    showToast(`Auto-tagged ${frames.length} slices with 8-direction locomotion rows`, 'success');
-    renderImportSliceView();
-  }
-
-  function clearAllTags() {
-    const frames = importSliceState.frames || [];
-    if (frames.length === 0) return;
-    frames.forEach(f => {
-      f.tag = '';
-    });
-    showToast('Cleared all slice tags', 'info');
-    renderImportSliceView();
-  }
-
-  function getSliceCanvasCoords(e) {
-    const canvas = dom.importSliceCanvas;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = Math.max(0, Math.min(canvas.width - 1, Math.floor((e.clientX - rect.left) * scaleX)));
-    const y = Math.max(0, Math.min(canvas.height - 1, Math.floor((e.clientY - rect.top) * scaleY)));
-    return { x, y };
-  }
-
-  function drawRoundedRect(ctx, x, y, width, height, radius, fill = true, stroke = false) {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-    if (fill) ctx.fill();
-    if (stroke) ctx.stroke();
-  }
-
-  function hitTestSliceHandles(slice, e) {
-    if (!slice || !slice.frame) return null;
-    const canvas = dom.importSliceCanvas;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-
-    const scaleX = rect.width / canvas.width;
-    const scaleY = rect.height / canvas.height;
-    const sx = rect.left + slice.frame.x * scaleX;
-    const sy = rect.top + slice.frame.y * scaleY;
-    const sw = slice.frame.w * scaleX;
-    const sh = slice.frame.h * scaleY;
-
-    const mx = e.clientX;
-    const my = e.clientY;
-    const hitR = 8; // 8 screen pixels
-
-    if (Math.abs(mx - sx) <= hitR && Math.abs(my - sy) <= hitR) return 'nw';
-    if (Math.abs(mx - (sx + sw)) <= hitR && Math.abs(my - sy) <= hitR) return 'ne';
-    if (Math.abs(mx - (sx + sw)) <= hitR && Math.abs(my - (sy + sh)) <= hitR) return 'se';
-    if (Math.abs(mx - sx) <= hitR && Math.abs(my - (sy + sh)) <= hitR) return 'sw';
-    if (mx >= sx && mx <= sx + sw && my >= sy && my <= sy + sh) return 'move';
-    return null;
-  }
-
-  function renderSliceRulers(imgW, imgH, zoom) {
-    if (!dom.sliceRulerTop || !dom.sliceRulerLeft) return;
-    if (importSliceState.showRulers === false) {
-      dom.sliceRulerTop.style.display = 'none';
-      dom.sliceRulerLeft.style.display = 'none';
-      if (dom.sliceRulerCorner) dom.sliceRulerCorner.style.display = 'none';
-      return;
-    }
-    dom.sliceRulerTop.style.display = 'flex';
-    dom.sliceRulerLeft.style.display = 'flex';
-    if (dom.sliceRulerCorner) dom.sliceRulerCorner.style.display = 'flex';
-
-    dom.sliceRulerTop.innerHTML = '';
-    dom.sliceRulerLeft.innerHTML = '';
-
-    let step = 16;
-    if (zoom >= 8) step = 2;
-    else if (zoom >= 4) step = 4;
-    else if (zoom >= 2) step = 8;
-    else if (zoom < 1) step = 32;
-
-    for (let x = 0; x < imgW; x += step) {
-      const tick = document.createElement('div');
-      tick.className = 'ruler-tick';
-      const tickW = Math.min(step, imgW - x) * zoom;
-      tick.style.width = `${tickW}px`;
-      tick.textContent = x;
-      dom.sliceRulerTop.appendChild(tick);
-    }
-
-    for (let y = 0; y < imgH; y += step) {
-      const tick = document.createElement('div');
-      tick.className = 'ruler-tick-v';
-      const tickH = Math.min(step, imgH - y) * zoom;
-      tick.style.height = `${tickH}px`;
-      tick.textContent = y;
-      dom.sliceRulerLeft.appendChild(tick);
-    }
-  }
-
-  function renderImportSliceView(refreshList = true) {
-    if (!dom.views['import-slice']) return;
-    const canvas = dom.importSliceCanvas;
-    const overlay = dom.importSliceOverlay;
-    if (!canvas) return;
-
-    if (!importSliceState.image) {
-      if (dom.sliceContainerWithRulers) dom.sliceContainerWithRulers.style.display = 'none';
-      if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'block';
-      canvas.width = 320;
-      canvas.height = 240;
-      canvas.style.width = '320px';
-      canvas.style.height = '240px';
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (overlay) {
-        overlay.width = 320;
-        overlay.height = 240;
-        overlay.style.width = '320px';
-        overlay.style.height = '240px';
-        const octx = overlay.getContext('2d');
-        octx.clearRect(0, 0, 320, 240);
-      }
-      if (dom.sliceZoomLevel) dom.sliceZoomLevel.textContent = '100%';
-      if (refreshList) renderImportSlicesList();
-      return;
-    }
-
-    if (dom.importSliceEmptyPrompt) dom.importSliceEmptyPrompt.style.display = 'none';
-    if (dom.sliceContainerWithRulers) dom.sliceContainerWithRulers.style.display = 'inline-grid';
-
-    const img = importSliceState.image;
-    canvas.width = img.width;
-    canvas.height = img.height;
-    applySliceZoom();
-    renderSliceRulers(img.width, img.height, importSliceState.zoom || 1);
-
-    // 1. Draw Checkerboard and Source Image onto base canvas (1:1 pixels)
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-
-    const isDark = document.body.classList.contains('dark-theme');
-    const c1 = isDark ? '#1f202e' : '#ffffff';
-    const c2 = isDark ? '#171822' : '#e2e8f0';
-    for (let y = 0; y < canvas.height; y += 8) {
-      for (let x = 0; x < canvas.width; x += 8) {
-        ctx.fillStyle = ((x / 8 + y / 8) % 2 === 0) ? c1 : c2;
-        ctx.fillRect(x, y, 8, 8);
-      }
-    }
-    ctx.drawImage(img, 0, 0);
-
-    // 2. High-DPI Sharp Vector Overlay for Grid, Slices, Handles, Labels, and Marquee
-    if (overlay) {
-      const dpr = window.devicePixelRatio || 1;
-      const zoom = importSliceState.zoom || 1;
-      const screenW = Math.round(img.width * zoom);
-      const screenH = Math.round(img.height * zoom);
-      overlay.width = Math.round(screenW * dpr);
-      overlay.height = Math.round(screenH * dpr);
-      overlay.style.width = `${screenW}px`;
-      overlay.style.height = `${screenH}px`;
-
-      const octx = overlay.getContext('2d');
-      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      octx.clearRect(0, 0, screenW, screenH);
-
-      // Pixel Grid (Crisp 1px lines when zoom >= 3x and enabled)
-      if (importSliceState.showPixelGrid !== false && zoom >= 3) {
-        octx.save();
-        octx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
-        octx.lineWidth = 1;
-        octx.beginPath();
-        for (let x = 0; x <= img.width; x++) {
-          const px = Math.floor(x * zoom) + 0.5;
-          octx.moveTo(px, 0);
-          octx.lineTo(px, screenH);
-        }
-        for (let y = 0; y <= img.height; y++) {
-          const py = Math.floor(y * zoom) + 0.5;
-          octx.moveTo(0, py);
-          octx.lineTo(screenW, py);
-        }
-        octx.stroke();
-        octx.restore();
-      }
-
-      const frames = importSliceState.frames || [];
-      const showLabels = (importSliceState.showLabels !== false);
-
-      frames.forEach((f, idx) => {
-        const rect = f.frame;
-        const isSelected = (idx === importSliceState.selectedSliceIndex);
-        const sx = Math.floor(rect.x * zoom);
-        const sy = Math.floor(rect.y * zoom);
-        const sw = Math.floor(rect.w * zoom);
-        const sh = Math.floor(rect.h * zoom);
-
-        octx.save();
-        if (isSelected) {
-          // Selected slice fill and outline
-          octx.fillStyle = 'rgba(16, 185, 129, 0.15)';
-          octx.fillRect(sx, sy, sw, sh);
-
-          octx.strokeStyle = '#10b981';
-          octx.lineWidth = 2;
-          octx.strokeRect(sx + 0.5, sy + 0.5, sw, sh);
-
-          // Crisp screen handles (8x8 screen pixels, never blurry!)
-          const handleSize = 8;
-          const half = handleSize / 2;
-          const handles = [
-            [sx, sy],
-            [sx + sw, sy],
-            [sx + sw, sy + sh],
-            [sx, sy + sh]
-          ];
-          octx.fillStyle = '#10b981';
-          octx.strokeStyle = '#ffffff';
-          octx.lineWidth = 1.5;
-          handles.forEach(([hx, hy]) => {
-            octx.fillRect(hx - half, hy - half, handleSize, handleSize);
-            octx.strokeRect(hx - half + 0.5, hy - half + 0.5, handleSize, handleSize);
-          });
-
-          // Crisp label badge
-          if (showLabels) {
-            const colNum = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : idx);
-            const tagDesc = f.tag ? `${f.tag} : f${colNum}` : (f.row !== undefined ? `row ${f.row} : f${colNum}` : `f${colNum}`);
-            const labelText = `${f.name || `slice_${idx}`} [${tagDesc}] (${rect.w}×${rect.h})`;
-            octx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            const metrics = octx.measureText(labelText);
-            const badgeW = metrics.width + 12;
-            const badgeH = 18;
-            const badgeY = (sy - badgeH - 2 >= 0) ? (sy - badgeH - 2) : (sy + 2);
-
-            octx.fillStyle = '#10b981';
-            drawRoundedRect(octx, sx, badgeY, badgeW, badgeH, 3, true, false);
-            octx.fillStyle = '#ffffff';
-            octx.textBaseline = 'middle';
-            octx.fillText(labelText, sx + 6, badgeY + badgeH / 2);
-          }
-        } else {
-          // Unselected slice outline
-          octx.strokeStyle = 'rgba(99, 102, 241, 0.85)';
-          octx.lineWidth = 1.5;
-          octx.strokeRect(sx + 0.5, sy + 0.5, sw, sh);
-
-          // Compact badge for unselected slice
-          if (showLabels) {
-            const colNum = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : idx);
-            const tagDesc = f.tag ? `${f.tag} : f${colNum}` : (f.row !== undefined ? `row ${f.row} : f${colNum}` : `f${colNum}`);
-            const labelText = `${f.name || `slice_${idx}`} [${tagDesc}]`;
-            octx.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            const metrics = octx.measureText(labelText);
-            const badgeW = Math.min(sw, metrics.width + 10);
-            const badgeH = 15;
-            const badgeY = (sy - badgeH - 1 >= 0) ? (sy - badgeH - 1) : (sy + 1);
-
-            octx.fillStyle = 'rgba(99, 102, 241, 0.9)';
-            drawRoundedRect(octx, sx, badgeY, badgeW, badgeH, 2, true, false);
-            octx.fillStyle = '#ffffff';
-            octx.textBaseline = 'middle';
-            octx.save();
-            octx.beginPath();
-            octx.rect(sx, badgeY, badgeW, badgeH);
-            octx.clip();
-            octx.fillText(labelText, sx + 4, badgeY + badgeH / 2);
-            octx.restore();
-          }
-        }
-        octx.restore();
-      });
-
-      // Live drag marquee
-      if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
-        const dr = importSliceState.currentDragRect;
-        const dsx = Math.floor(dr.x * zoom);
-        const dsy = Math.floor(dr.y * zoom);
-        const dsw = Math.floor(dr.w * zoom);
-        const dsh = Math.floor(dr.h * zoom);
-
-        octx.save();
-        octx.strokeStyle = '#10b981';
-        octx.lineWidth = 1.5;
-        octx.setLineDash([4, 4]);
-        octx.strokeRect(dsx + 0.5, dsy + 0.5, dsw, dsh);
-        octx.fillStyle = 'rgba(16, 185, 129, 0.12)';
-        octx.fillRect(dsx, dsy, dsw, dsh);
-        octx.setLineDash([]);
-
-        const dimText = `${dr.w} × ${dr.h} px`;
-        octx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        const metrics = octx.measureText(dimText);
-        const badgeW = metrics.width + 10;
-        const badgeH = 18;
-        const badgeY = (dsy - badgeH - 2 >= 0) ? (dsy - badgeH - 2) : (dsy + 2);
-
-        octx.fillStyle = '#10b981';
-        drawRoundedRect(octx, dsx, badgeY, badgeW, badgeH, 3, true, false);
-        octx.fillStyle = '#ffffff';
-        octx.textBaseline = 'middle';
-        octx.fillText(dimText, dsx + 5, badgeY + badgeH / 2);
-        octx.restore();
-      }
-    }
-
-    const frames = importSliceState.frames || [];
-    if (dom.sliceCountBadge) {
-      dom.sliceCountBadge.textContent = `${frames.length} slice${frames.length === 1 ? '' : 's'} detected`;
-    }
-    if (dom.btnSliceDeleteSelected) {
-      dom.btnSliceDeleteSelected.disabled = (importSliceState.selectedSliceIndex < 0 || importSliceState.selectedSliceIndex >= frames.length);
-    }
-
-    if (refreshList) renderImportSlicesList();
-  }
-
-  function renderImportSlicesList() {
-    if (!dom.importSlicesList) return;
-    const frames = importSliceState.frames || [];
-    if (dom.importSlicesCountText) {
-      dom.importSlicesCountText.textContent = `(${frames.length} item${frames.length === 1 ? '' : 's'})`;
-    }
-
-    if (frames.length === 0) {
-      dom.importSlicesList.innerHTML = `
-        <div style="padding: 16px; text-align: center; color: var(--text-dim); font-size: 11px;">
-          No slices created yet. Click "Update Slice Preview" or use Draw Slice tool to draw boxes!
-        </div>
-      `;
-      return;
-    }
-
-    let html = `
-      <div style="display: grid; grid-template-columns: 32px 36px minmax(120px, 1.4fr) minmax(120px, 1.4fr) minmax(70px, 85px) minmax(150px, 180px) 52px; gap: 8px; padding: 5px 12px; background: var(--bg-card); font-size: 10px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; min-width: 620px;">
-        <span>#</span>
-        <span>Thumb</span>
-        <span>Slice Name</span>
-        <span>Tag (Row)</span>
-        <span style="text-align: center;">Frame # (Col)</span>
-        <span>Rect (X, Y, W, H)</span>
-        <span style="text-align: right;">Actions</span>
-      </div>
-    `;
-
-    frames.forEach((f, idx) => {
-      const isSel = (idx === importSliceState.selectedSliceIndex);
-      const colVal = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : 0);
-      html += `
-        <div class="slice-item-row ${isSel ? 'selected' : ''}" data-slice-idx="${idx}" style="display: grid; grid-template-columns: 32px 36px minmax(120px, 1.4fr) minmax(120px, 1.4fr) minmax(70px, 85px) minmax(150px, 180px) 52px; gap: 8px; align-items: center; padding: 4px 12px; min-width: 620px;">
-          <span style="font-weight: 600; color: var(--text-dim);">${idx + 1}</span>
-          <canvas class="slice-thumb-canvas" id="slice-thumb-${idx}" width="24" height="24"></canvas>
-          <input type="text" class="slice-input-sm slice-name-input" data-slice-idx="${idx}" value="${escapeHTML(f.name)}" placeholder="Frame Name">
-          <input type="text" class="slice-input-sm slice-tag-input" data-slice-idx="${idx}" value="${escapeHTML(f.tag || '')}" placeholder="Tag / Row (e.g. walk_down)">
-          <input type="number" class="slice-input-sm slice-col-input" data-slice-idx="${idx}" value="${colVal}" min="0" max="256" style="width: 58px; text-align: center;" title="Frame sequence index / Column (0, 1, 2...)">
-          <div style="display: flex; gap: 3px; align-items: center;">
-            <input type="number" class="slice-input-sm slice-coord-w" data-slice-idx="${idx}" value="${f.frame.w}" style="width: 36px;" title="Width (px)">
-            <span>×</span>
-            <input type="number" class="slice-input-sm slice-coord-h" data-slice-idx="${idx}" value="${f.frame.h}" style="width: 36px;" title="Height (px)">
-            <span style="color: var(--text-dim); font-size: 9px;">@${f.frame.x},${f.frame.y}</span>
-          </div>
-          <div style="display: flex; gap: 4px; justify-content: flex-end;">
-            <button type="button" class="btn btn-xs btn-focus-slice" data-slice-idx="${idx}" title="Center slice in viewport" style="padding: 0; width: 20px; height: 20px; border: none; background: transparent; cursor: pointer; color: var(--accent-primary);">
-              <i class="fa-solid fa-crosshairs"></i>
-            </button>
-            <button type="button" class="btn btn-xs btn-del-slice" data-slice-idx="${idx}" title="Delete Slice" style="padding: 0; width: 20px; height: 20px; color: #ef4444; border: none; background: transparent; cursor: pointer;">
-              <i class="fa-solid fa-trash"></i>
-            </button>
-          </div>
-        </div>
-      `;
-    });
-
-    dom.importSlicesList.innerHTML = html;
-
-    if (importSliceState.image) {
-      frames.forEach((f, idx) => {
-        const thumbCanvas = document.getElementById(`slice-thumb-${idx}`);
-        if (thumbCanvas && f.frame.w > 0 && f.frame.h > 0) {
-          const tctx = thumbCanvas.getContext('2d');
-          tctx.imageSmoothingEnabled = false;
-          tctx.clearRect(0, 0, 24, 24);
-          tctx.drawImage(importSliceState.image, f.frame.x, f.frame.y, f.frame.w, f.frame.h, 0, 0, 24, 24);
-        }
-      });
-    }
-
-    dom.importSlicesList.querySelectorAll('.slice-item-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.closest('button')) return;
-        const idx = parseInt(row.dataset.sliceIdx, 10);
-        importSliceState.selectedSliceIndex = idx;
-        renderImportSliceView();
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.slice-name-input').forEach(input => {
-      input.addEventListener('change', (e) => {
-        const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        if (importSliceState.frames[idx]) {
-          importSliceState.frames[idx].name = e.target.value.trim() || `slice_${idx}`;
-          input.value = importSliceState.frames[idx].name;
-          renderImportSliceView(false);
-        }
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.slice-tag-input').forEach(input => {
-      input.addEventListener('change', (e) => {
-        const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        const frame = importSliceState.frames[idx];
-        const tag = input.value.trim();
-        if (frame && frame.tag !== tag) {
-          frame.tag = tag;
-          delete frame.row;
-          renderImportSliceView(false);
-        }
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.slice-col-input').forEach(input => {
-      input.addEventListener('change', (e) => {
-        const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        const val = Math.max(0, Math.min(PIX2.PROFILES.studio.maxGridCols - 1, parseInt(e.target.value, 10) || 0));
-        if (importSliceState.frames[idx]) {
-          importSliceState.frames[idx].col = val;
-          importSliceState.frames[idx].frameIndex = val;
-          input.value = val;
-          renderImportSliceView(false);
-        }
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.slice-coord-w').forEach(input => {
-      input.addEventListener('change', (e) => {
-        const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-        const slice = importSliceState.frames[idx];
-        if (slice) {
-          slice.frame.w = Math.min(val, importSliceState.image.width - slice.frame.x);
-          syncUntrimmedSliceSize(slice);
-          input.value = slice.frame.w;
-          renderImportSliceView(false);
-        }
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.slice-coord-h').forEach(input => {
-      input.addEventListener('change', (e) => {
-        const idx = parseInt(e.target.dataset.sliceIdx, 10);
-        const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-        const slice = importSliceState.frames[idx];
-        if (slice) {
-          slice.frame.h = Math.min(val, importSliceState.image.height - slice.frame.y);
-          syncUntrimmedSliceSize(slice);
-          input.value = slice.frame.h;
-          renderImportSliceView(false);
-        }
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.btn-focus-slice').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const idx = parseInt(btn.dataset.sliceIdx, 10);
-        importSliceState.selectedSliceIndex = idx;
-        const f = importSliceState.frames[idx];
-        if (f && dom.importSliceViewportContainer && importSliceState.image) {
-          const z = importSliceState.zoom || 1;
-          const img = importSliceState.image;
-          const sliceCenterX = (f.frame.x + f.frame.w / 2) * z;
-          const sliceCenterY = (f.frame.y + f.frame.h / 2) * z;
-          importSliceState.panX = Math.round((img.width * z / 2) - sliceCenterX);
-          importSliceState.panY = Math.round((img.height * z / 2) - sliceCenterY);
-          updateSliceTransform();
-        }
-        renderImportSliceView();
-      });
-    });
-
-    dom.importSlicesList.querySelectorAll('.btn-del-slice').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const idx = parseInt(btn.dataset.sliceIdx, 10);
-        deleteImportSlice(idx);
-      });
-    });
-  }
-
-  function deleteImportSlice(idx) {
-    if (idx >= 0 && idx < importSliceState.frames.length) {
-      importSliceState.frames.splice(idx, 1);
-      if (importSliceState.selectedSliceIndex >= importSliceState.frames.length) {
-        importSliceState.selectedSliceIndex = importSliceState.frames.length - 1;
-      }
-      renderImportSliceView();
-      showToast('Deleted slice', 'info');
-    }
-  }
-
-  function syncUntrimmedSliceSize(slice) {
-    if (slice.rotated || slice.trimmed || slice.spriteSourceSize?.x || slice.spriteSourceSize?.y) return;
-    const { w, h } = slice.frame;
-    slice.sourceSize = { w, h };
-    slice.spriteSourceSize = { x: 0, y: 0, w, h };
-  }
-
-  function initInspectorDeckResizer() {
-    const resizer = document.getElementById('import-slices-deck-resizer');
-    const deck = document.getElementById('import-slices-deck');
-    const mainArea = document.querySelector('.import-slice-main-area');
-    if (!resizer || !deck) return;
-
-    const widthResizer = document.getElementById('slice-config-resizer');
-    if (widthResizer && mainArea) {
-      const settings = widthResizer.previousElementSibling;
-      function resizeSettings(width) {
-        mainArea.style.setProperty('--slice-config-width', `${Math.round(width)}px`);
-      }
-      widthResizer.addEventListener('pointerdown', event => {
-        if (event.button === 0) widthResizer.setPointerCapture(event.pointerId);
-      });
-      widthResizer.addEventListener('pointermove', event => {
-        if (widthResizer.hasPointerCapture(event.pointerId)) {
-          resizeSettings(event.clientX - mainArea.getBoundingClientRect().left);
-        }
-      });
-      widthResizer.addEventListener('keydown', event => {
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-        event.preventDefault();
-        resizeSettings(settings.getBoundingClientRect().width + (event.key === 'ArrowLeft' ? -16 : 16));
-      });
-    }
-
-    let isDragging = false;
-    let startY = 0;
-    let startHeight = 0;
-
-    resizer.addEventListener('pointerdown', (e) => {
-      isDragging = true;
-      startY = e.clientY;
-      startHeight = deck.getBoundingClientRect().height;
-      resizer.classList.add('is-dragging');
-      document.body.style.cursor = 'row-resize';
-      document.body.style.userSelect = 'none';
-      e.preventDefault();
-    });
-
-    window.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      const dy = startY - e.clientY; // dragging up increases deck height
-      const parentH = mainArea ? mainArea.getBoundingClientRect().height : window.innerHeight;
-      const maxH = Math.round(parentH * 0.75);
-      const newHeight = Math.max(100, Math.min(maxH, Math.round(startHeight + dy)));
-      deck.style.height = `${newHeight}px`;
-      deck.style.maxHeight = '80%';
-    });
-
-    window.addEventListener('pointerup', () => {
-      if (isDragging) {
-        isDragging = false;
-        resizer.classList.remove('is-dragging');
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      }
-    });
-  }
-
-  function initImportSliceCanvasEvents() {
-    const canvas = dom.importSliceCanvas;
-    const container = dom.importSliceViewportContainer;
-    if (!canvas || !container) return;
-
-    // Zoom on wheel (Anchor-centered on cursor via NoiraViewport)
-    container.addEventListener('wheel', (e) => {
-      if (!importSliceState.image) return;
-      e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.25 : 0.8;
-      const oldZoom = importSliceState.zoom || 1;
-      const newZoom = Math.max(0.25, Math.min(32, Math.round(oldZoom * zoomFactor * 100) / 100));
-      if (newZoom === oldZoom) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const unscaledX = mx / oldZoom;
-      const unscaledY = my / oldZoom;
-
-      if (typeof NoiraViewport !== 'undefined' && NoiraViewport.computeAnchorZoomPan) {
-        const { panX, panY } = NoiraViewport.computeAnchorZoomPan(
-          importSliceState.panX || 0,
-          importSliceState.panY || 0,
-          oldZoom,
-          newZoom,
-          unscaledX,
-          unscaledY,
-          importSliceState.image.width,
-          importSliceState.image.height
-        );
-        importSliceState.panX = panX;
-        importSliceState.panY = panY;
-      }
-
-      setSliceZoom(newZoom);
-    }, { passive: false });
-
-    const startSlicePan = (e) => {
-      importSliceState.isPanning = true;
-      importSliceState.panStartX = e.clientX;
-      importSliceState.panStartY = e.clientY;
-      importSliceState.dragStartPanX = importSliceState.panX || 0;
-      importSliceState.dragStartPanY = importSliceState.panY || 0;
-      container.style.cursor = 'grabbing';
-      document.body.style.cursor = 'grabbing';
-      e.preventDefault();
-    };
-
-    // Pointer down on container for panning (middle click or hand tool or background)
-    container.addEventListener('pointerdown', (e) => {
-      if (!importSliceState.image) return;
-      const isHand = (importSliceState.activeTool === 'hand') || e.button === 1 || isSpacebarHeld;
-      if (isHand || e.target === container) {
-        startSlicePan(e);
-        return;
-      }
-    });
-
-    // Pointer down on canvas
-    canvas.addEventListener('pointerdown', (e) => {
-      if (!importSliceState.image) return;
-      const isHand = (importSliceState.activeTool === 'hand') || e.button === 1 || isSpacebarHeld;
-      if (isHand) {
-        startSlicePan(e);
-        return;
-      }
-
-      const coords = getSliceCanvasCoords(e);
-      if (!coords) return;
-
-      const frames = importSliceState.frames || [];
-      const selected = (importSliceState.selectedSliceIndex >= 0) ? frames[importSliceState.selectedSliceIndex] : null;
-
-      // In draw tool mode: immediately start drawing new marquee
-      if (importSliceState.activeTool === 'draw') {
-        importSliceState.selectedSliceIndex = -1;
-        importSliceState.isDrawingSlice = true;
-        importSliceState.dragStartX = coords.x;
-        importSliceState.dragStartY = coords.y;
-        importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 1, h: 1 };
-        renderImportSliceView();
-        return;
-      }
-
-      // Check handle on currently selected slice
-      if (selected) {
-        const handle = hitTestSliceHandles(selected, e);
-        if (handle && handle !== 'move') {
-          importSliceState.isResizingSlice = true;
-          importSliceState.activeHandle = handle;
-          importSliceState.dragStartX = coords.x;
-          importSliceState.dragStartY = coords.y;
-          importSliceState.dragOriginRect = { ...selected.frame };
-          return;
-        }
-      }
-
-      // Hit-test slice bodies (top to bottom)
-      let hitIdx = -1;
-      for (let i = frames.length - 1; i >= 0; i--) {
-        const f = frames[i];
-        if (coords.x >= f.frame.x && coords.x < f.frame.x + f.frame.w &&
-            coords.y >= f.frame.y && coords.y < f.frame.y + f.frame.h) {
-          hitIdx = i;
-          break;
-        }
-      }
-
-      if (hitIdx >= 0) {
-        importSliceState.selectedSliceIndex = hitIdx;
-        importSliceState.isDraggingSlice = true;
-        importSliceState.dragStartX = coords.x;
-        importSliceState.dragStartY = coords.y;
-        importSliceState.dragOriginRect = { ...frames[hitIdx].frame };
-        renderImportSliceView();
-        return;
-      }
-
-      // Clicked on empty space: deselect, or if dragged, allow creating a slice
-      importSliceState.selectedSliceIndex = -1;
-      importSliceState.isDrawingSlice = true;
-      importSliceState.dragStartX = coords.x;
-      importSliceState.dragStartY = coords.y;
-      importSliceState.currentDragRect = { x: coords.x, y: coords.y, w: 1, h: 1 };
-      renderImportSliceView();
-    });
-
-    window.addEventListener('pointermove', (e) => {
-      if (importSliceState.isPanning) {
-        const dx = e.clientX - importSliceState.panStartX;
-        const dy = e.clientY - importSliceState.panStartY;
-        importSliceState.panX = Math.round((importSliceState.dragStartPanX || 0) + dx);
-        importSliceState.panY = Math.round((importSliceState.dragStartPanY || 0) + dy);
-        updateSliceTransform();
-        return;
-      }
-
-      if (!importSliceState.image) return;
-      const coords = getSliceCanvasCoords(e);
-      if (!coords) return;
-
-      if (dom.sliceCoordsInfo) {
-        let text = `${coords.x}, ${coords.y}`;
-        if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
-          const dr = importSliceState.currentDragRect;
-          text = `${dr.w}×${dr.h} @ (${dr.x}, ${dr.y})`;
-        } else if (importSliceState.selectedSliceIndex >= 0 && importSliceState.frames[importSliceState.selectedSliceIndex]) {
-          const fr = importSliceState.frames[importSliceState.selectedSliceIndex].frame;
-          text = `${coords.x}, ${coords.y} | Sel: ${fr.w}×${fr.h} @ (${fr.x}, ${fr.y})`;
-        }
-        dom.sliceCoordsInfo.textContent = text;
-      }
-
-      if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
-        const x1 = Math.min(importSliceState.dragStartX, coords.x);
-        const y1 = Math.min(importSliceState.dragStartY, coords.y);
-        const x2 = Math.max(importSliceState.dragStartX, coords.x);
-        const y2 = Math.max(importSliceState.dragStartY, coords.y);
-        importSliceState.currentDragRect = { x: x1, y: y1, w: x2 - x1 + 1, h: y2 - y1 + 1 };
-        renderImportSliceView();
-        return;
-      }
-
-      if (importSliceState.isDraggingSlice && importSliceState.selectedSliceIndex >= 0) {
-        const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
-        if (slice && importSliceState.dragOriginRect) {
-          const dx = coords.x - importSliceState.dragStartX;
-          const dy = coords.y - importSliceState.dragStartY;
-          const maxW = importSliceState.image.width;
-          const maxH = importSliceState.image.height;
-          slice.frame.x = Math.max(0, Math.min(maxW - slice.frame.w, importSliceState.dragOriginRect.x + dx));
-          slice.frame.y = Math.max(0, Math.min(maxH - slice.frame.h, importSliceState.dragOriginRect.y + dy));
-          renderImportSliceView();
-        }
-        return;
-      }
-
-      if (importSliceState.isResizingSlice && importSliceState.selectedSliceIndex >= 0) {
-        const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
-        if (slice && importSliceState.dragOriginRect) {
-          const dx = coords.x - importSliceState.dragStartX;
-          const dy = coords.y - importSliceState.dragStartY;
-          const orig = importSliceState.dragOriginRect;
-          const handle = importSliceState.activeHandle;
-          const right = orig.x + orig.w;
-          const bottom = orig.y + orig.h;
-          const left = handle.endsWith('w') ? Math.max(0, Math.min(right - 1, orig.x + dx)) : orig.x;
-          const top = handle.startsWith('n') ? Math.max(0, Math.min(bottom - 1, orig.y + dy)) : orig.y;
-          const nextRight = handle.endsWith('e')
-            ? Math.max(left + 1, Math.min(importSliceState.image.width, right + dx)) : right;
-          const nextBottom = handle.startsWith('s')
-            ? Math.max(top + 1, Math.min(importSliceState.image.height, bottom + dy)) : bottom;
-          slice.frame = { x: left, y: top, w: nextRight - left, h: nextBottom - top };
-          renderImportSliceView();
-        }
-        return;
-      }
-
-      if (e.target === canvas || e.target === dom.importSliceOverlay) {
-        if (importSliceState.activeTool === 'hand' || isSpacebarHeld) {
-          canvas.style.cursor = 'grab';
-          return;
-        }
-        if (importSliceState.activeTool === 'draw') {
-          canvas.style.cursor = 'crosshair';
-          return;
-        }
-
-        const frames = importSliceState.frames || [];
-        const selected = (importSliceState.selectedSliceIndex >= 0) ? frames[importSliceState.selectedSliceIndex] : null;
-        if (selected) {
-          const handle = hitTestSliceHandles(selected, e);
-          if (handle === 'nw' || handle === 'se') {
-            canvas.style.cursor = 'nwse-resize';
-            return;
-          } else if (handle === 'ne' || handle === 'sw') {
-            canvas.style.cursor = 'nesw-resize';
-            return;
-          } else if (handle === 'move') {
-            canvas.style.cursor = 'move';
-            return;
-          }
-        }
-        for (let i = frames.length - 1; i >= 0; i--) {
-          const f = frames[i];
-          if (coords.x >= f.frame.x && coords.x < f.frame.x + f.frame.w &&
-              coords.y >= f.frame.y && coords.y < f.frame.y + f.frame.h) {
-            canvas.style.cursor = 'pointer';
-            return;
-          }
-        }
-        canvas.style.cursor = 'default';
-      }
-    });
-
-    window.addEventListener('pointerup', () => {
-      if (importSliceState.isPanning) {
-        importSliceState.isPanning = false;
-        container.style.cursor = (importSliceState.activeTool === 'hand' || isSpacebarHeld) ? 'grab' : 'default';
-        document.body.style.cursor = '';
-      }
-
-      if (importSliceState.isDrawingSlice && importSliceState.currentDragRect) {
-        const dr = importSliceState.currentDragRect;
-        if (importSliceState.activeTool === 'draw' || dr.w > 1 || dr.h > 1) {
-          const nextIdx = importSliceState.frames.length;
-          const newSlice = {
-            name: `slice_${String(nextIdx).padStart(3, '0')}`,
-            tag: '',
-            frame: { ...dr },
-            sourceSize: { w: dr.w, h: dr.h },
-            spriteSourceSize: { x: 0, y: 0, w: dr.w, h: dr.h }
-          };
-          importSliceState.frames.push(newSlice);
-          importSliceState.selectedSliceIndex = nextIdx;
-          showToast(`Added Slice #${nextIdx + 1} (${dr.w}×${dr.h}px)`, 'success');
-        }
-        importSliceState.isDrawingSlice = false;
-        importSliceState.currentDragRect = null;
-        renderImportSliceView();
-        return;
-      }
-
-      if (importSliceState.isDraggingSlice || importSliceState.isResizingSlice) {
-        const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
-        if (slice && importSliceState.isResizingSlice) syncUntrimmedSliceSize(slice);
-        importSliceState.isDraggingSlice = false;
-        importSliceState.isResizingSlice = false;
-        importSliceState.activeHandle = null;
-        importSliceState.dragOriginRect = null;
-        renderImportSliceView();
-      }
-    });
-
-    function cancelSliceGesture() {
-      const slice = importSliceState.frames[importSliceState.selectedSliceIndex];
-      if (slice && importSliceState.dragOriginRect) slice.frame = importSliceState.dragOriginRect;
-      importSliceState.dragOriginRect = null;
-      importSliceState.currentDragRect = null;
-      importSliceState.activeHandle = null;
-      importSliceState.isDrawingSlice = false;
-      importSliceState.isDraggingSlice = false;
-      importSliceState.isResizingSlice = false;
-      if (importSliceState.isPanning) document.body.style.cursor = '';
-      importSliceState.isPanning = false;
-      isSpacebarHeld = false;
-      container.style.cursor = importSliceState.activeTool === 'hand' ? 'grab' : 'default';
-      if (state.activeTabId === 'tab-import-slice') renderImportSliceView();
-    }
-    window.addEventListener('pointercancel', cancelSliceGesture);
-    window.addEventListener('blur', cancelSliceGesture);
-
-    window.addEventListener('keydown', (e) => {
-      if (state.activeTabId !== 'tab-import-slice') return;
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      if (e.code === 'Space') {
-        if (!isSpacebarHeld) {
-          isSpacebarHeld = true;
-          container.style.cursor = 'grab';
-        }
-        e.preventDefault();
-      } else if (e.key === 'v' || e.key === 'V') {
-        setSliceTool('select');
-      } else if (e.key === 'd' || e.key === 'D') {
-        setSliceTool('draw');
-      } else if (e.key === 'h' || e.key === 'H') {
-        setSliceTool('hand');
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (importSliceState.selectedSliceIndex >= 0) {
-          deleteImportSlice(importSliceState.selectedSliceIndex);
-        }
-      } else if (e.key === 'Escape') {
-        if (!importSliceState.dragOriginRect && !importSliceState.currentDragRect) importSliceState.selectedSliceIndex = -1;
-        cancelSliceGesture();
-      } else if (e.key === '+' || e.key === '=') {
-        setSliceZoom(importSliceState.zoom * 1.25);
-      } else if (e.key === '-' || e.key === '_') {
-        setSliceZoom(importSliceState.zoom * 0.8);
-      } else if (e.key === '0') {
-        setSliceZoom(1);
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      if (e.code === 'Space') {
-        isSpacebarHeld = false;
-        container.style.cursor = (importSliceState.activeTool === 'hand') ? 'grab' : 'default';
-      }
-    });
-  }
-
-  function updateImportSlices() {
-    if (!importSliceState.image) return;
-    const method = dom.selectSliceMethod ? dom.selectSliceMethod.value : 'grid';
-
-    if (method === 'manual') {
-      if (importSliceState.frames.length === 0) {
-        showToast('Click and drag on the image to draw your first slice!', 'info');
-      }
-    } else if (method === 'grid') {
-      const cellW = Math.max(1, parseInt(dom.inputSliceCellW?.value, 10) || 32);
-      const cellH = Math.max(1, parseInt(dom.inputSliceCellH?.value, 10) || 32);
-      const cols = dom.inputSliceCols?.value ? parseInt(dom.inputSliceCols.value, 10) : undefined;
-      const rows = dom.inputSliceRows?.value ? parseInt(dom.inputSliceRows.value, 10) : undefined;
-      const spacing = parseInt(dom.inputSliceSpacing?.value, 10) || 0;
-      const margin = parseInt(dom.inputSliceMargin?.value, 10) || 0;
-
-      const rects = ImportSlice.sliceGrid({
-        imageWidth: importSliceState.image.width,
-        imageHeight: importSliceState.image.height,
-        cellWidth: cellW,
-        cellHeight: cellH,
-        columns: cols,
-        rows: rows,
-        spacing: spacing,
-        margin: margin
-      });
-
-      const dirNames4 = ['down', 'up', 'right', 'left'];
-      importSliceState.frames = rects.map((r, i) => {
-        const rowIdx = (r.row !== undefined) ? r.row : 0;
-        const colIdx = (r.col !== undefined) ? r.col : (r.frameIndex !== undefined ? r.frameIndex : i);
-        const defaultTag = (rects.length >= 4 && rowIdx < 4) ? `walk_${dirNames4[rowIdx]}` : `row_${rowIdx}`;
-        const dirName = (rowIdx < 4) ? dirNames4[rowIdx] : `anim_${rowIdx}`;
-        return {
-          name: `${dirName}_${colIdx}`,
-          tag: defaultTag,
-          row: rowIdx,
-          col: colIdx,
-          frameIndex: colIdx,
-          frame: { x: r.x, y: r.y, w: r.w, h: r.h },
-          sourceSize: { w: r.w, h: r.h },
-          spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
-        };
-      });
-    } else if (method === 'alpha') {
-      const canvas = document.createElement('canvas');
-      canvas.width = importSliceState.image.width;
-      canvas.height = importSliceState.image.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(importSliceState.image, 0, 0);
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const alphaThresh = parseInt(dom.inputSliceAlphaThresh?.value, 10) || 10;
-      const minSize = parseInt(dom.inputSliceMinSize?.value, 10) || 2;
-
-      const islands = ImportSlice.sliceAlphaIslands(imgData, {
-        alphaThreshold: alphaThresh,
-        minIslandSize: minSize
-      });
-
-      importSliceState.frames = islands.map((r, i) => ({
-        name: `island_${String(i).padStart(3, '0')}`,
-        tag: 'island',
-        row: 0,
-        col: i,
-        frameIndex: i,
-        frame: r,
-        sourceSize: { w: r.w, h: r.h },
-        spriteSourceSize: { x: 0, y: 0, w: r.w, h: r.h }
-      }));
-    } else if (method === 'atlas') {
-      if (importSliceState.jsonAtlas) {
-        const plan = ImportSlice.parseAtlasJSON(importSliceState.jsonAtlas, {
-          width: importSliceState.image.width,
-          height: importSliceState.image.height
-        });
-        importSliceState.frames = (plan.frames || []).map((f, i) => {
-          const colVal = (f.frameIndex !== undefined) ? f.frameIndex : (f.col !== undefined ? f.col : i);
-          return {
-            ...f,
-            col: colVal,
-            frameIndex: colVal,
-            row: (f.row !== undefined) ? f.row : 0
-          };
-        });
-      }
-    }
-
-    renderImportSliceView();
-  }
-
-  function commitImportSlicesToProject() {
-    if (!importSliceState.image || !importSliceState.frames || importSliceState.frames.length === 0) {
-      showToast('No slices to import', 'error');
-      return;
-    }
-    const layerName = dom.inputSliceLayerName ? dom.inputSliceLayerName.value.trim() || 'Imported' : 'Imported';
-    const autoAnimate = dom.chkSliceAutoAnimate ? dom.chkSliceAutoAnimate.checked : true;
-
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = importSliceState.image.width;
-      canvas.height = importSliceState.image.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(importSliceState.image, 0, 0);
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const draft = PIX2.createDocument('Imported Sprites', 1, 1, 16, 16);
-      const candidate = PIX2.createDocument('Imported Sprites', 1, 1, 16, 16);
-      candidate.cells = {};
-      ImportSlice.importFramesToDoc(candidate, importSliceState.frames, imgData, {
-        layerName,
-        createAnimations: autoAnimate,
-        useGridCellIds: true,
-        rejectDuplicateCells: true
-      });
-      const validation = PIX2.validate(candidate, { strict: true });
-      if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid imported document');
-      const fileName = sanitizeSafeFilename(dom.importSliceFileName?.textContent.replace(/\.png$/i, ''), '.pix2', 'imported_sprites');
-      createProjectSession(draft, fileName);
+  const sliceController = StudioSlice.create({
+    dom, importSliceState,
+    input: { get spaceHeld() { return isSpacebarHeld; }, set spaceHeld(value) { isSpacebarHeld = value; } },
+    getActiveView: () => state.activeTabId,
+    activateView: view => { state.activeTabId = view; },
+    commitProject(draft, candidate, fileName, count) {
+      if (!createProjectSession(draft, fileName)) throw new Error('Resolve code edits before importing');
       state.beginStroke();
       state.doc = candidate;
-      state.endStroke(`Import ${importSliceState.frames.length} Slices`);
-      triggerEventAutosave();
+      if (state.endStroke(`Import ${count} Slices`)) triggerEventAutosave();
       state.activeTabId = 'tab-grid-overview';
       updateResolutionButtons();
       centerGridCanvas();
       refreshAll();
-      showToast(`Imported ${importSliceState.frames.length} frames into a new project`, 'success');
-    } catch (err) {
-      showToast(`Import error: ${err.message}`, 'error');
-    }
-  }
+    },
+    refreshAll, escapeHTML, sanitizeSafeFilename, showToast
+  });
+  const { setSliceTool, setSliceZoom, fitSliceZoom, batchTagPrefix, autoTag4Dir, autoTag8Dir, clearAllTags, renderImportSliceView, deleteImportSlice, initInspectorDeckResizer, initImportSliceCanvasEvents, updateImportSlices, commitImportSlicesToProject, handleSingleFileToImportSlice, handlePairDropToImportSlice } = sliceController;
 
-  function handleSingleFileToImportSlice(file) {
-    if (!file) return;
-    const name = file.name.toLowerCase();
-    if (name.endsWith('.png')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          importSliceState.image = img;
-          if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
-          if (dom.importSliceFileName) dom.importSliceFileName.textContent = file.name;
-          if (dom.importSliceImgDims) dom.importSliceImgDims.textContent = `${img.width}×${img.height}`;
-
-          const maxDim = Math.max(img.width, img.height);
-          if (maxDim <= 64) importSliceState.zoom = 6;
-          else if (maxDim <= 128) importSliceState.zoom = 4;
-          else if (maxDim <= 256) importSliceState.zoom = 2;
-          else if (maxDim > 1024) importSliceState.zoom = 0.5;
-          else importSliceState.zoom = 1;
-
-          state.activeTabId = 'tab-import-slice';
-          refreshAll();
-          updateImportSlices();
-          applySliceZoom();
-          showToast(`Loaded ${file.name} for slicing!`);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    } else if (name.endsWith('.json')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const parsed = JSON.parse(e.target.result);
-          importSliceState.jsonAtlas = parsed;
-          if (dom.selectSliceMethod) dom.selectSliceMethod.value = 'atlas';
-          if (dom.atlasDetectedInfo) {
-            dom.atlasDetectedInfo.innerHTML = `<span class="text-success"><i class="fa-solid fa-check"></i> Loaded Atlas JSON: ${escapeHTML(file.name)}</span>`;
-          }
-          state.activeTabId = 'tab-import-slice';
-          refreshAll();
-          updateImportSlices();
-          showToast(`Loaded Atlas JSON: ${file.name}`);
-        } catch (err) {
-          showToast(`Invalid JSON file: ${err.message}`, 'error');
-        }
-      };
-      reader.readAsText(file);
-    }
-  }
-
-  function handlePairDropToImportSlice(pngFile, jsonFile) {
-    const jsonReader = new FileReader();
-    jsonReader.onload = (je) => {
-      try {
-        const parsed = JSON.parse(je.target.result);
-        importSliceState.jsonAtlas = parsed;
-        if (dom.selectSliceMethod) dom.selectSliceMethod.value = 'atlas';
-        if (dom.atlasDetectedInfo) {
-          dom.atlasDetectedInfo.innerHTML = `<span class="text-success"><i class="fa-solid fa-check"></i> Paired Atlas JSON: ${escapeHTML(jsonFile.name)}</span>`;
-        }
-
-        const pngReader = new FileReader();
-        pngReader.onload = (pe) => {
-          const img = new Image();
-          img.onload = () => {
-            importSliceState.image = img;
-            if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
-            if (dom.importSliceFileName) dom.importSliceFileName.textContent = pngFile.name;
-            if (dom.importSliceImgDims) dom.importSliceImgDims.textContent = `${img.width}×${img.height}`;
-
-            const maxDim = Math.max(img.width, img.height);
-            if (maxDim <= 64) importSliceState.zoom = 6;
-            else if (maxDim <= 128) importSliceState.zoom = 4;
-            else if (maxDim <= 256) importSliceState.zoom = 2;
-            else if (maxDim > 1024) importSliceState.zoom = 0.5;
-            else importSliceState.zoom = 1;
-
-            state.activeTabId = 'tab-import-slice';
-            refreshAll();
-            updateImportSlices();
-            applySliceZoom();
-            showToast(`Paired ${pngFile.name} + ${jsonFile.name} loaded into Atlas Slicer!`, 'success');
-          };
-          img.src = pe.target.result;
-        };
-        pngReader.readAsDataURL(pngFile);
-      } catch (err) {
-        showToast(`Invalid Atlas JSON: ${err.message}`, 'error');
-      }
-    };
-    jsonReader.readAsText(jsonFile);
-  }
-
-  function assignRowToAnimation(rowIdx, animKey, customDisplayName) {
-    if (!state.doc) return;
-    const doc = state.doc;
-    const cols = doc.meta.grid.cols;
-    const rowCells = [];
-
-    // 1. Collect the ACTUAL existing cells currently at this row (preserving all artwork!)
-    for (let c = 0; c < cols; c++) {
-      const existing = getCellAtGrid(doc, rowIdx, c);
-      if (existing) {
-        rowCells.push(existing.id);
-      } else {
-        const fallbackId = `cell_${rowIdx}_${c}`;
-        rowCells.push(fallbackId);
-      }
-    }
-
-    // 2. Detach these cells from any other animation
-    for (const aName in doc.animations) {
-      if (aName !== animKey && doc.animations[aName].frames && Array.isArray(doc.animations[aName].frames)) {
-        doc.animations[aName].frames = doc.animations[aName].frames.filter(id => !rowCells.includes(id));
-      }
-    }
-
-    const dispName = customDisplayName || animKey.replace(/_/g, ' ');
-
-    // 3. Ensure target animation exists
-    if (!doc.animations[animKey]) {
-      doc.animations[animKey] = {
-        name: dispName,
-        direction: 'none',
-        frames: [],
-        fps: 6,
-        loop: true,
-        mode: 'loop'
-      };
-    }
-
-    // 4. Assign all row cells to this animation
-    doc.animations[animKey].frames = [...rowCells];
-
-    // 5. Update cell metadata WITHOUT clearing or overwriting existing pixels!
-    rowCells.forEach((cid, c) => {
-      let cell = doc.cells[cid];
-      if (!cell) {
-        cell = {
-          id: cid,
-          name: `${dispName} ${c}`,
-          row: rowIdx,
-          col: c,
-          direction: doc.animations[animKey].direction || 'none',
-          frame: c,
-          pixels: {}
-        };
-        doc.cells[cid] = cell;
-      } else {
-        // Cell exists: update coordinates and name, KEEP PIXELS INTACT!
-        cell.row = rowIdx;
-        cell.col = c;
-        cell.frame = c;
-        cell.name = `${dispName} ${c}`;
-        if (doc.animations[animKey].direction && doc.animations[animKey].direction !== 'none') {
-          cell.direction = doc.animations[animKey].direction;
-        }
-      }
-    });
-
-    state.saveSnapshot(`Assign Row ${rowIdx} to "${dispName}"`);
-    triggerEventAutosave();
-    refreshAll();
-    populateAnimDropdowns();
-    updateGridInspectorUI();
-    if (studioAnimPlayer) studioAnimPlayer.render();
-    if (animPlayer) animPlayer.render();
-    showToast(`Row ${rowIdx} assigned to "${dispName}" (${cols} frames)!`, 'success');
-  }
-
-  function assignCellToAnimation(cellId, animName) {
-    if (!state.doc || !state.doc.animations[animName]) return;
-
-    for (const name in state.doc.animations) {
-      const idx = state.doc.animations[name].frames.indexOf(cellId);
-      if (idx >= 0) {
-        state.doc.animations[name].frames.splice(idx, 1);
-      }
-    }
-
-    state.doc.animations[animName].frames.push(cellId);
-    triggerEventAutosave();
-    if (animPlayer) animPlayer.render();
-    if (studioAnimPlayer) studioAnimPlayer.render();
-  }
-
-  function applyRowBatchTag(rowIdx, actionName) {
-    assignRowToAnimation(rowIdx, actionName);
-  }
-
-  function ensureGridDimensions(targetRows, targetCols = 4) {
-    if (!state.doc) return;
-    targetRows = Math.min(Math.max(1, parseInt(targetRows, 10) || 1), 256);
-    targetCols = Math.min(Math.max(1, parseInt(targetCols, 10) || 1), 128);
-    const doc = state.doc;
-
-    // 1. Expand columns if needed
-    while (doc.meta.grid.cols < targetCols) {
-      const newC = doc.meta.grid.cols;
-      doc.meta.grid.cols++;
-      for (let r = 0; r < doc.meta.grid.rows; r++) {
-        const cid = `cell_${r}_${newC}`;
-        if (!doc.cells[cid]) {
-          doc.cells[cid] = {
-            id: cid,
-            name: `Frame ${r},${newC}`,
-            row: r,
-            col: newC,
-            direction: 'none',
-            frame: newC,
-            pixels: {}
-          };
-        }
-      }
-    }
-
-    // 2. Expand rows if needed
-    while (doc.meta.grid.rows < targetRows) {
-      const newR = doc.meta.grid.rows;
-      doc.meta.grid.rows++;
-      for (let c = 0; c < doc.meta.grid.cols; c++) {
-        const cid = `cell_${newR}_${c}`;
-        if (!doc.cells[cid]) {
-          doc.cells[cid] = {
-            id: cid,
-            name: `Action ${newR} Frame ${c}`,
-            row: newR,
-            col: c,
-            direction: 'none',
-            frame: c,
-            pixels: {}
-          };
-        }
-      }
-    }
-  }
 
   // ===========================================================================
   // ACTION & DIRECTION TEMPLATE GENERATOR MODAL LOGIC
@@ -5450,429 +2650,36 @@
     { id: 'up_right', label: 'Up-Right' }
   ];
 
-  function openActionTemplateModal(mode = 4) {
-    if (!dom.modalActionTemplate) return;
-    currentTemplateMode = (mode === 8) ? 8 : ((mode === 2) ? 2 : 4);
+  const animationController = StudioAnimation.create({
+    state: studioDocumentModel, dom,
+    view: {
+      get activeStudioClipId() { return activeStudioClipId; }, set activeStudioClipId(value) { activeStudioClipId = value; },
+      get currentTemplateMode() { return currentTemplateMode; }, set currentTemplateMode(value) { currentTemplateMode = value; },
+      get selectedGridCellId() { return selectedGridCellId; }, set selectedGridCellId(value) { selectedGridCellId = value; },
+      get animPlayer() { return animPlayer; }, set animPlayer(value) { animPlayer = value; },
+      get studioAnimPlayer() { return studioAnimPlayer; }, set studioAnimPlayer(value) { studioAnimPlayer = value; }
+    },
+    DIRECTIONS_2,
+    DIRECTIONS_4,
+    DIRECTIONS_8,
+    escapeHTML: (...args) => escapeHTML(...args),
+    getCellAtGrid: (...args) => getCellAtGrid(...args),
+    getCellRowCol: (...args) => getCellRowCol(...args),
+    handleBeforeLeaveCodeTab: (...args) => handleBeforeLeaveCodeTab(...args),
+    inferRowTitle: (...args) => inferRowTitle(...args),
+    refreshAll: (...args) => refreshAll(...args),
+    showToast: (...args) => showToast(...args),
+    triggerEventAutosave: (...args) => triggerEventAutosave(...args),
+    updateGridInspectorUI: (...args) => updateGridInspectorUI(...args),
+    updateStudioPlayButtonUI: (...args) => updateStudioPlayButtonUI(...args)
+  });
+  const { openFramePickerModal, closeFramePickerModal, renderFramePickerCards, appendCellToActiveAnimation, populateAnimDropdowns, assignRowToAnimation, assignCellToAnimation, openActionTemplateModal, closeActionTemplateModal, syncActiveActionChip, renderTemplateLivePreview, applyActionTemplate, renderDedicatedAnimationStudio, updateStudioActiveFrameUI, selectStudioFrame } = animationController;
 
-    if (dom.btnMode2dir) dom.btnMode2dir.classList.toggle('active', currentTemplateMode === 2);
-    if (dom.btnMode4dir) dom.btnMode4dir.classList.toggle('active', currentTemplateMode === 4);
-    if (dom.btnMode8dir) dom.btnMode8dir.classList.toggle('active', currentTemplateMode === 8);
-
-    // Auto-populate columns from current grid
-    if (state.doc && dom.templateColsInput) {
-      dom.templateColsInput.value = state.doc.meta.grid.cols || 4;
-    }
-
-    // Auto-detect a smart starting row:
-    if (state.doc && dom.templateStartRow) {
-      let maxRow = 0;
-      let hasCells = false;
-      for (const cid in state.doc.cells) {
-        const parts = cid.split('_');
-        if (parts.length >= 3) {
-          const r = parseInt(parts[1], 10);
-          if (r >= maxRow) maxRow = r + 1;
-          hasCells = true;
-        }
-      }
-      const hasAnims = Object.keys(state.doc.animations || {}).length > 0;
-      dom.templateStartRow.value = (hasCells && hasAnims) ? maxRow : 0;
-    }
-
-    syncActiveActionChip();
-    renderTemplateLivePreview();
-
-    dom.modalActionTemplate.classList.remove('hidden');
-    if (dom.templateActionInput) {
-      dom.templateActionInput.focus();
-      dom.templateActionInput.select();
-    }
-  }
-
-  function closeActionTemplateModal() {
-    if (dom.modalActionTemplate) {
-      dom.modalActionTemplate.classList.add('hidden');
-    }
-  }
-
-  function syncActiveActionChip() {
-    if (!dom.actionChipsContainer || !dom.templateActionInput) return;
-    const currentVal = dom.templateActionInput.value.trim().toLowerCase();
-    const chips = dom.actionChipsContainer.querySelectorAll('.chip-btn');
-    chips.forEach(chip => {
-      chip.classList.toggle('active', chip.dataset.action === currentVal);
-    });
-  }
-
-  function renderTemplateLivePreview() {
-    if (!dom.templateLivePreview) return;
-    const actionRaw = dom.templateActionInput ? dom.templateActionInput.value.trim() : 'idle';
-    const action = (actionRaw || 'action').toLowerCase().replace(/\s+/g, '_');
-    const actionTitle = action.charAt(0).toUpperCase() + action.slice(1);
-    const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : ((currentTemplateMode === 2) ? DIRECTIONS_2 : DIRECTIONS_4);
-    const cols = Math.max(1, parseInt(dom.templateColsInput?.value, 10) || 4);
-    const fps = Math.max(1, parseInt(dom.templateFpsInput?.value, 10) || 6);
-    const startRow = Math.max(0, parseInt(dom.templateStartRow?.value, 10) || 0);
-
-    if (dom.templateSummaryBadge) {
-      dom.templateSummaryBadge.textContent = `${dirs.length} Rows × ${cols} Frames (${dirs.length * cols} cells @ ${fps} FPS)`;
-    }
-
-    let html = '';
-    dirs.forEach((d, idx) => {
-      const rowIdx = startRow + idx;
-      const clipKey = `${action}_${d.id}`;
-      const clipName = `${actionTitle} ${d.label}`;
-      const firstFrame = `${action}_${d.id}_0`;
-      const lastFrame = `${action}_${d.id}_${cols - 1}`;
-      const rangeText = (cols === 1) ? firstFrame : `${firstFrame} → ${lastFrame}`;
-
-      let statusNotice = '';
-      if (state.doc) {
-        let hasArtwork = false;
-        for (let c = 0; c < cols; c++) {
-          const cid = `cell_${rowIdx}_${c}`;
-          if (state.doc.cells[cid] && Object.keys(state.doc.cells[cid].pixels || {}).length > 0) {
-            hasArtwork = true;
-            break;
-          }
-        }
-        if (hasArtwork) {
-          statusNotice = `<span class="badge-tag" style="background: rgba(245, 158, 11, 0.15); color: #d97706;" title="Artwork in this row is 100% kept"><i class="fa-solid fa-shield-halved"></i> Keep Artwork</span>`;
-        } else {
-          statusNotice = `<span class="badge-tag" style="background: rgba(99, 102, 241, 0.12); color: #6366f1;">New Frames</span>`;
-        }
-      }
-
-      const safeKey = escapeHTML(clipKey);
-      const safeName = escapeHTML(clipName);
-      const safeRange = escapeHTML(rangeText);
-
-      html += `
-        <div class="template-preview-row">
-          <div>
-            <strong class="anim-key">Row ${rowIdx}: ${safeKey}</strong>
-            <span class="anim-tag">("${safeName}")</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="sub-text" style="font-size: 11px;">${safeRange}</span>
-            ${statusNotice}
-          </div>
-        </div>
-      `;
-    });
-
-    dom.templateLivePreview.innerHTML = html;
-  }
-
-  function applyActionTemplate() {
-    if (!state.doc) return;
-    const actionRaw = dom.templateActionInput ? dom.templateActionInput.value.trim() : 'idle';
-    if (!actionRaw) {
-      showToast('Please enter an action name!', 'error');
-      return;
-    }
-    if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(actionRaw)) {
-      showToast(`Action name contains reserved keyword "${actionRaw}".`, 'error');
-      return;
-    }
-    const safeAction = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(actionRaw.toLowerCase().replace(/\s+/g, '_'), 'idle') : actionRaw.toLowerCase().replace(/\s+/g, '_');
-    const action = safeAction;
-    const actionTitle = action.charAt(0).toUpperCase() + action.slice(1);
-    const dirs = (currentTemplateMode === 8) ? DIRECTIONS_8 : ((currentTemplateMode === 2) ? DIRECTIONS_2 : DIRECTIONS_4);
-    const cols = Math.max(1, parseInt(dom.templateColsInput?.value, 10) || 4);
-    const fps = Math.max(1, parseInt(dom.templateFpsInput?.value, 10) || 6);
-    const startRow = Math.max(0, parseInt(dom.templateStartRow?.value, 10) || 0);
-
-    state.beginStroke(`Apply Template ${action} (${dirs.length}-Dir)`);
-
-    // Ensure grid has enough rows and cols
-    const targetRows = Math.max(state.doc.meta.grid.rows, startRow + dirs.length);
-    const targetCols = Math.max(state.doc.meta.grid.cols, cols);
-    ensureGridDimensions(targetRows, targetCols);
-
-    // Apply each direction row
-    dirs.forEach((d, idx) => {
-      const rowIdx = startRow + idx;
-      const clipKey = `${action}_${d.id}`;
-      const clipName = `${actionTitle} ${d.label}`;
-      const frameList = [];
-
-      for (let c = 0; c < cols; c++) {
-        const cellId = `cell_${rowIdx}_${c}`;
-        const frameName = `${action}_${d.id}_${c}`;
-
-        if (!state.doc.cells[cellId]) {
-          state.doc.cells[cellId] = {
-            id: cellId,
-            name: frameName,
-            direction: d.id,
-            pixels: {}
-          };
-        } else {
-          // 100% PRESERVE EXISTING PIXEL ARTWORK
-          state.doc.cells[cellId].name = frameName;
-          state.doc.cells[cellId].direction = d.id;
-        }
-        frameList.push(cellId);
-      }
-
-      state.doc.animations[clipKey] = {
-        name: clipName,
-        direction: d.id,
-        action: action,
-        template: (currentTemplateMode === 2) ? 'platformer_2dir' : ((currentTemplateMode === 8) ? '8dir' : '4dir'),
-        frames: frameList,
-        fps: fps,
-        loop: true,
-        mode: 'loop'
-      };
-    });
-
-    state.endStroke(`Applied Template: ${action}`);
-    triggerEventAutosave();
-    refreshAll();
-    populateAnimDropdowns();
-    updateGridInspectorUI();
-    updateStudioUI();
-    closeActionTemplateModal();
-
-    showToast(`Generated ${dirs.length}-Direction template for '${action}' (${dirs.length} rows × ${cols} frames)!`, 'success');
-  }
-
-  function autoSetup4Directions() {
-    openActionTemplateModal(4);
-  }
-
-  function autoSetup8Directions() {
-    openActionTemplateModal(8);
-  }
 
   // ===========================================================================
   // DEDICATED ANIMATION STUDIO WORKSPACE LOGIC
   // ===========================================================================
 
-  function renderDedicatedAnimationStudio() {
-    if (!state.doc) return;
-    const anims = state.doc.animations;
-    const animNames = Object.keys(anims);
-
-    if (animNames.length === 0) {
-      anims['idle'] = { name: 'Idle', direction: 'none', frames: ['cell_0_0'], fps: 6, loop: true, mode: 'loop' };
-      activeStudioClipId = 'idle';
-    } else if (!anims[activeStudioClipId]) {
-      activeStudioClipId = animNames[0];
-    }
-
-    const currentClip = anims[activeStudioClipId];
-
-    if (dom.studioAnimList) {
-      dom.studioAnimList.innerHTML = '';
-      animNames.forEach(name => {
-        const clip = anims[name];
-        const item = document.createElement('div');
-        item.className = `anim-clip-item ${name === activeStudioClipId ? 'active' : ''}`;
-        item.style.cursor = 'pointer';
-
-        const titleSpan = document.createElement('span');
-        const strongEl = document.createElement('strong');
-        strongEl.textContent = clip.name || name;
-        titleSpan.appendChild(strongEl);
-
-        const badgeSpan = document.createElement('span');
-        badgeSpan.className = 'anim-clip-badge';
-        badgeSpan.textContent = `${(clip.frames || []).length} frames @ ${clip.fps || 6}fps`;
-
-        item.appendChild(titleSpan);
-        item.appendChild(badgeSpan);
-        item.addEventListener('click', () => {
-          activeStudioClipId = name;
-          renderDedicatedAnimationStudio();
-        });
-        dom.studioAnimList.appendChild(item);
-      });
-    }
-
-    if (dom.studioClipName) dom.studioClipName.value = currentClip.name || activeStudioClipId;
-    if (dom.studioClipFps) {
-      dom.studioClipFps.value = currentClip.fps || 6;
-      if (dom.studioClipFpsLabel) dom.studioClipFpsLabel.textContent = `${currentClip.fps || 6} fps`;
-    }
-    if (dom.studioClipMode) dom.studioClipMode.value = currentClip.mode || (currentClip.loop !== false ? 'loop' : 'once');
-    if (dom.studioClipDir) dom.studioClipDir.value = currentClip.direction || 'none';
-    if (dom.studioActiveClipTitle) dom.studioActiveClipTitle.textContent = currentClip.name || activeStudioClipId;
-
-    if (studioAnimPlayer) {
-      studioAnimPlayer.setAnimation(activeStudioClipId);
-      studioAnimPlayer.fps = currentClip.fps || 6;
-      studioAnimPlayer.render();
-    }
-
-    renderTimelineFramesStrip(currentClip);
-  }
-
-  function updateStudioActiveFrameUI(idx, cellId) {
-    if (!state.doc) return;
-    const clip = state.doc.animations[activeStudioClipId];
-    const frames = clip ? (clip.frames || []) : [];
-    const safeIdx = (idx !== undefined && idx !== null) ? Math.max(0, Math.min(idx, Math.max(0, frames.length - 1))) : 0;
-    const actualCellId = cellId || (frames.length > 0 ? frames[safeIdx] : null);
-    const cell = actualCellId ? state.doc.cells[actualCellId] : null;
-    const frameName = cell ? (cell.name || actualCellId) : (actualCellId || 'None');
-
-    if (dom.studioActiveFrameText) {
-      dom.studioActiveFrameText.textContent = `#${safeIdx}: ${frameName}`;
-    }
-    if (dom.timelineSelectedFrameInfo) {
-      dom.timelineSelectedFrameInfo.textContent = `Selected: #${safeIdx} - ${frameName}`;
-    }
-    if (dom.studioFrameIdxBadge) {
-      dom.studioFrameIdxBadge.textContent = `#${safeIdx}`;
-    }
-    if (dom.studioFrameCellId) {
-      dom.studioFrameCellId.value = actualCellId || '';
-    }
-    if (dom.studioFrameNameInput) {
-      if (document.activeElement !== dom.studioFrameNameInput) {
-        dom.studioFrameNameInput.value = (cell && cell.name) ? cell.name : (frameName || '');
-      }
-    }
-
-    if (dom.timelineFramesStrip) {
-      const cards = dom.timelineFramesStrip.querySelectorAll('.timeline-frame-card');
-      cards.forEach((c) => {
-        const cIdx = parseInt(c.getAttribute('data-idx'), 10);
-        c.classList.toggle('active', cIdx === safeIdx);
-      });
-    }
-  }
-
-  function selectStudioFrame(idx) {
-    if (!state.doc) return;
-    const clip = state.doc.animations[activeStudioClipId];
-    if (!clip || !clip.frames || clip.frames.length === 0) return;
-    const safeIdx = Math.max(0, Math.min(idx, clip.frames.length - 1));
-    const cellId = clip.frames[safeIdx];
-
-    // Explicit selection pauses playback so the user can inspect or edit that frame
-    if (studioAnimPlayer) {
-      if (studioAnimPlayer.isPlaying) {
-        studioAnimPlayer.stop();
-        updateStudioPlayButtonUI();
-      }
-      studioAnimPlayer.currentFrameIdx = safeIdx;
-      studioAnimPlayer.render();
-    }
-    updateStudioActiveFrameUI(safeIdx, cellId);
-  }
-
-  function renderTimelineFramesStrip(clip) {
-    if (!dom.timelineFramesStrip || !clip) return;
-    dom.timelineFramesStrip.innerHTML = '';
-
-    const frames = clip.frames || [];
-    if (dom.studioTimelineFrameCounter) {
-      dom.studioTimelineFrameCounter.textContent = `${frames.length} frames`;
-    }
-
-    frames.forEach((cellId, idx) => {
-      const cell = state.doc.cells[cellId];
-      const card = document.createElement('div');
-      card.setAttribute('data-idx', idx);
-      card.className = `timeline-frame-card ${studioAnimPlayer && studioAnimPlayer.currentFrameIdx === idx ? 'active' : ''}`;
-      card.title = `${cell ? (cell.name || cellId) : cellId} (${cellId}) - Click to select, Double-click to edit`;
-
-      const thumbCanvas = document.createElement('canvas');
-      thumbCanvas.className = 'timeline-thumbnail-canvas';
-      thumbCanvas.width = 16;
-      thumbCanvas.height = 16;
-      const tctx = thumbCanvas.getContext('2d');
-      if (cell && cell.pixels) {
-        for (const coord in cell.pixels) {
-          const [x, y] = coord.split(',').map(Number);
-          tctx.fillStyle = cell.pixels[coord];
-          tctx.fillRect(x, y, 1, 1);
-        }
-      }
-      card.appendChild(thumbCanvas);
-
-      const info = document.createElement('span');
-      info.className = 'timeline-frame-info';
-      info.textContent = `#${idx}: ${cell ? (cell.name || cellId) : cellId}`;
-      card.appendChild(info);
-
-      const actions = document.createElement('div');
-      actions.className = 'timeline-card-actions';
-
-      if (idx > 0) {
-        const btnLeft = document.createElement('button');
-        btnLeft.className = 'timeline-mini-btn';
-        btnLeft.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-        btnLeft.title = 'Move frame earlier';
-        btnLeft.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const tmp = clip.frames[idx - 1];
-          clip.frames[idx - 1] = clip.frames[idx];
-          clip.frames[idx] = tmp;
-          triggerEventAutosave();
-          renderTimelineFramesStrip(clip);
-          if (studioAnimPlayer) studioAnimPlayer.render();
-        });
-        actions.appendChild(btnLeft);
-      }
-
-      if (idx < frames.length - 1) {
-        const btnRight = document.createElement('button');
-        btnRight.className = 'timeline-mini-btn';
-        btnRight.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-        btnRight.title = 'Move frame later';
-        btnRight.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const tmp = clip.frames[idx + 1];
-          clip.frames[idx + 1] = clip.frames[idx];
-          clip.frames[idx] = tmp;
-          triggerEventAutosave();
-          renderTimelineFramesStrip(clip);
-          if (studioAnimPlayer) studioAnimPlayer.render();
-        });
-        actions.appendChild(btnRight);
-      }
-
-      const btnRemove = document.createElement('button');
-      btnRemove.className = 'timeline-mini-btn btn-remove';
-      btnRemove.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
-      btnRemove.title = 'Remove frame from this animation';
-      btnRemove.addEventListener('click', (e) => {
-        e.stopPropagation();
-        clip.frames.splice(idx, 1);
-        triggerEventAutosave();
-        renderTimelineFramesStrip(clip);
-        if (studioAnimPlayer) studioAnimPlayer.render();
-      });
-      actions.appendChild(btnRemove);
-
-      card.appendChild(actions);
-
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.timeline-mini-btn')) return;
-        selectStudioFrame(idx);
-      });
-
-      card.addEventListener('dblclick', (e) => {
-        if (e.target.closest('.timeline-mini-btn')) return;
-        selectStudioFrame(idx);
-        if (cellId && state.doc && state.doc.cells[cellId]) {
-          state.openCellTab(cellId);
-          refreshAll();
-        }
-      });
-
-      dom.timelineFramesStrip.appendChild(card);
-    });
-
-    const initialIdx = (studioAnimPlayer && studioAnimPlayer.currentFrameIdx !== undefined) ? studioAnimPlayer.currentFrameIdx : 0;
-    updateStudioActiveFrameUI(initialIdx, frames[initialIdx]);
-  }
 
   // ===========================================================================
   // CELL EDITOR RENDERING & DRAWING
@@ -6056,78 +2863,20 @@
   // PALETTE UI & PRESETS LIBRARY (Custom Library + Built-in Presets)
   // ===========================================================================
 
-  const CUSTOM_PALETTES_STORAGE_KEY = 'noiradix_custom_palettes';
 
-  function loadCustomPalettes() {
-    try {
-      const raw = localStorage.getItem(CUSTOM_PALETTES_STORAGE_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      return (parsed && typeof parsed === 'object') ? parsed : {};
-    } catch (_) {
-      return {};
-    }
-  }
-
-  function saveCustomPalettes(palettesObj) {
-    try {
-      localStorage.setItem(CUSTOM_PALETTES_STORAGE_KEY, JSON.stringify(palettesObj));
-    } catch (err) {
-      console.warn('Failed to save custom palettes to storage:', err);
-    }
-  }
-
-  function populatePaletteDropdown() {
-    if (!dom.paletteSelect) return;
-    const prevVal = dom.paletteSelect.value;
-    dom.paletteSelect.innerHTML = '';
-
-    // 1. Built-in presets
-    const builtInGroup = document.createElement('optgroup');
-    builtInGroup.label = 'Built-in Presets';
-    const builtIns = [
+  const paletteLibrary = EditorPaletteLibrary.create({
+    storage: localStorage,
+    getSelect: () => dom.paletteSelect,
+    builtIns: [
       { id: 'wispling', name: 'Wispling Ghost', count: 8 },
       { id: 'pico8', name: 'Pico-8', count: 16 },
       { id: 'gameboy', name: 'GameBoy', count: 4 },
       { id: 'endesga32', name: 'Endesga 32', count: 32 }
-    ];
-    builtIns.forEach(b => {
-      const opt = document.createElement('option');
-      opt.value = b.id;
-      opt.textContent = `${b.name} (${b.count})`;
-      builtInGroup.appendChild(opt);
-    });
-    dom.paletteSelect.appendChild(builtInGroup);
-
-    // 2. Custom Library presets
-    const customPalettes = loadCustomPalettes();
-    const customKeys = Object.keys(customPalettes);
-    if (customKeys.length > 0) {
-      const customGroup = document.createElement('optgroup');
-      customGroup.label = 'Custom Library';
-      customKeys.forEach(k => {
-        const item = customPalettes[k];
-        const opt = document.createElement('option');
-        opt.value = `custom_${k}`;
-        opt.textContent = `${item.name} (${item.colors ? item.colors.length : 0})`;
-        customGroup.appendChild(opt);
-      });
-      dom.paletteSelect.appendChild(customGroup);
-    }
-
-    // 3. Action option
-    const actionGroup = document.createElement('optgroup');
-    actionGroup.label = 'Actions';
-    const newOpt = document.createElement('option');
-    newOpt.value = '__new_preset__';
-    newOpt.textContent = '+ Save Current Palette...';
-    actionGroup.appendChild(newOpt);
-    dom.paletteSelect.appendChild(actionGroup);
-
-    if (prevVal && dom.paletteSelect.querySelector(`option[value="${prevVal}"]`)) {
-      dom.paletteSelect.value = prevVal;
-    }
-  }
+    ],
+    actionLabel: '+ Save Current Palette...',
+    fallback: null
+  });
+  const { load: loadCustomPalettes, save: saveCustomPalettes, populate: populatePaletteDropdown } = paletteLibrary;
 
   function promptAndSavePalettePreset() {
     if (!state.doc || !state.doc.palette) {
@@ -6256,9 +3005,7 @@
   let isRotatingSelection = false;
   let rotationCenter = null;
   let rotationStartAngle = 0;
-  let rotationCurrentAngle = 0;
-  let rotationBaseFloatingPixels = null;
-  let rotationBaseSel = null;
+  let rotationGestureBaseAngle = 0;
   // Transform previews replace floatingSelectionPixels. Keep an immutable
   // lift-time baseline so Escape can restore, rather than commit, artwork.
   let floatingBaselinePixels = null;
@@ -6296,7 +3043,8 @@
     floatingCurrentX = floatingOriginalSel.x;
     floatingCurrentY = floatingOriginalSel.y;
     state.beginStroke();
-    const lifted = SelectionTransform.liftPixels(target, floatingOriginalSel);
+    const lifted = floatingSession.lift(state.doc, cell, target, floatingOriginalSel);
+    if (!lifted) return;
     floatingSelectionPixels = lifted.pixels;
     floatingBaselinePixels = lifted.baselinePixels;
     floatingBaselineSel = lifted.baselineBounds;
@@ -6304,28 +3052,36 @@
     renderCellEditor();
   }
 
+  const floatingSession = EditorFloatingSelection.create({
+    get pixels() { return floatingSelectionPixels; }, set pixels(value) { floatingSelectionPixels = value; },
+    get originalBounds() { return floatingOriginalSel; }, set originalBounds(value) { floatingOriginalSel = value; },
+    get baselinePixels() { return floatingBaselinePixels; }, set baselinePixels(value) { floatingBaselinePixels = value; },
+    get baselineBounds() { return floatingBaselineSel; }, set baselineBounds(value) { floatingBaselineSel = value; },
+    get targetId() { return floatingSelectionTargetId; }, set targetId(value) { floatingSelectionTargetId = value; },
+    get baselineTargetId() { return floatingSelectionTargetId; }, set baselineTargetId(value) { floatingSelectionTargetId = value; },
+    get x() { return floatingCurrentX; }, set x(value) { floatingCurrentX = value; },
+    get y() { return floatingCurrentY; }, set y(value) { floatingCurrentY = value; }
+  });
+
   function commitFloatingSelection(label = 'Move Selection') {
     if (!floatingSelectionPixels || !floatingOriginalSel) return;
     const cell = getFloatingSelectionCell();
-    const target = getSelectionTarget(cell, floatingSelectionTargetId);
-    if (cell && target) {
-      const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
-      const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
-      SelectionTransform.placePixels(target, floatingSelectionPixels, {
-        x: floatingCurrentX, y: floatingCurrentY
-      }, { w: cw, h: ch });
-      state.selection = {
-        x: floatingCurrentX,
-        y: floatingCurrentY,
-        w: floatingOriginalSel.w,
-        h: floatingOriginalSel.h
-      };
+    const size = cell && (cell.size || state.doc.meta.cellSize);
+    const bounds = { x: floatingCurrentX, y: floatingCurrentY, w: floatingOriginalSel.w, h: floatingOriginalSel.h };
+    const result = floatingSession.commit(state.doc, bounds, size);
+    EditorCanvas.refreshSourceComposite(PIX2, result.restored);
+    if (result.status === 'committed') {
+      state.selection = { ...result.bounds };
       if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
       if (state.endStroke(label)) triggerEventAutosave();
       renderCellEditor();
       renderMiniPreview();
+    } else {
+      state.strokePreState = null;
+      renderCellEditor();
+      renderMiniPreview();
     }
-    floatingSelectionPixels = null;
+    floatingSession.clear();
     floatingOriginalSel = null;
     floatingBaselinePixels = null;
     floatingBaselineSel = null;
@@ -6335,16 +3091,11 @@
 
   function cancelFloatingSelection() {
     const cell = getFloatingSelectionCell();
-    const target = getSelectionTarget(cell, floatingSelectionTargetId);
-    if (target && floatingBaselinePixels && floatingBaselineSel) {
-      const size = cell.size || state.doc.meta.cellSize;
-      SelectionTransform.placePixels(target, floatingBaselinePixels, floatingBaselineSel, size);
-      if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
-    }
+    EditorCanvas.refreshSourceComposite(PIX2, floatingSession.cancel());
     // beginStroke() captured the pre-lift document. Cancellation leaves no
     // committed mutation, so discard it rather than recording a false undo.
     state.strokePreState = null;
-    floatingSelectionPixels = null;
+    floatingSession.clear();
     floatingOriginalSel = null;
     floatingBaselinePixels = null;
     floatingBaselineSel = null;
@@ -6357,8 +3108,6 @@
     scaleOriginalSel = null;
     scaleOriginalPixels = null;
     rotationCenter = null;
-    rotationBaseFloatingPixels = null;
-    rotationBaseSel = null;
     state.selection = null;
     renderCellEditor();
     renderMiniPreview();
@@ -6409,20 +3158,16 @@
   }
 
   function paintCellStroke(cell, tool, x0, y0, x1, y1) {
-    const target = Tools.getTargetForPlot(cell);
+    const target = cell.layers?.length ? state.getActiveRegion(cell.id) : cell;
     if (!target) return;
     const isEraser = tool === 'eraser';
     const color = isEraser ? null : Tools.brushColor(state.primaryColor, brushSettings.opacity);
     if (!isEraser && !color) return;
     const size = isEraser ? brushSettings.eraserSize : brushSettings.size;
-    const dimensions = state.doc.meta.cellSize;
-    const changed = new Set();
-    Tools.brushStroke(x0, y0, x1, y1, size, { ...dimensions, symH: state.symmetry, symV: state.symmetryVertical }, (x, y) => {
-      const key = `${x},${y}`;
-      if ((target.pixels[key] ?? null) === color) return;
-      if (isEraser) delete target.pixels[key];
-      else target.pixels[key] = color;
-      changed.add(key);
+    const dimensions = cell.size || state.doc.meta.cellSize;
+    const { keys: changed } = Tools.editRaster(target, { ...dimensions, color }, plot => {
+      Tools.brushStroke(x0, y0, x1, y1, size,
+        { ...dimensions, symH: state.symmetry, symV: state.symmetryVertical }, plot);
     });
     if (!changed.size) return;
     const display = EditorCanvas.updateComposite(PIX2, cell, dimensions, changed, state.isolatedNodeId);
@@ -6476,19 +3221,21 @@
         isRotatingSelection = true;
         isPointerDown = true;
         ensureFloatingSelection();
-        rotationBaseFloatingPixels = { ...floatingSelectionPixels };
-        rotationBaseSel = { ...state.selection };
+        const rotation = floatingSession.beginRotation(state.selection);
+        if (!rotation) { isRotatingSelection = false; isPointerDown = false; return; }
+        rotationGestureBaseAngle = rotation.angle;
         const cx = state.selection.x + state.selection.w / 2;
         const cy = state.selection.y + state.selection.h / 2;
         const screenCenterX = rect.left + cx * state.cellZoom;
         const screenCenterY = rect.top + cy * state.cellZoom;
         rotationCenter = { x: screenCenterX, y: screenCenterY, cx, cy };
         rotationStartAngle = Math.atan2(e.clientY - screenCenterY, e.clientX - screenCenterX);
-        rotationCurrentAngle = 0;
+
         return;
       }
 
       if (hit && hit !== 'body') {
+        floatingSession.resetRotation();
         isScalingSelection = true;
         activeScaleHandle = hit;
         isPointerDown = true;
@@ -6503,6 +3250,7 @@
     if (state.selection && coords.x >= state.selection.x && coords.x < state.selection.x + state.selection.w &&
         coords.y >= state.selection.y && coords.y < state.selection.y + state.selection.h) {
       // User clicked INSIDE active selection -> Start moving/dragging it!
+      floatingSession.resetRotation();
       isMovingSelection = true;
       isPointerDown = true;
       moveStartX = coords.x;
@@ -6546,8 +3294,7 @@
       }
     } else if (tool === 'bucket') {
       Tools.floodFill(cell, coords.x, coords.y, color, state.doc.meta.cellSize);
-      state.endStroke('Paint Bucket Fill');
-      triggerEventAutosave();
+      if (state.endStroke('Paint Bucket Fill')) triggerEventAutosave();
       refreshAll();
     } else if (tool === 'line' || tool === 'rect' || tool === 'rect-fill' || tool === 'circle' || tool === 'circle-fill' || tool === 'select') {
       renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color, e);
@@ -6639,18 +3386,10 @@
         const step = (15 * Math.PI) / 180;
         deltaAngle = Math.round(deltaAngle / step) * step;
       }
-      rotationCurrentAngle = deltaAngle;
-      const rotated = SelectionTransform.rotatePixelsNearestNeighbor(
-        rotationBaseFloatingPixels,
-        rotationBaseSel.w,
-        rotationBaseSel.h,
-        deltaAngle
-      );
-      floatingSelectionPixels = rotated.pixels;
-      floatingCurrentX = Math.round(rotationBaseSel.x + (rotationBaseSel.w - rotated.w) / 2);
-      floatingCurrentY = Math.round(rotationBaseSel.y + (rotationBaseSel.h - rotated.h) / 2);
-      floatingOriginalSel = { x: floatingCurrentX, y: floatingCurrentY, w: rotated.w, h: rotated.h };
-      state.selection = { ...floatingOriginalSel };
+
+      const rotated = floatingSession.rotate(rotationGestureBaseAngle + deltaAngle);
+      if (!rotated) return;
+      state.selection = { ...rotated.bounds };
       renderMovingSelectionOverlay();
       return;
     }
@@ -6687,8 +3426,7 @@
       if (cell && regionSelection.release(cell, state.activeLayerId, state.isolatedNodeId,
         cell.size || state.doc.meta.cellSize, () => state.beginStroke(), showToast)) {
         state.syncCellComposite(cell.id);
-        state.endStroke('Move regions');
-        triggerEventAutosave();
+        if (state.endStroke('Move regions')) triggerEventAutosave();
         refreshAll();
       }
       renderCellOverlay();
@@ -6743,10 +3481,10 @@
     const color = (e.button === 2) ? state.secondaryColor : state.primaryColor;
 
     if (['line', 'rect', 'rect-fill', 'circle', 'circle-fill'].includes(tool)) {
-      const target = Tools.getTargetForPlot(cell);
+      const target = cell.layers?.length ? state.getActiveRegion(cell.id) : cell;
       if (target) {
-        Tools.shapePixels(tool, dragStartX, dragStartY, coords.x, coords.y, cellShapeOptions(e), (x, y) => {
-          target.pixels[`${x},${y}`] = color;
+        Tools.editRaster(target, { ...(cell.size || state.doc.meta.cellSize), color }, plot => {
+          Tools.shapePixels(tool, dragStartX, dragStartY, coords.x, coords.y, cellShapeOptions(e), plot);
         });
         state.syncCellComposite(cell.id);
       }
@@ -6897,18 +3635,8 @@
     }
     const target = getSelectionTarget(cell);
     if (!target) return;
-    const copiedPixels = {};
-    let count = 0;
-
-    for (let py = 0; py < sel.h; py++) {
-      for (let px = 0; px < sel.w; px++) {
-        const key = `${sel.x + px},${sel.y + py}`;
-        if (target.pixels && target.pixels[key]) {
-          copiedPixels[`${px},${py}`] = target.pixels[key];
-          count++;
-        }
-      }
-    }
+    const copiedPixels = SelectionTransform.copyPixels(target, sel);
+    const count = Object.keys(copiedPixels).length;
 
     state.clipboard = {
       w: sel.w,
@@ -6951,8 +3679,7 @@
     }
 
     state.syncCellComposite(cell.id);
-    state.endStroke('Cut Selection');
-    triggerEventAutosave();
+    if (state.endStroke('Cut Selection')) triggerEventAutosave();
     refreshAll();
     renderCellOverlay();
     showToast(`Cut selection (${sel.w}×${sel.h}) to clipboard (Ctrl+X)`, 'success');
@@ -7007,8 +3734,7 @@
     };
 
     state.syncCellComposite(cell.id);
-    state.endStroke('Paste Selection');
-    triggerEventAutosave();
+    if (state.endStroke('Paste Selection')) triggerEventAutosave();
     refreshAll();
     renderCellOverlay();
     showToast(`Pasted ${pastedCount} pixels into ${cell.name || cell.id}! (Ctrl+V)`, 'success');
@@ -7023,15 +3749,14 @@
       // Discard floating pixels without writing to destination!
       // Destination background pixels are 100% UNTOUCHED!
       // Original location was already cleared when lifted.
-      floatingSelectionPixels = null;
+      floatingSession.clear();
       floatingOriginalSel = null;
       floatingBaselinePixels = null;
       floatingBaselineSel = null;
       floatingSelectionCellId = null;
       floatingSelectionTargetId = null;
       state.selection = null;
-      state.endStroke('Delete Floating Selection');
-      triggerEventAutosave();
+      if (state.endStroke('Delete Floating Selection')) triggerEventAutosave();
       renderCellEditor();
       renderMiniPreview();
       renderCellOverlay();
@@ -7055,8 +3780,7 @@
       }
       state.selection = null;
       state.syncCellComposite(cell.id);
-      state.endStroke('Delete Selection');
-      triggerEventAutosave();
+      if (state.endStroke('Delete Selection')) triggerEventAutosave();
       refreshAll();
       renderCellOverlay();
       showToast(`Deleted selection (${sel.w}×${sel.h}) (Del)`);
@@ -7065,8 +3789,7 @@
         state.beginStroke();
         target.pixels = {};
         state.syncCellComposite(cell.id);
-        state.endStroke('Clear Artwork');
-        triggerEventAutosave();
+        if (state.endStroke('Clear Artwork')) triggerEventAutosave();
         refreshAll();
         showToast(`Cleared ${cell.name || cell.id}`);
       }
@@ -7095,8 +3818,7 @@
       }
     }
     state.syncCellComposite(cell.id);
-    state.endStroke('Fill Selection');
-    triggerEventAutosave();
+    if (state.endStroke('Fill Selection')) triggerEventAutosave();
     refreshAll();
     renderCellOverlay();
     showToast(`Filled selection with ${state.primaryColor}`, 'success');
@@ -7106,55 +3828,21 @@
     const cell = state.getActiveCell();
     if (!cell) return;
 
-    if (floatingSelectionPixels && floatingOriginalSel) {
-      const temp = { ...floatingSelectionPixels };
-      floatingSelectionPixels = {};
-      for (const relKey in temp) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const newRx = horizontal ? (floatingOriginalSel.w - 1 - rx) : rx;
-        const newRy = horizontal ? ry : (floatingOriginalSel.h - 1 - ry);
-        floatingSelectionPixels[`${newRx},${newRy}`] = temp[relKey];
-      }
-      renderMovingSelectionOverlay();
-      showToast(`Flipped selection ${horizontal ? 'Horizontally' : 'Vertically'}`);
-      return;
-    }
-
-    if (!state.selection) {
+    if (!state.selection && !floatingSelectionPixels) {
       showToast('Select a region to flip.');
       return;
     }
-    const target = getSelectionTarget(cell);
-    if (!target) {
+    const wasFloating = Boolean(floatingSelectionPixels);
+    ensureFloatingSelection();
+    if (!floatingSession.flip(floatingOriginalSel, horizontal)) {
       showToast('Select an editable layer or region');
       return;
     }
-    state.beginStroke();
-    const sel = state.selection;
-    const temp = {};
-
-    for (let py = 0; py < sel.h; py++) {
-      for (let px = 0; px < sel.w; px++) {
-        const key = `${sel.x + px},${sel.y + py}`;
-        if (target.pixels && target.pixels[key]) {
-          temp[`${px},${py}`] = target.pixels[key];
-          delete target.pixels[key];
-        }
-      }
-    }
-
-    for (const relKey in temp) {
-      const [rx, ry] = relKey.split(',').map(Number);
-      const newRx = horizontal ? (sel.w - 1 - rx) : rx;
-      const newRy = horizontal ? ry : (sel.h - 1 - ry);
-      target.pixels[`${sel.x + newRx},${sel.y + newRy}`] = temp[relKey];
-    }
-
-    state.syncCellComposite(cell.id);
-    state.endStroke(horizontal ? 'Flip Horizontal' : 'Flip Vertical');
-    triggerEventAutosave();
-    refreshAll();
-    renderCellOverlay();
+    if (!wasFloating) {
+      commitFloatingSelection(horizontal ? 'Flip Horizontal' : 'Flip Vertical');
+      refreshAll();
+      renderCellOverlay();
+    } else renderMovingSelectionOverlay();
     showToast(`Flipped selection ${horizontal ? 'Horizontally' : 'Vertically'}`);
   }
 
@@ -7214,12 +3902,7 @@
       showToast('Select an editable layer or region');
       return;
     }
-    floatingSelectionPixels = SelectionTransform.rotatePixelsNearestNeighbor(
-      floatingSelectionPixels, bounds.w, bounds.h, Math.PI / 2
-    ).pixels;
-    floatingOriginalSel = { ...next };
-    floatingCurrentX = next.x;
-    floatingCurrentY = next.y;
+    floatingSession.rotate90(bounds, size);
     state.selection = { ...next };
     if (!wasFloating) {
       commitFloatingSelection('Rotate selection 90°');
@@ -7267,8 +3950,7 @@
       if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(k)) continue;
       cell.pixels[k] = state.clipboard.pixels[k];
     }
-    state.endStroke(`Paste Frame into ${cellId}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Paste Frame into ${cellId}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Pasted into "${cell.name || cellId}" (Ctrl+V)`, 'success');
   }
@@ -7309,8 +3991,7 @@
       newPixels[`${nx},${ny}`] = cell.pixels[coord];
     }
     cell.pixels = newPixels;
-    state.endStroke(`Flip Frame ${horizontal ? 'H' : 'V'}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Flip Frame ${horizontal ? 'H' : 'V'}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Flipped ${cell.name || cellId} ${horizontal ? 'Horizontally' : 'Vertically'}`);
   }
@@ -7343,8 +4024,7 @@
       }
     }
     const dirName = horizontal ? 'Horizontal' : 'Vertical';
-    state.endStroke(`Flip Row ${rowIdx} ${dirName}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Flip Row ${rowIdx} ${dirName}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Flipped Row ${rowIdx} ("${rowTitle}") ${dirName.toLowerCase()} (${flippedCount} frame(s) modified).`, 'success');
   }
@@ -7354,8 +4034,7 @@
     const cell = state.doc.cells[cellId];
     state.beginStroke();
     cell.pixels = {};
-    state.endStroke(`Clear Frame ${cellId}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Clear Frame ${cellId}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Cleared frame ${cell.name || cellId}`);
   }
@@ -7611,11 +4290,6 @@
     if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
       return;
     }
-    if (isDocumentDirty) {
-      const confirmDiscard = confirm('You have unsaved changes in current project. Discard changes and open new file?');
-      if (!confirmDiscard) return;
-    }
-
     if ('showOpenFilePicker' in window) {
       try {
         const [handle] = await window.showOpenFilePicker({
@@ -7625,26 +4299,7 @@
           }],
           multiple: false
         });
-        const file = await handle.getFile();
-        const text = await file.text();
-        const doc = PIX2.parse(text);
-        currentFileHandle = handle;
-        currentFileName = file.name;
-        currentFilePath = file.name;
-        lastSavedContent = text;
-        lastKnownFileModified = file.lastModified;
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) btnReload.classList.remove('pulse-warning');
-        await persistFileHandle(handle);
-        localStorage.setItem('noiradix_session_type', 'disk');
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        state.setDocument(doc);
-        syncOrRegisterProjectSession(doc, file.name, handle, file.name);
-        setDirty(false);
-        refreshAll();
-        showToast(`Opened ${file.name} from disk!`, 'success');
+        await handleFileOpenFromHandle(handle);
         return;
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -7665,124 +4320,103 @@
     input.click();
   }
 
-  async function saveFileNative(forceSaveAs = false) {
-    if (!state.doc) return;
-    if (typeof commitFloatingSelection === 'function') {
-      commitFloatingSelection();
-    }
+  const enqueueStudioSave = EditorFileSave.createQueue();
+  let activeStudioSaves = 0;
 
-    // If manual code editing is active in the Code tab, ensure edits are parsed into document before saving
+  function saveFileNative(forceSaveAs = false) {
+    if (!state.doc) return Promise.resolve();
+    commitFloatingSelection();
     if (isCodeEditingUnlocked && dom.codeTextarea && state.activeTabId === 'tab-pix2-code') {
       try {
         const parsed = PIX2.parse(dom.codeTextarea.value);
-        state.setDocument(parsed, true);
-      } catch (err) {
-        showToast('Cannot save: PIX2 code has syntax errors. Please fix or lock before saving.', 'error');
-        return;
+        if (!PIX2.validate(parsed, { strict: true }).valid) throw new Error('Invalid PIX2');
+        if (state.applyDocument(parsed, 'Apply Code')) triggerEventAutosave();
+      } catch (_) {
+        showToast('Cannot save invalid PIX2 code. Fix the diagnostics first.', 'error');
+        return Promise.resolve();
       }
     }
-
-    const text = PIX2.serialize(state.doc);
-
-    // Direct Save to existing handle (Only if filename still matches and not forced to Save As)
-    const isDirectHandleValid = currentFileHandle &&
-                                'createWritable' in currentFileHandle &&
-                                (!currentFileName || currentFileHandle.name.normalize('NFC') === currentFileName.normalize('NFC'));
-
-    if (!forceSaveAs && isDirectHandleValid) {
-      try {
-        if (currentFileHandle.queryPermission) {
-          const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
-          if (perm !== 'granted') {
-            const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
-            if (req !== 'granted') {
-              showToast('Write permission to file was denied.', 'error');
-              return;
-            }
-          }
-        }
-        const writable = await currentFileHandle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        setDirty(false);
-        lastSavedContent = text;
-        try {
-          const fresh = await currentFileHandle.getFile();
-          lastKnownFileModified = fresh.lastModified;
-        } catch (_) {}
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) btnReload.classList.remove('pulse-warning');
-        localStorage.setItem('noiradix_session_type', 'disk');
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        localStorage.setItem('pix2_last_saved_content', text);
-        localStorage.removeItem('pix2_recovery_snapshot');
-        showToast(`Saved to ${currentFileHandle.name}!`, 'success');
-        updateFileStatusUI();
-        return;
-      } catch (err) {
-        console.warn('Direct overwrite failed:', err);
-        showToast(`Could not write directly to ${currentFileHandle.name}: ${err.message}`, 'error');
-        return;
-      }
-    }
-
-    // Save As via File System Access API (Only when forceSaveAs is true or no handle exists)
-    if ('showSaveFilePicker' in window) {
-      try {
-        const suggested = currentFileName || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'sprite');
-        const handle = await window.showSaveFilePicker({
-          suggestedName: suggested,
-          types: [{
-            description: 'PIX2 Sprite File (*.pix2)',
-            accept: { 'text/plain': ['.pix2'] }
-          }]
-        });
-        const writable = await handle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        currentFileHandle = handle;
-        currentFileName = handle.name;
-        currentFilePath = handle.name;
-        lastSavedContent = text;
-        try {
-          const fresh = await handle.getFile();
-          lastKnownFileModified = fresh.lastModified;
-        } catch (_) {}
-        pendingExternalConflict = null;
-        const btnReload = document.getElementById('btn-reload-file');
-        if (btnReload) btnReload.classList.remove('pulse-warning');
-        await persistFileHandle(handle);
-        localStorage.setItem('noiradix_session_type', 'disk');
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        localStorage.setItem('pix2_last_saved_content', text);
-        setDirty(false);
-        localStorage.removeItem('pix2_recovery_snapshot');
-        refreshAll();
-        showToast(`Saved as ${handle.name}!`, 'success');
-        return;
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        console.warn('Save file picker failed, falling back to download:', err);
-      }
-    }
-
-    fallbackDownloadSave(text);
+    return saveStudioSnapshot({ interactive: true, forceSaveAs });
   }
 
-  function fallbackDownloadSave(text) {
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const fileNameToDownload = currentFileName || sanitizeSafeFilename(state.doc ? state.doc.meta.title : null, '.pix2', 'sprite');
-    a.download = fileNameToDownload;
-    a.click();
-    URL.revokeObjectURL(url);
-    setDirty(false);
-    showToast(`Downloaded ${fileNameToDownload}!`, 'success');
+  function saveStudioSnapshot({ interactive = false, forceSaveAs = false } = {}) {
+    const session = getActiveSession();
+    const doc = state.doc;
+    if (!session || !doc || floatingSelectionPixels) return Promise.resolve(false);
+    const revision = documentRevision;
+    const text = PIX2.serialize(doc);
+    const fileName = currentFileName || sanitizeSafeFilename(doc.meta.title, '.pix2', 'sprite');
+    const direct = !forceSaveAs && currentFileHandle?.createWritable ? currentFileHandle : null;
+    const access = direct ? EditorFileSave.permission(direct, interactive) : Promise.resolve(true);
+    // Open a picker during the original user gesture, before waiting for other writes.
+    let picker;
+    if (!direct && interactive && typeof window.showSaveFilePicker === 'function') {
+      try {
+        picker = window.showSaveFilePicker({ suggestedName: fileName,
+          types: [{ description: 'PIX2 Sprite File', accept: { 'text/plain': ['.pix2'] } }] });
+      } catch (error) {
+        picker = Promise.reject(error);
+      }
+      picker.catch(() => {});
+    }
+    activeStudioSaves++;
+    return enqueueStudioSave(async () => {
+      try {
+        if (!projectSessions.includes(session)) return false;
+        if (!await access) throw new Error('Write permission was denied');
+        const handle = picker ? await picker : direct;
+        let modified = 0;
+        if (handle) modified = await EditorFileSave.write(handle, text);
+        else if (interactive) fallbackDownloadSave(text, fileName);
+        else return false;
+        if (!projectSessions.includes(session)) return true;
+        const active = getActiveSession() === session;
+        if (active) saveCurrentSessionState();
+        session.lastSavedContent = text;
+        session.lastSavedRevision = revision;
+        session.isDirty = session.revision !== revision || PIX2.serialize(session.doc) !== text;
+        session.lastKnownFileModified = modified;
+        session.pendingExternalConflict = null;
+        if (handle) {
+          session.fileHandle = handle;
+          session.fileName = handle.name;
+          session.filePath = handle.name;
+        }
+        if (active) {
+          if (handle) {
+            currentFileHandle = handle;
+            currentFileName = session.fileName;
+            currentFilePath = session.filePath;
+            persistFileHandle(handle);
+          }
+          lastSavedContent = text;
+          lastKnownFileModified = modified;
+          pendingExternalConflict = null;
+          lastSavedRevision = revision;
+          isDocumentDirty = session.isDirty;
+          if (!isDocumentDirty) setDirty(false);
+          updateFileStatusUI();
+          renderProjectTabs();
+          if (interactive) showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName, 'success');
+        }
+        await persistAllProjectSessions();
+        return true;
+      } catch (error) {
+        if (error.name !== 'AbortError') showToast('Save failed: ' + error.message, 'error');
+        return false;
+      } finally {
+        activeStudioSaves--;
+      }
+    });
+  }
+
+  function fallbackDownloadSave(text, fileName) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   // ===========================================================================
@@ -7790,12 +4424,17 @@
   // ===========================================================================
 
   async function checkAndReloadExternalFileChanges(force = false) {
-    if (!currentFileHandle || isExternalReloading) return;
+    if (!currentFileHandle || isExternalReloading || activeStudioSaves) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
+    const watchedHandle = currentFileHandle;
+    const watchedSession = getActiveSession();
+    const watchedRevision = documentRevision;
+    const stillCurrent = () => currentFileHandle === watchedHandle && getActiveSession() === watchedSession && documentRevision === watchedRevision && !activeStudioSaves;
     try {
       isExternalReloading = true;
       const file = await currentFileHandle.getFile();
+      if (!stillCurrent()) return;
       const currentModified = file.lastModified;
 
       // Check if file modified time is newer than our recorded timestamp
@@ -7805,6 +4444,7 @@
       }
 
       const text = await file.text();
+      if (!stillCurrent()) return;
       if (!text || !text.trim()) {
         isExternalReloading = false;
         return;
@@ -7826,8 +4466,8 @@
       }
 
       // Safe reload (preserving active tabs)
-      const newDoc = PIX2.parse(text);
-      state.setDocument(newDoc, true);
+      const newDoc = PIX2.parseValidated(text);
+      state.applyDocument(newDoc, 'External Reload');
       lastKnownFileModified = currentModified;
       lastSavedContent = text;
       localStorage.setItem('pix2_last_saved_content', text);
@@ -7907,557 +4547,29 @@
 
   let isCodeEditingUnlocked = false;
 
+  const sourceController = StudioSource.create({
+    state: studioDocumentModel, dom,
+    view: {
+      get isCodeEditingUnlocked() { return isCodeEditingUnlocked; }, set isCodeEditingUnlocked(value) { isCodeEditingUnlocked = value; }
+    },
+
+    escapeHtml: (...args) => escapeHtml(...args),
+    refreshAll: (...args) => refreshAll(...args),
+    showToast: (...args) => showToast(...args),
+    triggerEventAutosave: (...args) => triggerEventAutosave(...args)
+  });
+  const { renderCodeEditor, handleBeforeLeaveCodeTab, toggleCodeEditMode, copyRawPix2Code, applyCodeToDoc, updateAiGuidePane, copyAiPrompt } = sourceController;
+
+
   function escapeHtml(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  function splitLineComment(rawLine) {
-    if (!rawLine) return { code: '', comment: '' };
-    const semiIdx = rawLine.indexOf(';');
-    const text = (semiIdx >= 0 ? rawLine.slice(0, semiIdx) : rawLine);
-    let comment = (semiIdx >= 0 ? rawLine.slice(semiIdx) : '');
-
-    let code = '';
-    let inQuote = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (ch === '"' || ch === "'") inQuote = !inQuote;
-      if (!inQuote && ch === '#') {
-        const rest = text.slice(i);
-        const hexMatch = rest.match(/^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=[\s,;"']|$)/);
-        if (hexMatch) {
-          code += hexMatch[0];
-          i += hexMatch[0].length - 1;
-          continue;
-        } else {
-          comment = text.slice(i) + comment;
-          break;
-        }
-      }
-      code += ch;
-    }
-    return { code, comment };
-  }
-
-  function highlightPix2Code(code) {
-    if (!code) return '';
-    const lines = code.split('\n');
-    return lines.map((line, idx) => {
-      const { code: codePart, comment: commentPart } = splitLineComment(line);
-
-      let html = escapeHtml(codePart);
-
-      // 1. Strings (mask to avoid token collision)
-      const strMap = [];
-      html = html.replace(/(&quot;.*?&quot;|"[^"]*"|'[^']*')/g, (m) => {
-        strMap.push('<span class="syn-str">' + m + '</span>');
-        return '___PIXSTR_' + (strMap.length - 1) + '___';
-      });
-
-      // 2. Hex colors with color preview dot swatch (mask before number detection to prevent numeric hex like #080610 corruption)
-      const colMap = [];
-      html = html.replace(/(#[0-9a-fA-F]{3,8})\b/g, (m) => {
-        colMap.push('<span class="syn-color"><span class="syn-swatch" style="background-color:' + m + '"></span>' + m + '</span>');
-        return '___PIXCOL_' + (colMap.length - 1) + '___';
-      });
-
-      // 3. Section directives (@meta, @grid, @palette, @cell, etc.)
-      html = html.replace(/(@[a-zA-Z0-9_]+)/g, '<span class="syn-dir">$1</span>');
-
-      // 4. Keys followed by colon (key:) - mask to protect key names and colon
-      const keyMap = [];
-      html = html.replace(/\b([a-zA-Z0-9_]+):/g, (_, k) => {
-        keyMap.push('<span class="syn-key">' + k + ':</span>');
-        return '___PIXKEY_' + (keyMap.length - 1) + '___';
-      });
-
-      // 5. Drawing commands & vector macros
-      html = html.replace(/\b(sym_dot|line|rect|fill|pixel|dot)\b/g, '<span class="syn-cmd">$1</span>');
-      html = html.replace(/(^|\s)(p)(?=\s|$)/g, '$1<span class="syn-cmd">$2</span>');
-
-      // 6. Keywords
-      html = html.replace(/\b(true|false|loop|once|outline|none|down|up|right|left|down_right|down_left|up_right|up_left)\b/g, '<span class="syn-kw">$1</span>');
-
-      // 7. Numbers, dimensions, coordinates (outside tags & tokens)
-      html = html.replace(/\b(\d+(?:,\d+|\.\d+|x\d+)?)\b(?![^<]*>)/g, '<span class="syn-num">$1</span>');
-
-      // 8. Restore tokens safely in reverse order
-      html = html.replace(/___PIXKEY_(\d+)___/g, (_, i) => keyMap[i]);
-      html = html.replace(/___PIXCOL_(\d+)___/g, (_, i) => colMap[i]);
-      html = html.replace(/___PIXSTR_(\d+)___/g, (_, i) => strMap[i]);
-
-      if (commentPart) {
-        html += '<span class="syn-cmt">' + escapeHtml(commentPart) + '</span>';
-      }
-
-      const lineNum = '<span class="line-num">' + (idx + 1) + '</span>';
-      return '<div class="code-line">' + lineNum + '<span class="line-content">' + (html || ' ') + '</span></div>';
-    }).join('');
-  }
-
-  function renderCodeEditor() {
-    if (!state.doc) return;
-
-    if (!isCodeEditingUnlocked) {
-      const serialized = PIX2.serialize(state.doc);
-      if (dom.codeTextarea) dom.codeTextarea.value = serialized;
-      if (dom.codeViewer) {
-        dom.codeViewer.innerHTML = highlightPix2Code(serialized);
-        dom.codeViewer.classList.remove('hidden');
-      }
-      if (dom.codeTextarea) {
-        dom.codeTextarea.classList.add('hidden');
-        dom.codeTextarea.readOnly = true;
-      }
-      if (dom.codeModeBadge) {
-        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-        dom.codeModeBadge.className = 'badge badge-subtle';
-      }
-      if (dom.btnToggleEditCode) {
-        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
-        dom.btnToggleEditCode.classList.remove('btn-warning');
-        dom.btnToggleEditCode.classList.add('btn-secondary');
-        dom.btnToggleEditCode.title = 'Unlock to edit PIX2 code manually';
-      }
-      if (dom.btnApplyCode) {
-        dom.btnApplyCode.classList.add('hidden');
-      }
-    }
-    updateAiGuidePane(dom.selectAiPromptMode ? dom.selectAiPromptMode.value : 'all-in-one');
-  }
-
-  function lockCodeEditingSilently() {
-    isCodeEditingUnlocked = false;
-    if (dom.codeTextarea) {
-      dom.codeTextarea.classList.add('hidden');
-      dom.codeTextarea.readOnly = true;
-      dom.codeTextarea.classList.remove('editing-active');
-    }
-
-    if (dom.codeViewer && state.doc) {
-      const serialized = PIX2.serialize(state.doc);
-      if (dom.codeTextarea) dom.codeTextarea.value = serialized;
-      dom.codeViewer.innerHTML = highlightPix2Code(serialized);
-      dom.codeViewer.classList.remove('hidden');
-    }
-
-    if (dom.btnToggleEditCode) {
-      dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Code';
-      dom.btnToggleEditCode.classList.remove('btn-warning');
-      dom.btnToggleEditCode.classList.add('btn-secondary');
-      dom.btnToggleEditCode.title = 'Unlock to edit PIX2 code manually';
-    }
-
-    if (dom.codeModeBadge) {
-      dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-      dom.codeModeBadge.className = 'badge badge-subtle';
-    }
-
-    if (dom.btnApplyCode) {
-      dom.btnApplyCode.classList.add('hidden');
-    }
-  }
-
-  function handleBeforeLeaveCodeTab() {
-    if (!isCodeEditingUnlocked || !dom.codeTextarea || !state.doc) return true;
-    const currentDocCode = PIX2.serialize(state.doc);
-    const textareaCode = dom.codeTextarea.value;
-    if (textareaCode.trim() === currentDocCode.trim()) {
-      lockCodeEditingSilently();
-      return true;
-    }
-
-    const wantApply = confirm(
-      '⚠️ UNAPPLIED CODE EDITS DETECTED:\n\n' +
-      'You have manual modifications in the PIX2 Code Editor that have not been applied to the project.\n\n' +
-      '• Click OK to APPLY edits to canvas and continue.\n' +
-      '• Click Cancel to DISCARD edits and switch tabs.'
-    );
-
-    if (wantApply) {
-      try {
-        const parsed = PIX2.parse(textareaCode);
-        state.setDocument(parsed, true);
-        state.saveSnapshot('Apply Code');
-        triggerEventAutosave();
-        lockCodeEditingSilently();
-        showToast('Applied PIX2 code edits to project!', 'success');
-        return true;
-      } catch (err) {
-        alert(`Cannot switch tab: PIX2 code contains syntax errors:\n${err.message}\n\nPlease fix the errors or click Cancel to discard.`);
-        return false;
-      }
-    } else {
-      // Discard edits and lock back to safe AST view
-      lockCodeEditingSilently();
-      showToast('Unapplied code edits discarded.', 'info');
-      return true;
-    }
-  }
-
-  function toggleCodeEditMode() {
-    if (!dom.codeTextarea) return;
-
-    if (!isCodeEditingUnlocked) {
-      const confirmed = confirm(
-        '⚠️ DIRECT CODE EDITING WARNING:\n\n' +
-        'Manually modifying PIX2 code can corrupt sprite syntax or desynchronize animation sequences if the format grammar is not followed accurately.\n\n' +
-        '💡 RECOMMENDED: Use your AI Copilot!\n' +
-        'Click "Copy for AI Prompt" or "Copy PIX2 Code" to let an AI modify the code safely and intelligently.\n\n' +
-        'Are you sure you want to unlock direct code editing?'
-      );
-      if (!confirmed) return;
-
-      isCodeEditingUnlocked = true;
-      if (dom.codeViewer) dom.codeViewer.classList.add('hidden');
-      if (dom.codeTextarea) {
-        dom.codeTextarea.classList.remove('hidden');
-        dom.codeTextarea.readOnly = false;
-        dom.codeTextarea.classList.add('editing-active');
-        dom.codeTextarea.focus();
-      }
-
-      if (dom.btnToggleEditCode) {
-        dom.btnToggleEditCode.innerHTML = '<i class="fa-solid fa-lock"></i> Lock Code';
-        dom.btnToggleEditCode.classList.remove('btn-secondary');
-        dom.btnToggleEditCode.classList.add('btn-warning');
-        dom.btnToggleEditCode.title = 'Lock code and revert to safe syntax viewer';
-      }
-
-      if (dom.codeModeBadge) {
-        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-pen"></i> Direct Editing Active';
-        dom.codeModeBadge.className = 'badge badge-warning';
-      }
-
-      if (dom.btnApplyCode) {
-        dom.btnApplyCode.classList.remove('hidden');
-      }
-
-      showToast('Direct code editing enabled. Click "Apply to Canvas" to commit changes.', 'warning');
-    } else {
-      // Check for unapplied code edits before locking
-      if (dom.codeTextarea && state.doc) {
-        const currentDocCode = PIX2.serialize(state.doc);
-        if (dom.codeTextarea.value.trim() !== currentDocCode.trim()) {
-          const wantApply = confirm(
-            '⚠️ UNAPPLIED CODE EDITS DETECTED:\n\n' +
-            'You have modified PIX2 code that has not been applied to the canvas.\n\n' +
-            '• Click OK to apply your edits now and lock safely.\n' +
-            '• Click Cancel to discard edits and revert to canvas state.'
-          );
-          if (wantApply) {
-            applyCodeToDoc();
-            return;
-          }
-        }
-      }
-
-      lockCodeEditingSilently();
-      showToast('Code locked in safe syntax view mode.', 'info');
-    }
-  }
-
-  function copyRawPix2Code() {
-    if (!state.doc) return;
-    const code = (isCodeEditingUnlocked && dom.codeTextarea && state.activeTabId === 'tab-pix2-code')
-      ? dom.codeTextarea.value
-      : PIX2.serialize(state.doc);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(code).then(() => {
-        showToast('Copied raw .PIX2 code to clipboard!', 'success');
-      }).catch(() => {
-        fallbackCopyText(code);
-      });
-    } else {
-      fallbackCopyText(code);
-    }
-  }
-
-  function fallbackCopyText(text) {
-    const tempTa = document.createElement('textarea');
-    tempTa.value = text;
-    tempTa.style.position = 'fixed';
-    tempTa.style.opacity = '0';
-    document.body.appendChild(tempTa);
-    tempTa.select();
-    try {
-      document.execCommand('copy');
-      showToast('Copied raw .PIX2 code to clipboard!', 'success');
-    } catch (e) {
-      alert('Could not copy automatically. You can copy the code manually.');
-    }
-    document.body.removeChild(tempTa);
-  }
-
-  function applyCodeToDoc() {
-    if (!dom.codeTextarea) return;
-    try {
-      const code = dom.codeTextarea.value;
-      const newDoc = PIX2.parse(code);
-      state.setDocument(newDoc, true);
-      state.saveSnapshot('Apply Code');
-      triggerEventAutosave();
-
-      // Automatically lock code editing after successful apply for safety
-      lockCodeEditingSilently();
-
-      refreshAll();
-      showToast('PIX2 Code parsed & applied to canvas successfully!', 'success');
-    } catch (err) {
-      alert(`Error parsing PIX2 code:\n${err.message}`);
-    }
-  }
 
   // ===========================================================================
   // AI SPECIFICATION & CONTEXTUAL PROMPT STUDIO
   // ===========================================================================
 
-  function getSpriteMath(cw, ch) {
-    cw = Math.min(Math.max(1, parseInt(cw, 10) || 16), 512);
-    ch = Math.min(Math.max(1, parseInt(ch, 10) || 16), 512);
-    const axisX = (cw - 1) / 2;
-    const axisXStr = axisX.toFixed(1);
-
-    // Dynamic vertical landmarks proportional to canvas height
-    const topMargin = Math.max(1, Math.round(ch * 0.05));
-    const headEndY = Math.max(topMargin + 3, Math.round(ch * 0.38));
-    const eyeStartY = Math.max(topMargin + 2, Math.round(ch * 0.28));
-    const eyeEndY = Math.min(headEndY - 1, Math.round(ch * 0.36));
-    const torsoStartY = headEndY + 1;
-    const torsoEndY = Math.max(torsoStartY + 3, Math.round(ch * 0.72));
-    const legsStartY = torsoEndY + 1;
-    const legsEndY = Math.max(legsStartY + 1, ch - 2);
-    const groundY = ch - 1;
-
-    // Dynamic horizontal widths & bounds proportional to canvas width
-    const bodyW = Math.max(6, Math.round(cw * 0.65));
-    const startX = Math.floor((cw - bodyW) / 2);
-    const endX = startX + bodyW - 1;
-
-    const headW = Math.max(6, Math.round(cw * 0.55));
-    const headStartX = Math.floor((cw - headW) / 2);
-    const headEndX = headStartX + headW - 1;
-
-    const eyeOffset = Math.max(1, Math.round(cw * 0.12));
-    const eyeLeftX = Math.round(axisX - eyeOffset - 0.5);
-    const eyeRightX = Math.round(axisX + eyeOffset + 0.5);
-
-    return {
-      cw, ch, axisX, axisXStr,
-      head: { y: [topMargin, headEndY], w: headW, x: [headStartX, headEndX] },
-      eyes: { y: [eyeStartY, eyeEndY], leftX: eyeLeftX, rightX: eyeRightX },
-      torso: { y: [torsoStartY, torsoEndY], w: bodyW, x: [startX, endX] },
-      legs: { y: [legsStartY, legsEndY] },
-      groundY
-    };
-  }
-
-  function updateAiGuidePane(mode = 'all-in-one') {
-    const titleEl = document.getElementById('ai-guide-title');
-    const contentEl = document.getElementById('ai-guide-content');
-    if (!contentEl) return;
-
-    const cw = (state.doc && state.doc.meta && state.doc.meta.cellSize) ? state.doc.meta.cellSize.w : 16;
-    const ch = (state.doc && state.doc.meta && state.doc.meta.cellSize) ? state.doc.meta.cellSize.h : 16;
-    const m = getSpriteMath(cw, ch);
-
-    const canonicalTableHtml = `
-      <table class="guide-table">
-        <thead>
-          <tr>
-            <th>Cell Resolution</th>
-            <th>Valid Coords</th>
-            <th>Center Axis (axisX)</th>
-            <th>Bilateral Symmetry Macro</th>
-            <th>Reflection Math</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>16 × 16</strong></td>
-            <td>0 to 15</td>
-            <td><code>X = 7.5</code></td>
-            <td><code>sym_dot x,y 7.5 &lt;color&gt;</code></td>
-            <td><code>x' = 15 - x</code></td>
-          </tr>
-          <tr>
-            <td><strong>24 × 24</strong></td>
-            <td>0 to 23</td>
-            <td><code>X = 11.5</code></td>
-            <td><code>sym_dot x,y 11.5 &lt;color&gt;</code></td>
-            <td><code>x' = 23 - x</code></td>
-          </tr>
-          <tr>
-            <td><strong>32 × 32</strong></td>
-            <td>0 to 31</td>
-            <td><code>X = 15.5</code></td>
-            <td><code>sym_dot x,y 15.5 &lt;color&gt;</code></td>
-            <td><code>x' = 31 - x</code></td>
-          </tr>
-          <tr>
-            <td><strong>64 × 64</strong></td>
-            <td>0 to 63</td>
-            <td><code>X = 31.5</code></td>
-            <td><code>sym_dot x,y 31.5 &lt;color&gt;</code></td>
-            <td><code>x' = 63 - x</code></td>
-          </tr>
-          <tr>
-            <td><strong>W × H (Custom)</strong></td>
-            <td>0..W-1, 0..H-1</td>
-            <td><code>axisX = (W-1)/2</code></td>
-            <td><code>sym_dot x,y axisX &lt;color&gt;</code></td>
-            <td><code>x' = (W - 1) - x</code></td>
-          </tr>
-        </tbody>
-      </table>
-    `;
-
-    const activeBoundsBoxHtml = `
-      <div class="guide-formula-box" style="border-left: 3px solid #3b82f6; margin-bottom: 10px;">
-        <p><strong>🎯 Active Canvas (${cw}×${ch}):</strong> Center Axis <code>axisX = ${m.axisXStr}</code></p>
-        <p><strong>Head &amp; Hair:</strong> Y = ${m.head.y[0]}..${m.head.y[1]}, X = ${m.head.x[0]}..${m.head.x[1]} (Width ~ ${m.head.w}px)</p>
-        <p><strong>Eyes:</strong> Y = ${m.eyes.y[0]}..${m.eyes.y[1]} (Left: X ≈ ${m.eyes.leftX}, Right: X ≈ ${m.eyes.rightX})</p>
-        <p><strong>Torso / Outfit / Armor:</strong> Y = ${m.torso.y[0]}..${m.torso.y[1]}, X = ${m.torso.x[0]}..${m.torso.x[1]} (Width ~ ${m.torso.w}px)</p>
-        <p><strong>Legs / Ghost Wisps:</strong> Y = ${m.legs.y[0]}..${m.legs.y[1]}</p>
-        <p><strong>Ground Shadow / Clearance:</strong> Y = ${m.groundY} (Bottom boundary)</p>
-      </div>
-    `;
-
-    if (mode === 'all-in-one') {
-      if (titleEl) titleEl.textContent = '🌟 All-in-One Master Cognitive Guide (Complete Reference)';
-      contentEl.innerHTML = `
-        <h4>1. Canonical Coordinate &amp; Bilateral Symmetry Reference Table</h4>
-        ${canonicalTableHtml}
-
-        <h4>2. Live Computed Anatomy Landmarks for Active Canvas (${cw}×${ch})</h4>
-        ${activeBoundsBoxHtml}
-
-        <h4>3. Solid Sprite Mass Mandate (Strictly No Hollow Wireframes)</h4>
-        <div class="guide-formula-box" style="border-left: 3px solid #ef4444;">
-          <p><strong>Mandatory Solid Interior:</strong> Pixel art sprites are solid physical entities with volume, NOT hollow wireframes! The interior of the head, face, torso, clothing, and limbs MUST be 100% packed with solid color pixels.</p>
-          <p><strong>Transparent Boundary:</strong> Transparent pixels exist ONLY in the open air outside the character silhouette.</p>
-          <p><strong>Fast Solid Filling:</strong> Use <code>rect x,y w,h &lt;col&gt; fill</code> to instantly pack torso/cape blocks in 1 line! Use <code>sym_dot</code> to plot horizontal rows symmetrically.</p>
-        </div>
-
-        <h4>4. Mathematical Primitives &amp; Vector Macros in PIX2</h4>
-        <ul class="guide-cmd-list">
-          <li><code>p x,y &lt;pal_id|hex&gt;</code> — Plot single pixel (inline chaining supported: <code>p 5,2 1  p 6,2 2</code>)</li>
-          <li><code>sym_dot x,y axisX &lt;col&gt;</code> — Automatic bilateral mirror reflection (axisX = ${m.axisXStr})</li>
-          <li><code>rect x,y w,h &lt;col&gt; fill</code> — Solid rectangular fill (chest, body, robes)</li>
-          <li><code>rect x,y w,h &lt;col&gt; outline</code> — Rectangular bounding box (shields, borders)</li>
-          <li><code>line x0,y0 x1,y1 &lt;col&gt;</code> — Bresenham discrete line (swords, staves, diagonal edges)</li>
-          <li><code>fill x,y &lt;col&gt;</code> — 4-way bounded flood fill</li>
-        </ul>
-
-        <h4>5. Anti-Lazy 4-Frame Locomotion Formulas</h4>
-        <ul class="guide-cmd-list">
-          <li><strong>Frame 0 (Contact / Hover High):</strong> Baseline standing or hovering pose, grounded at Y = ${m.legs.y[1]}.</li>
-          <li><strong>Frame 1 (Step Left / Sway Right Dip):</strong> Torso bobs Y±1, left foot forward. For floating: tail wisps curl right (+1..+2px X).</li>
-          <li><strong>Frame 2 (Passing / Hover Low):</strong> Feet cross center axis. Ghost tail elongates, glowing eyes pulse brighter.</li>
-          <li><strong>Frame 3 (Step Right / Sway Left Dip):</strong> Torso bobs Y±1, right foot forward. For floating: tail wisps curl left (-1..-2px X).</li>
-          <li><strong>Secondary Motion:</strong> Cloaks, hair tails, and ethereal wisps MUST lag 1 frame behind primary body motion.</li>
-        </ul>
-
-        <h4>6. Directional Perspective Standards</h4>
-        <div class="guide-formula-box">
-          <p><strong>Down:</strong> Frontal perspective. Perfect bilateral symmetry on <code>axisX = ${m.axisXStr}</code>. Both eyes visible.</p>
-          <p><strong>Up:</strong> Back perspective. Center symmetry on <code>axisX = ${m.axisXStr}</code>. NO eyes, nose, or mouth (hair and cloak only).</p>
-          <p><strong>Right:</strong> 3/4 profile facing right. Face and chest shifted towards right margin.</p>
-          <p><strong>Left:</strong> Exact mathematical mirror of Right: <code>x_left = (${cw - 1}) - x_right</code>.</p>
-        </div>
-
-        <div class="tip-box">
-          <i class="fa-solid fa-palette"></i>
-          <span><strong>Cohesive 5-6 Tone Palette:</strong> 1: Outline Dark Slate &bull; 2: Deep Core Shadow &bull; 3: Midtone Body &bull; 4: Rim Highlight &bull; 5: Glowing Eyes &bull; 6: Accent Trim.</span>
-        </div>
-      `;
-    } else if (mode === 'full-character') {
-      if (titleEl) titleEl.textContent = '🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)';
-      contentEl.innerHTML = `
-        <h4>1. Coordinate &amp; Symmetry Reference Table (${cw}×${ch})</h4>
-        ${canonicalTableHtml}
-        ${activeBoundsBoxHtml}
-
-        <h4>2. Solid Sprite Mass Mandate</h4>
-        <p class="guide-desc">The interior of the head, torso, clothing, and limbs MUST be 100% packed with solid color pixels. Never output an empty wireframe!</p>
-
-        <h4>3. Directional Frame Mapping</h4>
-        <ul class="guide-cmd-list">
-          <li><code>down_0..3</code>: Front facing (bilateral symmetry, axisX = ${m.axisXStr}, 2 eyes visible)</li>
-          <li><code>up_0..3</code>: Back view (bilateral symmetry, axisX = ${m.axisXStr}, hair/cloak only, 0 eyes)</li>
-          <li><code>right_0..3</code>: Profile facing right (3/4 angle, eyes/nose facing right)</li>
-          <li><code>left_0..3</code>: Exact horizontal mirror of Right: <code>x_left = ${cw - 1} - x_right</code></li>
-        </ul>
-      `;
-    } else if (mode === 'walk-animation') {
-      if (titleEl) titleEl.textContent = '🎬 Walk & Float Animation Engine';
-      contentEl.innerHTML = `
-        <h4>1. Mathematical 4-Frame Locomotion Formulas</h4>
-        <div class="guide-formula-box">
-          <p><strong>Frame 0 (Neutral):</strong> Neutral standing or hovering baseline pose.</p>
-          <p><strong>Frame 1 (Step Left / Sway Right):</strong> Torso bobs Y±1, left foot steps forward or tail wisps sway right.</p>
-          <p><strong>Frame 2 (Passing / Low Dip):</strong> Feet pass center axis or ghost tail elongates vertically.</p>
-          <p><strong>Frame 3 (Step Right / Sway Left):</strong> Torso bobs Y±1, right foot steps forward or tail wisps sway left.</p>
-        </div>
-
-        <h4>2. Secondary Motion Physics</h4>
-        <p class="guide-desc">Trailing capes, hair tails, antennae, and magical floating wisps MUST lag 1 frame behind body movement for fluid organic motion.</p>
-      `;
-    } else if (mode === 'accessory-equipment') {
-      if (titleEl) titleEl.textContent = '🗡️ Equipment & Accessory Overlay';
-      contentEl.innerHTML = `
-        <h4>1. Equipment Attachment Zones on Canvas (${cw}×${ch})</h4>
-        <div class="guide-formula-box">
-          <p><strong>Hats / Helmets / Crowns:</strong> Top crown Y = 0 to ${m.head.y[0] + 3}</p>
-          <p><strong>Weapons (Swords / Staves / Bows):</strong> Hand level X = 1..${m.torso.x[0]} or ${m.torso.x[1]}..${cw - 1}, Y = ${m.torso.y[0]}..${m.torso.y[1]}</p>
-          <p><strong>Cloaks / Wings / Shields:</strong> Flanking sides X = 0..${m.torso.x[0]} and ${m.torso.x[1]}..${cw - 1}</p>
-        </div>
-        <h4>2. Weapon Drawing Directives</h4>
-        <p class="guide-desc">Use <code>line x0,y0 x1,y1 &lt;col&gt;</code> for diagonal sword blades and staff shafts.</p>
-      `;
-    } else if (mode === 'surgical-patch') {
-      if (titleEl) titleEl.textContent = '🩹 Surgical Frame / Color Patch';
-      contentEl.innerHTML = `
-        <h4>1. Surgical Frame-Level Addressing</h4>
-        <p class="guide-desc">Output ONLY the specific <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives that need changes, keeping all other frames untouched to save tokens and prevent regressions.</p>
-        <pre><code>; Recolor eyes to Glowing Cyan
-@cell cell_0_0
-  p ${m.eyes.leftX},${m.eyes.y[0]} #00ffff  p ${m.eyes.rightX},${m.eyes.y[0]} #00ffff</code></pre>
-      `;
-    } else {
-      if (titleEl) titleEl.textContent = '📋 Studio Architecture & Programmatic API';
-      contentEl.innerHTML = `
-        <h4>1. NOIRADIX Studio Overview</h4>
-        <p class="guide-desc">A coordinate-addressed pixel art editor with live disk hot-reloading, 4-dir/8-dir animation player, and Unity/TexturePacker exporters.</p>
-        <h4>2. JavaScript / Node.js Engine API</h4>
-        <pre><code>const doc = PIX2.parse(fileContent);
-doc.cells['cell_0_0'].pixels['${m.eyes.leftX},${m.eyes.y[0]}'] = '#00ffff';
-const outText = PIX2.serialize(doc);</code></pre>
-      `;
-    }
-  }
-
-  function copyAiPrompt() {
-    if (!state.doc) return;
-    const mode = dom.selectAiPromptMode?.value || 'all-in-one';
-    const { version, cellSize, grid } = state.doc.meta;
-    const briefs = {
-      'full-character': 'Design a consistent full character across the requested facing directions and preserve anchors across the sheet.',
-      'walk-animation': 'Create a readable walk cycle with consistent foot contacts and frame timing. Preserve unrelated clips.',
-      'accessory-equipment': 'Add the requested accessory in independently editable Regions aligned to each existing pose.',
-      'surgical-patch': 'Apply the requested localized frame or color repair. Leave all other cells and hierarchy intact.',
-      'raw-spec': 'Use the canonical source and format rules as a reference when validating the requested output.'
-    };
-    const brief = briefs[mode] || 'Edit or extend the sprite sheet according to the user brief. Keep frame alignment, dimensions and palette continuity.';
-    const prompt = Pix2AiPrompt.build({
-      brief, source: PIX2.serialize(state.doc), version,
-      width: cellSize.w, height: cellSize.h, cols: grid.cols, rows: grid.rows,
-      detailed: mode !== 'compact',
-      mode
-    });
-    navigator.clipboard.writeText(prompt).then(() => showToast('Copied PIX2 AI prompt', 'success'))
-      .catch(() => showToast('Clipboard unavailable', 'error'));
-  }
 
   // ===========================================================================
   // PNG EXPORT & IMPORT
@@ -8479,8 +4591,8 @@ const outText = PIX2.serialize(doc);</code></pre>
     document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
       b.classList.toggle('active', b.dataset.scale === String(exportPreviewZoom));
     });
-    updateExportPreview();
     dom.modalGameExport.classList.remove('hidden');
+    updateExportPreview();
   }
 
   function closeGameExportModal() {
@@ -8529,110 +4641,36 @@ const outText = PIX2.serialize(doc);</code></pre>
   }
 
   function generateAtlasCanvas(opts) {
-    if (!state.doc) return null;
-    const { spacing, margin, extrude, scale } = opts;
-    const doc = state.doc;
-    const cols = doc.meta.grid.cols;
-    const rows = doc.meta.grid.rows;
-    const cw = doc.meta.cellSize.w;
-    const ch = doc.meta.cellSize.h;
-
-    const scw = cw * scale;
-    const sch = ch * scale;
-
-    const atlasW = margin * 2 + cols * scw + Math.max(0, cols - 1) * spacing;
-    const atlasH = margin * 2 + rows * sch + Math.max(0, rows - 1) * spacing;
-
-    if (atlasW <= 0 || atlasH <= 0 || atlasW > 16384 || atlasH > 16384) {
-      showToast('Calculated atlas size exceeds browser canvas limits (16384px).', 'error');
+    try {
+      return StudioAtlas.build(state.doc, opts, {
+        resolveCell: getCellAtGrid,
+        createCanvas: () => document.createElement('canvas')
+      });
+    } catch (error) {
+      showToast(error.message + ' Reduce the export scale or grid size.', 'error');
       return null;
     }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = atlasW;
-    canvas.height = atlasH;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, atlasW, atlasH);
-
-    // Frame layout map for metadata
-    const frameRects = [];
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cell = getCellAtGrid(doc, r, c);
-        const cid = cell ? cell.id : `cell_${r}_${c}`;
-        const ox = margin + c * (scw + spacing);
-        const oy = margin + r * (sch + spacing);
-
-        const frameName = (cell && cell.name) ? cell.name : `frame_${r}_${c}`;
-        frameRects.push({
-          id: cid,
-          name: frameName,
-          row: r,
-          col: c,
-          x: ox,
-          y: oy,
-          w: scw,
-          h: sch,
-          nativeW: cw,
-          nativeH: ch
-        });
-
-        if (cell && cell.pixels) {
-          // 1. Draw cell pixels
-          for (const coord in cell.pixels) {
-            const [px, py] = coord.split(',').map(Number);
-            ctx.fillStyle = cell.pixels[coord];
-            ctx.fillRect(ox + px * scale, oy + py * scale, scale, scale);
-          }
-
-          // 2. Extrude edges if enabled (1px padding bleed-protection clone)
-          if (extrude && spacing > 0) {
-            // Top and bottom edges
-            for (let px = 0; px < cw; px++) {
-              const topCol = cell.pixels[`${px},0`];
-              if (topCol) {
-                ctx.fillStyle = topCol;
-                ctx.fillRect(ox + px * scale, oy - 1, scale, 1);
-              }
-              const botCol = cell.pixels[`${px},${ch - 1}`];
-              if (botCol) {
-                ctx.fillStyle = botCol;
-                ctx.fillRect(ox + px * scale, oy + sch, scale, 1);
-              }
-            }
-            // Left and right edges
-            for (let py = 0; py < ch; py++) {
-              const leftCol = cell.pixels[`0,${py}`];
-              if (leftCol) {
-                ctx.fillStyle = leftCol;
-                ctx.fillRect(ox - 1, oy + py * scale, 1, scale);
-              }
-              const rightCol = cell.pixels[`${cw - 1},${py}`];
-              if (rightCol) {
-                ctx.fillStyle = rightCol;
-                ctx.fillRect(ox + scw, oy + py * scale, 1, scale);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return { canvas, width: atlasW, height: atlasH, frameRects, scale, spacing, margin };
   }
 
-  function updateExportPreview() {
+  function updateExportPreview(reuseRaster = false) {
     if (!state.doc || !dom.exportPreviewCanvas) return;
     const opts = getExportOptions();
-    const atlasData = generateAtlasCanvas(opts);
-    if (!atlasData) return;
-
-    dom.exportPreviewCanvas.width = atlasData.width;
-    dom.exportPreviewCanvas.height = atlasData.height;
-    const pctx = dom.exportPreviewCanvas.getContext('2d');
-    pctx.clearRect(0, 0, atlasData.width, atlasData.height);
-    pctx.drawImage(atlasData.canvas, 0, 0);
+    if (reuseRaster !== true) {
+      const atlasData = generateAtlasCanvas(opts);
+      const invalid = !atlasData;
+      if (dom.btnExecuteGameExport) dom.btnExecuteGameExport.disabled = invalid;
+      if (dom.btnQuickExportPng) dom.btnQuickExportPng.disabled = invalid;
+      if (invalid) {
+        dom.exportPreviewCanvas.width = dom.exportPreviewCanvas.height = 1;
+        if (dom.exportDimensionBadge) dom.exportDimensionBadge.textContent = 'Export size exceeds allocation limit';
+        return;
+      }
+      EditorCanvas.resize(dom.exportPreviewCanvas, atlasData.width, atlasData.height);
+      const pctx = dom.exportPreviewCanvas.getContext('2d');
+      pctx.clearRect(0, 0, atlasData.width, atlasData.height);
+      pctx.drawImage(atlasData.canvas, 0, 0);
+    }
+    const atlasData = { width: dom.exportPreviewCanvas.width, height: dom.exportPreviewCanvas.height };
 
     // Apply Magnifying Zoom scaling to Atlas Preview
     let effZoom = exportPreviewZoom;
@@ -8644,7 +4682,7 @@ const outText = PIX2.serialize(doc);</code></pre>
       if (fitRatio >= 1) {
         effZoom = Math.max(1, Math.floor(fitRatio));
       } else {
-        effZoom = Math.max(0.05, Number(fitRatio.toFixed(3)));
+        effZoom = fitRatio;
       }
     } else {
       effZoom = Math.max(1, Number(exportPreviewZoom) || 4);
@@ -8692,110 +4730,6 @@ const outText = PIX2.serialize(doc);</code></pre>
     }
   }
 
-  function canvasToUint8Array(canvas) {
-    return new Promise(resolve => {
-      canvas.toBlob(blob => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(new Uint8Array(reader.result));
-        };
-        reader.readAsArrayBuffer(blob);
-      }, 'image/png');
-    });
-  }
-
-  function createZip(files) {
-    const table = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let k = 0; k < 8; k++) {
-        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-      }
-      table[i] = c;
-    }
-    function crc32(buf) {
-      let c = 0xffffffff;
-      for (let i = 0; i < buf.length; i++) {
-        c = table[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-      }
-      return (c ^ 0xffffffff) >>> 0;
-    }
-
-    const parts = [];
-    const centralDir = [];
-    let offset = 0;
-
-    for (const f of files) {
-      const safeEntryName = sanitizeSafeFilename(f.name);
-      const nameBuf = new TextEncoder().encode(safeEntryName);
-      const data = f.data;
-      const crc = crc32(data);
-      const size = data.length;
-
-      const lHeader = new Uint8Array(30 + nameBuf.length);
-      const lv = new DataView(lHeader.buffer);
-      lv.setUint32(0, 0x04034b50, true);
-      lv.setUint16(4, 20, true);
-      lv.setUint16(6, 0, true);
-      lv.setUint16(8, 0, true);
-      lv.setUint16(10, 0, true);
-      lv.setUint16(12, 0, true);
-      lv.setUint32(14, crc, true);
-      lv.setUint32(18, size, true);
-      lv.setUint32(22, size, true);
-      lv.setUint16(26, nameBuf.length, true);
-      lv.setUint16(28, 0, true);
-      lHeader.set(nameBuf, 30);
-
-      parts.push(lHeader);
-      parts.push(data);
-
-      const cHeader = new Uint8Array(46 + nameBuf.length);
-      const cv = new DataView(cHeader.buffer);
-      cv.setUint32(0, 0x02014b50, true);
-      cv.setUint16(4, 20, true);
-      cv.setUint16(6, 20, true);
-      cv.setUint16(8, 0, true);
-      cv.setUint16(10, 0, true);
-      cv.setUint16(12, 0, true);
-      cv.setUint32(16, crc, true);
-      cv.setUint32(20, size, true);
-      cv.setUint32(24, size, true);
-      cv.setUint16(28, nameBuf.length, true);
-      cv.setUint16(30, 0, true);
-      cv.setUint16(32, 0, true);
-      cv.setUint16(34, 0, true);
-      cv.setUint16(36, 0, true);
-      cv.setUint32(38, 0, true);
-      cv.setUint32(42, offset, true);
-      cHeader.set(nameBuf, 46);
-
-      centralDir.push(cHeader);
-      offset += lHeader.length + data.length;
-    }
-
-    const cdOffset = offset;
-    let cdSize = 0;
-    for (const h of centralDir) {
-      parts.push(h);
-      cdSize += h.length;
-    }
-
-    const eocd = new Uint8Array(22);
-    const ev = new DataView(eocd.buffer);
-    ev.setUint32(0, 0x06054b50, true);
-    ev.setUint16(4, 0, true);
-    ev.setUint16(6, 0, true);
-    ev.setUint16(8, files.length, true);
-    ev.setUint16(10, files.length, true);
-    ev.setUint32(12, cdSize, true);
-    ev.setUint32(16, cdOffset, true);
-    ev.setUint16(20, 0, true);
-    parts.push(eocd);
-
-    return new Blob(parts, { type: 'application/zip' });
-  }
-
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -8805,629 +4739,66 @@ const outText = PIX2.serialize(doc);</code></pre>
     URL.revokeObjectURL(url);
   }
 
+  const gameExporter = StudioExport.create({
+    sanitizeSafeFilename, downloadBlob, showToast, closeGameExportModal,
+    createCanvas: () => document.createElement('canvas')
+  });
+
   async function executeGameExport() {
     if (!state.doc) return;
     const opts = getExportOptions();
-    const atlasData = generateAtlasCanvas(opts);
-    if (!atlasData) return;
-
-    const rawBaseName = (state.doc.meta.title || 'sprite_atlas').toLowerCase().replace(/\s+/g, '_');
-    const baseName = sanitizeSafeFilename(rawBaseName, 'sprite_atlas');
-    const pngName = `${baseName}.png`;
-
-    if (currentExportFormat === 'png-only') {
-      atlasData.canvas.toBlob(blob => {
-        downloadBlob(blob, pngName);
-        showToast(`Exported PNG Atlas (${atlasData.width}×${atlasData.height} px)!`, 'success');
-        closeGameExportModal();
-      });
-      return;
-    }
-
-    if (currentExportFormat === 'modular-components') {
-      if (typeof ModularExport !== 'undefined') {
-        const isTrimmed = Boolean(document.getElementById('export-trimmed-bounds-checkbox')?.checked);
-        const result = ModularExport.exportModularComponents(state.doc, {
-          mode: 'modular',
-          trimmed: isTrimmed
-        });
-        const zipBlob = (result.zip instanceof Blob)
-          ? result.zip
-          : new Blob([result.zip], { type: 'application/zip' });
-        downloadBlob(zipBlob, `${baseName}_modular_package.zip`);
-        showToast(`Exported Modular Component Package (${result.files.length} assets)!`, 'success');
-        closeGameExportModal();
-        return;
-      }
-    }
-
-    if (currentExportFormat === 'unity') {
-      const pngBytes = await canvasToUint8Array(atlasData.canvas);
-
-      // Build Unity Metadata JSON
-      const unityAnimList = [];
-      const anims = state.doc.animations || {};
-      for (const k in anims) {
-        const anim = anims[k];
-        const fNames = (anim.frames || []).map(cid => {
-          const c = state.doc.cells[cid];
-          return (c && c.name) ? c.name : cid;
-        });
-        unityAnimList.push({
-          clipName: k,
-          fps: anim.fps || 6,
-          loop: anim.loop !== false,
-          frameNames: fNames
-        });
-      }
-
-      const unityJsonData = {
-        meta: {
-          app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
-          version: NOIRADIX_VERSION.studio.version,
-          formatVersion: "1.1",
-          image: pngName,
-          cellWidth: state.doc.meta.cellSize.w * opts.scale,
-          cellHeight: state.doc.meta.cellSize.h * opts.scale,
-          size: { w: atlasData.width, h: atlasData.height },
-          spacing: opts.spacing,
-          margin: opts.margin,
-          extrude: opts.extrude,
-          scale: opts.scale
-        },
-        frames: atlasData.frameRects.map(fr => ({
-          name: fr.name,
-          cellId: fr.id,
-          x: fr.x,
-          y: fr.y,
-          w: fr.w,
-          h: fr.h,
-          pivotX: opts.pivot.x,
-          pivotY: opts.pivot.y
-        })),
-        animations: unityAnimList
-      };
-
-      const jsonStr = JSON.stringify(unityJsonData, null, 2);
-      const jsonBytes = new TextEncoder().encode(jsonStr);
-
-      // Unity Importer Script
-      const importerScript = `using System;
-using System.Collections.Generic;
-using System.IO;
-using UnityEngine;
-using UnityEditor;
-
-namespace NOIRADIX.Editor
-{
-    /// <summary>
-    /// Automatic Unity 2D Sprite Importer for NOIRADIX Studio (.pix2.json) exports.
-    /// Slices multi-frame sprite sheets with exact padding/spacing bleed protection,
-    /// sets sprite pivots, and automatically generates Unity .anim AnimationClips.
-    /// </summary>
-    public static class Pix2UnityImporter
-    {
-        [MenuItem("Tools/NOIRADIX/Import Pix2 Spritesheet JSON...")]
-        public static void ImportPix2Menu()
-        {
-            string selectedPath = EditorUtility.OpenFilePanel("Select NOIRADIX Spritesheet JSON", "Assets", "json");
-            if (string.IsNullOrEmpty(selectedPath)) return;
-
-            ImportPix2Json(selectedPath);
-        }
-
-        [MenuItem("Assets/NOIRADIX/Import Spritesheet & Animations", false, 30)]
-        public static void ImportSelectedAsset()
-        {
-            var selected = Selection.activeObject;
-            if (selected == null) return;
-            string path = AssetDatabase.GetAssetPath(selected);
-            if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                EditorUtility.DisplayDialog("NOIRADIX Importer", "Please select a NOIRADIX .json spritesheet file.", "OK");
-                return;
-            }
-            ImportPix2Json(Path.GetFullPath(path));
-        }
-
-        [MenuItem("Assets/NOIRADIX/Import Spritesheet & Animations", true)]
-        public static bool ValidateImportSelectedAsset()
-        {
-            var selected = Selection.activeObject;
-            if (selected == null) return false;
-            string path = AssetDatabase.GetAssetPath(selected);
-            return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-        }
-
-        public static void ImportPix2Json(string fullJsonPath)
-        {
-            try
-            {
-                if (!File.Exists(fullJsonPath))
-                {
-                    Debug.LogError($"[NOIRADIX] File not found: {fullJsonPath}");
-                    return;
-                }
-
-                string jsonText = File.ReadAllText(fullJsonPath);
-                Pix2Data data = JsonUtility.FromJson<Pix2Data>(jsonText);
-                if (data == null || data.frames == null || data.frames.Length == 0)
-                {
-                    Debug.LogError("[NOIRADIX] Invalid or empty NOIRADIX JSON format.");
-                    return;
-                }
-
-                string dir = Path.GetDirectoryName(fullJsonPath);
-                string safeImageName = Path.GetFileName(data.meta.image);
-                string pngPath = Path.Combine(dir, safeImageName);
-                if (!File.Exists(pngPath))
-                {
-                    string altPng = Path.ChangeExtension(fullJsonPath, ".png");
-                    if (File.Exists(altPng)) pngPath = altPng;
-                    else
-                    {
-                        Debug.LogError($"[NOIRADIX] PNG image not found at: {pngPath}");
-                        return;
-                    }
-                }
-
-                string assetPngPath = ToAssetPath(pngPath);
-                TextureImporter importer = AssetImporter.GetAtPath(assetPngPath) as TextureImporter;
-                if (importer == null)
-                {
-                    AssetDatabase.ImportAsset(assetPngPath, ImportAssetOptions.ForceUpdate);
-                    importer = AssetImporter.GetAtPath(assetPngPath) as TextureImporter;
-                }
-
-                if (importer == null)
-                {
-                    Debug.LogError($"[NOIRADIX] Failed to obtain TextureImporter for {assetPngPath}");
-                    return;
-                }
-
-                importer.textureType = TextureImporterType.Sprite;
-                importer.spriteImportMode = SpriteImportMode.Multiple;
-                importer.filterMode = FilterMode.Point;
-                importer.textureCompression = TextureImporterCompression.Uncompressed;
-                importer.mipmapEnabled = false;
-                importer.spritePixelsPerUnit = data.meta.cellWidth > 0 ? data.meta.cellWidth : 16;
-
-                List<SpriteMetaData> metas = new List<SpriteMetaData>();
-                int texH = data.meta.size.h;
-
-                foreach (var frame in data.frames)
-                {
-                    SpriteMetaData sm = new SpriteMetaData();
-                    sm.name = frame.name;
-                    int unityY = texH - frame.y - frame.h;
-                    sm.rect = new Rect(frame.x, unityY, frame.w, frame.h);
-                    sm.alignment = (int)SpriteAlignment.Custom;
-                    sm.pivot = new Vector2(frame.pivotX, frame.pivotY);
-                    metas.Add(sm);
-                }
-
-                importer.spritesheet = metas.ToArray();
-                EditorUtility.SetDirty(importer);
-                importer.SaveAndReimport();
-
-                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-
-                UnityEngine.Object[] loadedSprites = AssetDatabase.LoadAllAssetsAtPath(assetPngPath);
-                Dictionary<string, Sprite> spriteMap = new Dictionary<string, Sprite>();
-                foreach (var obj in loadedSprites)
-                {
-                    if (obj is Sprite s) spriteMap[s.name] = s;
-                }
-
-                int createdClips = 0;
-                string animDir = Path.Combine(Path.GetDirectoryName(assetPngPath), "Animations");
-                if (!Directory.Exists(animDir)) Directory.CreateDirectory(animDir);
-
-                if (data.animations != null)
-                {
-                    foreach (var anim in data.animations)
-                    {
-                        if (anim.frameNames == null || anim.frameNames.Length == 0) continue;
-
-                        AnimationClip clip = new AnimationClip();
-                        clip.frameRate = anim.fps > 0 ? anim.fps : 6;
-
-                        if (anim.loop)
-                        {
-                            AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(clip);
-                            settings.loopTime = true;
-                            AnimationUtility.SetAnimationClipSettings(clip, settings);
-                        }
-
-                        EditorCurveBinding binding = new EditorCurveBinding();
-                        binding.type = typeof(SpriteRenderer);
-                        binding.path = "";
-                        binding.propertyName = "m_Sprite";
-
-                        List<ObjectReferenceKeyframe> keyframes = new List<ObjectReferenceKeyframe>();
-                        float frameDuration = 1f / clip.frameRate;
-
-                        for (int i = 0; i < anim.frameNames.Length; i++)
-                        {
-                            string fName = anim.frameNames[i];
-                            if (spriteMap.TryGetValue(fName, out Sprite sp))
-                            {
-                                ObjectReferenceKeyframe key = new ObjectReferenceKeyframe();
-                                key.time = i * frameDuration;
-                                key.value = sp;
-                                keyframes.Add(key);
-                            }
-                        }
-
-                        if (keyframes.Count > 0)
-                        {
-                            AnimationUtility.SetObjectReferenceCurve(clip, binding, keyframes.ToArray());
-                            string clipPath = $"{animDir}/{anim.clipName}.anim";
-                            AssetDatabase.CreateAsset(clip, clipPath);
-                            createdClips++;
-                        }
-                    }
-                }
-
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-
-                Debug.Log($"[NOIRADIX] Successfully imported '{Path.GetFileName(pngPath)}': Sliced {metas.Count} frames and created {createdClips} Animation Clips!");
-                EditorUtility.DisplayDialog("NOIRADIX Importer", $"Import Complete!\n\nSliced: {metas.Count} frames\nClips Created: {createdClips}\nTarget: {assetPngPath}", "OK");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[NOIRADIX] Import failed: {ex.Message}\\n{ex.StackTrace}");
-            }
-        }
-
-        private static string ToAssetPath(string fullPath)
-        {
-            string projectPath = Path.GetFullPath(Application.dataPath + "/..").Replace('\\\\', '/');
-            string norm = fullPath.Replace('\\\\', '/');
-            if (norm.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return norm.Substring(projectPath.Length).TrimStart('/');
-            }
-            return fullPath;
-        }
-
-        [Serializable]
-        public class Pix2Data
-        {
-            public Pix2Meta meta;
-            public Pix2Frame[] frames;
-            public Pix2Anim[] animations;
-        }
-
-        [Serializable]
-        public class Pix2Meta
-        {
-            public string image;
-            public int cellWidth;
-            public int cellHeight;
-            public Pix2Size size;
-        }
-
-        [Serializable]
-        public class Pix2Size
-        {
-            public int w;
-            public int h;
-        }
-
-        [Serializable]
-        public class Pix2Frame
-        {
-            public string name;
-            public int x;
-            public int y;
-            public int w;
-            public int h;
-            public float pivotX = 0.5f;
-            public float pivotY = 0f;
-        }
-
-        [Serializable]
-        public class Pix2Anim
-        {
-            public string clipName;
-            public float fps = 6;
-            public bool loop = true;
-            public string[] frameNames;
-        }
-    }
-}`;
-      const readmeUnityText = `================================================================================
-NOIRADIX STUDIO — Unity 2D Sprite Package Quickstart Guide
-================================================================================
-
-Package Contents:
-  1. ${pngName}
-     - High-resolution sprite sheet atlas with anti-bleed padding & extrusion.
-  2. ${baseName}.pix2.json
-     - Precise slice boundaries, custom pivots, and animation sequence metadata.
-  3. Pix2UnityImporter.cs
-     - Automatic 1-click Unity editor importer script.
-  4. README_UNITY_IMPORT.txt
-     - This instruction guide.
-
---------------------------------------------------------------------------------
-HOW TO IMPORT INTO YOUR UNITY PROJECT (3 Easy Steps):
---------------------------------------------------------------------------------
-
-STEP 1: PLACE THE C# SCRIPT IN AN "Editor" FOLDER
-  - Copy "Pix2UnityImporter.cs" into your Unity project's Editor directory:
-      Assets/Editor/Pix2UnityImporter.cs
-      (or Assets/_Game/Editor/Pix2UnityImporter.cs)
-  * Note: Unity requires editor tools to be placed inside a folder named "Editor".
-
-STEP 2: PLACE THE SPRITESHEET AND METADATA TOGETHER
-  - Copy "${pngName}" and "${baseName}.pix2.json" into any folder inside Assets:
-      e.g. Assets/_Game/Art/Sprites/
-  * Note: Keep both the .png and .json files in the SAME directory.
-
-STEP 3: 1-CLICK AUTOMATIC IMPORT
-  - Method A (Right-Click Context Menu):
-      In Unity Project Window, RIGHT-CLICK the "${baseName}.pix2.json" file
-      -> Select "NOIRADIX > Import Spritesheet & Animations".
-  
-  - Method B (Top Menu Bar):
-      In Unity's top menu bar, click "Tools > NOIRADIX > Import Pix2 Spritesheet JSON..."
-      and select the .json file.
-
---------------------------------------------------------------------------------
-WHAT THE IMPORTER DOES AUTOMATICALLY:
---------------------------------------------------------------------------------
-  [x] Sets Texture Type to "Sprite (2D and UI)" with Sprite Mode = "Multiple".
-  [x] Sets Filter Mode to "Point (no filter)" for crisp pixel-perfect art.
-  [x] Sets Texture Compression to "None / Uncompressed".
-  [x] Automatically slices all frames with exact pixel bounds and custom pivots.
-  [x] Automatically creates native Unity Animation Clips (.anim) in an "Animations/"
-      subfolder with preconfigured frame rates and looping!
-
-Ready to drag directly into your Scene or Animator Controller!
-NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
-`;
-
-      const scriptBytes = new TextEncoder().encode(importerScript);
-      const readmeBytes = new TextEncoder().encode(readmeUnityText);
-
-      const zipBlob = createZip([
-        { name: pngName, data: pngBytes },
-        { name: `${baseName}.pix2.json`, data: jsonBytes },
-        { name: 'Pix2UnityImporter.cs', data: scriptBytes },
-        { name: 'README_UNITY_IMPORT.txt', data: readmeBytes }
-      ]);
-
-      downloadBlob(zipBlob, `${baseName}_unity_package.zip`);
-      showToast(`Exported Unity 2D Sprite Package (${baseName}_unity_package.zip)!`, 'success');
-      closeGameExportModal();
-      return;
-    }
-
-    if (currentExportFormat === 'texturepacker') {
-      const pngBytes = await canvasToUint8Array(atlasData.canvas);
-
-      // TexturePacker Hash Format
-      const tpFrames = {};
-      atlasData.frameRects.forEach(fr => {
-        const safeFrameName = PIX2.sanitizeKey(fr.name || fr.id);
-        tpFrames[safeFrameName] = {
-          frame: { x: fr.x, y: fr.y, w: fr.w, h: fr.h },
-          rotated: false,
-          trimmed: false,
-          spriteSourceSize: { x: 0, y: 0, w: fr.w, h: fr.h },
-          sourceSize: { w: fr.w, h: fr.h },
-          pivot: { x: opts.pivot.x, y: opts.pivot.y }
-        };
-      });
-
-      const tpAnimations = {};
-      const anims = state.doc.animations || {};
-      for (const k in anims) {
-        if (!PIX2.isSafeIdentifier(k)) continue;
-        tpAnimations[k] = (anims[k].frames || []).map(cid => {
-          const c = state.doc.cells[cid];
-          return (c && c.name) ? c.name : cid;
-        });
-      }
-
-      const tpData = {
-        frames: tpFrames,
-        animations: tpAnimations,
-        meta: {
-          app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
-          version: NOIRADIX_VERSION.studio.version,
-          formatVersion: "1.1",
-          image: pngName,
-          format: "RGBA8888",
-          size: { w: atlasData.width, h: atlasData.height },
-          scale: `${opts.scale}`
-        }
-      };
-
-      const readmeTpText = `================================================================================
-NOIRADIX STUDIO — TexturePacker Standard JSON Package Guide
-================================================================================
-
-Package Contents:
-  1. ${pngName}
-     - High-resolution transparent sprite atlas with bleed protection.
-  2. ${baseName}.json
-     - Industry standard TexturePacker Hash format with frame rects and animations.
-  3. README_TEXTUREPACKER.txt
-     - This guide.
-
---------------------------------------------------------------------------------
-HOW TO USE IN POPULAR GAME ENGINES:
---------------------------------------------------------------------------------
-
-1. GODOT 4:
-   - Copy "${pngName}" and "${baseName}.json" into your Godot project.
-   - Use SpriteFrames importer or load as an AtlasTexture resource.
-
-2. PHASER 3:
-   - In your Scene preload method:
-       this.load.atlas('${baseName}', 'assets/${pngName}', 'assets/${baseName}.json');
-
-3. PIXI.JS:
-   - Load using the modern Assets loader:
-       const sheet = await PIXI.Assets.load('assets/${baseName}.json');
-
-4. DEFOLD / RAYLIB / GAMEMAKER:
-   - Direct support for TexturePacker JSON Hash coordinates.
-
-NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
-`;
-
-      const jsonBytes = new TextEncoder().encode(JSON.stringify(tpData, null, 2));
-      const readmeBytes = new TextEncoder().encode(readmeTpText);
-
-      const zipBlob = createZip([
-        { name: pngName, data: pngBytes },
-        { name: `${baseName}.json`, data: jsonBytes },
-        { name: 'README_TEXTUREPACKER.txt', data: readmeBytes }
-      ]);
-
-      downloadBlob(zipBlob, `${baseName}_texturepacker.zip`);
-      showToast(`Exported TexturePacker Package (${baseName}_texturepacker.zip)!`, 'success');
-      closeGameExportModal();
-      return;
-    }
-
-    if (currentExportFormat === 'zip-frames') {
-      const doc = state.doc;
-      const cw = doc.meta.cellSize.w;
-      const ch = doc.meta.cellSize.h;
-      const files = [];
-
-      for (const fr of atlasData.frameRects) {
-        const cell = doc.cells[fr.id];
-        const cellCanvas = document.createElement('canvas');
-        cellCanvas.width = cw * opts.scale;
-        cellCanvas.height = ch * opts.scale;
-        const cctx = cellCanvas.getContext('2d');
-        cctx.clearRect(0, 0, cellCanvas.width, cellCanvas.height);
-
-        if (cell && cell.pixels) {
-          for (const coord in cell.pixels) {
-            const [px, py] = coord.split(',').map(Number);
-            cctx.fillStyle = cell.pixels[coord];
-            cctx.fillRect(px * opts.scale, py * opts.scale, opts.scale, opts.scale);
-          }
-        }
-
-        const fBytes = await canvasToUint8Array(cellCanvas);
-        files.push({ name: `${fr.name}.png`, data: fBytes });
-      }
-
-      const zipBlob = createZip(files);
-      downloadBlob(zipBlob, `${baseName}_frames.zip`);
-      showToast(`Exported ${files.length} individual frame PNGs (.zip)!`, 'success');
-      closeGameExportModal();
-      return;
-    }
+    return gameExporter.execute({
+      doc: state.doc, opts, atlasData: generateAtlasCanvas(opts),
+      format: currentExportFormat,
+      trimmed: Boolean(document.getElementById('export-trimmed-bounds-checkbox')?.checked)
+    });
   }
 
   function exportAtlasPng() {
     openGameExportModal();
   }
 
-  function exportCurrentCellPng() {
-    if (typeof commitFloatingSelection === 'function') {
-      commitFloatingSelection();
+
+
+  async function openStudioDocument(file, handle = null) {
+    if (handle) {
+      for (const session of projectSessions) {
+        let same = session.fileHandle === handle;
+        if (!same && session.fileHandle?.isSameEntry) {
+          try { same = await session.fileHandle.isSameEntry(handle); } catch (_) {}
+        }
+        if (same) {
+          switchProjectSession(session.id);
+          return;
+        }
+      }
     }
-    const cell = state.getActiveCell();
-    if (!cell || !state.doc) return;
-    const cw = state.doc.meta.cellSize.w;
-    const ch = state.doc.meta.cellSize.h;
-
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = cw;
-    exportCanvas.height = ch;
-    const ctx = exportCanvas.getContext('2d');
-    ctx.clearRect(0, 0, cw, ch);
-
-    for (const coord in cell.pixels) {
-      const [px, py] = coord.split(',').map(Number);
-      ctx.fillStyle = cell.pixels[coord];
-      ctx.fillRect(px, py, 1, 1);
-    }
-
-    exportCanvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(cell.name || cell.id).toLowerCase().replace(/\s+/g, '_')}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast(`Exported frame ${cell.name || cell.id} PNG!`, 'success');
-    });
+    const text = await file.text();
+    const doc = PIX2.parseValidated(text);
+    const validation = PIX2.validate(doc, { strict: false });
+    if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid PIX2 document');
+    const session = createProjectSession(doc, file.name, handle);
+    if (!session) return;
+    session.lastSavedContent = text;
+    session.lastKnownFileModified = file.lastModified || 0;
+    currentFileHandle = handle;
+    currentFileName = file.name;
+    currentFilePath = file.name;
+    lastSavedContent = text;
+    lastKnownFileModified = session.lastKnownFileModified;
+    pendingExternalConflict = null;
+    setDirty(false);
+    if (handle) persistFileHandle(handle);
+    persistAllProjectSessions();
+    updateFileStatusUI();
+    showToast('Opened ' + file.name + ' in a document tab', 'success');
   }
 
   async function handleFileOpenFromHandle(handle) {
     if (!handle) return;
-    try {
-      const file = await handle.getFile();
-      if (file.size > 25 * 1024 * 1024) {
-        showToast('File exceeds 25MB safety limit.', 'error');
-        return;
-      }
-      const name = file.name.toLowerCase();
-      if (name.endsWith('.pix2') || name.endsWith('.txt')) {
-        const text = await file.text();
-        const doc = PIX2.parse(text);
-
-        const existing = projectSessions.find(p => p.fileName === file.name || p.filePath === file.name);
-        if (existing) {
-          existing.fileHandle = handle;
-          switchProjectSession(existing.id);
-          showToast(`Switched to open tab "${file.name}"`, 'info');
-          return;
-        }
-
-        saveCurrentSessionState();
-        currentFileHandle = handle;
-        currentFileName = file.name;
-        currentFilePath = file.name;
-        lastSavedContent = text;
-        lastKnownFileModified = file.lastModified;
-        pendingExternalConflict = null;
-        await persistFileHandle(handle);
-        localStorage.setItem('noiradix_active_file_name', currentFileName);
-        localStorage.setItem('noiradix_active_file_path', currentFilePath);
-        localStorage.setItem('pix2_last_saved_content', text);
-
-        const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-        const session = new ProjectSession(newId, file.name, doc, handle, file.name, file.name);
-        session.lastSavedContent = text;
-        session.isDirty = false;
-        session.activeTabId = 'tab-grid-overview';
-        session.openCellTabs = [];
-        projectSessions.push(session);
-        switchProjectSession(newId);
-        persistAllProjectSessions();
-        showToast(`Linked & opened ${file.name} in tab!`, 'success');
-        return;
-      } else if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new Image();
-          img.onload = () => {
-            slicePngToProject(img, file.name);
-          };
-          img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-      }
-    } catch (err) {
-      console.warn('Failed reading from dropped FileSystemHandle, falling back:', err);
-      try {
-        const file = await handle.getFile();
-        handleFileOpen(file);
-      } catch (_) {}
-    }
+    const file = await handle.getFile();
+    if (/\.(pix2|txt)$/i.test(file.name)) return openStudioDocument(file, handle);
+    handleFileOpen(file);
   }
 
   function handleFileOpen(file) {
@@ -9438,45 +4809,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     }
     const name = file.name.toLowerCase();
     if (name.endsWith('.pix2') || name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = e.target.result;
-          const doc = PIX2.parse(content);
-
-          const existing = projectSessions.find(p => p.fileName === file.name || p.filePath === file.name);
-          if (existing) {
-            switchProjectSession(existing.id);
-            showToast(`Switched to open tab "${file.name}"`, 'info');
-            return;
-          }
-
-          saveCurrentSessionState();
-          currentFileHandle = null;
-          currentFileName = file.name;
-          currentFilePath = file.name;
-          lastSavedContent = content;
-          lastKnownFileModified = file.lastModified || Date.now();
-          pendingExternalConflict = null;
-          localStorage.setItem('noiradix_active_file_name', currentFileName);
-          localStorage.setItem('noiradix_active_file_path', currentFilePath);
-          localStorage.setItem('pix2_last_saved_content', content);
-
-          const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-          const session = new ProjectSession(newId, file.name, doc, null, file.name, file.name);
-          session.lastSavedContent = content;
-          session.isDirty = false;
-          session.activeTabId = 'tab-grid-overview';
-          session.openCellTabs = [];
-          projectSessions.push(session);
-          switchProjectSession(newId);
-          persistAllProjectSessions();
-          showToast(`Opened ${file.name} in tab!`, 'success');
-        } catch (err) {
-          alert(`Error reading .pix2 file:\n${err.message}`);
-        }
-      };
-      reader.readAsText(file);
+      openStudioDocument(file).catch(error => showToast('Cannot open file: ' + error.message, 'error'));
     } else if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -9585,8 +4918,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
     brushSettings = Tools.bindBrushSettings();
     RegionSelection.bindActions(regionSelection, () => state.getActiveCell(), state, (cell, label) => {
       state.syncCellComposite(cell.id);
-      state.saveSnapshot(label);
-      triggerEventAutosave();
+      if (state.saveSnapshot(label)) triggerEventAutosave();
       refreshAll();
     }, showToast);
     if (dom.btnThemeToggle) dom.btnThemeToggle.addEventListener('click', toggleTheme);
@@ -10070,8 +5402,8 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           for (const pf of pix2Files) {
             const text = await pf.text();
             try {
-              const doc = PIX2.parse(text);
-              createProjectSession(doc, pf.name, null);
+              const doc = PIX2.parseValidated(text);
+              if (!createProjectSession(doc, pf.name, null)) break;
               showToast(`Opened ${pf.name} as project tab!`, 'success');
             } catch (pErr) {
               showToast(`Error parsing ${pf.name}: ${pErr.message}`, 'error');
@@ -10127,8 +5459,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           }
 
           selectedGridCellId = newId;
-          state.saveSnapshot(`Rename Cell ID to ${newId}`);
-          triggerEventAutosave();
+          if (state.saveSnapshot(`Rename Cell ID to ${newId}`)) triggerEventAutosave();
           refreshAll();
         }
       });
@@ -10587,7 +5918,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         btn.classList.add('active');
         const scaleVal = btn.dataset.scale;
         exportPreviewZoom = (scaleVal === 'fit') ? 'fit' : parseInt(scaleVal, 10);
-        updateExportPreview();
+        updateExportPreview(true);
       });
     });
 
@@ -10612,7 +5943,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
           b.classList.toggle('active', b.dataset.scale === String(nextScale));
         });
-        updateExportPreview();
+        updateExportPreview(true);
       }, { passive: false });
 
       exportViewport.addEventListener('dblclick', (e) => {
@@ -10622,7 +5953,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         document.querySelectorAll('#export-zoom-group [data-scale]').forEach(b => {
           b.classList.toggle('active', b.dataset.scale === String(nextScale));
         });
-        updateExportPreview();
+        updateExportPreview(true);
       });
 
       let isPanDragging = false;
@@ -11146,8 +6477,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           }
         });
 
-        state.endStroke(`Add ${addedCount} Colors to Palette`);
-        triggerEventAutosave();
+        if (state.endStroke(`Add ${addedCount} Colors to Palette`)) triggerEventAutosave();
         renderPalette();
         showToast(addedCount > 0 ? `Added ${addedCount} new color(s) to palette!` : 'All detected colors already in palette.', addedCount > 0 ? 'success' : 'info');
       });
@@ -11168,8 +6498,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         });
         state.doc.palette = newPalette;
 
-        state.endStroke(`Replace Palette from Artwork (${detectedArtworkColors.length} colors)`);
-        triggerEventAutosave();
+        if (state.endStroke(`Replace Palette from Artwork (${detectedArtworkColors.length} colors)`)) triggerEventAutosave();
         renderPalette();
         showToast(`Palette replaced with ${detectedArtworkColors.length} colors!`, 'success');
       });
@@ -11184,21 +6513,19 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         const target = getSelectionTarget(cell);
         if (!Tools.alignRaster(target, cell.size || state.doc.meta.cellSize, direction)) return;
         state.syncCellComposite(cell.id);
-        state.saveSnapshot('Align ' + direction);
-        triggerEventAutosave();
+        if (state.saveSnapshot('Align ' + direction)) triggerEventAutosave();
         refreshAll();
       });
     }
 
     bindAction('btn-flip-h', () => {
       if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
-        flipSelection(true);
+        executeSelectionFlip(true);
       } else {
         const cell = state.getActiveCell();
         if (cell && state.doc) {
           Tools.flipHorizontal(cell, state.doc.meta.cellSize.w);
-          state.saveSnapshot('Flip Cell Horizontal');
-          triggerEventAutosave();
+          if (state.saveSnapshot('Flip Cell Horizontal')) triggerEventAutosave();
           refreshAll();
         }
       }
@@ -11206,13 +6533,12 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
     bindAction('btn-flip-v', () => {
       if (state.selection || (floatingSelectionPixels && floatingOriginalSel)) {
-        flipSelection(false);
+        executeSelectionFlip(false);
       } else {
         const cell = state.getActiveCell();
         if (cell && state.doc) {
           Tools.flipVertical(cell, state.doc.meta.cellSize.h);
-          state.saveSnapshot('Flip Cell Vertical');
-          triggerEventAutosave();
+          if (state.saveSnapshot('Flip Cell Vertical')) triggerEventAutosave();
           refreshAll();
         }
       }
@@ -11241,8 +6567,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
         for (const cid in state.doc.cells) {
           Tools.centerContent(state.doc.cells[cid], state.doc.meta.cellSize.w, state.doc.meta.cellSize.h);
         }
-        state.saveSnapshot('Center All Cells');
-        triggerEventAutosave();
+        if (state.saveSnapshot('Center All Cells')) triggerEventAutosave();
         refreshAll();
       }
     });
@@ -12073,8 +7398,7 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
           if (regionSelection.nudge(cell, state.activeLayerId, state.isolatedNodeId,
             cell.size || state.doc.meta.cellSize, e.key, () => state.beginStroke())) {
             state.syncCellComposite(cell.id);
-            state.endStroke('Nudge regions');
-            triggerEventAutosave();
+            if (state.endStroke('Nudge regions')) triggerEventAutosave();
             refreshAll();
           }
           return;

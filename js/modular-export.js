@@ -171,6 +171,7 @@
 
   // Render pixels to PNG (pure byte writer).
   function renderPixelsToPngBytes(pixels, w, h) {
+    PIX2.assertRasterSize(w, h);
     if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, w);

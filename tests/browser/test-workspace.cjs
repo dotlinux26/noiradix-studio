@@ -4,6 +4,21 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const PIX2 = require('../../js/pix2-format.js');
+function zipEntries(bytes) {
+  const entries = new Map();
+  let offset = 0;
+  while (bytes.readUInt32LE(offset) === 0x04034b50) {
+    assert.equal(bytes.readUInt16LE(offset + 8), 0, 'Stored ZIP format');
+    const size = bytes.readUInt32LE(offset + 18);
+    const nameLength = bytes.readUInt16LE(offset + 26);
+    const extraLength = bytes.readUInt16LE(offset + 28);
+    const name = bytes.subarray(offset + 30, offset + 30 + nameLength).toString('utf8');
+    const start = offset + 30 + nameLength + extraLength;
+    entries.set(name, bytes.subarray(start, start + size));
+    offset = start + size;
+  }
+  return entries;
+}
 (async () => {
   let browser;
   const channel = process.env.EDITOR_QA_CHANNEL || (process.env.CI ? undefined : 'chrome');
@@ -33,12 +48,20 @@ const PIX2 = require('../../js/pix2-format.js');
       await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) =>
         route.abort(),
       );
-      await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'));
+      await page.addInitScript(() => {
+        localStorage.setItem('noiradix_custom_palettes', JSON.stringify({
+          'qa_"quoted': { name: 'QA <palette>', colors: ['#ff0000', '#00ff00'] }
+        }));
+      });
+      await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + (pa ? '/pixelart/' : '/'));
       await page.waitForTimeout(550);
       const about = page
         .locator('#btn-about-close-done, #btn-pa-about-close-done')
         .filter({ visible: true });
       if (await about.count()) await about.first().click();
+      const palette = page.locator(pa ? '#pa-palette-select' : '#palette-select');
+      assert.equal(await palette.locator('option').filter({ hasText: 'QA <palette> (2)' }).count(), 1);
+      assert.equal(await palette.locator('optgroup').count(), 3);
       const tabs = page.locator('.project-tab[data-tab-id]');
       const plus = page.locator(
         pa ? '#pa-btn-project-new-tab' : '#btn-project-new-tab',
@@ -266,6 +289,16 @@ const PIX2 = require('../../js/pix2-format.js');
       await page.reload();
       await page.waitForFunction(id => document.querySelector('.project-tab.active')?.dataset.tabId === id, expectedActive);
       assert.equal(await sourceText(), afterQuotaStroke);
+      await page.addInitScript(key => {
+        if (sessionStorage.getItem('qa-corrupt-catalog')) return;
+        sessionStorage.setItem('qa-corrupt-catalog', 'done');
+        localStorage.setItem(key, JSON.stringify({
+          updatedAt: 9999999999999, sessions: 'corrupt catalog'
+        }));
+      }, workspaceKey);
+      await page.reload();
+      await page.waitForFunction(id => document.querySelector('.project-tab.active')?.dataset.tabId === id, expectedActive);
+      assert.equal(await sourceText(), afterQuotaStroke, 'A corrupt local catalog cannot hide the valid IndexedDB backup');
       while (await tabs.count())
         await tabs.last().locator('.project-tab-close').click();
       assert.ok(
@@ -280,6 +313,25 @@ const PIX2 = require('../../js/pix2-format.js');
         .waitFor({ state: 'visible' });
       assert.equal(await tabs.count(), 0);
       assert.equal(await page.title(), versionLabel);
+      if (!pa) {
+        await page.locator('#btn-empty-load-reaper').click();
+        await tabs.first().waitFor();
+        assert.equal(await tabs.count(), 1);
+        const reaper = await sourceText();
+        await page.locator('#btn-load-demo').click();
+        await page.locator('#btn-load-demo-ghost').click();
+        assert.equal(await tabs.count(), 2, 'Demo creates an independent session');
+        await tabs.first().click();
+        assert.equal(await sourceText(), reaper);
+        await tabs.last().click();
+        const ghost = await sourceText();
+        await page.locator('#btn-grid-open-editor').click();
+        const c = await page.locator('#cell-overlay').boundingBox();
+        await page.mouse.click(c.x + c.width * 0.18, c.y + c.height * 0.18);
+        assert.notEqual(await sourceText(), ghost);
+        await page.keyboard.press('Control+z');
+        assert.equal(await sourceText(), ghost, 'The first demo edit can be undone');
+      }
       assert.deepEqual(errs, []);
       console.log(
         (pa ? 'PixelArt' : 'Studio') +
@@ -315,7 +367,7 @@ const PIX2 = require('../../js/pix2-format.js');
         }),
       );
     }, legacy);
-    await page.goto('http://127.0.0.1:8769/');
+    await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + '/');
     await page.locator('#btn-convert-v11-layers').click();
     const converted = PIX2.parse(
       await page.evaluate(() => PIX2.serialize(state.doc)),
@@ -380,6 +432,119 @@ const PIX2 = require('../../js/pix2-format.js');
     await gridPage.waitForFunction(() => state.activeTabId === 'cell_3_3');
     assert.ok(await gridCanvas.evaluate(canvas => Math.max(canvas.width, canvas.height) <= 4096));
     console.log('Studio PASS 4×4 grid of 512×512 frames / Fit / sub-1× zoom / double-click at DPR 2');
+    await gridPage.locator('#btn-export-atlas').click();
+    const preview = gridPage.locator('#export-preview-canvas');
+    await gridPage.locator('#export-zoom-group [data-scale="fit"]').click();
+    await gridPage.waitForFunction(() => {
+      const image = document.querySelector('#export-preview-canvas').getBoundingClientRect();
+      const viewport = document.querySelector('#export-preview-viewport').getBoundingClientRect();
+      return image.width <= viewport.width && image.height <= viewport.height;
+    });
+    const previewBox = await preview.boundingBox();
+    const previewViewport = await gridPage.locator('#export-preview-viewport').boundingBox();
+    assert.ok(previewBox.width <= previewViewport.width && previewBox.height <= previewViewport.height,
+      JSON.stringify({ previewBox, previewViewport }));
+    await preview.evaluate(canvas => {
+      const context = canvas.getContext('2d');
+      const draw = context.drawImage.bind(context);
+      window.previewDraws = 0;
+      context.drawImage = (...args) => { window.previewDraws++; return draw(...args); };
+    });
+    await gridPage.locator('#export-zoom-group [data-scale="2"]').click();
+    assert.equal(await gridPage.evaluate(() => window.previewDraws), 0, 'Zoom reuses the existing raster');
+    await gridPage.locator('#export-scale-select').selectOption('4');
+    assert.ok(await gridPage.locator('#btn-execute-game-export').isDisabled());
+    assert.ok(await gridPage.locator('#btn-quick-export-png').isDisabled());
+    await gridPage.locator('#export-scale-select').selectOption('1');
+    assert.ok(await gridPage.locator('#btn-execute-game-export').isEnabled());
+    console.log('Studio PASS export visible Fit / zoom raster reuse / allocation rejection and recovery');
+    // Verify the extracted export controller through the ordinary modal/download path.
+    const controllerErrors = [];
+    page.on('pageerror', error => controllerErrors.push(error.message));
+    for (const format of ['unity', 'texturepacker', 'zip-frames']) {
+      await page.locator('#btn-export-atlas').click();
+      await page.locator('.format-option-card[data-format="' + format + '"]').click();
+      let expectedWidth;
+      if (format === 'unity') {
+        expectedWidth = await page.evaluate(() => {
+          window.exportSource = PIX2.serialize(state.doc);
+          const original = HTMLCanvasElement.prototype.toBlob;
+          HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+            HTMLCanvasElement.prototype.toBlob = original;
+            original.call(this, blob => { window.releaseExport = () => callback(blob); }, ...args);
+          };
+          return state.doc.meta.cellSize.w;
+        });
+      }
+      const pending = page.waitForEvent('download');
+      await page.locator('#btn-execute-game-export').click();
+      if (format === 'unity') {
+        await page.waitForFunction(() => typeof window.releaseExport === 'function');
+        await page.evaluate(() => {
+          state.doc.meta.cellSize.w = 123;
+          state.doc.animations.qa_late = { frames: [], fps: 6 };
+          window.releaseExport();
+        });
+      }
+      const download = await pending;
+      const suffix = { unity: 'unity_package', texturepacker: 'texturepacker', 'zip-frames': 'frames' }[format];
+      assert.equal(download.suggestedFilename(), 'safe-01_legacy_fixture_' + suffix + '.zip');
+      const entries = zipEntries(readFileSync(await download.path()));
+      assert.ok([...entries.keys()].some(name => name.endsWith('.png')));
+      if (format === 'unity') {
+        assert.ok([...entries.keys()].some(name => name.endsWith('.cs')));
+        const json = [...entries].find(([name]) => name.endsWith('.json'));
+        const metadata = JSON.parse(json[1].toString('utf8'));
+        assert.equal(metadata.meta.cellWidth, expectedWidth);
+        assert.equal(metadata.meta.image, 'safe-01_legacy_fixture.png');
+        assert.equal(metadata.animations.some(clip => clip.clipName === 'qa_late'), false);
+        await page.evaluate(() => { state.doc = PIX2.parse(window.exportSource); });
+      }
+      if (format === 'texturepacker') {
+        const json = [...entries].find(([name]) => name.endsWith('.json'));
+        const metadata = JSON.parse(json[1].toString('utf8'));
+        assert.ok(Object.keys(metadata.frames).length);
+      }
+      for (const [name, data] of entries) {
+        if (name.endsWith('.png')) assert.equal(data.subarray(1, 4).toString(), 'PNG');
+      }
+    }
+    console.log('Studio PASS Unity / TexturePacker / individual frame ZIP downloads');
+    await page.locator('.studio-tab[data-tab-id="tab-grid-overview"]').click();
+    const beforeTemplate = await page.evaluate(() => PIX2.serialize(state.doc));
+    await page.locator('#btn-quick-4dir').click();
+    await page.locator('#template-action-input').fill('qa_template');
+    await page.locator('#template-cols-input').fill('2');
+    await page.locator('#btn-apply-template-modal').click();
+    await page.locator('#modal-action-template').waitFor({ state: 'hidden' });
+    const generated = await page.evaluate(() => state.doc.animations.qa_template_down);
+    assert.equal(generated.frames.length, 2);
+    await page.keyboard.press('Control+z');
+    assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeTemplate);
+    assert.deepEqual(controllerErrors, []);
+    console.log('Studio PASS action template / modal close / Undo / controller wiring');
+    page.on('dialog', dialog => dialog.accept());
+    await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
+    const beforeSourceApply = await page.evaluate(() => PIX2.serialize(state.doc));
+    const changedCode = await page.evaluate(() => {
+      const doc = PIX2.parse(PIX2.serialize(state.doc));
+      doc.meta.title = 'QA; source # applied';
+      return PIX2.serialize(doc);
+    });
+    await page.locator('#btn-toggle-edit-code').click();
+    await page.locator('#pix2-code-text').fill(changedCode);
+    await page.locator('#btn-apply-code').click();
+    await page.waitForFunction(() => state.doc.meta.title === 'QA; source # applied');
+    assert.equal((await page.locator('#pix2-code-viewer .syn-cmt').allTextContents()).some(text => text.includes('source # applied')), false, 'Source highlighting shares parser comment rules');
+    await page.keyboard.press('Control+z');
+    assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeSourceApply);
+    await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
+    await page.locator('#btn-toggle-edit-code').click();
+    await page.locator('#pix2-code-text').fill('@pix2 1.1\n@cell c\n p nope #fff');
+    await page.locator('#btn-apply-code').click();
+    assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeSourceApply);
+    assert.deepEqual(controllerErrors, []);
+    console.log('Studio PASS Apply Code / Undo / invalid source preserves document');
   } finally {
     await browser.close();
   }

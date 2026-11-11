@@ -50,6 +50,12 @@ const EditorCanvas = (() => {
       : composite;
   }
 
+  function refreshSourceComposite(compiler, scope) {
+    if (!scope || scope.doc?.cells?.[scope.cell.id] !== scope.cell) return;
+    const { doc, cell } = scope;
+    if (cell.layers?.length) cell.pixels = compiler.compositeCellLayers(cell, cell.size || doc.meta.cellSize);
+  }
+
   function visibleBounds(canvas, viewport, w, h, zoom) {
     const full = { minX: 0, maxX: w, minY: 0, maxY: h };
     if (!canvas || !viewport || zoom <= 2) return full;
@@ -99,7 +105,7 @@ const EditorCanvas = (() => {
     }
   }
 
-  return { checker, drawPixels, writePixel, updateComposite, visibleBounds, artworkSlice, paintArtwork, resize, wheelAnchor };
+  return { checker, drawPixels, writePixel, updateComposite, refreshSourceComposite, visibleBounds, artworkSlice, paintArtwork, resize, wheelAnchor };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = EditorCanvas;

@@ -68,28 +68,12 @@ class EditorState {
     this.animCurrentFrameIndex = 0;
 
     // Pre-built palettes
-    this.presetPalettes = {
-      wispling: [
-        '#ffffff', '#57546f', '#dde8ef', '#ffb0bc', '#46435c', '#181425', '#ff0044', '#00e436'
-      ],
-      pico8: [
-        '#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8',
-        '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'
-      ],
-      gameboy: [
-        '#0f380f', '#306230', '#8bac0f', '#9bbc0f'
-      ],
-      endesga32: [
-        '#be4a2f', '#d77643', '#ead4aa', '#e4a672', '#b86f50', '#733e39', '#3e2731', '#a22633',
-        '#e43b44', '#f77622', '#feae34', '#fee761', '#63c74d', '#3e8948', '#265c42', '#193c3e',
-        '#124e89', '#0099db', '#2ce8f5', '#ffffff', '#c0cbdc', '#8b9bb4', '#5a6988', '#3a4466',
-        '#262b44', '#181425', '#ff0044', '#68386c', '#b55088', '#f6757a', '#e8b796', '#c28569'
-      ]
-    };
+    this.presetPalettes = (typeof EditorPalettePresets !== 'undefined'
+      ? EditorPalettePresets : require('./editor-palette-presets.js')).create('studio');
   }
 
   // Load a new document into state (optionally preserving open tabs during external reload or Apply Code)
-  setDocument(doc, preserveTabs = false) {
+  setDocument(doc, preserveTabs = false, { preserveHistory = false, action = 'Apply Document' } = {}) {
     this.doc = doc;
     if (!preserveTabs) {
       this.openCellTabs = [];
@@ -109,11 +93,17 @@ class EditorState {
         }
       }
     }
-    this.history = [];
-    this.historyIndex = -1;
+    if (!preserveHistory) {
+      this.history = [];
+      this.historyIndex = -1;
+    }
     this.selection = null;
     this.strokePreState = null;
-    this.saveSnapshot('Initial Load');
+    return this.saveSnapshot(preserveHistory ? action : 'Initial Load');
+  }
+
+  applyDocument(doc, action = 'Apply Document') {
+    return this.setDocument(doc, true, { preserveHistory: true, action });
   }
 
   // Begin a continuous stroke
@@ -127,20 +117,19 @@ class EditorState {
     if (!this.doc || !this.strokePreState || !_PIX2) return false;
     const currentState = _PIX2.serialize(this.doc);
     const changed = currentState !== this.strokePreState;
-    if (changed) {
-      this.saveSnapshot(strokeName);
-    }
+    const recorded = changed ? this.saveSnapshot(strokeName) : false;
     this.strokePreState = null;
-    return changed;
+    return Boolean(recorded);
   }
 
   // Record undo snapshot
   saveSnapshot(actionName = 'Edit') {
-    if (!this.doc || !_PIX2) return;
+    if (!this.doc || !_PIX2) return false;
+    const serialized = _PIX2.serialize(this.doc);
+    if (this.history[this.historyIndex]?.data === serialized) return false;
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1);
     }
-    const serialized = _PIX2.serialize(this.doc);
     this.history.push({
       action: actionName,
       data: serialized,
@@ -151,6 +140,7 @@ class EditorState {
     } else {
       this.historyIndex++;
     }
+    return true;
   }
 
   // Undo

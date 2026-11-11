@@ -31,85 +31,18 @@
   const _EditorCanvas = typeof EditorCanvas !== 'undefined' ? EditorCanvas : require('../../js/editor-canvas.js');
   const _EditorRulers = typeof EditorRulers !== 'undefined' ? EditorRulers : require('../../js/editor-rulers.js');
   const _SelectionTransform = typeof SelectionTransform !== 'undefined' ? SelectionTransform : require('../../js/selection-transform.js');
+  const _PaletteLibrary = typeof EditorPaletteLibrary !== 'undefined' ? EditorPaletteLibrary : require('../../js/editor-palette-library.js');
+  const _FloatingSelection = typeof EditorFloatingSelection !== 'undefined' ? EditorFloatingSelection : require('../../js/editor-floating-selection.js');
+  const _FileSave = typeof EditorFileSave !== 'undefined' ? EditorFileSave : require('../../js/editor-file-save.js');
   const _Version = typeof NOIRADIX_VERSION !== 'undefined' ? NOIRADIX_VERSION : require('../../js/version.js');
-  const PRESET_PALETTES = {
-    noiradix: [
-      '#1a1a24', '#ffffff', '#4f46e5', '#7c3aed', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'
-    ],
-    pico8: [
-      '#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8',
-      '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'
-    ],
-    gameboy: [
-      '#0f380f', '#306230', '#8bac0f', '#9bbc0f'
-    ],
-    sweetie16: [
-      '#1a1c2c', '#5d275d', '#b13e53', '#ef7d57', '#ffcd75', '#a7f070', '#38b764', '#257179',
-      '#29366f', '#3b5dc9', '#41a6f6', '#73eff7', '#f4f4f4', '#94b0c2', '#566c86', '#333c57'
-    ],
-    endesga32: [
-      '#be4a2f', '#d77643', '#ead4aa', '#e4a672', '#b86f50', '#733e39', '#3e2731', '#a22633',
-      '#e43b44', '#f77622', '#feae34', '#fee761', '#63c74d', '#3e8948', '#265c42', '#193c3e',
-      '#124e89', '#0099db', '#2ce8f5', '#ffffff', '#c0cbdc', '#8b9bb4', '#5a6988', '#3a4466',
-      '#262b44', '#181425', '#ff0044', '#68386c', '#b55088', '#f6757a', '#e8b796', '#c28569'
-    ],
-    solarenvy: [
-      '#10141f', '#2f2e41', '#3b5dc9', '#41a6f6', '#73eff7', '#257179', '#38b764', '#a7f070',
-      '#ffcd75', '#ef7d57', '#b13e53', '#5d275d', '#333c57', '#566c86', '#94b0c2', '#f4f4f4',
-      '#181425', '#262b44', '#3a4466', '#5a6988', '#8b9bb4', '#c0cbdc', '#ffffff', '#2ce8f5',
-      '#0099db', '#124e89', '#193c3e', '#265c42', '#3e8948', '#63c74d', '#fee761', '#feae34'
-    ],
-    dawnbringer16: [
-      '#140c1c', '#442434', '#30346d', '#4e4a4e', '#854c30', '#346524', '#d04648', '#757161',
-      '#597dce', '#d27d2c', '#8595a1', '#6daa2c', '#d2aa99', '#6dc2ca', '#dad45e', '#deeed6'
-    ],
-    dawnbringer32: [
-      '#000000', '#222034', '#45283c', '#663931', '#8f563b', '#df7126', '#d9a066', '#eec39a',
-      '#fbf236', '#99e550', '#6abe30', '#37946e', '#4b692f', '#524b24', '#323c39', '#3f3f74',
-      '#306082', '#5b6ee1', '#639bff', '#5fcde4', '#cbdbfc', '#ffffff', '#9badb7', '#847e87',
-      '#696a6a', '#595652', '#76428a', '#ac3232', '#d95763', '#d77643', '#8f974a', '#8a6f30'
-    ],
-    nes54: [
-      '#7c7c7c', '#0000fc', '#0000bc', '#4428bc', '#940084', '#a80020', '#a81000', '#881400',
-      '#503000', '#007800', '#006800', '#0058f8', '#004058', '#000000', '#bcbcbc', '#0078f8',
-      '#6844fc', '#d800cc', '#e40058', '#f83800', '#e45c10', '#ac7c00', '#00b800', '#00a800',
-      '#00a844', '#008888', '#f8f8f8', '#3cbcfc', '#6888fc', '#9878f8', '#f878f8', '#f85898',
-      '#f87858', '#fca044', '#f8b800', '#b8f818', '#58d854', '#58f898', '#00e8d8', '#fcfcfc',
-      '#a4e4fc', '#b8b8f8', '#d8b8f8', '#f8b8f8', '#f8a4c0', '#f0d0b0', '#fce0a8', '#f8d878',
-      '#d8f878', '#b8f8b8', '#b8f8d8', '#00fcfc'
-    ]
-  };
+  const _PalettePresets = typeof EditorPalettePresets !== 'undefined' ? EditorPalettePresets : require('../../js/editor-palette-presets.js');
+  const PRESET_PALETTES = _PalettePresets.create('pixelart');
 
-  const CUSTOM_PALETTES_STORAGE_KEY = 'noiradix_custom_palettes';
 
-  function loadCustomPalettes() {
-    try {
-      const raw = _storage.getItem(CUSTOM_PALETTES_STORAGE_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      return (parsed && typeof parsed === 'object') ? parsed : {};
-    } catch (_) {
-      return {};
-    }
-  }
-
-  function saveCustomPalettes(palettesObj) {
-    try {
-      _storage.setItem(CUSTOM_PALETTES_STORAGE_KEY, JSON.stringify(palettesObj));
-    } catch (err) {
-      console.warn('Failed to save custom palettes to storage:', err);
-    }
-  }
-
-  function populatePaletteDropdown() {
-    if (!dom.paletteSelect) return;
-    const prevVal = dom.paletteSelect.value;
-    dom.paletteSelect.innerHTML = '';
-
-    // 1. Built-in presets
-    const builtInGroup = document.createElement('optgroup');
-    builtInGroup.label = 'Built-in Presets';
-    const builtIns = [
+  const paletteLibrary = _PaletteLibrary.create({
+    storage: _storage,
+    getSelect: () => dom.paletteSelect,
+    builtIns: [
       { id: 'noiradix', name: 'Noiradix Classic', count: PRESET_PALETTES.noiradix.length },
       { id: 'pico8', name: 'PICO-8', count: PRESET_PALETTES.pico8.length },
       { id: 'endesga32', name: 'Endesga 32', count: PRESET_PALETTES.endesga32.length },
@@ -119,46 +52,11 @@
       { id: 'dawnbringer16', name: 'DawnBringer 16', count: PRESET_PALETTES.dawnbringer16.length },
       { id: 'dawnbringer32', name: 'DawnBringer 32', count: PRESET_PALETTES.dawnbringer32.length },
       { id: 'nes54', name: 'NES 54', count: PRESET_PALETTES.nes54.length }
-    ];
-    builtIns.forEach(b => {
-      const opt = document.createElement('option');
-      opt.value = b.id;
-      opt.textContent = `${b.name} (${b.count})`;
-      builtInGroup.appendChild(opt);
-    });
-    dom.paletteSelect.appendChild(builtInGroup);
-
-    // 2. Custom Library presets
-    const customPalettes = loadCustomPalettes();
-    const customKeys = Object.keys(customPalettes);
-    if (customKeys.length > 0) {
-      const customGroup = document.createElement('optgroup');
-      customGroup.label = 'Custom Library';
-      customKeys.forEach(k => {
-        const item = customPalettes[k];
-        const opt = document.createElement('option');
-        opt.value = `custom_${k}`;
-        opt.textContent = `${item.name} (${item.colors ? item.colors.length : 0})`;
-        customGroup.appendChild(opt);
-      });
-      dom.paletteSelect.appendChild(customGroup);
-    }
-
-    // 3. Action option
-    const actionGroup = document.createElement('optgroup');
-    actionGroup.label = 'Actions';
-    const newOpt = document.createElement('option');
-    newOpt.value = '__new_preset__';
-    newOpt.textContent = '+ Save Current Palette to Library...';
-    actionGroup.appendChild(newOpt);
-    dom.paletteSelect.appendChild(actionGroup);
-
-    if (prevVal && dom.paletteSelect.querySelector(`option[value="${prevVal}"]`)) {
-      dom.paletteSelect.value = prevVal;
-    } else {
-      dom.paletteSelect.value = 'noiradix';
-    }
-  }
+    ],
+    actionLabel: '+ Save Current Palette to Library...',
+    fallback: 'noiradix'
+  });
+  const { load: loadCustomPalettes, save: saveCustomPalettes, populate: populatePaletteDropdown } = paletteLibrary;
 
   function promptAndSavePalettePreset() {
     const colors = [];
@@ -582,9 +480,34 @@
     return true;
   }
 
+  function lockCodeEditor() {
+    state.isCodeEditingUnlocked = false;
+    dom.codeEditor.readOnly = true;
+    if (dom.codeModeBadge) {
+      dom.codeModeBadge.className = 'pa-mode-badge locked';
+      dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+      dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
+    }
+    if (dom.btnToggleCodeLock) {
+      dom.btnToggleCodeLock.classList.remove('hidden');
+    }
+    if (dom.btnApplyCode) {
+      dom.btnApplyCode.classList.add('hidden');
+    }
+  }
+
+  function preparePaProjectSwitch() {
+    if (!_hasDocument || !state.isCodeEditingUnlocked) return true;
+    clearTimeout(state.sourceDebounceTimer);
+    if (state.sourcePaneMode !== 'summary' && !applySourceCodeToCanvas()) return false;
+    lockCodeEditor();
+    return true;
+  }
+
   function switchPaProjectSession(sessionId) {
     const target = paProjectSessions.find(p => p.id === sessionId);
-    if (!target) return;
+    if (!target || activePaProjectId === sessionId) return;
+    if (!preparePaProjectSwitch()) return;
 
     if (state.floatingPixels) commitFloatingSelection();
     regionSelection?.reset();
@@ -706,12 +629,13 @@
       cell.pixels['24,11'] = cCyan;
       cell.pixels['25,12'] = cCyan;
     }
-    createPaProjectSession(title, doc);
+    if (!createPaProjectSession(title, doc)) return;
     showToast('Loaded Sample Ghost Artwork!', 'success');
     setTimeout(fitCanvasToViewport, 50);
   }
 
   function createPaProjectSession(title, doc, fileHandle = null) {
+    if (!preparePaProjectSwitch()) return null;
     saveCurrentPaSession();
 
     const cell = (doc && doc.cells) ? (doc.cells.artwork || Object.values(doc.cells)[0]) : null;
@@ -734,6 +658,11 @@
       ? sessionOrId
       : paProjectSessions.find(p => p.id === sessionOrId);
     if (!session) return;
+    if (session.id === activePaProjectId) {
+      if (!preparePaProjectSwitch()) return;
+      saveCurrentPaSession();
+    }
+
 
     if (session.isDirty) {
       const confirmDiscard = confirm(`Artwork "${session.fileName || session.title}" has unsaved changes. Discard and close?`);
@@ -766,7 +695,7 @@
       currentFileHandle = null;
       currentFileName = null;
       lastSavedContent = '';
-      state.floatingPixels = null;
+      floatingSession.clear();
       state.floatingOriginalSel = null;
       state.isMovingSelection = false;
 
@@ -1335,14 +1264,6 @@
     );
   }
 
-  // Once a floating selection has lifted pixels, retain its original target
-  // even if the user clicks another layer before committing or pressing Esc.
-  function getFloatingSelectionTarget(cell = getArtworkCell()) {
-    if (!cell) return null;
-    if (!cell.layers || cell.layers.length === 0) return cell;
-    return state.floatingTargetId ? findNodeById(cell, state.floatingTargetId) : getActiveEditingTarget(cell);
-  }
-
   // ===========================================================================
   // HARDWARE-ACCELERATED 1:1 OFFSCREEN TEXTURE BUFFERS
   // ===========================================================================
@@ -1820,6 +1741,7 @@
   }
 
   function resetRotationSession() {
+    floatingSession.resetRotation();
     state.rotationSessionPixels = null;
     state.rotationSessionSel = null;
     state.rotationAccumulatedAngle = 0;
@@ -1831,14 +1753,13 @@
   function beginRotationGesture() {
     ensureFloatingSelection();
     if (!state.floatingPixels || !state.selection) return false;
-    if (!state.rotationSessionPixels || !state.rotationSessionSel) {
-      state.rotationSessionPixels = { ...state.floatingPixels };
-      state.rotationSessionSel = { ...state.selection };
-      state.rotationAccumulatedAngle = 0;
-    }
-    state.rotationGestureBaseAngle = state.rotationAccumulatedAngle;
-    state.rotationBaseFloatingPixels = state.rotationSessionPixels;
-    state.rotationBaseSel = state.rotationSessionSel;
+    const rotation = floatingSession.beginRotation(state.selection);
+    state.rotationSessionPixels = rotation.pixels;
+    state.rotationSessionSel = rotation.bounds;
+    state.rotationAccumulatedAngle = rotation.angle;
+    state.rotationGestureBaseAngle = rotation.angle;
+    state.rotationBaseFloatingPixels = rotation.pixels;
+    state.rotationBaseSel = rotation.bounds;
     return true;
   }
 
@@ -1957,16 +1878,6 @@
       return dom.codeEditor.value;
     }
 
-    // Ensure cell size metadata is up-to-date before serializing
-    const cell = getArtworkCell();
-    if (cell) {
-      cell.size = { w: state.w, h: state.h };
-      if (state.doc && state.doc.meta) {
-        state.doc.meta.cell_size = { w: state.w, h: state.h };
-        state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${state.w}x${state.h}` };
-      }
-    }
-
     // ALWAYS serialize from authoritative canonical state.doc!
     let serialized = _PIX2.serialize(state.doc);
     if (state.canvasBgMode && state.canvasBgMode !== 'transparent') {
@@ -1999,7 +1910,7 @@
 
     try {
       // 1. Parse raw PIX2 source into AST document with PixelArt profile (supports up to 1024x1024)
-      const parsedDoc = _PIX2.parse(source, { profile: 'pixelart' });
+      const parsedDoc = _PIX2.parseValidated(source, { profile: 'pixelart' });
       if (!parsedDoc || !parsedDoc.cells) {
         throw new Error('PIX2 parse error: missing cells object.');
       }
@@ -2030,8 +1941,14 @@
         return false; // Non-destructive: keep canvas intact!
       }
 
-      // 3. Document is valid - commit to active state
-      state.doc = parsedDoc;
+        // 3. Document is valid - commit to active state
+        const previousSerialized = _PIX2.serialize(state.doc);
+        const nextSerialized = _PIX2.serialize(parsedDoc);
+        if (previousSerialized === nextSerialized) {
+          lockCodeEditor();
+          return true;
+        }
+        state.doc = parsedDoc;
       if (!_StructureOps.findNode(getArtworkCell(), state.activeLayerId)) state.activeLayerId = null;
       if (!_StructureOps.findNode(getArtworkCell(), state.activeRegionId)) state.activeRegionId = null;
       if (!_StructureOps.findNode(getArtworkCell(), state.isolatedNodeId)) state.isolatedNodeId = null;
@@ -2046,10 +1963,11 @@
 
       // Extract artwork dimensions
       const cell = getArtworkCell();
-      if (cell && cell.size) {
-        if (cell.size.w !== state.w || cell.size.h !== state.h) {
-          state.w = Math.max(1, Math.min(1024, cell.size.w));
-          state.h = Math.max(1, Math.min(1024, cell.size.h));
+      const size = cell?.size || parsedDoc.meta.cellSize;
+      if (size) {
+        if (size.w !== state.w || size.h !== state.h) {
+          state.w = Math.max(1, Math.min(1024, size.w));
+          state.h = Math.max(1, Math.min(1024, size.h));
           dom.dimBadge.textContent = `${state.w}×${state.h}`;
           resizeCanvasesToZoom();
           renderRulers();
@@ -2196,30 +2114,11 @@
 
   function paintRaster(cell, color, emitPixels) {
     const structured = Boolean(cell.layers?.length);
-    const target = _Tools.getTargetForPlot(cell, state.isolatedNodeId || state.activeRegionId || state.activeLayerId);
-    if (!target) return;
-    const changed = structured ? new Set() : null;
-    let didPaint = false;
-    emitPixels((x, y) => {
-      if (x < 0 || x >= state.w || y < 0 || y >= state.h) return;
-      const key = `${x},${y}`;
-      const oldVal = target.pixels[key] || null;
-      if (oldVal === color) return;
-      didPaint = true;
-      if (color === null) delete target.pixels[key];
-      else target.pixels[key] = color;
-      if (changed) {
-        changed.add(key);
-        return;
-      }
-      if (state.activeStrokeChanges) {
-        if (!state.activeStrokeChanges[key]) state.activeStrokeChanges[key] = [oldVal, color];
-        else state.activeStrokeChanges[key][1] = color;
-      }
-      plotPixelOnBuffer(x, y, color);
-      renderPixelDirect(x, y, color);
-    });
-    if (changed?.size) {
+    const target = getActiveEditingTarget(cell);
+    const { keys: changed, diff } = _Tools.editRaster(target,
+      { w: state.w, h: state.h, color, recordDiff: !structured }, emitPixels);
+    if (!changed.size) return false;
+    if (structured) {
       const display = _EditorCanvas.updateComposite(_PIX2, cell, state, changed, state.isolatedNodeId);
       for (const key of changed) {
         const [x, y] = key.split(',').map(Number);
@@ -2227,8 +2126,19 @@
         plotPixelOnBuffer(x, y, displayedColor);
         renderPixelDirect(x, y, displayedColor);
       }
+    } else {
+      for (const key of changed) {
+        const [oldVal, nextVal] = diff[key];
+        if (state.activeStrokeChanges) {
+          if (!state.activeStrokeChanges[key]) state.activeStrokeChanges[key] = [oldVal, nextVal];
+          else state.activeStrokeChanges[key][1] = nextVal;
+        }
+        const [x, y] = key.split(',').map(Number);
+        plotPixelOnBuffer(x, y, nextVal);
+        renderPixelDirect(x, y, nextVal);
+      }
     }
-    return didPaint;
+    return true;
   }
 
   function paintBrush(cell, tool, x0, y0, x1, y1) {
@@ -2669,26 +2579,14 @@
       dom.viewport.style.cursor = 'crosshair';
 
       if (state.rotationSessionPixels && state.rotationSessionSel && typeof SelectionTransform !== 'undefined') {
-        const baseSel = state.rotationSessionSel;
-        const rotated = SelectionTransform.rotatePixelsNearestNeighbor(
-          state.rotationSessionPixels,
-          baseSel.w,
-          baseSel.h,
-          theta
-        );
-        state.selection.x = Math.round(baseSel.x + (baseSel.w - rotated.w) / 2);
-        state.selection.y = Math.round(baseSel.y + (baseSel.h - rotated.h) / 2);
-        state.selection.w = rotated.w;
-        state.selection.h = rotated.h;
-        state.floatingPixels = rotated.pixels;
-        state.floatingCurrentX = state.selection.x;
-        state.floatingCurrentY = state.selection.y;
+        const rotated = floatingSession.rotate(theta);
+        if (!rotated) return;
+        state.selection = { ...rotated.bounds };
         state.rotationAccumulatedAngle = theta;
         rebuildFloatingBuffer();
 
         const deg = Math.round((theta * 180) / Math.PI);
         showToast(`Selection rotation: ${deg}°`);
-        if (Math.abs(theta) > 0.01) setDirty(true);
       }
 
       renderSelectionMarquee();
@@ -2772,19 +2670,30 @@
     }
   }
 
+  const floatingSession = _FloatingSelection.create({
+    get pixels() { return state.floatingPixels; }, set pixels(value) { state.floatingPixels = value; },
+    get originalBounds() { return state.floatingOriginalSel; }, set originalBounds(value) { state.floatingOriginalSel = value; },
+    get baselinePixels() { return state.floatingBaselinePixels; }, set baselinePixels(value) { state.floatingBaselinePixels = value; },
+    get baselineBounds() { return state.floatingBaselineSel; }, set baselineBounds(value) { state.floatingBaselineSel = value; },
+    get targetId() { return state.floatingTargetId; }, set targetId(value) { state.floatingTargetId = value; },
+    get baselineTargetId() { return state.floatingBaselineTargetId; }, set baselineTargetId(value) { state.floatingBaselineTargetId = value; },
+    get x() { return state.floatingCurrentX; }, set x(value) { state.floatingCurrentX = value; },
+    get y() { return state.floatingCurrentY; }, set y(value) { state.floatingCurrentY = value; }
+  });
+
   function commitFloatingSelection() {
     if (!state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
-    const target = getFloatingSelectionTarget(cell);
-    if (target) {
-      _SelectionTransform.placePixels(target, state.floatingPixels, state.selection, state);
+    const result = floatingSession.commit(state.doc, state.selection, state);
+    _EditorCanvas.refreshSourceComposite(_PIX2, result.restored);
+    if (result.status === 'committed') {
       rebuildArtworkBuffer();
       pushHistory();
       repaintCanvas();
       syncCanvasToSource();
       triggerAutosave();
     }
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.floatingOriginalSel = null;
     state.floatingTargetId = null;
     state.floatingBaselinePixels = null;
@@ -2803,18 +2712,11 @@
    */
   function cancelFloatingSelection() {
     const cell = getArtworkCell();
-    const baselinePixels = state.floatingBaselinePixels;
-    const baselineSel = state.floatingBaselineSel;
-    const baselineTarget = state.floatingBaselineTargetId
-      ? findNodeById(cell, state.floatingBaselineTargetId)
-      : getFloatingSelectionTarget(cell);
+    const restored = floatingSession.cancel();
+    _EditorCanvas.refreshSourceComposite(_PIX2, restored);
+    if (restored) rebuildArtworkBuffer();
 
-    if (baselineTarget && baselinePixels && baselineSel) {
-      _SelectionTransform.placePixels(baselineTarget, baselinePixels, baselineSel, state);
-      rebuildArtworkBuffer();
-    }
-
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.floatingOriginalSel = null;
     state.floatingTargetId = null;
     state.floatingBaselinePixels = null;
@@ -2874,16 +2776,7 @@
     const y = state.selection ? state.selection.y : 0;
     const w = state.selection ? state.selection.w : state.w;
     const h = state.selection ? state.selection.h : state.h;
-    const copiedPixels = {};
-
-    for (let py = y; py < y + h; py++) {
-      for (let px = x; px < x + w; px++) {
-        const key = `${px},${py}`;
-        if (target.pixels[key]) {
-          copiedPixels[`${px - x},${py - y}`] = target.pixels[key];
-        }
-      }
-    }
+    const copiedPixels = _SelectionTransform.copyPixels(target, { x, y, w, h });
 
     state.clipboard = { w, h, pixels: copiedPixels };
     showToast(`Copied ${Object.keys(copiedPixels).length} pixels (${w}×${h})`);
@@ -2896,7 +2789,7 @@
 
   function deleteSelection() {
     if (state.floatingPixels) {
-      state.floatingPixels = null;
+      floatingSession.clear();
       state.floatingOriginalSel = null;
       state.floatingTargetId = null;
       state.floatingBaselinePixels = null;
@@ -2973,7 +2866,7 @@
     state.floatingBaselineTargetId = null;
     state.floatingCurrentX = startX;
     state.floatingCurrentY = startY;
-    state.floatingPixels = { ...state.clipboard.pixels };
+    floatingSession.paste(state.doc, getArtworkCell(), target, state.selection, state.clipboard.pixels);
     rebuildFloatingBuffer();
 
     renderSelectionMarquee();
@@ -3009,7 +2902,7 @@
       }
     }
 
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.floatingOriginalSel = null;
     state.floatingTargetId = null;
     state.floatingBaselinePixels = null;
@@ -3035,7 +2928,8 @@
     state.floatingCurrentX = state.selection.x;
     state.floatingCurrentY = state.selection.y;
     resetRotationSession();
-    const lifted = _SelectionTransform.liftPixels(target, state.floatingOriginalSel);
+    const lifted = floatingSession.lift(state.doc, cell, target, state.floatingOriginalSel);
+    if (!lifted) return;
     state.floatingPixels = lifted.pixels;
     state.floatingBaselinePixels = lifted.baselinePixels;
     state.floatingBaselineSel = lifted.baselineBounds;
@@ -3073,13 +2967,8 @@
         showToast('Select an editable layer or region');
         return;
       }
-      state.floatingPixels = SelectionTransform.rotatePixelsNearestNeighbor(
-        state.floatingPixels, bounds.w, bounds.h, Math.PI / 2
-      ).pixels;
+      floatingSession.rotate90(bounds, state);
       state.selection = { ...next };
-      state.floatingOriginalSel = { ...next };
-      state.floatingCurrentX = next.x;
-      state.floatingCurrentY = next.y;
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3104,14 +2993,7 @@
     if (state.selection) {
       resetRotationSession();
       ensureFloatingSelection();
-      const newFloating = {};
-      const sw = state.selection.w;
-      for (const relKey in state.floatingPixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const nx = sw - 1 - rx;
-        newFloating[`${nx},${ry}`] = state.floatingPixels[relKey];
-      }
-      state.floatingPixels = newFloating;
+      if (!floatingSession.flip(state.selection, true)) return;
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3137,14 +3019,7 @@
     if (state.selection) {
       resetRotationSession();
       ensureFloatingSelection();
-      const newFloating = {};
-      const sh = state.selection.h;
-      for (const relKey in state.floatingPixels) {
-        const [rx, ry] = relKey.split(',').map(Number);
-        const ny = sh - 1 - ry;
-        newFloating[`${rx},${ny}`] = state.floatingPixels[relKey];
-      }
-      state.floatingPixels = newFloating;
+      if (!floatingSession.flip(state.selection, false)) return;
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3272,13 +3147,32 @@
     const cell = getArtworkCell();
     if (!cell) return;
 
+    const currPixels = cell.pixels || {};
+    const previousEntry = state.history[state.historyIndex];
+    let pendingDiff = null;
+    // Decide whether the command changed artwork BEFORE dirtying the document
+    // or discarding redo. View focus and repeated no-op commands are not edits.
+    if (previousEntry && previousEntry.w === state.w && previousEntry.h === state.h &&
+        previousEntry.title === state.title) {
+      let unchanged = false;
+      if (cell.layers?.length) {
+        unchanged = Boolean(previousEntry.structuralLayers) &&
+          JSON.stringify(previousEntry.structuralLayers) === JSON.stringify(cell.layers);
+      } else if (!previousEntry.structuralLayers) {
+        pendingDiff = state.activeStrokeChanges || calculatePixelDiff(state.lastHistoryPixels || {}, currPixels);
+        unchanged = Object.values(pendingDiff).every(([before, after]) => before === after);
+      }
+      if (unchanged) {
+        state.activeStrokeChanges = null;
+        return;
+      }
+    }
+
     if (!initial) markDocumentMutation('history-step');
 
     if (state.historyIndex < state.history.length - 1) {
       state.history = state.history.slice(0, state.historyIndex + 1);
     }
-
-    const currPixels = cell.pixels || {};
 
     // The composite buffer cannot represent layer order, groups, visibility or
     // ownership. Structured documents therefore use complete AST snapshots;
@@ -3293,10 +3187,6 @@
         pixels: { ...currPixels },
         structuralLayers: JSON.parse(JSON.stringify(cell.layers))
       };
-      const previous = state.history[state.historyIndex];
-      if (previous && previous.structuralLayers &&
-          JSON.stringify(previous.structuralLayers) === JSON.stringify(snapshot.structuralLayers) &&
-          previous.title === snapshot.title) return;
       state.history.push(snapshot);
       state.historyIndex = state.history.length - 1;
       state.lastHistoryPixels = { ...currPixels };
@@ -3323,7 +3213,8 @@
     }
 
     const lastEntry = state.history[state.historyIndex];
-    const dimChanged = !lastEntry || (lastEntry.w !== state.w || lastEntry.h !== state.h);
+    const dimChanged = !lastEntry || Boolean(lastEntry.structuralLayers) ||
+      (lastEntry.w !== state.w || lastEntry.h !== state.h);
     const hasStrokeDiff = state.activeStrokeChanges && Object.keys(state.activeStrokeChanges).length > 0;
 
     if (dimChanged) {
@@ -3382,7 +3273,7 @@
         state.lastHistoryPixels = {};
       }
       const prevPixels = state.lastHistoryPixels;
-      const diff = calculatePixelDiff(prevPixels, currPixels);
+      const diff = pendingDiff || calculatePixelDiff(prevPixels, currPixels);
       const diffKeys = Object.keys(diff);
       if (diffKeys.length === 0 && lastEntry && lastEntry.title === state.title) {
         return;
@@ -3663,7 +3554,7 @@
     state.h = recovered.h;
     state.title = recovered.title;
     state.selection = null;
-    state.floatingPixels = null;
+    floatingSession.clear();
     state.activeLayerId = payload.activeLayerId || null;
     state.activeRegionId = payload.activeRegionId || null;
     state.isolatedNodeId = payload.isolatedNodeId || null;
@@ -3841,7 +3732,7 @@
     cell.size = { w: newW, h: newH };
     if (state.doc && state.doc.meta) {
       state.doc.meta.cell_size = { w: newW, h: newH };
-      state.doc.meta.grid = { columns: 1, rows: 1, default_cell: `${newW}x${newH}` };
+      state.doc.meta.grid = { cols: 1, rows: 1 };
     }
 
     // Clean out-of-bounds pixels if shrank
@@ -4322,6 +4213,7 @@
           }
           const title = file.name.replace(/\.[^/.]+$/, '');
           const session = createPaProjectSession(title, parsed, handle);
+          if (!session) return;
           session.fileName = file.name;
           session.isDirty = false;
           state.history = [];
@@ -4361,146 +4253,89 @@
     dom.fileInput.click();
   }
 
-  let activeSavePromise = Promise.resolve();
-  let saveSequenceCounter = 0;
-  let lastCompletedSaveSeq = 0;
+  const enqueueArtworkSave = _FileSave.createQueue();
   let activeSaveOperations = 0;
 
   function saveFileNative(forceSaveAs = false) {
+    if (_hasDocument && state.isCodeEditingUnlocked && state.sourcePaneMode !== 'summary') {
+      clearTimeout(state.sourceDebounceTimer);
+      if (!applySourceCodeToCanvas()) return Promise.resolve(false);
+    }
     commitFloatingSelection();
-    const snapshotRevision = documentRevision;
-    const saveSeq = ++saveSequenceCounter;
+    if (!state.doc) return Promise.resolve(false);
+    const doc = state.doc;
+    const session = paProjectSessions.find(item => item.id === activePaProjectId) || null;
+    const revision = documentRevision;
     const text = flushSourceCode();
-    activeSaveOperations++;
-
-    const doSave = async () => {
+    const title = state.title;
+    const fileName = currentFileName || `${sanitizeFilename(title)}.pix2`;
+    const direct = !forceSaveAs && currentFileHandle?.createWritable ? currentFileHandle : null;
+    const access = direct ? _FileSave.permission(direct) : Promise.resolve(true);
+    let picker;
+    if (!direct && typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
       try {
-        // Prevent stale out-of-order writes if a newer queued save already completed
-        if (saveSeq < lastCompletedSaveSeq && !forceSaveAs) {
-          return;
-        }
-
-        // Direct overwrite to existing handle
-        if (!forceSaveAs && currentFileHandle && 'createWritable' in currentFileHandle) {
-          try {
-            if (currentFileHandle.queryPermission) {
-              const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
-              if (perm !== 'granted') {
-                const req = await currentFileHandle.requestPermission({ mode: 'readwrite' });
-                if (req !== 'granted') {
-                  showToast('Write permission to file was denied.', 'error');
-                  return;
-                }
-              }
-            }
-            const writable = await currentFileHandle.createWritable();
-            await writable.write(text);
-            await writable.close();
-            try {
-              const fresh = await currentFileHandle.getFile();
-              lastKnownFileModified = fresh.lastModified;
-            } catch (_) {
-              lastKnownFileModified = Date.now();
-            }
-            lastSavedContent = text;
-            pendingExternalConflict = null;
-            const btnReload = document.getElementById('btn-reload-file');
-            if (btnReload) {
-              btnReload.classList.remove('pulse-warning');
-              btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-            }
-            await persistFileHandle(currentFileHandle);
-            try {
-              _storage.setItem('noiradix_pixelart_file_name', currentFileName);
-              _storage.setItem('pix2_last_saved_content', text);
-              _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-            } catch (_) {}
-            lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-            lastSavedRevision = snapshotRevision;
-            setDirty(documentRevision !== lastSavedRevision);
-            triggerAutosave(true);
-            showToast(`Saved to ${currentFileHandle.name}!`);
-            return;
-          } catch (err) {
-            console.warn('Direct overwrite failed, prompting Save As:', err);
+        picker = window.showSaveFilePicker({ suggestedName: fileName,
+          types: [{ description: 'PIX2 Sprite File', accept: { 'text/plain': ['.pix2'] } }] });
+      } catch (error) {
+        picker = Promise.reject(error);
+      }
+      picker.catch(() => {});
+    }
+    activeSaveOperations++;
+    return enqueueArtworkSave(async () => {
+      try {
+        if (session && !paProjectSessions.includes(session)) return false;
+        if (!await access) throw new Error('Write permission was denied');
+        const handle = picker ? await picker : direct;
+        let modified = 0;
+        if (handle) modified = await _FileSave.write(handle, text);
+        else savePix2File(text, fileName);
+        if (session && !paProjectSessions.includes(session)) return true;
+        const active = session ? session.id === activePaProjectId : state.doc === doc;
+        if (active) saveCurrentPaSession();
+        if (session) {
+          session.lastSavedContent = text;
+          session.lastSavedRevision = revision;
+          session.isDirty = session.revision !== revision || _PIX2.serialize(session.doc) !== text;
+          session.lastKnownFileModified = modified;
+          session.pendingExternalConflict = null;
+          if (handle) {
+            session.fileHandle = handle;
+            session.fileName = handle.name;
           }
         }
-
-        // Save As via File System Access API
-        if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-          try {
-            const suggested = currentFileName || `${sanitizeFilename(state.title)}.pix2`;
-            const handle = await window.showSaveFilePicker({
-              suggestedName: suggested,
-              types: [{
-                description: 'PIX2 Sprite File (*.pix2)',
-                accept: { 'text/plain': ['.pix2'] }
-              }]
-            });
-            const writable = await handle.createWritable();
-            await writable.write(text);
-            await writable.close();
+        if (active) {
+          if (handle) {
             currentFileHandle = handle;
             currentFileName = handle.name;
-            state.title = handle.name.replace(/\.[^/.]+$/, '');
-            if (dom.docTitle) dom.docTitle.value = state.title;
-            try {
-              const fresh = await handle.getFile();
-              lastKnownFileModified = fresh.lastModified;
-            } catch (_) {
-              lastKnownFileModified = Date.now();
-            }
-            lastSavedContent = text;
-            pendingExternalConflict = null;
-            const btnReload = document.getElementById('btn-reload-file');
-            if (btnReload) {
-              btnReload.classList.remove('pulse-warning');
-              btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
-            }
-            await persistFileHandle(handle);
-            try {
-              _storage.setItem('noiradix_pixelart_file_name', currentFileName);
-              _storage.setItem('pix2_last_saved_content', text);
-              _storage.setItem('pix2_last_saved_time', String(lastKnownFileModified));
-            } catch (_) {}
-            lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-            lastSavedRevision = snapshotRevision;
-            setDirty(documentRevision !== lastSavedRevision);
-            triggerAutosave(true);
-            showToast(`Saved as ${handle.name}!`);
-            return;
-          } catch (err) {
-            if (err.name === 'AbortError') return;
-            console.warn('Save file picker failed, falling back to download:', err);
+            persistFileHandle(handle);
           }
+          lastKnownFileModified = modified;
+          lastSavedContent = text;
+          pendingExternalConflict = null;
+          lastSavedRevision = revision;
+          setDirty(documentRevision !== lastSavedRevision || _PIX2.serialize(state.doc) !== text);
+          triggerAutosave(true);
+          showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName);
         }
-
-        // Fallback: Blob download
-        savePix2File();
-        lastCompletedSaveSeq = Math.max(lastCompletedSaveSeq, saveSeq);
-        lastSavedRevision = snapshotRevision;
-        setDirty(documentRevision !== lastSavedRevision);
-        triggerAutosave(true);
+        if (_hasDocument) persistPaWorkspace();
+        return true;
+      } catch (error) {
+        if (error.name !== 'AbortError') showToast('Save failed: ' + error.message, 'error');
+        return false;
       } finally {
-        activeSaveOperations = Math.max(0, activeSaveOperations - 1);
+        activeSaveOperations--;
       }
-    };
-
-    activeSavePromise = activeSavePromise.then(doSave, doSave);
-    return activeSavePromise;
+    });
   }
 
-  function savePix2File() {
-    commitFloatingSelection();
-    const text = flushSourceCode();
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${sanitizeFilename(state.title)}.pix2`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`Downloaded ${sanitizeFilename(state.title)}.pix2`);
+  function savePix2File(text = flushSourceCode(), fileName = `${sanitizeFilename(state.title)}.pix2`) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   // ===========================================================================
@@ -4528,6 +4363,7 @@
         const validation = _PIX2.validate(doc, { profile: 'pixelart', strict: false });
         if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid PIX2 format');
         const session = createPaProjectSession(file.name.replace(/\.[^.]+$/, ''), doc);
+        if (!session) return;
         session.fileName = file.name;
         currentFileName = file.name;
         lastSavedContent = text;
@@ -4574,6 +4410,7 @@
           _PIX2.rgbaToHex(pixels[index], pixels[index + 1], pixels[index + 2], alpha);
       }
       const session = createPaProjectSession(title, draft);
+      if (!session) return;
       target.pixels = importedPixels;
       commitStructureMutation();
       saveCurrentPaSession();
@@ -4627,15 +4464,21 @@
     if (!currentFileHandle || isExternalReloading || activeSaveOperations > 0) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
+    const watchedHandle = currentFileHandle;
+    const watchedProject = activePaProjectId;
+    const watchedRevision = documentRevision;
+    const stillCurrent = () => currentFileHandle === watchedHandle && activePaProjectId === watchedProject && documentRevision === watchedRevision && !activeSaveOperations;
     try {
       isExternalReloading = true;
       const file = await currentFileHandle.getFile();
+      if (!stillCurrent()) return;
       const currentModified = file.lastModified;
 
       // If baseline timestamp is not yet recorded, record it and baseline content from file
       if (lastKnownFileModified === 0) {
         lastKnownFileModified = currentModified;
         const curText = await file.text();
+        if (!stillCurrent()) return;
         lastSavedContent = curText;
         try { _storage.setItem('pix2_last_saved_content', curText); } catch (_) {}
 
@@ -4665,6 +4508,7 @@
       }
 
       const text = await file.text();
+      if (!stillCurrent()) return;
       if (!text || !text.trim()) {
         isExternalReloading = false;
         return;
@@ -4699,9 +4543,17 @@
 
       // Safe reload
       pushHistory(); // Critical! Save undo state so user can Ctrl+Z immediately if unwanted
+      const previousSource = dom.codeEditor.value;
+      const previousSourceMode = state.sourcePaneMode;
       state.sourcePaneMode = 'full';
       dom.codeEditor.value = text;
       const ok = applySourceCodeToCanvas();
+      if (!ok) {
+        dom.codeEditor.value = previousSource;
+        state.sourcePaneMode = previousSourceMode;
+        updateCodeGutter();
+        return;
+      }
       if (ok) {
         lastKnownFileModified = currentModified;
         lastSavedContent = text;
@@ -5110,22 +4962,6 @@
       showToast('Code editor unlocked for direct edits. Click "Apply" when done.');
     }
 
-    function lockCodeEditor() {
-      state.isCodeEditingUnlocked = false;
-      dom.codeEditor.readOnly = true;
-      if (dom.codeModeBadge) {
-        dom.codeModeBadge.className = 'pa-mode-badge locked';
-        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-        dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
-      }
-      if (dom.btnToggleCodeLock) {
-        dom.btnToggleCodeLock.classList.remove('hidden');
-      }
-      if (dom.btnApplyCode) {
-        dom.btnApplyCode.classList.add('hidden');
-      }
-    }
-
     if (dom.btnToggleCodeLock) {
       dom.btnToggleCodeLock.addEventListener('click', unlockCodeEditor);
     }
@@ -5419,7 +5255,7 @@
       const title = 'New Artwork';
       const doc = _PIX2.createDocument(title, 1, 1, cw, ch, { profile: 'pixelart' });
       doc.meta.title = title;
-      createPaProjectSession(title, doc, null);
+      if (!createPaProjectSession(title, doc, null)) return;
       state.history = [];
       state.historyIndex = -1;
       state.lastHistoryPixels = null;
@@ -5890,6 +5726,7 @@
             const doc = _PIX2.parse(text, { profile: 'pixelart' });
             const handle = handleMap.get(pf.name) || null;
             const session = createPaProjectSession(pf.name.replace(/\.[^/.]+$/, ''), doc, handle);
+            if (!session) return;
             session.fileName = pf.name;
             session.isDirty = false;
             renderPaProjectTabs();

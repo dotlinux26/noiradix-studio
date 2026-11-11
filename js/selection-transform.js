@@ -276,16 +276,25 @@
     ctx.restore();
   }
 
-  function liftPixels(target, bounds) {
-    const source = target.pixels ??= {};
+  function copyPixels(target, bounds) {
+    const source = target.pixels || {};
     const pixels = {};
     for (let y = 0; y < bounds.h; y++) {
       for (let x = 0; x < bounds.w; x++) {
         const key = `${bounds.x + x},${bounds.y + y}`;
         if (!source[key]) continue;
         pixels[`${x},${y}`] = source[key];
-        delete source[key];
       }
+    }
+    return pixels;
+  }
+
+  function liftPixels(target, bounds) {
+    const source = target.pixels ??= {};
+    const pixels = copyPixels(target, bounds);
+    for (const key in pixels) {
+      const [x, y] = key.split(',').map(Number);
+      delete source[`${bounds.x + x},${bounds.y + y}`];
     }
     return { pixels, baselinePixels: { ...pixels }, baselineBounds: { ...bounds } };
   }
@@ -430,6 +439,7 @@
     getSelectionHandles,
     hitTestSelectionHandles,
     drawHandles,
+    copyPixels,
     liftPixels,
     placePixels,
     quarterTurnBounds,
