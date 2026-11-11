@@ -4,6 +4,21 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const PIX2 = require('../../js/pix2-format.js');
+function zipEntries(bytes) {
+  const entries = new Map();
+  let offset = 0;
+  while (bytes.readUInt32LE(offset) === 0x04034b50) {
+    assert.equal(bytes.readUInt16LE(offset + 8), 0, 'Stored ZIP format');
+    const size = bytes.readUInt32LE(offset + 18);
+    const nameLength = bytes.readUInt16LE(offset + 26);
+    const extraLength = bytes.readUInt16LE(offset + 28);
+    const name = bytes.subarray(offset + 30, offset + 30 + nameLength).toString('utf8');
+    const start = offset + 30 + nameLength + extraLength;
+    entries.set(name, bytes.subarray(start, start + size));
+    offset = start + size;
+  }
+  return entries;
+}
 (async () => {
   let browser;
   const channel = process.env.EDITOR_QA_CHANNEL || (process.env.CI ? undefined : 'chrome');
@@ -33,12 +48,20 @@ const PIX2 = require('../../js/pix2-format.js');
       await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) =>
         route.abort(),
       );
+      await page.addInitScript(() => {
+        localStorage.setItem('noiradix_custom_palettes', JSON.stringify({
+          'qa_"quoted': { name: 'QA <palette>', colors: ['#ff0000', '#00ff00'] }
+        }));
+      });
       await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'));
       await page.waitForTimeout(550);
       const about = page
         .locator('#btn-about-close-done, #btn-pa-about-close-done')
         .filter({ visible: true });
       if (await about.count()) await about.first().click();
+      const palette = page.locator(pa ? '#pa-palette-select' : '#palette-select');
+      assert.equal(await palette.locator('option').filter({ hasText: 'QA <palette> (2)' }).count(), 1);
+      assert.equal(await palette.locator('optgroup').count(), 3);
       const tabs = page.locator('.project-tab[data-tab-id]');
       const plus = page.locator(
         pa ? '#pa-btn-project-new-tab' : '#btn-project-new-tab',
@@ -435,6 +458,32 @@ const PIX2 = require('../../js/pix2-format.js');
     await gridPage.locator('#export-scale-select').selectOption('1');
     assert.ok(await gridPage.locator('#btn-execute-game-export').isEnabled());
     console.log('Studio PASS export visible Fit / zoom raster reuse / allocation rejection and recovery');
+    // Verify the extracted export controller through the ordinary modal/download path.
+    for (const format of ['unity', 'texturepacker', 'zip-frames']) {
+      page.on('pageerror', error => console.error('Export page:', error.message));
+      console.log('Checking export', format);
+      await page.locator('#btn-export-atlas').click();
+      await page.locator('.format-option-card[data-format="' + format + '"]').click();
+      const pending = page.waitForEvent('download');
+      await page.locator('#btn-execute-game-export').click();
+      const download = await pending;
+      const entries = zipEntries(readFileSync(await download.path()));
+      assert.ok([...entries.keys()].some(name => name.endsWith('.png')));
+      if (format === 'unity') {
+        assert.ok([...entries.keys()].some(name => name.endsWith('.cs')));
+        const json = [...entries].find(([name]) => name.endsWith('.json'));
+        assert.ok(JSON.parse(json[1].toString('utf8')));
+      }
+      if (format === 'texturepacker') {
+        const json = [...entries].find(([name]) => name.endsWith('.json'));
+        const metadata = JSON.parse(json[1].toString('utf8'));
+        assert.ok(Object.keys(metadata.frames).length);
+      }
+      for (const [name, data] of entries) {
+        if (name.endsWith('.png')) assert.equal(data.subarray(1, 4).toString(), 'PNG');
+      }
+    }
+    console.log('Studio PASS Unity / TexturePacker / individual frame ZIP downloads');
   } finally {
     await browser.close();
   }

@@ -39,3 +39,16 @@ P0 hoàn tất bản đồ theo entry point hiện tại và kiểm thử bổ s
 ## P1 — Tách controller
 
 Đang thực hiện lát cắt palette/library đầu tiên. Tách storage + dropdown chung vào `js/editor-palette-library.js`; app cung cấp preset, fallback, nhãn và DOM accessor. Nguồn lấy màu/save prompt vẫn thuộc app. Tiếp theo sẽ quyết định lát cắt dựa trên dependency, không gom toàn bộ app state vào module mới.
+
+### P1 — Kết quả lát cắt đầu
+
+Đã tách `EditorPaletteLibrary` (storage và dropdown dùng chung), `StudioAtlas` (raster và frame rect), `StudioExport` (đóng gói định dạng và ZIP). App chỉ cung cấp lựa chọn, tài liệu và các callback UI. Preset/fallback/nhãn và nguồn lấy màu của mỗi app giữ nguyên. Không tạo runtime dependency.
+
+19 Node suites qua sau extraction. Browser workspace qua palette có tên chứa ký tự đặc biệt và các luồng hiện có; đang mở rộng kiểm tra tải gói Unity/TexturePacker/frame ZIP. Các controller grid/slice/animation còn nằm trong Studio app; P1 chưa hoàn tất toàn bộ phạm vi kế hoạch.
+
+### P1 — Kiểm chứng controller đã tách
+
+- Palette preset data đã có một nguồn; mỗi app nhận bản sao riêng, giữ bộ preset sẵn có.
+- Studio normal entry point tải được gói Unity, TexturePacker và ZIP từng frame. Test đọc ZIP thực, JSON metadata và chữ ký PNG; không chỉ kiểm tra nút có callback.
+- Workspace browser qua cả hai app, gồm palette library có tên chứa ký tự đặc biệt. 19 Node suites qua. Đã sửa thứ tự nạp preset trước EditorState; kiểm thử browser bắt được dependency khởi tạo này.
+- Module atlas/export không tham chiếu state/DOM toàn app. App cấp request và callback UI. Refactor đang tiếp tục các controller còn lại; chưa đánh dấu P1 hoàn tất.
