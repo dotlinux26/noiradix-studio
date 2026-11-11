@@ -1,5 +1,7 @@
 # Working in NOIRADIX
 
+Start with [the agent handbook](docs/agents/README.md). It maps the maintained contracts, implementation boundaries, verification commands and release workflow.
+
 - Studio owns sprite sheets, frame editing, animation and atlas import. PixelArt owns the standalone artwork canvas. Put PIX2 parsing, raster operations and editor rules shared by both apps in `js/`. Keep DOM, viewport, history and autosave wiring in each app.
 - Start with `PIX2_SPECIFICATION.md`, `docs/ARCHITECTURE.md` and the relevant interaction spec. Treat discussion notes, screenshots and prior agent reports as evidence to check against the current checkout.
 - Keep static deployment and PIX2 1.0 read compatibility. Verify new PIX2 1.1 behavior through load, edit, undo, export and reload. View state such as zoom and isolation must stay out of exported artwork.

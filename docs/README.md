@@ -18,6 +18,7 @@
 - [Shared editor behavior and implementation decisions](discussion/EDITOR_BEHAVIOR.md)
 - [Studio and PixelArt editor engine audit](discussion/EDITOR_ENGINE_AUDIT.md)
 - [Repository workflow for agents](../AGENTS.md)
+- [Agent handbook and verification workflow](agents/README.md)
 - [Release process and verification gates](ENGINEERING/RELEASE_PROCESS.md)
 - [Gemini Argon 4.0 PIX2 1.1 Field Report & Parser Findings](ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md)
 
