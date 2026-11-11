@@ -782,7 +782,9 @@ const fixture = `@pix2 1.1
           ctx.drawImage = drawImage;
         }
         durations.sort((a, b) => a - b);
-        return { fills, blits, maxZoomSourceArea, bufferFills, maxDrift, drifts, p95: durations[Math.ceil(durations.length * 0.95) - 1] };
+        return { fills, blits, maxZoomSourceArea, bufferFills, maxDrift, drifts,
+          median: durations[Math.floor(durations.length / 2)],
+          p95: durations[Math.ceil(durations.length * 0.95) - 1], max: durations.at(-1) };
       }, pa);
       assert.ok(wheelStats.blits >= 16, name + ' zoom in and out repaints the artwork buffer');
       assert.equal(wheelStats.fills, wheelStats.blits, name + ' wheel uses one background fill per blit');

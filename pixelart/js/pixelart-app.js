@@ -1887,7 +1887,7 @@
 
     try {
       // 1. Parse raw PIX2 source into AST document with PixelArt profile (supports up to 1024x1024)
-      const parsedDoc = _PIX2.parse(source, { profile: 'pixelart' });
+      const parsedDoc = _PIX2.parseValidated(source, { profile: 'pixelart' });
       if (!parsedDoc || !parsedDoc.cells) {
         throw new Error('PIX2 parse error: missing cells object.');
       }
@@ -2668,6 +2668,7 @@
     if (!state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
     const result = floatingSession.commit(state.doc, state.selection, state);
+    _EditorCanvas.refreshSourceComposite(_PIX2, result.restored);
     if (result.status === 'committed') {
       rebuildArtworkBuffer();
       pushHistory();
@@ -2695,6 +2696,7 @@
   function cancelFloatingSelection() {
     const cell = getArtworkCell();
     const restored = floatingSession.cancel();
+    _EditorCanvas.refreshSourceComposite(_PIX2, restored);
     if (restored) rebuildArtworkBuffer();
 
     floatingSession.clear();
@@ -4521,9 +4523,17 @@
 
       // Safe reload
       pushHistory(); // Critical! Save undo state so user can Ctrl+Z immediately if unwanted
+      const previousSource = dom.codeEditor.value;
+      const previousSourceMode = state.sourcePaneMode;
       state.sourcePaneMode = 'full';
       dom.codeEditor.value = text;
       const ok = applySourceCodeToCanvas();
+      if (!ok) {
+        dom.codeEditor.value = previousSource;
+        state.sourcePaneMode = previousSourceMode;
+        updateCodeGutter();
+        return;
+      }
       if (ok) {
         lastKnownFileModified = currentModified;
         lastSavedContent = text;

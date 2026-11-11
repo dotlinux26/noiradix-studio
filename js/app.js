@@ -3061,6 +3061,7 @@
     const size = cell && (cell.size || state.doc.meta.cellSize);
     const bounds = { x: floatingCurrentX, y: floatingCurrentY, w: floatingOriginalSel.w, h: floatingOriginalSel.h };
     const result = floatingSession.commit(state.doc, bounds, size);
+    EditorCanvas.refreshSourceComposite(PIX2, result.restored);
     if (result.status === 'committed') {
       state.selection = { ...result.bounds };
       if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
@@ -3082,8 +3083,7 @@
 
   function cancelFloatingSelection() {
     const cell = getFloatingSelectionCell();
-    floatingSession.cancel();
-    if (cell?.layers?.length) state.syncCellComposite(cell.id);
+    EditorCanvas.refreshSourceComposite(PIX2, floatingSession.cancel());
     // beginStroke() captured the pre-lift document. Cancellation leaves no
     // committed mutation, so discard it rather than recording a false undo.
     state.strokePreState = null;
@@ -4478,7 +4478,7 @@
       }
 
       // Safe reload (preserving active tabs)
-      const newDoc = PIX2.parse(text);
+      const newDoc = PIX2.parseValidated(text);
       state.setDocument(newDoc, true);
       lastKnownFileModified = currentModified;
       lastSavedContent = text;
@@ -4816,7 +4816,7 @@
       }
     }
     const text = await file.text();
-    const doc = PIX2.parse(text);
+    const doc = PIX2.parseValidated(text);
     const validation = PIX2.validate(doc, { strict: false });
     if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid PIX2 document');
     const session = createProjectSession(doc, file.name, handle);

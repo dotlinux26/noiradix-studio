@@ -95,3 +95,17 @@ Không có thay đổi định dạng hay storage schema. Không cài dependency
 ## P4 — Render và lifecycle
 
 Đang bắt đầu: kiểm tra buffer/cache ownership, invalidation và async snapshot; không đổi giao diện hoặc storage schema.
+
+### Kết quả P4
+
+- Shared `EditorCanvas.refreshSourceComposite` làm mới full composite của đúng source document sau cancellation, kể cả document đó không còn active. Không ghi isolation vào artwork cache.
+- RF-004: export chờ PNG encoding rồi đọc metadata từ doc còn mutable. Controller hiện chụp metadata/animation ở thời điểm bắt đầu; ZIP từng frame chụp thêm pixel source. Unity/TexturePacker không nhân đôi raster không cần thiết. Browser test trì hoãn toBlob, đổi kích thước và animation của live doc, rồi xác nhận metadata vẫn thuộc snapshot ban đầu.
+- RF-005: Studio source apply/watcher có đường publish parse result chưa validate; PixelArt watcher từ chối canvas nhưng để source lỗi trong textarea. Thêm `PIX2.parseValidated` dùng chung cho publication được di chuyển; parse() vẫn dành cho diagnostic tooling. PixelArt restore source/mode khi external reload thất bại. Native browser test xác nhận file có coordinate lỗi không thay document/source hiện tại ở cả hai app.
+- Native tests bổ sung quyền ghi bị từ chối, hủy picker và retry; cả hai app qua. Đây là mô phỏng adapter trình duyệt, không phải OS picker thật.
+- Workspace browser qua cả hai app, export snapshot và template regression qua. Node test xác nhận validated ingestion giữ PIX2 1.0 và cache phục hồi đúng document.
+- Benchmark browser mới: Chrome 157, 1440x950, DPR2, sparse density 1/16, khổ Studio 16/64/512 và PixelArt 16/64/512/1024. Đã chờ dimension thực của tài liệu trước đo. Handler p95 Studio 3.1/4.1/4.3ms, PixelArt 6.6/6.1/5.9/6.3ms; max cao nhất 9.4ms. Đây là mẫu trên máy hiện tại, không phải frame latency, RSS hay chứng minh hiệu năng trên mọi máy. Heap/canvas-connected estimates được script in riêng; không bao gồm mọi GPU/offscreen allocation.
+- Ranh giới: shared geometry/raster/cache rules; viewport instance, render scheduling và autosave/history wiring riêng từng app. Không hợp nhất schema lưu trữ trong đợt này.
+
+## P5 — Dọn, tài liệu và gate cuối
+
+Đang bắt đầu rà dependency/caller, chuẩn hóa runner CI để không bỏ sót suite mới, cập nhật hợp đồng/module map và kiểm tra toàn bộ trước push RC2. Không merge main.

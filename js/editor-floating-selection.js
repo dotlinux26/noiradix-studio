@@ -59,8 +59,8 @@
     function commit(doc, bounds, size) {
       if (!state.pixels || !scope) return { status: 'empty' };
       if (scope.doc !== doc || !editable()) {
-        cancel();
-        return { status: 'cancelled' };
+        const restored = cancel();
+        return { status: 'cancelled', restored };
       }
       const result = { status: 'committed', cell: scope.cell, target: scope.target, bounds: { ...bounds } };
       transform.placePixels(scope.target, state.pixels, bounds, size);

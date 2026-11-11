@@ -103,3 +103,19 @@ assert.equal(session.commit(doc, { x: 7, y: 7, w: 2, h: 1 }, { w: 8, h: 8 }).sta
 assert.equal(region.pixels['7,7'], '#ff0000');
 assert.equal(region.pixels['8,7'], undefined);
 console.log('PASS shared floating selection / immutable cancel / lock / stale scope / paste clipping');
+
+// Validated ingestion rejects diagnostic-bearing partial documents in both profiles.
+const invalidSource = '@pix2 1.1\n@cell c\n p nope #fff';
+for (const profile of ['studio', 'pixelart']) {
+  assert.throws(() => PIX2.parseValidated(invalidSource, { profile }), /INVALID_COORDINATE/);
+  assert.equal(PIX2.parseValidated('@pix2 1.0\n@cell c\n p 1,1 #f00', { profile }).meta.version, '1.0');
+}
+const Canvas = require('../js/editor-canvas.js');
+session.lift(doc, sourceCell, region, box);
+sourceCell.pixels = {};
+const rejected = session.commit(otherDoc, box, { w: 8, h: 8 });
+Canvas.refreshSourceComposite(PIX2, rejected.restored);
+assert.equal(sourceCell.pixels['1,1'], '#0000ff', 'Rebuilt full composite honors the top sibling');
+assert.equal(sourceCell.pixels['2,1'], '#00ff00', 'Restored old document composite is refreshed independently');
+assert.deepEqual(otherDoc.cells.cell_0_0.pixels, {});
+console.log('PASS validated ingestion / restored source composite ownership');

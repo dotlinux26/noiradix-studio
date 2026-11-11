@@ -464,15 +464,38 @@ function zipEntries(bytes) {
     for (const format of ['unity', 'texturepacker', 'zip-frames']) {
       await page.locator('#btn-export-atlas').click();
       await page.locator('.format-option-card[data-format="' + format + '"]').click();
+      let expectedWidth;
+      if (format === 'unity') {
+        expectedWidth = await page.evaluate(() => {
+          window.exportSource = PIX2.serialize(state.doc);
+          const original = HTMLCanvasElement.prototype.toBlob;
+          HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+            HTMLCanvasElement.prototype.toBlob = original;
+            original.call(this, blob => { window.releaseExport = () => callback(blob); }, ...args);
+          };
+          return state.doc.meta.cellSize.w;
+        });
+      }
       const pending = page.waitForEvent('download');
       await page.locator('#btn-execute-game-export').click();
+      if (format === 'unity') {
+        await page.waitForFunction(() => typeof window.releaseExport === 'function');
+        await page.evaluate(() => {
+          state.doc.meta.cellSize.w = 123;
+          state.doc.animations.qa_late = { frames: [], fps: 6 };
+          window.releaseExport();
+        });
+      }
       const download = await pending;
       const entries = zipEntries(readFileSync(await download.path()));
       assert.ok([...entries.keys()].some(name => name.endsWith('.png')));
       if (format === 'unity') {
         assert.ok([...entries.keys()].some(name => name.endsWith('.cs')));
         const json = [...entries].find(([name]) => name.endsWith('.json'));
-        assert.ok(JSON.parse(json[1].toString('utf8')));
+        const metadata = JSON.parse(json[1].toString('utf8'));
+        assert.equal(metadata.meta.cellWidth, expectedWidth);
+        assert.equal(metadata.animations.some(clip => clip.clipName === 'qa_late'), false);
+        await page.evaluate(() => { state.doc = PIX2.parse(window.exportSource); });
       }
       if (format === 'texturepacker') {
         const json = [...entries].find(([name]) => name.endsWith('.json'));

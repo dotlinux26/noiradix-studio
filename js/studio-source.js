@@ -166,7 +166,7 @@ function handleBeforeLeaveCodeTab() {
 
     if (wantApply) {
       try {
-        const parsed = PIX2.parse(textareaCode);
+        const parsed = PIX2.parseValidated(textareaCode);
         state.setDocument(parsed, true);
         state.saveSnapshot('Apply Code');
         triggerEventAutosave();
@@ -283,7 +283,7 @@ function applyCodeToDoc() {
     if (!dom.codeTextarea) return;
     try {
       const code = dom.codeTextarea.value;
-      const newDoc = PIX2.parse(code);
+      const newDoc = PIX2.parseValidated(code);
       state.setDocument(newDoc, true);
       state.saveSnapshot('Apply Code');
       triggerEventAutosave();

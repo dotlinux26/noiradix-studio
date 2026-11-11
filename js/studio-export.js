@@ -111,6 +111,20 @@ const StudioExport = (() => {
   async function execute({ doc, opts, atlasData, format: currentExportFormat, trimmed: isTrimmed }) {
     if (!doc || !atlasData) return;
 
+    // PNG encoding yields to the browser. Retain metadata and (for per-frame
+    // encoding) source pixels from this invocation, independently of later edits.
+    if (['unity', 'texturepacker', 'zip-frames'].includes(currentExportFormat)) {
+      doc = {
+        meta: { ...doc.meta, cellSize: { ...doc.meta.cellSize } },
+        animations: JSON.parse(JSON.stringify(doc.animations || {})),
+        cells: Object.fromEntries(Object.entries(doc.cells).map(([id, cell]) => [id, {
+          name: cell.name,
+          pixels: currentExportFormat === 'zip-frames' ? { ...cell.pixels } : undefined
+        }]))
+      };
+      opts = { ...opts, pivot: { ...opts.pivot } };
+    }
+
     const rawBaseName = (doc.meta.title || 'sprite_atlas').toLowerCase().replace(/\s+/g, '_');
     const baseName = sanitizeSafeFilename(rawBaseName, 'sprite_atlas');
     const pngName = `${baseName}.png`;

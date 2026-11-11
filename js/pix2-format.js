@@ -2453,8 +2453,22 @@ const PIX2 = (function () {
   // PUBLIC EXPORTS
   // ===========================================================================
 
+  // Editor ingestion must reject error diagnostics rather than publish a
+  // partially parsed document. parse() remains available for diagnostic tooling.
+  function parseValidated(text, options = {}) {
+    const doc = parse(text, options);
+    const result = validate(doc, { ...options, strict: options.strict === true });
+    if (!result.valid) {
+      const error = new Error(result.errors[0] || result.warnings[0] || 'Invalid PIX2 document');
+      error.diagnostics = result.diagnostics;
+      throw error;
+    }
+    return doc;
+  }
+
   return {
     parse,
+    parseValidated,
     serialize,
     createDocument,
     validate,

@@ -25,9 +25,10 @@ const assert = require('node:assert/strict');
             name: id === 'C' ? 'copy.pix2' : 'same.pix2',
             kind: 'file',
             async queryPermission() { return record.denied ? 'denied' : 'granted'; },
-            async requestPermission() { return record.denied ? 'denied' : 'granted'; },
+            async requestPermission() { record.permissionRequests = (record.permissionRequests || 0) + 1; return record.denied ? 'denied' : 'granted'; },
             async isSameEntry(other) { return other === record.handle; },
             async getFile() {
+              record.readCount = (record.readCount || 0) + 1;
               const snapshot = record.content;
               if (record.blockRead) {
                 record.readStarted = true;
@@ -52,7 +53,11 @@ const assert = require('node:assert/strict');
           window.files[id] = record;
         }
         window.showOpenFilePicker = async () => [window.files[window.openFileId].handle];
-        window.showSaveFilePicker = async () => window.files[window.saveFileId].handle;
+        window.showSaveFilePicker = async () => {
+          window.savePickerCalls = (window.savePickerCalls || 0) + 1;
+          if (window.cancelPicker) throw new DOMException('Picker cancelled', 'AbortError');
+          return window.files[window.saveFileId].handle;
+        };
       });
       await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'));
       const about = page.locator('#btn-about-close-done, #btn-pa-about-close-done').filter({ visible: true });
@@ -141,6 +146,39 @@ const assert = require('node:assert/strict');
       await page.waitForFunction(() => window.files.C.aborted === 1);
       assert.equal(await dirty(), 1, 'Failed write retains the unsaved marker');
       assert.equal(await page.evaluate(() => window.files.C.content), newerRevision);
+      const writesBeforeDenial = await page.evaluate(() => {
+        window.files.C.fail = false;
+        window.files.C.denied = true;
+        return window.files.C.started;
+      });
+      await page.keyboard.press('Control+s');
+      await page.waitForFunction(() => window.files.C.permissionRequests > 0);
+      assert.equal(await page.evaluate(() => window.files.C.started), writesBeforeDenial);
+      assert.equal(await dirty(), 1, 'Permission denial keeps unsaved state');
+      const pickerCalls = await page.evaluate(() => {
+        window.files.C.denied = false;
+        window.cancelPicker = true;
+        return window.savePickerCalls || 0;
+      });
+      await page.keyboard.press('Control+Shift+s');
+      await page.waitForFunction(count => window.savePickerCalls > count, pickerCalls);
+      assert.equal(await dirty(), 1, 'Cancelling the picker keeps unsaved state');
+      assert.equal(await page.evaluate(() => window.files.C.content), newerRevision);
+      await page.evaluate(() => { window.cancelPicker = false; });
+      const retrySource = await source();
+      await page.keyboard.press('Control+s');
+      await page.waitForFunction(() => window.files.C.writes.length === 2);
+      assert.equal(await page.evaluate(() => window.files.C.content), retrySource);
+      assert.equal(await dirty(), 0, 'Retry succeeds after denied/cancelled saves');
+      const readsBeforeInvalid = await page.evaluate(() => {
+        window.files.C.content = '@pix2 1.1\n@cell c\n p nope #fff';
+        return window.files.C.readCount;
+      });
+      await page.locator('#btn-reload-file').click();
+      await page.waitForFunction(count => window.files.C.readCount > count, readsBeforeInvalid);
+      await page.waitForTimeout(150);
+      assert.equal(await source(), retrySource, 'Invalid external source cannot replace the current document');
+      await page.evaluate(text => { window.files.C.content = text; }, retrySource);
       assert.deepEqual(errors, []);
       console.log((pa ? 'PixelArt' : 'Studio') + ' PASS native adapter / duplicate names / queued writes / late edits / Save As / failed stream');
       await page.close();

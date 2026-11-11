@@ -45,3 +45,7 @@ Noiradix Studio implements a progressive, feature-detected file loading strategy
   - Prompts user to prevent accidental data loss.
 - Document title in header displays an asterisk (`*`) when dirty.
 
+
+## RC2 refactor: validated publication and async snapshots
+
+Editor source application and external file reload must validate a parsed document before replacing artwork. `PIX2.parseValidated(text, options)` provides this boundary while `parse` remains a diagnostic API that can return a partial document with errors. Rejected external source keeps the current canvas and code view intact. Pending raster exports retain invocation-time metadata and, when needed, per-frame source pixels across asynchronous PNG encoding. Native write permission denial, picker cancellation and write failure keep unsaved state and permit retry.
