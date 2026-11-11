@@ -1,7 +1,7 @@
 <div align="center">
   <img src="noiradix-studio-logo.svg" alt="NOIRADIX Studio Logo" width="128" height="128">
   <h1>NOIRADIX Studio</h1>
-  <p><strong>High-Performance, AI-Native Pixel Art & Spritesheet Studio for the <code>.pix2</code> Standard</strong></p>
+  <p><strong>Draw pixel art. Build sprite animations. Bring them into Unity.</strong></p>
 
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
@@ -20,9 +20,29 @@
   </p>
 </div>
 
-**NOIRADIX Studio** is a pure vanilla, offline-first pixel art editor and animation suite built from the ground up for the `.pix2` semantic text standard. It bridges the gap between AI generation, pixel artists, and modern game engines by providing deterministic sparse-pixel serialization, multi-directional character templates, and game-ready atlas export with anti-bleeding protection.
+> **Verdict:** NOIRADIX Studio is a free, open-source browser toolkit for pixel artists and 2D game developers who want to draw sprites, organize sprite sheets, preview 4-direction, 8-direction, and platformer animations, and export a Unity-ready sprite package.
 
-> Listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/) — see the product profile and its PIX2-focused overview.
+<div align="center">
+
+### A complete pixel-art workflow, in your browser
+
+**Draw and edit** · **Organize frames and layers** · **Preview animation** · **Export for Unity**
+
+[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the demo](https://www.youtube.com/watch?v=XikhVI0APQg) · [Explore PixelArt](https://noiradix.me/pixelart/)
+
+</div>
+
+| What you can do | What it means |
+|---|---|
+| **Make pixel art** | Draw in the sprite-sheet Studio or open **PixelArt** for a standalone artwork canvas. Both run in the browser; the project is open source under Apache 2.0. |
+| **Build and preview animation** | Work with **4-direction**, **8-direction**, **Platformer 2D**, and custom animation clips. Four-direction is the demo example, not the product limit. |
+| **Export to Unity 2D** | Download a package with an atlas PNG, metadata, and `Pix2UnityImporter.cs`. Importing it slices the sprites and generates native `.anim` AnimationClip assets. **It does not generate an Animator Controller asset.** |
+| **Use PIX2 with an AI assistant** | Copy a PIX2 prompt, ask a separate coding assistant to produce PIX2 text, then paste that text into Studio. AI is an optional external step; NOIRADIX does not generate art by itself. |
+| **Work offline** | The app is client-side and designed to work offline after its files are available locally or cached by the browser; no account or install is required. |
+
+NOIRADIX Studio is a lightweight, vanilla-JavaScript editor built around the open `.pix2` text format. PIX2 keeps sprite and animation data structured and editable, while the canvas remains the place to draw, inspect, and refine the result.
+
+> Listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/). The listing is being updated to distinguish the four-direction demo from the full animation options and to describe the Unity export accurately.
 
 > [!TIP]
 > **Looking for standalone 2D pixel painting without animation timelines?**  
@@ -55,8 +75,7 @@ Most generative AI tools rely on heavy diffusion models that hallucinate anti-al
 > Raw AI generation serves as **rapid structural scaffolding and timing draft in seconds**. Turning AI-generated scaffolding into game-ready art **still requires human eyes and artist touch** — fine-tuning palettes, adjusting facial expressions, and adding nuanced pixel details inside NOIRADIX Studio.
 
 ### 3. Exclusively Focused on 2D Pixel Art
-NOIRADIX Studio does not attempt to be a bloated 1,000-menu painting suite like Photoshop or Aseprite, nor does it dabble in 3D meshes or vector graphics. It is razor-focused on one painful bottleneck:  
-👉 **Taking you from an idea or sprite sheet to a fully working, directional walking character inside Unity 2D in 1 click — saving 15 to 20 minutes of tedious manual slicing and animator wiring per character.**
+NOIRADIX Studio focuses on pixel art, sprite-sheet organization, animation preview, and a repeatable Unity 2D import path. The export package automates atlas slicing and creates native Unity `.anim` clips; you can then use those clips in your own Animator Controller or let Unity create a controller when you add a clip to a GameObject. The package does **not** contain a prebuilt Animator Controller.
 
 ### 4. Clear Boundary: Native Import & Slice vs. Vector Autotracing
 A common architectural boundary in NOIRADIX is the distinction between raster slicing and vector autotracing:
@@ -312,11 +331,11 @@ Click the expand arrow next to the sprite atlas to view all 16 sliced sub-sprite
 
 ---
 
-### Step 10: Live Animator Controller & Scene Setup
-Attach the animation clip to the sprite to automatically create an Animator Controller component in your scene:
+### Step 10: Add an Animation Clip to a Scene
+Drag an imported animation clip onto a GameObject with a `SpriteRenderer`. Unity can create and assign an Animator Controller for that GameObject; this is a Unity editor step after importing, not an asset generated by the NOIRADIX package:
 
 ![Step 10 - Scene Setup & Animator Controller](docs/noiradix-export-unity-8.png)
-*Character positioned in the scene alongside the generated Animator Controller.*
+*Character positioned in the scene with Unity's Animator setup. NOIRADIX generates the animation clips; Unity handles this scene setup step.*
 
 ---
 
