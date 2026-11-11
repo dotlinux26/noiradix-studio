@@ -480,9 +480,34 @@
     return true;
   }
 
+  function lockCodeEditor() {
+    state.isCodeEditingUnlocked = false;
+    dom.codeEditor.readOnly = true;
+    if (dom.codeModeBadge) {
+      dom.codeModeBadge.className = 'pa-mode-badge locked';
+      dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
+      dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
+    }
+    if (dom.btnToggleCodeLock) {
+      dom.btnToggleCodeLock.classList.remove('hidden');
+    }
+    if (dom.btnApplyCode) {
+      dom.btnApplyCode.classList.add('hidden');
+    }
+  }
+
+  function preparePaProjectSwitch() {
+    if (!_hasDocument || !state.isCodeEditingUnlocked) return true;
+    clearTimeout(state.sourceDebounceTimer);
+    if (state.sourcePaneMode !== 'summary' && !applySourceCodeToCanvas()) return false;
+    lockCodeEditor();
+    return true;
+  }
+
   function switchPaProjectSession(sessionId) {
     const target = paProjectSessions.find(p => p.id === sessionId);
-    if (!target) return;
+    if (!target || activePaProjectId === sessionId) return;
+    if (!preparePaProjectSwitch()) return;
 
     if (state.floatingPixels) commitFloatingSelection();
     regionSelection?.reset();
@@ -604,12 +629,13 @@
       cell.pixels['24,11'] = cCyan;
       cell.pixels['25,12'] = cCyan;
     }
-    createPaProjectSession(title, doc);
+    if (!createPaProjectSession(title, doc)) return;
     showToast('Loaded Sample Ghost Artwork!', 'success');
     setTimeout(fitCanvasToViewport, 50);
   }
 
   function createPaProjectSession(title, doc, fileHandle = null) {
+    if (!preparePaProjectSwitch()) return null;
     saveCurrentPaSession();
 
     const cell = (doc && doc.cells) ? (doc.cells.artwork || Object.values(doc.cells)[0]) : null;
@@ -632,6 +658,11 @@
       ? sessionOrId
       : paProjectSessions.find(p => p.id === sessionOrId);
     if (!session) return;
+    if (session.id === activePaProjectId) {
+      if (!preparePaProjectSwitch()) return;
+      saveCurrentPaSession();
+    }
+
 
     if (session.isDirty) {
       const confirmDiscard = confirm(`Artwork "${session.fileName || session.title}" has unsaved changes. Discard and close?`);
@@ -1233,14 +1264,6 @@
     );
   }
 
-  // Once a floating selection has lifted pixels, retain its original target
-  // even if the user clicks another layer before committing or pressing Esc.
-  function getFloatingSelectionTarget(cell = getArtworkCell()) {
-    if (!cell) return null;
-    if (!cell.layers || cell.layers.length === 0) return cell;
-    return state.floatingTargetId ? findNodeById(cell, state.floatingTargetId) : getActiveEditingTarget(cell);
-  }
-
   // ===========================================================================
   // HARDWARE-ACCELERATED 1:1 OFFSCREEN TEXTURE BUFFERS
   // ===========================================================================
@@ -1718,6 +1741,7 @@
   }
 
   function resetRotationSession() {
+    floatingSession.resetRotation();
     state.rotationSessionPixels = null;
     state.rotationSessionSel = null;
     state.rotationAccumulatedAngle = 0;
@@ -1729,14 +1753,13 @@
   function beginRotationGesture() {
     ensureFloatingSelection();
     if (!state.floatingPixels || !state.selection) return false;
-    if (!state.rotationSessionPixels || !state.rotationSessionSel) {
-      state.rotationSessionPixels = { ...state.floatingPixels };
-      state.rotationSessionSel = { ...state.selection };
-      state.rotationAccumulatedAngle = 0;
-    }
-    state.rotationGestureBaseAngle = state.rotationAccumulatedAngle;
-    state.rotationBaseFloatingPixels = state.rotationSessionPixels;
-    state.rotationBaseSel = state.rotationSessionSel;
+    const rotation = floatingSession.beginRotation(state.selection);
+    state.rotationSessionPixels = rotation.pixels;
+    state.rotationSessionSel = rotation.bounds;
+    state.rotationAccumulatedAngle = rotation.angle;
+    state.rotationGestureBaseAngle = rotation.angle;
+    state.rotationBaseFloatingPixels = rotation.pixels;
+    state.rotationBaseSel = rotation.bounds;
     return true;
   }
 
@@ -1918,8 +1941,14 @@
         return false; // Non-destructive: keep canvas intact!
       }
 
-      // 3. Document is valid - commit to active state
-      state.doc = parsedDoc;
+        // 3. Document is valid - commit to active state
+        const previousSerialized = _PIX2.serialize(state.doc);
+        const nextSerialized = _PIX2.serialize(parsedDoc);
+        if (previousSerialized === nextSerialized) {
+          lockCodeEditor();
+          return true;
+        }
+        state.doc = parsedDoc;
       if (!_StructureOps.findNode(getArtworkCell(), state.activeLayerId)) state.activeLayerId = null;
       if (!_StructureOps.findNode(getArtworkCell(), state.activeRegionId)) state.activeRegionId = null;
       if (!_StructureOps.findNode(getArtworkCell(), state.isolatedNodeId)) state.isolatedNodeId = null;
@@ -2550,26 +2579,14 @@
       dom.viewport.style.cursor = 'crosshair';
 
       if (state.rotationSessionPixels && state.rotationSessionSel && typeof SelectionTransform !== 'undefined') {
-        const baseSel = state.rotationSessionSel;
-        const rotated = SelectionTransform.rotatePixelsNearestNeighbor(
-          state.rotationSessionPixels,
-          baseSel.w,
-          baseSel.h,
-          theta
-        );
-        state.selection.x = Math.round(baseSel.x + (baseSel.w - rotated.w) / 2);
-        state.selection.y = Math.round(baseSel.y + (baseSel.h - rotated.h) / 2);
-        state.selection.w = rotated.w;
-        state.selection.h = rotated.h;
-        state.floatingPixels = rotated.pixels;
-        state.floatingCurrentX = state.selection.x;
-        state.floatingCurrentY = state.selection.y;
+        const rotated = floatingSession.rotate(theta);
+        if (!rotated) return;
+        state.selection = { ...rotated.bounds };
         state.rotationAccumulatedAngle = theta;
         rebuildFloatingBuffer();
 
         const deg = Math.round((theta * 180) / Math.PI);
         showToast(`Selection rotation: ${deg}°`);
-        if (Math.abs(theta) > 0.01) setDirty(true);
       }
 
       renderSelectionMarquee();
@@ -4196,6 +4213,7 @@
           }
           const title = file.name.replace(/\.[^/.]+$/, '');
           const session = createPaProjectSession(title, parsed, handle);
+          if (!session) return;
           session.fileName = file.name;
           session.isDirty = false;
           state.history = [];
@@ -4345,6 +4363,7 @@
         const validation = _PIX2.validate(doc, { profile: 'pixelart', strict: false });
         if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid PIX2 format');
         const session = createPaProjectSession(file.name.replace(/\.[^.]+$/, ''), doc);
+        if (!session) return;
         session.fileName = file.name;
         currentFileName = file.name;
         lastSavedContent = text;
@@ -4391,6 +4410,7 @@
           _PIX2.rgbaToHex(pixels[index], pixels[index + 1], pixels[index + 2], alpha);
       }
       const session = createPaProjectSession(title, draft);
+      if (!session) return;
       target.pixels = importedPixels;
       commitStructureMutation();
       saveCurrentPaSession();
@@ -4942,22 +4962,6 @@
       showToast('Code editor unlocked for direct edits. Click "Apply" when done.');
     }
 
-    function lockCodeEditor() {
-      state.isCodeEditingUnlocked = false;
-      dom.codeEditor.readOnly = true;
-      if (dom.codeModeBadge) {
-        dom.codeModeBadge.className = 'pa-mode-badge locked';
-        dom.codeModeBadge.innerHTML = '<i class="fa-solid fa-lock"></i> View Only';
-        dom.codeModeBadge.title = 'Safe View Mode (ReadOnly to prevent accidental deletion)';
-      }
-      if (dom.btnToggleCodeLock) {
-        dom.btnToggleCodeLock.classList.remove('hidden');
-      }
-      if (dom.btnApplyCode) {
-        dom.btnApplyCode.classList.add('hidden');
-      }
-    }
-
     if (dom.btnToggleCodeLock) {
       dom.btnToggleCodeLock.addEventListener('click', unlockCodeEditor);
     }
@@ -5251,7 +5255,7 @@
       const title = 'New Artwork';
       const doc = _PIX2.createDocument(title, 1, 1, cw, ch, { profile: 'pixelart' });
       doc.meta.title = title;
-      createPaProjectSession(title, doc, null);
+      if (!createPaProjectSession(title, doc, null)) return;
       state.history = [];
       state.historyIndex = -1;
       state.lastHistoryPixels = null;
@@ -5722,6 +5726,7 @@
             const doc = _PIX2.parse(text, { profile: 'pixelart' });
             const handle = handleMap.get(pf.name) || null;
             const session = createPaProjectSession(pf.name.replace(/\.[^/.]+$/, ''), doc, handle);
+            if (!session) return;
             session.fileName = pf.name;
             session.isDirty = false;
             renderPaProjectTabs();

@@ -1,6 +1,6 @@
 # Báo cáo tiến độ tái cấu trúc editor
 
-Baseline `2d5e751`, nhánh `rc2`. Mỗi phase cập nhật tại đây trước khi bước tiếp. Kế hoạch: `EDITOR_REFACTOR_PLAN.md`.
+Baseline `2d5e751`, nhánh review `rc2`, mã ứng viên `2.1.2-beta.2`. Mỗi phase được cập nhật tuần tự tại đây. Kế hoạch: `EDITOR_REFACTOR_PLAN.md`.
 
 ## P0 — Bản đồ và baseline
 
@@ -103,9 +103,32 @@ Không có thay đổi định dạng hay storage schema. Không cài dependency
 - RF-005: Studio source apply/watcher có đường publish parse result chưa validate; PixelArt watcher từ chối canvas nhưng để source lỗi trong textarea. Thêm `PIX2.parseValidated` dùng chung cho publication được di chuyển; parse() vẫn dành cho diagnostic tooling. PixelArt restore source/mode khi external reload thất bại. Native browser test xác nhận file có coordinate lỗi không thay document/source hiện tại ở cả hai app.
 - Native tests bổ sung quyền ghi bị từ chối, hủy picker và retry; cả hai app qua. Đây là mô phỏng adapter trình duyệt, không phải OS picker thật.
 - Workspace browser qua cả hai app, export snapshot và template regression qua. Node test xác nhận validated ingestion giữ PIX2 1.0 và cache phục hồi đúng document.
-- Benchmark browser mới: Chrome 157, 1440x950, DPR2, sparse density 1/16, khổ Studio 16/64/512 và PixelArt 16/64/512/1024. Đã chờ dimension thực của tài liệu trước đo. Handler p95 Studio 3.1/4.1/4.3ms, PixelArt 6.6/6.1/5.9/6.3ms; max cao nhất 9.4ms. Đây là mẫu trên máy hiện tại, không phải frame latency, RSS hay chứng minh hiệu năng trên mọi máy. Heap/canvas-connected estimates được script in riêng; không bao gồm mọi GPU/offscreen allocation.
+- Benchmark browser ban đầu ở P4 đã được thay thế tại P5: fixture phải ghi vào source Region rồi composite, không chỉ gán cell.pixels. Không sử dụng số đo ban đầu làm bằng chứng tải raster.
 - Ranh giới: shared geometry/raster/cache rules; viewport instance, render scheduling và autosave/history wiring riêng từng app. Không hợp nhất schema lưu trữ trong đợt này.
 
 ## P5 — Dọn, tài liệu và gate cuối
 
 Đang bắt đầu rà dependency/caller, chuẩn hóa runner CI để không bỏ sót suite mới, cập nhật hợp đồng/module map và kiểm tra toàn bộ trước push RC2. Không merge main.
+
+### P5 — Kết quả rà soát và sửa bổ sung
+
+- Runner `tests/run-all.cjs` tự tìm toàn bộ production JS và suite Node/browser theo tên file; CI không còn danh sách dễ bỏ sót. Không thêm package runtime. Formatter chỉ dùng trong TEMP; AST và nội dung template nhúng đã được đối chiếu trước/sau khi format các module mới.
+- Thu gọn public surface của controller, bỏ helper không có caller và các đường ghi selection trùng đã được thay thế. Không thay schema workspace/PIX2.
+- RF-006: Studio Apply Code reset history rồi thêm snapshot trùng, khiến Undo không trở về artwork trước apply. `EditorState.applyDocument` giữ history; saveSnapshot phát hiện no-op trước khi cắt redo. Các caller mutation liền kề chỉ báo autosave khi có thay đổi. Node và browser đã xác nhận source Apply/Undo; nguồn lỗi không publish.
+- RF-007: Studio lấy mẫu lại raster sau mỗi gesture xoay tự do trong khi PixelArt có rotation session riêng. Session chung hiện giữ raster gốc và góc cộng dồn; đã kiểm tra hai gesture 45° cho kết quả 90° ở cả hai app và full-turn trong Node.
+- RF-008: source chưa apply có thể đi theo mode/debounce sang project khác. Chuyển/tạo/đóng project hiện settle source tại project gốc; source lỗi chặn chuyển, debounce PixelArt được hủy trước khi đổi scope. Native browser runner kiểm tra invalid-source block và valid-source switch ở cả hai app.
+- RF-009: export truyền fallback filename vào vị trí extension, làm tên gói có hậu tố sprite_atlas thừa. Đã sửa vị trí đối số và thêm assertion tên ZIP/PNG chính xác trong workspace runner.
+- RF-010: highlighter Studio tự tách comment khác compiler, nhận dấu ; trong quoted title thành comment. Đã dùng chung PIX2.stripComment; regression title có ; và # được bổ sung.
+- Trần zoom nay dùng cùng budget trước cấp phát: cạnh backing artwork tối đa 4096px, 512→8×, 1024→4×; khổ lẻ chọn nấc không vượt budget. Node kiểm các biên 64/100/127/128/255/256/511/512/1024; browser kiểm artwork 1024-square tại zoom tối đa.
+- Đã chuẩn hóa tài liệu architecture, history/recovery, file lifecycle, module ownership và hướng dẫn agent; đánh dấu báo cáo cũ là checkpoint lịch sử. Bản review tiếp theo là 2.1.2-beta.2.
+
+### P5 — Gate cuối và kết quả
+
+- Fix bổ sung cuối: PIX2 source đã sửa nhưng serialize không đổi không tạo snapshot/dirty giả; PixelArt source mutation có bước history hiện có và được commit trước khi đổi session. Chuỗi cache token `2.1.2-beta.2` đã đồng nhất cho production scripts chia sẻ ở hai entry point để browser lấy module mới sau deploy.
+- Fixture test editor/benchmark giờ xóa workspace IndexedDB/localStorage cũ trong context mới, để lần chạy lặp không phụ thuộc dữ liệu tab lưu từ lần browser trước. Benchmark giữ pixel trong Region nguồn, serialize/reload xác nhận fixture thực sự có raster trước đo.
+- Gate (lần chạy cuối sau bổ sung cache token/assertion): 35 file JS qua `node --check`; 20 suite Node qua; 3 browser suite chạy normal entry point Studio + PixelArt trên Chrome 157, DPR2, gồm thao tác selection/region/isolation, alpha/brush/eraser, layer/group, switch project, native save watcher, invalid source, export thực và zoom. Cổng browser sạch là 8770; cổng 8769 sẵn có trên máy phục vụ cây source cũ và không dùng để lấy kết quả. Benchmark engine Node qua.
+- Benchmark browser (wheel handler, Chrome 157, 1440×950, DPR2, raster thưa 1/16): Studio 16/64/512: p95 lần lượt 3.4/3.8/2.9 ms; PixelArt 16/64/512/1024: 5.0/5.3/6.8/6.9 ms. Đây là thời gian xử lý sự kiện đo được, không phải độ trễ trình bày frame. 512→8× và 1024→4× bị chặn ở backing cạnh 4096px; thông số có test biên và normal browser.
+- `git diff --check` sạch; test runner CI tự phát hiện suites; tài liệu đặc tả/kiến trúc/quy trình release/agent đã cập nhật. Không đổi PIX2 schema hoặc workspace storage schema.
+- P0–P5 hoàn tất theo phạm vi ghi ở đây. Phạm vi cần lưu ý: đây là refactor lát cắt owner/mutation/selection/render/file/controller, không phải chuyển toàn bộ closure của hai app ra module; viewport/history/autosave/session wiring vẫn được giữ riêng theo `AGENTS.md`. Security/DoS/semantic evidence là các suites hiện có, không phải chứng nhận audit chuyên gia. Không merge `main` trong phase này.
+
+RC2 được cập nhật sau khi gate hoàn tất; commit và CI sẽ được chốt ở phần review handoff.

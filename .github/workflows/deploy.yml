@@ -31,79 +31,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Verify JavaScript Syntax
-        run: |
-          node --check js/version.js
-          node --check js/app.js
-          node --check js/pix2-format.js
-          node --check js/selection-transform.js
-          node --check js/editor-state.js
-          node --check js/editor-file-save.js
-          node --check js/animation-player.js
-          node --check js/tools.js
-          node --check js/modular-export.js
-          node --check js/import-slice.js
-          node --check js/default-sample.js
-          node --check js/structure-operations.js
-          node --check js/tab-strip.js
-          node --check pix2/js/pix2-format.js
-          node --check pixelart/js/pixelart-app.js
+      - name: Verify all production JavaScript syntax
+        run: node tests/run-all.cjs --syntax
 
-      - name: Run Semantic Roundtrip & Feature Tests (96 Tests)
-        run: node tests/test-roundtrip.js
-
-      - name: Run Security & Anti-DoS Defense Tests (21 Tests)
-        run: node tests/test-security.js
-
-      - name: Run TextMate Regex Pattern & Capture Group Tests (6 Checks)
-        run: node tests/test-tmLanguage.js
-
-      - name: Run Normative Test Vector Conformance Tests (11 Tests)
-        run: node tests/test-vectors-conformance.js
-
-      - name: Run PIX2 1.1 Specification & Integration Tests (9 Tests)
-        run: node tests/test-pix2-v11.js
-
-      - name: Run SAFE-01 Lossless Conversion Tests (3 Tests)
-        run: node tests/test-safe-conversion.js
-
-      - name: Run SAFE-02 Visibility & Compositing Tests (5 Tests)
-        run: node tests/test-safe-visibility.js
-
-      - name: Run SAFE Recovery Tests (5 Tests)
-        run: node tests/test-safe-recovery.js
-
-      - name: Run Tab Strip Ordering & Wiring Tests (10 Cases)
-        run: node tests/test-tab-strip.js
-
-      - name: Run Editor State Structural Engine Tests (8 Tests)
-        run: node tests/test-editor-state-structural.js
-
-      - name: Run Modular Component Export Tests (4 Tests)
-        run: node tests/test-modular-export.js
-
-      - name: Run Import & Slice Pipeline Tests (6 Tests)
-        run: node tests/test-import-slice.js
-
-      - name: Run Studio 2.0 Integration Tests (8 Tests)
-        run: node tests/test-studio-v2.js
-
-      - name: Run Selection Transform Engine Tests (6 Tests)
-        run: node tests/test-selection-transform.js
-
-      - name: Run PixelArt 2.0 & Multi-Track Integration Tests (8 Tests)
-        run: node tests/test-pixelart-v2.js
-
-      - name: Run Audit Data Integrity & Regression Tests
-        run: node tests/test-audit-integrity.js
-
-      - name: Run Shared Viewport Pan & Zoom Tests
-        run: node tests/test-viewport-pan-zoom.js
-
-      - name: Run AI prompt and RC2 hardening regressions
-        run: |
-          node tests/test-pix2-ai-prompt.js
-          node tests/test-rc2-hardening.js
+      - name: Run every Node regression suite
+        run: node tests/run-all.cjs
 
       - name: Run Performance & Latency Benchmark Suite
         run: node tests/benchmark-performance.js
@@ -122,9 +54,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:8769/ > /dev/null
-          EDITOR_QA_DENSE=1 EDITOR_QA_DPR=2 node tests/browser/test-editor.cjs
-          node tests/browser/test-workspace.cjs
-          node tests/browser/test-file-lifecycle.cjs
+          node tests/run-all.cjs --browser
 
   release:
     name: Publish verified GitHub release

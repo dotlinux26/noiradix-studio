@@ -1,13 +1,13 @@
 # NOIRADIX Studio 2.0 — UX & Interaction Specification
 
-> **Version:** 2.0.0  
+> **Version:** 2.1.2-beta.2
 > **Format Specification:** PIX2 1.1 Structural Graphics  
 > **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)  
 
 ---
 
 ## 1. Top Navigation & Document Sessions Strip
-- **Branding Badge:** Displays official NOIRADIX logo, brand title "NOIRADIX Studio", and clickable version badge "v2.0.0" opening the About modal.
+- **Branding Badge:** Displays official NOIRADIX logo, brand title "NOIRADIX Studio", and clickable version badge derived from `js/version.js`, opening the About modal.
 - **Project Sessions Tab Strip (`#project-tabs-strip`):**
   - Displays tabs for open `.pix2` projects with document titles, dirty indicators (`*`), and close buttons (`×`).
   - `+` button opens Guided New Project modal.

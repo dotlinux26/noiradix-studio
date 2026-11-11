@@ -33,7 +33,7 @@ const StudioAtlas = (() => {
         const ox = margin + c * (scw + spacing);
         const oy = margin + r * (sch + spacing);
 
-        const frameName = (cell && cell.name) ? cell.name : `frame_${r}_${c}`;
+        const frameName = cell && cell.name ? cell.name : `frame_${r}_${c}`;
         frameRects.push({
           id: cid,
           name: frameName,
@@ -44,7 +44,7 @@ const StudioAtlas = (() => {
           w: scw,
           h: sch,
           nativeW: cw,
-          nativeH: ch
+          nativeH: ch,
         });
 
         if (cell && cell.pixels) {

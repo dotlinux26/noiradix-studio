@@ -53,7 +53,7 @@ function zipEntries(bytes) {
           'qa_"quoted': { name: 'QA <palette>', colors: ['#ff0000', '#00ff00'] }
         }));
       });
-      await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'));
+      await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + (pa ? '/pixelart/' : '/'));
       await page.waitForTimeout(550);
       const about = page
         .locator('#btn-about-close-done, #btn-pa-about-close-done')
@@ -367,7 +367,7 @@ function zipEntries(bytes) {
         }),
       );
     }, legacy);
-    await page.goto('http://127.0.0.1:8769/');
+    await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + '/');
     await page.locator('#btn-convert-v11-layers').click();
     const converted = PIX2.parse(
       await page.evaluate(() => PIX2.serialize(state.doc)),
@@ -487,6 +487,8 @@ function zipEntries(bytes) {
         });
       }
       const download = await pending;
+      const suffix = { unity: 'unity_package', texturepacker: 'texturepacker', 'zip-frames': 'frames' }[format];
+      assert.equal(download.suggestedFilename(), 'safe-01_legacy_fixture_' + suffix + '.zip');
       const entries = zipEntries(readFileSync(await download.path()));
       assert.ok([...entries.keys()].some(name => name.endsWith('.png')));
       if (format === 'unity') {
@@ -494,6 +496,7 @@ function zipEntries(bytes) {
         const json = [...entries].find(([name]) => name.endsWith('.json'));
         const metadata = JSON.parse(json[1].toString('utf8'));
         assert.equal(metadata.meta.cellWidth, expectedWidth);
+        assert.equal(metadata.meta.image, 'safe-01_legacy_fixture.png');
         assert.equal(metadata.animations.some(clip => clip.clipName === 'qa_late'), false);
         await page.evaluate(() => { state.doc = PIX2.parse(window.exportSource); });
       }
@@ -520,6 +523,28 @@ function zipEntries(bytes) {
     assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeTemplate);
     assert.deepEqual(controllerErrors, []);
     console.log('Studio PASS action template / modal close / Undo / controller wiring');
+    page.on('dialog', dialog => dialog.accept());
+    await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
+    const beforeSourceApply = await page.evaluate(() => PIX2.serialize(state.doc));
+    const changedCode = await page.evaluate(() => {
+      const doc = PIX2.parse(PIX2.serialize(state.doc));
+      doc.meta.title = 'QA; source # applied';
+      return PIX2.serialize(doc);
+    });
+    await page.locator('#btn-toggle-edit-code').click();
+    await page.locator('#pix2-code-text').fill(changedCode);
+    await page.locator('#btn-apply-code').click();
+    await page.waitForFunction(() => state.doc.meta.title === 'QA; source # applied');
+    assert.equal((await page.locator('#pix2-code-viewer .syn-cmt').allTextContents()).some(text => text.includes('source # applied')), false, 'Source highlighting shares parser comment rules');
+    await page.keyboard.press('Control+z');
+    assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeSourceApply);
+    await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
+    await page.locator('#btn-toggle-edit-code').click();
+    await page.locator('#pix2-code-text').fill('@pix2 1.1\n@cell c\n p nope #fff');
+    await page.locator('#btn-apply-code').click();
+    assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeSourceApply);
+    assert.deepEqual(controllerErrors, []);
+    console.log('Studio PASS Apply Code / Undo / invalid source preserves document');
   } finally {
     await browser.close();
   }

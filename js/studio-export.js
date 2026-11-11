@@ -1,211 +1,234 @@
 /** Studio export packages. App owns document capture, options and modal wiring. */
 const StudioExport = (() => {
   const PIX2 = typeof window !== 'undefined' ? window.PIX2 : require('./pix2-format.js');
-  const NOIRADIX_VERSION = typeof window !== 'undefined' ? window.NOIRADIX_VERSION : require('./version.js');
-  const ModularExport = typeof window !== 'undefined' ? window.ModularExport : require('./modular-export.js');
-  function create({ sanitizeSafeFilename, downloadBlob, showToast, closeGameExportModal, createCanvas }) {
-  function canvasToUint8Array(canvas) {
-    return new Promise(resolve => {
-      canvas.toBlob(blob => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(new Uint8Array(reader.result));
-        };
-        reader.readAsArrayBuffer(blob);
-      }, 'image/png');
-    });
-  }
-
-  function createZip(files) {
-    const table = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let k = 0; k < 8; k++) {
-        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-      }
-      table[i] = c;
-    }
-    function crc32(buf) {
-      let c = 0xffffffff;
-      for (let i = 0; i < buf.length; i++) {
-        c = table[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-      }
-      return (c ^ 0xffffffff) >>> 0;
-    }
-
-    const parts = [];
-    const centralDir = [];
-    let offset = 0;
-
-    for (const f of files) {
-      const safeEntryName = sanitizeSafeFilename(f.name);
-      const nameBuf = new TextEncoder().encode(safeEntryName);
-      const data = f.data;
-      const crc = crc32(data);
-      const size = data.length;
-
-      const lHeader = new Uint8Array(30 + nameBuf.length);
-      const lv = new DataView(lHeader.buffer);
-      lv.setUint32(0, 0x04034b50, true);
-      lv.setUint16(4, 20, true);
-      lv.setUint16(6, 0, true);
-      lv.setUint16(8, 0, true);
-      lv.setUint16(10, 0, true);
-      lv.setUint16(12, 0, true);
-      lv.setUint32(14, crc, true);
-      lv.setUint32(18, size, true);
-      lv.setUint32(22, size, true);
-      lv.setUint16(26, nameBuf.length, true);
-      lv.setUint16(28, 0, true);
-      lHeader.set(nameBuf, 30);
-
-      parts.push(lHeader);
-      parts.push(data);
-
-      const cHeader = new Uint8Array(46 + nameBuf.length);
-      const cv = new DataView(cHeader.buffer);
-      cv.setUint32(0, 0x02014b50, true);
-      cv.setUint16(4, 20, true);
-      cv.setUint16(6, 20, true);
-      cv.setUint16(8, 0, true);
-      cv.setUint16(10, 0, true);
-      cv.setUint16(12, 0, true);
-      cv.setUint32(16, crc, true);
-      cv.setUint32(20, size, true);
-      cv.setUint32(24, size, true);
-      cv.setUint16(28, nameBuf.length, true);
-      cv.setUint16(30, 0, true);
-      cv.setUint16(32, 0, true);
-      cv.setUint16(34, 0, true);
-      cv.setUint16(36, 0, true);
-      cv.setUint32(38, 0, true);
-      cv.setUint32(42, offset, true);
-      cHeader.set(nameBuf, 46);
-
-      centralDir.push(cHeader);
-      offset += lHeader.length + data.length;
-    }
-
-    const cdOffset = offset;
-    let cdSize = 0;
-    for (const h of centralDir) {
-      parts.push(h);
-      cdSize += h.length;
-    }
-
-    const eocd = new Uint8Array(22);
-    const ev = new DataView(eocd.buffer);
-    ev.setUint32(0, 0x06054b50, true);
-    ev.setUint16(4, 0, true);
-    ev.setUint16(6, 0, true);
-    ev.setUint16(8, files.length, true);
-    ev.setUint16(10, files.length, true);
-    ev.setUint32(12, cdSize, true);
-    ev.setUint32(16, cdOffset, true);
-    ev.setUint16(20, 0, true);
-    parts.push(eocd);
-
-    return new Blob(parts, { type: 'application/zip' });
-  }
-
-  async function execute({ doc, opts, atlasData, format: currentExportFormat, trimmed: isTrimmed }) {
-    if (!doc || !atlasData) return;
-
-    // PNG encoding yields to the browser. Retain metadata and (for per-frame
-    // encoding) source pixels from this invocation, independently of later edits.
-    if (['unity', 'texturepacker', 'zip-frames'].includes(currentExportFormat)) {
-      doc = {
-        meta: { ...doc.meta, cellSize: { ...doc.meta.cellSize } },
-        animations: JSON.parse(JSON.stringify(doc.animations || {})),
-        cells: Object.fromEntries(Object.entries(doc.cells).map(([id, cell]) => [id, {
-          name: cell.name,
-          pixels: currentExportFormat === 'zip-frames' ? { ...cell.pixels } : undefined
-        }]))
-      };
-      opts = { ...opts, pivot: { ...opts.pivot } };
-    }
-
-    const rawBaseName = (doc.meta.title || 'sprite_atlas').toLowerCase().replace(/\s+/g, '_');
-    const baseName = sanitizeSafeFilename(rawBaseName, 'sprite_atlas');
-    const pngName = `${baseName}.png`;
-
-    if (currentExportFormat === 'png-only') {
-      atlasData.canvas.toBlob(blob => {
-        downloadBlob(blob, pngName);
-        showToast(`Exported PNG Atlas (${atlasData.width}×${atlasData.height} px)!`, 'success');
-        closeGameExportModal();
+  const NOIRADIX_VERSION =
+    typeof window !== 'undefined' ? window.NOIRADIX_VERSION : require('./version.js');
+  const ModularExport =
+    typeof window !== 'undefined' ? window.ModularExport : require('./modular-export.js');
+  function create({
+    sanitizeSafeFilename,
+    downloadBlob,
+    showToast,
+    closeGameExportModal,
+    createCanvas,
+  }) {
+    function canvasToUint8Array(canvas) {
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve(new Uint8Array(reader.result));
+          };
+          reader.readAsArrayBuffer(blob);
+        }, 'image/png');
       });
-      return;
     }
 
-    if (currentExportFormat === 'modular-components') {
-      if (typeof ModularExport !== 'undefined') {
-        const result = ModularExport.exportModularComponents(doc, {
-          mode: 'modular',
-          trimmed: isTrimmed
+    function createZip(files) {
+      const table = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) {
+          c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        }
+        table[i] = c;
+      }
+      function crc32(buf) {
+        let c = 0xffffffff;
+        for (let i = 0; i < buf.length; i++) {
+          c = table[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+        }
+        return (c ^ 0xffffffff) >>> 0;
+      }
+
+      const parts = [];
+      const centralDir = [];
+      let offset = 0;
+
+      for (const f of files) {
+        const safeEntryName = sanitizeSafeFilename(f.name);
+        const nameBuf = new TextEncoder().encode(safeEntryName);
+        const data = f.data;
+        const crc = crc32(data);
+        const size = data.length;
+
+        const lHeader = new Uint8Array(30 + nameBuf.length);
+        const lv = new DataView(lHeader.buffer);
+        lv.setUint32(0, 0x04034b50, true);
+        lv.setUint16(4, 20, true);
+        lv.setUint16(6, 0, true);
+        lv.setUint16(8, 0, true);
+        lv.setUint16(10, 0, true);
+        lv.setUint16(12, 0, true);
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, size, true);
+        lv.setUint32(22, size, true);
+        lv.setUint16(26, nameBuf.length, true);
+        lv.setUint16(28, 0, true);
+        lHeader.set(nameBuf, 30);
+
+        parts.push(lHeader);
+        parts.push(data);
+
+        const cHeader = new Uint8Array(46 + nameBuf.length);
+        const cv = new DataView(cHeader.buffer);
+        cv.setUint32(0, 0x02014b50, true);
+        cv.setUint16(4, 20, true);
+        cv.setUint16(6, 20, true);
+        cv.setUint16(8, 0, true);
+        cv.setUint16(10, 0, true);
+        cv.setUint16(12, 0, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, size, true);
+        cv.setUint32(24, size, true);
+        cv.setUint16(28, nameBuf.length, true);
+        cv.setUint16(30, 0, true);
+        cv.setUint16(32, 0, true);
+        cv.setUint16(34, 0, true);
+        cv.setUint16(36, 0, true);
+        cv.setUint32(38, 0, true);
+        cv.setUint32(42, offset, true);
+        cHeader.set(nameBuf, 46);
+
+        centralDir.push(cHeader);
+        offset += lHeader.length + data.length;
+      }
+
+      const cdOffset = offset;
+      let cdSize = 0;
+      for (const h of centralDir) {
+        parts.push(h);
+        cdSize += h.length;
+      }
+
+      const eocd = new Uint8Array(22);
+      const ev = new DataView(eocd.buffer);
+      ev.setUint32(0, 0x06054b50, true);
+      ev.setUint16(4, 0, true);
+      ev.setUint16(6, 0, true);
+      ev.setUint16(8, files.length, true);
+      ev.setUint16(10, files.length, true);
+      ev.setUint32(12, cdSize, true);
+      ev.setUint32(16, cdOffset, true);
+      ev.setUint16(20, 0, true);
+      parts.push(eocd);
+
+      return new Blob(parts, { type: 'application/zip' });
+    }
+
+    async function execute({
+      doc,
+      opts,
+      atlasData,
+      format: currentExportFormat,
+      trimmed: isTrimmed,
+    }) {
+      if (!doc || !atlasData) return;
+
+      // PNG encoding yields to the browser. Retain metadata and (for per-frame
+      // encoding) source pixels from this invocation, independently of later edits.
+      if (['unity', 'texturepacker', 'zip-frames'].includes(currentExportFormat)) {
+        doc = {
+          meta: { ...doc.meta, cellSize: { ...doc.meta.cellSize } },
+          animations: JSON.parse(JSON.stringify(doc.animations || {})),
+          cells: Object.fromEntries(
+            Object.entries(doc.cells).map(([id, cell]) => [
+              id,
+              {
+                name: cell.name,
+                pixels: currentExportFormat === 'zip-frames' ? { ...cell.pixels } : undefined,
+              },
+            ]),
+          ),
+        };
+        opts = { ...opts, pivot: { ...opts.pivot } };
+      }
+
+      const rawBaseName = (doc.meta.title || 'sprite_atlas').toLowerCase().replace(/\s+/g, '_');
+      const baseName = sanitizeSafeFilename(rawBaseName, '', 'sprite_atlas');
+      const pngName = `${baseName}.png`;
+
+      if (currentExportFormat === 'png-only') {
+        atlasData.canvas.toBlob((blob) => {
+          downloadBlob(blob, pngName);
+          showToast(`Exported PNG Atlas (${atlasData.width}×${atlasData.height} px)!`, 'success');
+          closeGameExportModal();
         });
-        const zipBlob = (result.zip instanceof Blob)
-          ? result.zip
-          : new Blob([result.zip], { type: 'application/zip' });
-        downloadBlob(zipBlob, `${baseName}_modular_package.zip`);
-        showToast(`Exported Modular Component Package (${result.files.length} assets)!`, 'success');
-        closeGameExportModal();
         return;
       }
-    }
 
-    if (currentExportFormat === 'unity') {
-      const pngBytes = await canvasToUint8Array(atlasData.canvas);
-
-      // Build Unity Metadata JSON
-      const unityAnimList = [];
-      const anims = doc.animations || {};
-      for (const k in anims) {
-        const anim = anims[k];
-        const fNames = (anim.frames || []).map(cid => {
-          const c = doc.cells[cid];
-          return (c && c.name) ? c.name : cid;
-        });
-        unityAnimList.push({
-          clipName: k,
-          fps: anim.fps || 6,
-          loop: anim.loop !== false,
-          frameNames: fNames
-        });
+      if (currentExportFormat === 'modular-components') {
+        if (typeof ModularExport !== 'undefined') {
+          const result = ModularExport.exportModularComponents(doc, {
+            mode: 'modular',
+            trimmed: isTrimmed,
+          });
+          const zipBlob =
+            result.zip instanceof Blob
+              ? result.zip
+              : new Blob([result.zip], { type: 'application/zip' });
+          downloadBlob(zipBlob, `${baseName}_modular_package.zip`);
+          showToast(
+            `Exported Modular Component Package (${result.files.length} assets)!`,
+            'success',
+          );
+          closeGameExportModal();
+          return;
+        }
       }
 
-      const unityJsonData = {
-        meta: {
-          app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
-          version: NOIRADIX_VERSION.studio.version,
-          formatVersion: "1.1",
-          image: pngName,
-          cellWidth: doc.meta.cellSize.w * opts.scale,
-          cellHeight: doc.meta.cellSize.h * opts.scale,
-          size: { w: atlasData.width, h: atlasData.height },
-          spacing: opts.spacing,
-          margin: opts.margin,
-          extrude: opts.extrude,
-          scale: opts.scale
-        },
-        frames: atlasData.frameRects.map(fr => ({
-          name: fr.name,
-          cellId: fr.id,
-          x: fr.x,
-          y: fr.y,
-          w: fr.w,
-          h: fr.h,
-          pivotX: opts.pivot.x,
-          pivotY: opts.pivot.y
-        })),
-        animations: unityAnimList
-      };
+      if (currentExportFormat === 'unity') {
+        const pngBytes = await canvasToUint8Array(atlasData.canvas);
 
-      const jsonStr = JSON.stringify(unityJsonData, null, 2);
-      const jsonBytes = new TextEncoder().encode(jsonStr);
+        // Build Unity Metadata JSON
+        const unityAnimList = [];
+        const anims = doc.animations || {};
+        for (const k in anims) {
+          const anim = anims[k];
+          const fNames = (anim.frames || []).map((cid) => {
+            const c = doc.cells[cid];
+            return c && c.name ? c.name : cid;
+          });
+          unityAnimList.push({
+            clipName: k,
+            fps: anim.fps || 6,
+            loop: anim.loop !== false,
+            frameNames: fNames,
+          });
+        }
 
-      // Unity Importer Script
-      const importerScript = `using System;
+        const unityJsonData = {
+          meta: {
+            app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
+            version: NOIRADIX_VERSION.studio.version,
+            formatVersion: '1.1',
+            image: pngName,
+            cellWidth: doc.meta.cellSize.w * opts.scale,
+            cellHeight: doc.meta.cellSize.h * opts.scale,
+            size: { w: atlasData.width, h: atlasData.height },
+            spacing: opts.spacing,
+            margin: opts.margin,
+            extrude: opts.extrude,
+            scale: opts.scale,
+          },
+          frames: atlasData.frameRects.map((fr) => ({
+            name: fr.name,
+            cellId: fr.id,
+            x: fr.x,
+            y: fr.y,
+            w: fr.w,
+            h: fr.h,
+            pivotX: opts.pivot.x,
+            pivotY: opts.pivot.y,
+          })),
+          animations: unityAnimList,
+        };
+
+        const jsonStr = JSON.stringify(unityJsonData, null, 2);
+        const jsonBytes = new TextEncoder().encode(jsonStr);
+
+        // Unity Importer Script
+        const importerScript = `using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -451,7 +474,7 @@ namespace NOIRADIX.Editor
         }
     }
 }`;
-      const readmeUnityText = `================================================================================
+        const readmeUnityText = `================================================================================
 NOIRADIX STUDIO — Unity 2D Sprite Package Quickstart Guide
 ================================================================================
 
@@ -503,64 +526,64 @@ Ready to drag directly into your Scene or Animator Controller!
 NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 `;
 
-      const scriptBytes = new TextEncoder().encode(importerScript);
-      const readmeBytes = new TextEncoder().encode(readmeUnityText);
+        const scriptBytes = new TextEncoder().encode(importerScript);
+        const readmeBytes = new TextEncoder().encode(readmeUnityText);
 
-      const zipBlob = createZip([
-        { name: pngName, data: pngBytes },
-        { name: `${baseName}.pix2.json`, data: jsonBytes },
-        { name: 'Pix2UnityImporter.cs', data: scriptBytes },
-        { name: 'README_UNITY_IMPORT.txt', data: readmeBytes }
-      ]);
+        const zipBlob = createZip([
+          { name: pngName, data: pngBytes },
+          { name: `${baseName}.pix2.json`, data: jsonBytes },
+          { name: 'Pix2UnityImporter.cs', data: scriptBytes },
+          { name: 'README_UNITY_IMPORT.txt', data: readmeBytes },
+        ]);
 
-      downloadBlob(zipBlob, `${baseName}_unity_package.zip`);
-      showToast(`Exported Unity 2D Sprite Package (${baseName}_unity_package.zip)!`, 'success');
-      closeGameExportModal();
-      return;
-    }
-
-    if (currentExportFormat === 'texturepacker') {
-      const pngBytes = await canvasToUint8Array(atlasData.canvas);
-
-      // TexturePacker Hash Format
-      const tpFrames = {};
-      atlasData.frameRects.forEach(fr => {
-        const safeFrameName = PIX2.sanitizeKey(fr.name || fr.id);
-        tpFrames[safeFrameName] = {
-          frame: { x: fr.x, y: fr.y, w: fr.w, h: fr.h },
-          rotated: false,
-          trimmed: false,
-          spriteSourceSize: { x: 0, y: 0, w: fr.w, h: fr.h },
-          sourceSize: { w: fr.w, h: fr.h },
-          pivot: { x: opts.pivot.x, y: opts.pivot.y }
-        };
-      });
-
-      const tpAnimations = {};
-      const anims = doc.animations || {};
-      for (const k in anims) {
-        if (!PIX2.isSafeIdentifier(k)) continue;
-        tpAnimations[k] = (anims[k].frames || []).map(cid => {
-          const c = doc.cells[cid];
-          return (c && c.name) ? c.name : cid;
-        });
+        downloadBlob(zipBlob, `${baseName}_unity_package.zip`);
+        showToast(`Exported Unity 2D Sprite Package (${baseName}_unity_package.zip)!`, 'success');
+        closeGameExportModal();
+        return;
       }
 
-      const tpData = {
-        frames: tpFrames,
-        animations: tpAnimations,
-        meta: {
-          app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
-          version: NOIRADIX_VERSION.studio.version,
-          formatVersion: "1.1",
-          image: pngName,
-          format: "RGBA8888",
-          size: { w: atlasData.width, h: atlasData.height },
-          scale: `${opts.scale}`
-        }
-      };
+      if (currentExportFormat === 'texturepacker') {
+        const pngBytes = await canvasToUint8Array(atlasData.canvas);
 
-      const readmeTpText = `================================================================================
+        // TexturePacker Hash Format
+        const tpFrames = {};
+        atlasData.frameRects.forEach((fr) => {
+          const safeFrameName = PIX2.sanitizeKey(fr.name || fr.id);
+          tpFrames[safeFrameName] = {
+            frame: { x: fr.x, y: fr.y, w: fr.w, h: fr.h },
+            rotated: false,
+            trimmed: false,
+            spriteSourceSize: { x: 0, y: 0, w: fr.w, h: fr.h },
+            sourceSize: { w: fr.w, h: fr.h },
+            pivot: { x: opts.pivot.x, y: opts.pivot.y },
+          };
+        });
+
+        const tpAnimations = {};
+        const anims = doc.animations || {};
+        for (const k in anims) {
+          if (!PIX2.isSafeIdentifier(k)) continue;
+          tpAnimations[k] = (anims[k].frames || []).map((cid) => {
+            const c = doc.cells[cid];
+            return c && c.name ? c.name : cid;
+          });
+        }
+
+        const tpData = {
+          frames: tpFrames,
+          animations: tpAnimations,
+          meta: {
+            app: `NOIRADIX Studio ${NOIRADIX_VERSION.studio.displayVersion}`,
+            version: NOIRADIX_VERSION.studio.version,
+            formatVersion: '1.1',
+            image: pngName,
+            format: 'RGBA8888',
+            size: { w: atlasData.width, h: atlasData.height },
+            scale: `${opts.scale}`,
+          },
+        };
+
+        const readmeTpText = `================================================================================
 NOIRADIX STUDIO — TexturePacker Standard JSON Package Guide
 ================================================================================
 
@@ -594,53 +617,53 @@ HOW TO USE IN POPULAR GAME ENGINES:
 NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 `;
 
-      const jsonBytes = new TextEncoder().encode(JSON.stringify(tpData, null, 2));
-      const readmeBytes = new TextEncoder().encode(readmeTpText);
+        const jsonBytes = new TextEncoder().encode(JSON.stringify(tpData, null, 2));
+        const readmeBytes = new TextEncoder().encode(readmeTpText);
 
-      const zipBlob = createZip([
-        { name: pngName, data: pngBytes },
-        { name: `${baseName}.json`, data: jsonBytes },
-        { name: 'README_TEXTUREPACKER.txt', data: readmeBytes }
-      ]);
+        const zipBlob = createZip([
+          { name: pngName, data: pngBytes },
+          { name: `${baseName}.json`, data: jsonBytes },
+          { name: 'README_TEXTUREPACKER.txt', data: readmeBytes },
+        ]);
 
-      downloadBlob(zipBlob, `${baseName}_texturepacker.zip`);
-      showToast(`Exported TexturePacker Package (${baseName}_texturepacker.zip)!`, 'success');
-      closeGameExportModal();
-      return;
-    }
-
-    if (currentExportFormat === 'zip-frames') {
-      const cw = doc.meta.cellSize.w;
-      const ch = doc.meta.cellSize.h;
-      const files = [];
-
-      for (const fr of atlasData.frameRects) {
-        const cell = doc.cells[fr.id];
-        const cellCanvas = createCanvas();
-        cellCanvas.width = cw * opts.scale;
-        cellCanvas.height = ch * opts.scale;
-        const cctx = cellCanvas.getContext('2d');
-        cctx.clearRect(0, 0, cellCanvas.width, cellCanvas.height);
-
-        if (cell && cell.pixels) {
-          for (const coord in cell.pixels) {
-            const [px, py] = coord.split(',').map(Number);
-            cctx.fillStyle = cell.pixels[coord];
-            cctx.fillRect(px * opts.scale, py * opts.scale, opts.scale, opts.scale);
-          }
-        }
-
-        const fBytes = await canvasToUint8Array(cellCanvas);
-        files.push({ name: `${fr.name}.png`, data: fBytes });
+        downloadBlob(zipBlob, `${baseName}_texturepacker.zip`);
+        showToast(`Exported TexturePacker Package (${baseName}_texturepacker.zip)!`, 'success');
+        closeGameExportModal();
+        return;
       }
 
-      const zipBlob = createZip(files);
-      downloadBlob(zipBlob, `${baseName}_frames.zip`);
-      showToast(`Exported ${files.length} individual frame PNGs (.zip)!`, 'success');
-      closeGameExportModal();
-      return;
+      if (currentExportFormat === 'zip-frames') {
+        const cw = doc.meta.cellSize.w;
+        const ch = doc.meta.cellSize.h;
+        const files = [];
+
+        for (const fr of atlasData.frameRects) {
+          const cell = doc.cells[fr.id];
+          const cellCanvas = createCanvas();
+          cellCanvas.width = cw * opts.scale;
+          cellCanvas.height = ch * opts.scale;
+          const cctx = cellCanvas.getContext('2d');
+          cctx.clearRect(0, 0, cellCanvas.width, cellCanvas.height);
+
+          if (cell && cell.pixels) {
+            for (const coord in cell.pixels) {
+              const [px, py] = coord.split(',').map(Number);
+              cctx.fillStyle = cell.pixels[coord];
+              cctx.fillRect(px * opts.scale, py * opts.scale, opts.scale, opts.scale);
+            }
+          }
+
+          const fBytes = await canvasToUint8Array(cellCanvas);
+          files.push({ name: `${fr.name}.png`, data: fBytes });
+        }
+
+        const zipBlob = createZip(files);
+        downloadBlob(zipBlob, `${baseName}_frames.zip`);
+        showToast(`Exported ${files.length} individual frame PNGs (.zip)!`, 'success');
+        closeGameExportModal();
+        return;
+      }
     }
-  }
 
     return { execute };
   }

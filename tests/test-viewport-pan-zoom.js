@@ -59,9 +59,10 @@ console.log('  [PASS] computeFitZoom fits within padding bounds correctly');
 
 // 5. Shared artwork zoom policy for Studio frames and PixelArt canvases
 const { artworkZoomLimit, stepArtworkZoom, fitArtworkZoom } = NoiraViewport;
-for (const [size, limit] of [[127, 64], [128, 32], [255, 32], [256, 16], [511, 16], [512, 8], [1024, 8]]) {
+for (const [size, limit] of [[64, 64], [100, 32], [127, 32], [128, 32], [255, 16], [256, 16], [511, 8], [512, 8], [1024, 4]]) {
   assert.equal(artworkZoomLimit(size, 16), limit);
   assert.equal(artworkZoomLimit(16, size), limit);
+  assert.ok(size * limit <= 4096);
   assert.equal(stepArtworkZoom(limit, 1, size, 16), limit);
   assert.equal(fitArtworkZoom(100000, 100000, size, 16, 64), limit);
 }

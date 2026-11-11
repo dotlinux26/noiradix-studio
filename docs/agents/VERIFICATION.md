@@ -5,10 +5,8 @@ Run commands from the repository root. Static runtime code requires no package i
 ## Node
 
 ```powershell
-foreach ($file in Get-ChildItem tests/test-*.js) {
-    node $file.FullName
-    if ($LASTEXITCODE -ne 0) { throw "Failed $($file.Name)" }
-}
+node tests/run-all.cjs --syntax
+node tests/run-all.cjs
 node tests/benchmark-performance.js
 git diff --check
 ```
@@ -29,8 +27,7 @@ Install QA tooling in a temporary directory.
 $qaDirectory = Join-Path $env:TEMP 'noiradix-editor-qa'
 npm.cmd install --prefix $qaDirectory playwright@1.65.0 --no-audit --no-fund
 $env:NODE_PATH = Join-Path $qaDirectory 'node_modules'
-node tests/browser/test-editor.cjs
-node tests/browser/test-workspace.cjs
+node tests/run-all.cjs --browser
 ```
 
 For rendering changes, also run the dense fixture.
@@ -54,3 +51,5 @@ The runners default to installed Chrome. CI installs Playwright Chromium and set
 | UI and performance | Both apps, narrow layouts, pointer and keyboard access, small/large art, fractional zoom, DPR, buffer allocations and frame-time limitations |
 
 Exercise the affected normal entry point. A unit test of a copied algorithm does not prove production wiring. Browser mocks must retain the real file lifecycle and storage code. Clearly distinguish simulated permission failures from a manual OS picker check.
+
+For diagnostic size/performance measurements, run `node tests/browser/benchmark-editors.cjs`. Record the actual fixture dimensions and the meaning of each metric. The three browser suites can also be run separately. Set `EDITOR_QA_URL` to use a server other than the default `http://127.0.0.1:8769`. Keep server logs redirected for repeated local runs.

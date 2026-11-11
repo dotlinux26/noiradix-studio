@@ -9,8 +9,13 @@ const PIX2 = require('../../js/pix2-format.js');
     for (const pa of [false, true]) for (const size of (pa ? [16, 64, 512, 1024] : [16, 64, 512])) {
       const doc = PIX2.createDocument('Profile ' + size, 1, 1, size, size, { profile: pa ? 'pixelart' : 'studio' });
       assert.equal(doc.meta.cellSize.w, size);
-      for (let y = 0; y < size; y += 4) for (let x = 0; x < size; x += 4) doc.cells.cell_0_0.pixels[`${x},${y}`] = '#4f46e5';
+      const cell = doc.cells.cell_0_0;
+      const source = cell.layers[0].children[0].pixels;
+      for (let y = 0; y < size; y += 4) for (let x = 0; x < size; x += 4) source[`${x},${y}`] = '#4f46e5';
+      cell.pixels = PIX2.compositeCellLayers(cell, doc.meta.cellSize);
       const content = PIX2.serialize(doc);
+      assert.equal(Object.keys(PIX2.parseValidated(content, { profile: pa ? 'pixelart' : 'studio' }).cells.cell_0_0.pixels).length,
+        (size / 4) ** 2, 'Benchmark fixture must contain real source pixels after export/reload');
       const page = await browser.newPage({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 2 });
       page.setDefaultTimeout(30000);
       const errors = [];
@@ -19,12 +24,14 @@ const PIX2 = require('../../js/pix2-format.js');
       await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
       await page.addInitScript(({ pa, content }) => {
         localStorage.setItem('noiradix_about_seen', 'true');
+        localStorage.removeItem('noiradix_browser_workspaces');
+        localStorage.removeItem('noiradix_open_project_sessions');
         if (!pa) localStorage.setItem('noiradix_open_project_sessions', JSON.stringify({
           activeId: 'profile', sessions: [{ id: 'profile', title: 'Profile', content,
             activeTabId: 'cell_0_0', openCellTabs: ['cell_0_0'] }]
         }));
       }, { pa, content });
-      await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'));
+      await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + (pa ? '/pixelart/' : '/'));
       const about = page.locator('#btn-about-close-done, #btn-pa-about-close-done').filter({ visible: true });
       if (await about.count()) await about.first().click();
       if (pa) await page.locator('#pa-hidden-file-input').setInputFiles({ name: 'profile.pix2', mimeType: 'text/plain', buffer: Buffer.from(content) });

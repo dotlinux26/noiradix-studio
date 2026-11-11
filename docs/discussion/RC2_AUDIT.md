@@ -1,5 +1,7 @@
 # RC2 audit and beta gate
 
+> Historical checkpoint. For the later RC2 refactor, corrections, completed regression gaps and current verification, see [EDITOR_REFACTOR_PROGRESS.md](EDITOR_REFACTOR_PROGRESS.md). Original results below retain their original scope.
+
 Baseline: main `6feb59e`, agent handbook `89c3dae`. Review branch: `rc2`. Product: **2.1.2-beta.1**; format: **PIX2 1.1**, retaining 1.0 reads.
 
 ## Changes reviewed since 2.1.0

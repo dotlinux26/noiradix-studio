@@ -59,10 +59,11 @@ const fixture = `@pix2 1.1
         console.log(e.stack);
       });
       page.on('dialog', (dialog) => dialog.accept());
-      if (!pa)
-        await page.addInitScript(
-          (content) =>
-            localStorage.setItem(
+      await page.addInitScript(
+        ({ pa, content }) => {
+          localStorage.removeItem('noiradix_browser_workspaces');
+          localStorage.removeItem('noiradix_open_project_sessions');
+          if (!pa) localStorage.setItem(
               'noiradix_open_project_sessions',
               JSON.stringify({
                 activeId: 'fixture',
@@ -77,13 +78,14 @@ const fixture = `@pix2 1.1
                   },
                 ],
               }),
-            ),
-          fixture,
-        );
+            );
+        },
+        { pa, content: fixture },
+      );
       await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) =>
         route.abort(),
       );
-      await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'), {
+      await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + (pa ? '/pixelart/' : '/'), {
         waitUntil: 'domcontentloaded',
       });
       if (pa) {
@@ -257,6 +259,31 @@ const fixture = `@pix2 1.1
         await page.mouse.up();
       };
       const rotate = page.locator('#btn-rotate-90');
+      // Two 45-degree gestures must sample the original raster at cumulative 90°.
+      await page.locator('[data-tool="select"]').click();
+      await dragPixels(2, 2, 7, 6);
+      for (const bounds of [{ x: 2, y: 2, w: 6, h: 5 }, { x: 1, y: 1, w: 8, h: 8 }]) {
+        const gesture = await canvas.evaluate((element, bounds) => {
+          const box = element.getBoundingClientRect();
+          const zoom = box.width / 16;
+          const handle = SelectionTransform.getSelectionHandles(bounds, zoom).rot;
+          const cx = box.x + (bounds.x + bounds.w / 2) * zoom;
+          const cy = box.y + (bounds.y + bounds.h / 2) * zoom;
+          const radius = cy - (box.y + handle.y);
+          return { x: box.x + handle.x, y: box.y + handle.y,
+            toX: cx + radius / Math.sqrt(2), toY: cy - radius / Math.sqrt(2) };
+        }, bounds);
+        await page.mouse.move(gesture.x, gesture.y);
+        await page.keyboard.down('Shift');
+        await page.mouse.down();
+        await page.mouse.move(gesture.toX, gesture.toY, { steps: 5 });
+        await page.mouse.up();
+        await page.keyboard.up('Shift');
+      }
+      await page.keyboard.press('Enter');
+      assert.deepEqual((await node('red')).pixels, { '7,2': '#ff0000' }, name + ' cumulative immutable free rotation');
+      await page.keyboard.press('Control+z');
+      await page.keyboard.press('Escape');
       for (const horizontal of [true, false]) {
         await page.locator('[data-tool="select"]').click();
         await dragPixels(2, 2, 7, 6);
@@ -800,6 +827,16 @@ const fixture = `@pix2 1.1
       await page.mouse.up();
       const panEnd = await canvas.boundingBox();
       assert.ok(Math.abs(panEnd.x - panStart.x - 36) <= 1 && Math.abs(panEnd.y - panStart.y - 24) <= 1, name + ' hand pan stays aligned');
+      if (pa) {
+        await page.locator('#pa-dim-badge').click();
+        await page.locator('#input-resize-w').fill('1024');
+        await page.locator('#input-resize-h').fill('1024');
+        await page.locator('#btn-confirm-resize-canvas').click();
+        await page.waitForFunction(() => document.querySelector('#pa-dim-badge').textContent.startsWith('1024×1024'));
+        for (let i = 0; i < 14; i++) await page.locator('#btn-zoom-in').click();
+        assert.equal(await canvas.evaluate(c => c.width), 4096, '1024px artwork caps its backing at 4x');
+        assert.equal(await canvas.evaluate(c => c.height), 4096);
+      }
       assert.deepEqual(errors, [], name + ' console exceptions');
       console.log(
         name +

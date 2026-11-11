@@ -119,3 +119,39 @@ assert.equal(sourceCell.pixels['1,1'], '#0000ff', 'Rebuilt full composite honors
 assert.equal(sourceCell.pixels['2,1'], '#00ff00', 'Restored old document composite is refreshed independently');
 assert.deepEqual(otherDoc.cells.cell_0_0.pixels, {});
 console.log('PASS validated ingestion / restored source composite ownership');
+
+// Studio uses the same no-op rule while retaining its full-document history.
+const EditorState = require('../js/editor-state.js');
+const editor = new EditorState();
+editor.setDocument(PIX2.createDocument('Apply source', 1, 1, 8, 8));
+editor.openCellTab('cell_0_0');
+editor.plotPixelAt('cell_0_0', 1, 1, '#ff0000');
+editor.saveSnapshot('Pixel');
+editor.undo();
+const studioHistory = editor.history.length;
+assert.equal(editor.saveSnapshot('No-op'), false);
+assert.equal(editor.history.length, studioHistory);
+assert.equal(editor.redo(), true);
+assert.equal(editor.doc.cells.cell_0_0.pixels['1,1'], '#ff0000');
+const beforeApply = PIX2.serialize(editor.doc);
+const replacement = PIX2.parseValidated(beforeApply.replace('Apply source', 'Changed source'));
+assert.equal(editor.applyDocument(replacement, 'Apply Code'), true);
+assert.equal(editor.undo(), true);
+assert.equal(PIX2.serialize(editor.doc), beforeApply, 'Apply Code remains one undoable document mutation');
+assert.equal(editor.redo(), true);
+assert.equal(editor.doc.meta.title, 'Changed source');
+console.log('PASS Studio no-op redo / undoable document replacement');
+
+// Repeated free rotation samples the original raster at the cumulative angle.
+session.lift(doc, sourceCell, region, box);
+const rotationPixels = { ...transient.pixels };
+session.beginRotation(box);
+session.rotate(Math.PI / 4);
+const continuing = session.beginRotation(transient.originalBounds);
+assert.equal(continuing.angle, Math.PI / 4);
+const at90 = session.rotate(Math.PI / 2);
+assert.deepEqual(at90.pixels, Transform.rotatePixelsNearestNeighbor(rotationPixels, box.w, box.h, Math.PI / 2).pixels);
+session.rotate(Math.PI * 2);
+assert.deepEqual(transient.pixels, rotationPixels, 'A full cumulative turn does not compound intermediate sampling loss');
+session.cancel();
+console.log('PASS cumulative rotation uses immutable source');

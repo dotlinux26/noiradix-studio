@@ -1,5 +1,7 @@
 # Audit engine của Studio Sprite Editor và PixelArt
 
+> Historical checkpoint. For the later RC2 refactor, corrections, completed regression gaps and current verification, see [EDITOR_REFACTOR_PROGRESS.md](EDITOR_REFACTOR_PROGRESS.md). Original results below retain their original scope.
+
 PixelArt là chuẩn tham chiếu cho thao tác trên canvas, hình học và điều hướng. Studio là nguồn cho cây Structure & Layers và cách thao tác với dự án nhiều frame. Đích chung là một bộ quy tắc chỉnh sửa trong `js/`, với mỗi app cung cấp tài liệu đang mở, đích chỉnh sửa, lịch sử và UI của nó.
 
 ## Đối chiếu mã và bằng chứng

@@ -73,7 +73,7 @@ class EditorState {
   }
 
   // Load a new document into state (optionally preserving open tabs during external reload or Apply Code)
-  setDocument(doc, preserveTabs = false) {
+  setDocument(doc, preserveTabs = false, { preserveHistory = false, action = 'Apply Document' } = {}) {
     this.doc = doc;
     if (!preserveTabs) {
       this.openCellTabs = [];
@@ -93,11 +93,17 @@ class EditorState {
         }
       }
     }
-    this.history = [];
-    this.historyIndex = -1;
+    if (!preserveHistory) {
+      this.history = [];
+      this.historyIndex = -1;
+    }
     this.selection = null;
     this.strokePreState = null;
-    this.saveSnapshot('Initial Load');
+    return this.saveSnapshot(preserveHistory ? action : 'Initial Load');
+  }
+
+  applyDocument(doc, action = 'Apply Document') {
+    return this.setDocument(doc, true, { preserveHistory: true, action });
   }
 
   // Begin a continuous stroke
@@ -111,20 +117,19 @@ class EditorState {
     if (!this.doc || !this.strokePreState || !_PIX2) return false;
     const currentState = _PIX2.serialize(this.doc);
     const changed = currentState !== this.strokePreState;
-    if (changed) {
-      this.saveSnapshot(strokeName);
-    }
+    const recorded = changed ? this.saveSnapshot(strokeName) : false;
     this.strokePreState = null;
-    return changed;
+    return Boolean(recorded);
   }
 
   // Record undo snapshot
   saveSnapshot(actionName = 'Edit') {
-    if (!this.doc || !_PIX2) return;
+    if (!this.doc || !_PIX2) return false;
+    const serialized = _PIX2.serialize(this.doc);
+    if (this.history[this.historyIndex]?.data === serialized) return false;
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1);
     }
-    const serialized = _PIX2.serialize(this.doc);
     this.history.push({
       action: actionName,
       data: serialized,
@@ -135,6 +140,7 @@ class EditorState {
     } else {
       this.historyIndex++;
     }
+    return true;
   }
 
   // Undo

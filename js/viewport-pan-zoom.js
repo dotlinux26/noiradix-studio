@@ -22,11 +22,10 @@
   const ARTWORK_ZOOM_LADDER = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
 
   function artworkZoomLimit(width, height) {
-    const longestSide = Math.max(width, height);
-    if (longestSide >= 512) return 8;
-    if (longestSide >= 256) return 16;
-    if (longestSide >= 128) return 32;
-    return 64;
+    // Keep every artwork backing axis within 4096px before allocation, even
+    // for dimensions between presets and PixelArt's 1024px profile.
+    const limit = Math.min(64, 4096 / Math.max(1, width, height));
+    return ARTWORK_ZOOM_LADDER.findLast(zoom => zoom <= limit) || ARTWORK_ZOOM_LADDER[0];
   }
 
   function artworkZoomLadder(width, height) {

@@ -315,3 +315,7 @@ All development in NOIRADIX Studio adheres to three non-negotiable principles:
 1. **Zero Runtime Dependencies:** No npm runtime packages, no frameworks (React, Vue, etc.), no build tools (Webpack, Vite). The application must remain executable simply by double-clicking `index.html`.
 2. **100% Offline-First:** Zero telemetry, zero external network requests. All drawing, animation, storage, and exports execute completely locally in the user's browser.
 3. **Lossless Artwork Preservation:** Grid expansions, directional conversions, row movements, and format updates must **never** erase or destructively overwrite existing drawn pixels.
+
+## RC2 shared editor maintenance
+
+See the [refactor plan](discussion/EDITOR_REFACTOR_PLAN.md), [phase report](discussion/EDITOR_REFACTOR_PROGRESS.md) and [agent handbook](agents/README.md) for current module ownership, evidence and verification commands. Historical discussions retain their original scope.

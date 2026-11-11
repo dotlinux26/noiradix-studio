@@ -1,6 +1,6 @@
 # Kế hoạch tái cấu trúc engine editor sau RC2
 
-Trạng thái: đã được người dùng cho triển khai tuần tự; đang thực hiện. Mốc code `2d5e751`, nhánh `rc2`, bản `2.1.2-beta.1`. Ngày 2026-11-11.
+Trạng thái: P0–P5 hoàn tất trên nhánh review `rc2`; gate cuối đã qua. Mốc khởi đầu `2d5e751`, mã review `2.1.2-beta.2`. Ngày 2026-11-11.
 
 ## Mục tiêu và mốc nghiệm thu
 
@@ -98,4 +98,4 @@ Một thao tác chỉ có một chủ sở hữu commit history và dirty. Engin
 
 Bắt đầu P0, rồi chọn một lát cắt P1 nhỏ làm mẫu (palette controller có logic hai bên tương tự nhưng cần đối chiếu persistence và UI khác nhau). Tiếp theo ưu tiên transaction/gesture có rủi ro dữ liệu cao. Không đặt mục tiêu giảm số dòng tùy ý hoặc viết lại toàn bộ cùng lúc. Mỗi lát cắt có note trước/sau, kiểm thử và kết quả review; chỉ đánh dấu hoàn tất khi có bằng chứng.
 
-Tài liệu này là kế hoạch, không phải cam kết các bước đã thực hiện. Chưa thay code runtime, chưa có quyết định merge hay phát hành mới.
+Kế hoạch theo phase đã được thực hiện tuần tự; xem kết quả và bằng chứng trong `EDITOR_REFACTOR_PROGRESS.md`. Đợt này chưa merge `main`.

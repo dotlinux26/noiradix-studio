@@ -34,7 +34,7 @@ const assert = require('node:assert/strict');
                 record.readStarted = true;
                 await new Promise(resolve => { record.releaseRead = resolve; });
               }
-              return new File([snapshot], this.name, { type: 'text/plain', lastModified: 200 });
+              return new File([snapshot], this.name, { type: 'text/plain', lastModified: record.modified || 200 });
             },
             async createWritable() {
               let pending;
@@ -59,7 +59,7 @@ const assert = require('node:assert/strict');
           return window.files[window.saveFileId].handle;
         };
       });
-      await page.goto('http://127.0.0.1:8769' + (pa ? '/pixelart/' : '/'));
+      await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + (pa ? '/pixelart/' : '/'));
       const about = page.locator('#btn-about-close-done, #btn-pa-about-close-done').filter({ visible: true });
       if (await about.count()) await about.first().click();
       const tabs = page.locator('.project-tab[data-tab-id]');
@@ -172,6 +172,7 @@ const assert = require('node:assert/strict');
       assert.equal(await dirty(), 0, 'Retry succeeds after denied/cancelled saves');
       const readsBeforeInvalid = await page.evaluate(() => {
         window.files.C.content = '@pix2 1.1\n@cell c\n p nope #fff';
+        window.files.C.modified = 300;
         return window.files.C.readCount;
       });
       await page.locator('#btn-reload-file').click();
@@ -179,6 +180,24 @@ const assert = require('node:assert/strict');
       await page.waitForTimeout(150);
       assert.equal(await source(), retrySource, 'Invalid external source cannot replace the current document');
       await page.evaluate(text => { window.files.C.content = text; }, retrySource);
+      if (pa) {
+        await page.locator('#btn-pa-side-code').click();
+        await page.locator('#btn-toggle-code-lock').click();
+      } else {
+        await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
+        await page.locator('#btn-toggle-edit-code').click();
+      }
+      const code = page.locator(pa ? '#pa-code-editor' : '#pix2-code-text');
+      await code.fill('@pix2 1.1\n@cell c\n p nope #fff');
+      await focus(a);
+      assert.equal(await page.locator('.project-tab.active').getAttribute('data-tab-id'), b,
+        'Invalid pending source blocks a project switch');
+      await code.fill(retrySource);
+      await focus(a);
+      await page.waitForTimeout(350);
+      assert.equal(await source(), aText, 'A pending code debounce cannot publish B into A');
+      await focus(b);
+      assert.equal(await source(), retrySource, 'Valid source is settled in its originating project');
       assert.deepEqual(errors, []);
       console.log((pa ? 'PixelArt' : 'Studio') + ' PASS native adapter / duplicate names / queued writes / late edits / Save As / failed stream');
       await page.close();

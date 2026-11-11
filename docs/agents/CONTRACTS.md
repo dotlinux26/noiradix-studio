@@ -14,9 +14,12 @@
 | Parse, normalize, serialize, validate, composite and migration | `js/pix2-format.js` |
 | Standalone PIX2 distribution | `pix2/js/pix2-format.js`, byte-identical to the root compiler |
 | Raster tools and ownership guards | `js/tools.js`, `js/structure-operations.js` |
-| Selection geometry and Region gestures | `js/selection-transform.js`, `js/region-selection.js` |
+| Selection geometry and Region gestures | `js/selection-transform.js`, `js/region-selection.js`, `js/editor-floating-selection.js` |
 | Canvas buffers, viewport geometry and rulers | `js/editor-canvas.js`, `js/viewport-pan-zoom.js`, `js/editor-rulers.js` |
 | Toolbars, tree, context menus and document tabs | `js/editor-toolbar.js`, `js/editor-outliner.js`, `js/editor-menu.js`, `js/tab-strip.js` |
+| Palette data and library controller | `js/editor-palette-presets.js`, `js/editor-palette-library.js` |
+| Native write permission/queue/stream cleanup | `js/editor-file-save.js` |
+| Studio feature controllers | `js/studio-grid.js`, `js/studio-animation.js`, `js/studio-slice.js`, `js/studio-source.js`, `js/studio-atlas.js`, `js/studio-export.js` |
 | Browser workspace storage | `js/editor-workspace-storage.js` |
 | AI format rules | `js/pix2-ai-prompt.js` |
 | Studio document/frame history, file handles, UI and animation | `js/editor-state.js`, `js/app.js` and the Studio adapters |
@@ -26,3 +29,5 @@
 Persist artwork in cell coordinates. Keep zoom, hover, isolation, temporary selection and derived render buffers outside exported artwork. Structural identity uses IDs. Display names may coincide.
 
 Preserve node order and alpha through parse, edit, Undo/Redo, export and reload. Resolve the exact editable target with ancestor lock/visibility checks before mutation. A pending transform retains its original destination and cancellation baseline.
+
+Refactor decisions and verified phase gates are recorded in [the phase report](../discussion/EDITOR_REFACTOR_PROGRESS.md). `PIX2.parseValidated` is the publication boundary for migrated editor ingestion; `parse` can return diagnostic-bearing partial data for tooling.

@@ -10,12 +10,17 @@ const EditorPaletteLibrary = (() => {
         if (!raw) return {};
         const parsed = JSON.parse(raw);
         return parsed && typeof parsed === 'object' ? parsed : {};
-      } catch (_) { return {}; }
+      } catch (_) {
+        return {};
+      }
     }
 
     function save(palettes) {
-      try { storage.setItem(storageKey, JSON.stringify(palettes)); }
-      catch (error) { console.warn('Failed to save custom palettes to storage:', error); }
+      try {
+        storage.setItem(storageKey, JSON.stringify(palettes));
+      } catch (error) {
+        console.warn('Failed to save custom palettes to storage:', error);
+      }
     }
 
     function populate() {
@@ -44,12 +49,17 @@ const EditorPaletteLibrary = (() => {
         const library = group('Custom Library');
         for (const key of keys) {
           const item = custom[key];
-          option(library, `custom_${key}`, `${item.name} (${item.colors ? item.colors.length : 0})`);
+          option(
+            library,
+            `custom_${key}`,
+            `${item.name} (${item.colors ? item.colors.length : 0})`,
+          );
         }
       }
       option(group('Actions'), '__new_preset__', actionLabel);
       // Compare values directly; persisted names never become a selector.
-      if (Array.from(select.options).some(item => item.value === previous)) select.value = previous;
+      if (Array.from(select.options).some((item) => item.value === previous))
+        select.value = previous;
       else if (fallback !== null) select.value = fallback;
     }
     return { load, save, populate };

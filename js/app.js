@@ -80,7 +80,7 @@
     endStroke: label => state.endStroke(label),
     saveSnapshot: label => state.saveSnapshot(label),
     openCellTab: id => state.openCellTab(id),
-    setDocument: (...args) => state.setDocument(...args)
+    applyDocument: (...args) => state.applyDocument(...args)
   };
 
 
@@ -753,9 +753,15 @@
     });
   }
 
+  function prepareProjectSwitch() {
+    return !getActiveSession() || state.activeTabId !== 'tab-pix2-code' ||
+      !isCodeEditingUnlocked || handleBeforeLeaveCodeTab();
+  }
+
   function switchProjectSession(sessionId) {
     const target = projectSessions.find(p => p.id === sessionId);
-    if (!target) return;
+    if (!target || activeProjectId === sessionId) return;
+    if (!prepareProjectSwitch()) return;
 
     commitFloatingSelection();
     regionSelection.reset();
@@ -795,6 +801,7 @@
   }
 
   function createProjectSession(doc, title = 'Untitled.pix2', fileHandle = null) {
+    if (!prepareProjectSwitch()) return null;
     saveCurrentSessionState();
     const newId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const session = new ProjectSession(newId, title, doc, fileHandle, title, title);
@@ -842,6 +849,11 @@
       ? sessionOrId
       : projectSessions.find(p => p.id === sessionOrId);
     if (!session) return;
+    if (session.id === activeProjectId) {
+      if (!prepareProjectSwitch()) return;
+      saveCurrentSessionState();
+    }
+
 
     if (session.isDirty) {
       const confirmDiscard = confirm(`Project "${session.fileName || session.title}" has unsaved changes. Discard and close?`);
@@ -1577,7 +1589,7 @@
       try {
         const doc = PIX2.parse(source);
         if (getActiveSession()) {
-          createProjectSession(doc, fileName);
+          if (!createProjectSession(doc, fileName)) return;
           selectedGridCellId = Object.keys(doc.cells)[0] || null;
           centerCellCanvas();
           centerGridCanvas();
@@ -2359,7 +2371,7 @@
     triggerEventAutosave: (...args) => triggerEventAutosave(...args),
     updateGridInspectorUI: (...args) => updateGridInspectorUI(...args)
   });
-  const { setGridZoom, fitGridCanvas, zoomGridIn, zoomGridOut, applyGridPan, centerGridCanvas, getRowMoveUpHit, getRowMoveDownHit, getRowCardHit, getRowDuplicateHit, getRowDeleteHit, getColDeleteHit, confirmAndDeleteRow, confirmAndDeleteCol, getCellAtGrid, getCellRowCol, renderGridOverview, inferRowTitle, drawChecker, getGridCellFromPos, addGridRow, addGridCol, promptAndDuplicateRow, duplicateSpecificRow, moveRow, deleteSpecificRow, deleteSpecificCol, removeSelectedRow, removeSelectedCol } = gridController;
+  const { setGridZoom, fitGridCanvas, zoomGridIn, zoomGridOut, applyGridPan, centerGridCanvas, getRowMoveUpHit, getRowMoveDownHit, getRowCardHit, getRowDuplicateHit, getRowDeleteHit, getColDeleteHit, confirmAndDeleteRow, confirmAndDeleteCol, getCellAtGrid, getCellRowCol, renderGridOverview, inferRowTitle, getGridCellFromPos, addGridRow, addGridCol, promptAndDuplicateRow, moveRow, deleteSpecificRow, deleteSpecificCol, removeSelectedRow, removeSelectedCol } = gridController;
 
 
   // ===========================================================================
@@ -2558,8 +2570,7 @@
       },
       change: label => {
         state.syncCellComposite(cell.id);
-        state.saveSnapshot(label);
-        triggerEventAutosave();
+        if (state.saveSnapshot(label)) triggerEventAutosave();
         refreshAll();
       },
       isolate: node => {
@@ -2596,11 +2607,10 @@
     getActiveView: () => state.activeTabId,
     activateView: view => { state.activeTabId = view; },
     commitProject(draft, candidate, fileName, count) {
-      createProjectSession(draft, fileName);
+      if (!createProjectSession(draft, fileName)) throw new Error('Resolve code edits before importing');
       state.beginStroke();
       state.doc = candidate;
-      state.endStroke(`Import ${count} Slices`);
-      triggerEventAutosave();
+      if (state.endStroke(`Import ${count} Slices`)) triggerEventAutosave();
       state.activeTabId = 'tab-grid-overview';
       updateResolutionButtons();
       centerGridCanvas();
@@ -2608,7 +2618,7 @@
     },
     refreshAll, escapeHTML, sanitizeSafeFilename, showToast
   });
-  const { setSliceTool, setSliceZoom, updateSliceTransform, applySliceZoom, fitSliceZoom, batchTagPrefix, autoTag4Dir, autoTag8Dir, clearAllTags, getSliceCanvasCoords, drawRoundedRect, hitTestSliceHandles, renderSliceRulers, renderImportSliceView, renderImportSlicesList, deleteImportSlice, syncUntrimmedSliceSize, initInspectorDeckResizer, initImportSliceCanvasEvents, updateImportSlices, commitImportSlicesToProject, handleSingleFileToImportSlice, handlePairDropToImportSlice } = sliceController;
+  const { setSliceTool, setSliceZoom, fitSliceZoom, batchTagPrefix, autoTag4Dir, autoTag8Dir, clearAllTags, renderImportSliceView, deleteImportSlice, initInspectorDeckResizer, initImportSliceCanvasEvents, updateImportSlices, commitImportSlicesToProject, handleSingleFileToImportSlice, handlePairDropToImportSlice } = sliceController;
 
 
   // ===========================================================================
@@ -2663,7 +2673,7 @@
     updateGridInspectorUI: (...args) => updateGridInspectorUI(...args),
     updateStudioPlayButtonUI: (...args) => updateStudioPlayButtonUI(...args)
   });
-  const { openFramePickerModal, closeFramePickerModal, renderFramePickerCards, appendCellToActiveAnimation, populateAnimDropdowns, assignRowToAnimation, assignCellToAnimation, applyRowBatchTag, ensureGridDimensions, openActionTemplateModal, closeActionTemplateModal, syncActiveActionChip, renderTemplateLivePreview, applyActionTemplate, autoSetup4Directions, autoSetup8Directions, renderDedicatedAnimationStudio, updateStudioActiveFrameUI, selectStudioFrame, renderTimelineFramesStrip } = animationController;
+  const { openFramePickerModal, closeFramePickerModal, renderFramePickerCards, appendCellToActiveAnimation, populateAnimDropdowns, assignRowToAnimation, assignCellToAnimation, openActionTemplateModal, closeActionTemplateModal, syncActiveActionChip, renderTemplateLivePreview, applyActionTemplate, renderDedicatedAnimationStudio, updateStudioActiveFrameUI, selectStudioFrame } = animationController;
 
 
   // ===========================================================================
@@ -2995,9 +3005,7 @@
   let isRotatingSelection = false;
   let rotationCenter = null;
   let rotationStartAngle = 0;
-  let rotationCurrentAngle = 0;
-  let rotationBaseFloatingPixels = null;
-  let rotationBaseSel = null;
+  let rotationGestureBaseAngle = 0;
   // Transform previews replace floatingSelectionPixels. Keep an immutable
   // lift-time baseline so Escape can restore, rather than commit, artwork.
   let floatingBaselinePixels = null;
@@ -3100,8 +3108,6 @@
     scaleOriginalSel = null;
     scaleOriginalPixels = null;
     rotationCenter = null;
-    rotationBaseFloatingPixels = null;
-    rotationBaseSel = null;
     state.selection = null;
     renderCellEditor();
     renderMiniPreview();
@@ -3215,19 +3221,21 @@
         isRotatingSelection = true;
         isPointerDown = true;
         ensureFloatingSelection();
-        rotationBaseFloatingPixels = { ...floatingSelectionPixels };
-        rotationBaseSel = { ...state.selection };
+        const rotation = floatingSession.beginRotation(state.selection);
+        if (!rotation) { isRotatingSelection = false; isPointerDown = false; return; }
+        rotationGestureBaseAngle = rotation.angle;
         const cx = state.selection.x + state.selection.w / 2;
         const cy = state.selection.y + state.selection.h / 2;
         const screenCenterX = rect.left + cx * state.cellZoom;
         const screenCenterY = rect.top + cy * state.cellZoom;
         rotationCenter = { x: screenCenterX, y: screenCenterY, cx, cy };
         rotationStartAngle = Math.atan2(e.clientY - screenCenterY, e.clientX - screenCenterX);
-        rotationCurrentAngle = 0;
+
         return;
       }
 
       if (hit && hit !== 'body') {
+        floatingSession.resetRotation();
         isScalingSelection = true;
         activeScaleHandle = hit;
         isPointerDown = true;
@@ -3242,6 +3250,7 @@
     if (state.selection && coords.x >= state.selection.x && coords.x < state.selection.x + state.selection.w &&
         coords.y >= state.selection.y && coords.y < state.selection.y + state.selection.h) {
       // User clicked INSIDE active selection -> Start moving/dragging it!
+      floatingSession.resetRotation();
       isMovingSelection = true;
       isPointerDown = true;
       moveStartX = coords.x;
@@ -3285,8 +3294,7 @@
       }
     } else if (tool === 'bucket') {
       Tools.floodFill(cell, coords.x, coords.y, color, state.doc.meta.cellSize);
-      state.endStroke('Paint Bucket Fill');
-      triggerEventAutosave();
+      if (state.endStroke('Paint Bucket Fill')) triggerEventAutosave();
       refreshAll();
     } else if (tool === 'line' || tool === 'rect' || tool === 'rect-fill' || tool === 'circle' || tool === 'circle-fill' || tool === 'select') {
       renderShapeOverlay(dragStartX, dragStartY, coords.x, coords.y, tool, color, e);
@@ -3378,18 +3386,10 @@
         const step = (15 * Math.PI) / 180;
         deltaAngle = Math.round(deltaAngle / step) * step;
       }
-      rotationCurrentAngle = deltaAngle;
-      const rotated = SelectionTransform.rotatePixelsNearestNeighbor(
-        rotationBaseFloatingPixels,
-        rotationBaseSel.w,
-        rotationBaseSel.h,
-        deltaAngle
-      );
-      floatingSelectionPixels = rotated.pixels;
-      floatingCurrentX = Math.round(rotationBaseSel.x + (rotationBaseSel.w - rotated.w) / 2);
-      floatingCurrentY = Math.round(rotationBaseSel.y + (rotationBaseSel.h - rotated.h) / 2);
-      floatingOriginalSel = { x: floatingCurrentX, y: floatingCurrentY, w: rotated.w, h: rotated.h };
-      state.selection = { ...floatingOriginalSel };
+
+      const rotated = floatingSession.rotate(rotationGestureBaseAngle + deltaAngle);
+      if (!rotated) return;
+      state.selection = { ...rotated.bounds };
       renderMovingSelectionOverlay();
       return;
     }
@@ -3426,8 +3426,7 @@
       if (cell && regionSelection.release(cell, state.activeLayerId, state.isolatedNodeId,
         cell.size || state.doc.meta.cellSize, () => state.beginStroke(), showToast)) {
         state.syncCellComposite(cell.id);
-        state.endStroke('Move regions');
-        triggerEventAutosave();
+        if (state.endStroke('Move regions')) triggerEventAutosave();
         refreshAll();
       }
       renderCellOverlay();
@@ -3680,8 +3679,7 @@
     }
 
     state.syncCellComposite(cell.id);
-    state.endStroke('Cut Selection');
-    triggerEventAutosave();
+    if (state.endStroke('Cut Selection')) triggerEventAutosave();
     refreshAll();
     renderCellOverlay();
     showToast(`Cut selection (${sel.w}×${sel.h}) to clipboard (Ctrl+X)`, 'success');
@@ -3736,8 +3734,7 @@
     };
 
     state.syncCellComposite(cell.id);
-    state.endStroke('Paste Selection');
-    triggerEventAutosave();
+    if (state.endStroke('Paste Selection')) triggerEventAutosave();
     refreshAll();
     renderCellOverlay();
     showToast(`Pasted ${pastedCount} pixels into ${cell.name || cell.id}! (Ctrl+V)`, 'success');
@@ -3759,8 +3756,7 @@
       floatingSelectionCellId = null;
       floatingSelectionTargetId = null;
       state.selection = null;
-      state.endStroke('Delete Floating Selection');
-      triggerEventAutosave();
+      if (state.endStroke('Delete Floating Selection')) triggerEventAutosave();
       renderCellEditor();
       renderMiniPreview();
       renderCellOverlay();
@@ -3784,8 +3780,7 @@
       }
       state.selection = null;
       state.syncCellComposite(cell.id);
-      state.endStroke('Delete Selection');
-      triggerEventAutosave();
+      if (state.endStroke('Delete Selection')) triggerEventAutosave();
       refreshAll();
       renderCellOverlay();
       showToast(`Deleted selection (${sel.w}×${sel.h}) (Del)`);
@@ -3794,8 +3789,7 @@
         state.beginStroke();
         target.pixels = {};
         state.syncCellComposite(cell.id);
-        state.endStroke('Clear Artwork');
-        triggerEventAutosave();
+        if (state.endStroke('Clear Artwork')) triggerEventAutosave();
         refreshAll();
         showToast(`Cleared ${cell.name || cell.id}`);
       }
@@ -3824,8 +3818,7 @@
       }
     }
     state.syncCellComposite(cell.id);
-    state.endStroke('Fill Selection');
-    triggerEventAutosave();
+    if (state.endStroke('Fill Selection')) triggerEventAutosave();
     refreshAll();
     renderCellOverlay();
     showToast(`Filled selection with ${state.primaryColor}`, 'success');
@@ -3957,8 +3950,7 @@
       if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(k)) continue;
       cell.pixels[k] = state.clipboard.pixels[k];
     }
-    state.endStroke(`Paste Frame into ${cellId}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Paste Frame into ${cellId}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Pasted into "${cell.name || cellId}" (Ctrl+V)`, 'success');
   }
@@ -3999,8 +3991,7 @@
       newPixels[`${nx},${ny}`] = cell.pixels[coord];
     }
     cell.pixels = newPixels;
-    state.endStroke(`Flip Frame ${horizontal ? 'H' : 'V'}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Flip Frame ${horizontal ? 'H' : 'V'}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Flipped ${cell.name || cellId} ${horizontal ? 'Horizontally' : 'Vertically'}`);
   }
@@ -4033,8 +4024,7 @@
       }
     }
     const dirName = horizontal ? 'Horizontal' : 'Vertical';
-    state.endStroke(`Flip Row ${rowIdx} ${dirName}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Flip Row ${rowIdx} ${dirName}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Flipped Row ${rowIdx} ("${rowTitle}") ${dirName.toLowerCase()} (${flippedCount} frame(s) modified).`, 'success');
   }
@@ -4044,8 +4034,7 @@
     const cell = state.doc.cells[cellId];
     state.beginStroke();
     cell.pixels = {};
-    state.endStroke(`Clear Frame ${cellId}`);
-    triggerEventAutosave();
+    if (state.endStroke(`Clear Frame ${cellId}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Cleared frame ${cell.name || cellId}`);
   }
@@ -4341,8 +4330,7 @@
       try {
         const parsed = PIX2.parse(dom.codeTextarea.value);
         if (!PIX2.validate(parsed, { strict: true }).valid) throw new Error('Invalid PIX2');
-        state.setDocument(parsed, true);
-        triggerEventAutosave();
+        if (state.applyDocument(parsed, 'Apply Code')) triggerEventAutosave();
       } catch (_) {
         showToast('Cannot save invalid PIX2 code. Fix the diagnostics first.', 'error');
         return Promise.resolve();
@@ -4479,7 +4467,7 @@
 
       // Safe reload (preserving active tabs)
       const newDoc = PIX2.parseValidated(text);
-      state.setDocument(newDoc, true);
+      state.applyDocument(newDoc, 'External Reload');
       lastKnownFileModified = currentModified;
       lastSavedContent = text;
       localStorage.setItem('pix2_last_saved_content', text);
@@ -4570,7 +4558,7 @@
     showToast: (...args) => showToast(...args),
     triggerEventAutosave: (...args) => triggerEventAutosave(...args)
   });
-  const { splitLineComment, highlightPix2Code, renderCodeEditor, lockCodeEditingSilently, handleBeforeLeaveCodeTab, toggleCodeEditMode, copyRawPix2Code, fallbackCopyText, applyCodeToDoc, getSpriteMath, updateAiGuidePane, copyAiPrompt } = sourceController;
+  const { renderCodeEditor, handleBeforeLeaveCodeTab, toggleCodeEditMode, copyRawPix2Code, applyCodeToDoc, updateAiGuidePane, copyAiPrompt } = sourceController;
 
 
   function escapeHtml(str) {
@@ -4770,37 +4758,7 @@
     openGameExportModal();
   }
 
-  function exportCurrentCellPng() {
-    if (typeof commitFloatingSelection === 'function') {
-      commitFloatingSelection();
-    }
-    const cell = state.getActiveCell();
-    if (!cell || !state.doc) return;
-    const cw = state.doc.meta.cellSize.w;
-    const ch = state.doc.meta.cellSize.h;
 
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = cw;
-    exportCanvas.height = ch;
-    const ctx = exportCanvas.getContext('2d');
-    ctx.clearRect(0, 0, cw, ch);
-
-    for (const coord in cell.pixels) {
-      const [px, py] = coord.split(',').map(Number);
-      ctx.fillStyle = cell.pixels[coord];
-      ctx.fillRect(px, py, 1, 1);
-    }
-
-    exportCanvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(cell.name || cell.id).toLowerCase().replace(/\s+/g, '_')}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast(`Exported frame ${cell.name || cell.id} PNG!`, 'success');
-    });
-  }
 
   async function openStudioDocument(file, handle = null) {
     if (handle) {
@@ -4820,6 +4778,7 @@
     const validation = PIX2.validate(doc, { strict: false });
     if (!validation.valid) throw new Error(validation.errors[0] || 'Invalid PIX2 document');
     const session = createProjectSession(doc, file.name, handle);
+    if (!session) return;
     session.lastSavedContent = text;
     session.lastKnownFileModified = file.lastModified || 0;
     currentFileHandle = handle;
@@ -4959,8 +4918,7 @@
     brushSettings = Tools.bindBrushSettings();
     RegionSelection.bindActions(regionSelection, () => state.getActiveCell(), state, (cell, label) => {
       state.syncCellComposite(cell.id);
-      state.saveSnapshot(label);
-      triggerEventAutosave();
+      if (state.saveSnapshot(label)) triggerEventAutosave();
       refreshAll();
     }, showToast);
     if (dom.btnThemeToggle) dom.btnThemeToggle.addEventListener('click', toggleTheme);
@@ -5444,8 +5402,8 @@
           for (const pf of pix2Files) {
             const text = await pf.text();
             try {
-              const doc = PIX2.parse(text);
-              createProjectSession(doc, pf.name, null);
+              const doc = PIX2.parseValidated(text);
+              if (!createProjectSession(doc, pf.name, null)) break;
               showToast(`Opened ${pf.name} as project tab!`, 'success');
             } catch (pErr) {
               showToast(`Error parsing ${pf.name}: ${pErr.message}`, 'error');
@@ -5501,8 +5459,7 @@
           }
 
           selectedGridCellId = newId;
-          state.saveSnapshot(`Rename Cell ID to ${newId}`);
-          triggerEventAutosave();
+          if (state.saveSnapshot(`Rename Cell ID to ${newId}`)) triggerEventAutosave();
           refreshAll();
         }
       });
@@ -6520,8 +6477,7 @@
           }
         });
 
-        state.endStroke(`Add ${addedCount} Colors to Palette`);
-        triggerEventAutosave();
+        if (state.endStroke(`Add ${addedCount} Colors to Palette`)) triggerEventAutosave();
         renderPalette();
         showToast(addedCount > 0 ? `Added ${addedCount} new color(s) to palette!` : 'All detected colors already in palette.', addedCount > 0 ? 'success' : 'info');
       });
@@ -6542,8 +6498,7 @@
         });
         state.doc.palette = newPalette;
 
-        state.endStroke(`Replace Palette from Artwork (${detectedArtworkColors.length} colors)`);
-        triggerEventAutosave();
+        if (state.endStroke(`Replace Palette from Artwork (${detectedArtworkColors.length} colors)`)) triggerEventAutosave();
         renderPalette();
         showToast(`Palette replaced with ${detectedArtworkColors.length} colors!`, 'success');
       });
@@ -6558,8 +6513,7 @@
         const target = getSelectionTarget(cell);
         if (!Tools.alignRaster(target, cell.size || state.doc.meta.cellSize, direction)) return;
         state.syncCellComposite(cell.id);
-        state.saveSnapshot('Align ' + direction);
-        triggerEventAutosave();
+        if (state.saveSnapshot('Align ' + direction)) triggerEventAutosave();
         refreshAll();
       });
     }
@@ -6571,8 +6525,7 @@
         const cell = state.getActiveCell();
         if (cell && state.doc) {
           Tools.flipHorizontal(cell, state.doc.meta.cellSize.w);
-          state.saveSnapshot('Flip Cell Horizontal');
-          triggerEventAutosave();
+          if (state.saveSnapshot('Flip Cell Horizontal')) triggerEventAutosave();
           refreshAll();
         }
       }
@@ -6585,8 +6538,7 @@
         const cell = state.getActiveCell();
         if (cell && state.doc) {
           Tools.flipVertical(cell, state.doc.meta.cellSize.h);
-          state.saveSnapshot('Flip Cell Vertical');
-          triggerEventAutosave();
+          if (state.saveSnapshot('Flip Cell Vertical')) triggerEventAutosave();
           refreshAll();
         }
       }
@@ -6615,8 +6567,7 @@
         for (const cid in state.doc.cells) {
           Tools.centerContent(state.doc.cells[cid], state.doc.meta.cellSize.w, state.doc.meta.cellSize.h);
         }
-        state.saveSnapshot('Center All Cells');
-        triggerEventAutosave();
+        if (state.saveSnapshot('Center All Cells')) triggerEventAutosave();
         refreshAll();
       }
     });
@@ -7447,8 +7398,7 @@
           if (regionSelection.nudge(cell, state.activeLayerId, state.isolatedNodeId,
             cell.size || state.doc.meta.cellSize, e.key, () => state.beginStroke())) {
             state.syncCellComposite(cell.id);
-            state.endStroke('Nudge regions');
-            triggerEventAutosave();
+            if (state.endStroke('Nudge regions')) triggerEventAutosave();
             refreshAll();
           }
           return;

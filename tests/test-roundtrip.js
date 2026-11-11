@@ -444,8 +444,10 @@ assert(testEditor.openCellTabs.length === 0, 'Reset with preserveTabs=false clea
 
 // Undo / Redo tab restoration
 testEditor.openCellTab('cell_0_1');
+testEditor.plotPixelAt('cell_0_1', 0, 0, '#ff0000');
 testEditor.saveSnapshot('State on Cell 0,1'); // History index 1: cell_0_1
 testEditor.activeTabId = 'tab-grid-overview';
+testEditor.plotPixelAt('cell_0_1', 1, 0, '#00ff00');
 testEditor.saveSnapshot('State on Overview'); // History index 2: tab-grid-overview
 assert(testEditor.activeTabId === 'tab-grid-overview', 'Currently on Overview');
 

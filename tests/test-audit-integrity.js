@@ -251,7 +251,7 @@ async function runSuite() {
   {
     PixelArtApp.state.w = 1024;
     PixelArtApp.state.h = 1024;
-    assert.strictEqual(PixelArtApp.getMaxAllowedZoom(), 8, '1024x1024 must cap at 8x zoom');
+    assert.strictEqual(PixelArtApp.getMaxAllowedZoom(), 4, '1024x1024 must cap at 4x within the shared backing budget');
 
     PixelArtApp.state.w = 512;
     PixelArtApp.state.h = 512;
@@ -285,8 +285,8 @@ async function runSuite() {
     PixelArtApp.state.h = 1024;
     PixelArtApp.resizeCanvasesToZoom();
 
-    assert.strictEqual(PixelArtApp.state.zoom, 8, `state.zoom must be clamped from 64 to 8, got ${PixelArtApp.state.zoom}`);
-    console.log('  [PASS] resizeCanvasesToZoom() defensively clamps zoom on dimension change (64x -> 8x)');
+    assert.strictEqual(PixelArtApp.state.zoom, 4, `state.zoom must be clamped from 64 to 4, got ${PixelArtApp.state.zoom}`);
+    console.log('  [PASS] resizeCanvasesToZoom() defensively clamps zoom on dimension change (64x -> 4x)');
   }
 
   // -----------------------------------------------------------------------------
@@ -975,8 +975,8 @@ async function runSuite() {
     assert(source.includes('rotationSessionPixels'), 'PixelArt must retain an immutable rotation-session raster');
     assert(source.includes('state.rotationGestureBaseAngle + state.rotationCurrentAngle'),
       'Pointer-up must apply the cumulative angle rather than re-rotating the previous bounding box');
-    assert(source.includes('SelectionTransform.rotatePixelsNearestNeighbor(\n          state.rotationSessionPixels'),
-      'Committed rotation must sample the immutable session pixels');
+    assert(source.includes('floatingSession.rotate(theta)'),
+      'Committed rotation must delegate to the shared immutable sampling session');
     console.log('  [PASS] repeated rotation gestures use a stable source snapshot and cumulative angle');
   }
 

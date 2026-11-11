@@ -1,6 +1,6 @@
 # NOIRADIX Studio — Core Architecture & Design Philosophy
 
-**Document Version:** 1.0.0  
+**Document Version:** RC2 / 2.1.2-beta.2
 **Project:** NOIRADIX Studio — Structured Pixel Art Editor & Open Sprite Description Language  
 **Target Architecture:** Zero-dependency, browser-native, offline-capable, AI-native structured sprite authoring.  
 
@@ -76,7 +76,7 @@ To eliminate layout, zoom, and viewport scaling bugs, PIX2 strictly separates th
 | **Sheet Space** | Integer | $(X, Y) \in [0, \text{SheetW}-1] \times [0, \text{SheetH}-1]$ | Global pixel coordinate on the compiled sprite sheet atlas. |
 | **Screen Space** | Float | $(x_s, y_s) \in \mathbb{R}^2$ | Physical CSS/Client pixels on the monitor. Screen coordinates are **never** stored in `.pix2`. |
 
-$$\text{Zoom Invariant: } \forall z \in [4\times, 64\times], \quad \text{ScreenToCell}(x_s, y_s, z) \equiv (x, y)$$
+Pointer-to-cell mapping must use the actual view transform, including fractional Fit zoom, canvas layout and DPR. Artwork zoom limits depend on dimensions; `js/viewport-pan-zoom.js` defines the shared ladder and cap. View state is never serialized into artwork.
 
 ---
 
@@ -104,28 +104,19 @@ Player.cell_id.pixel(x, y) = Color
 
 - **Web Static Hosting:** Hostable on any static server or CDN (GitHub Pages, Cloudflare Pages, Netlify) with zero backend.
 - **Desktop / Portable Edition:** Single zip folder containing `index.html`, `css/`, `js/`, `engine/`, and `samples/`. Double-click `index.html` or `start-pix2-studio.bat` to launch immediately without installing runtimes.
-- **Open Format Ecosystem:** The `.pix2` format specification and core parser are released under permissive open-source licenses (MIT / CC0) so external developers, game engines, and AI agents can build native tools around PIX2.
+- **Open Format Ecosystem:** See repository license files for applicable terms when distributing the parser or format documentation.
 
 ---
 
-## 6. Browser Compatibility & Native File Engine Matrix
+## 6. Browser capabilities and measured support
 
-| Browser Environment | Minimum Version | Native `Ctrl+S` Disk Overwrite | Drag-and-Drop Handle Binding | Real-Time Live Watcher | Support Level |
-|---|:---:|:---:|:---:|:---:|:---|
-| **Google Chrome / Chromium** | **v86+** | ✅ Full Native | ✅ `DataTransferItem.getAsFileSystemHandle()` | ✅ Live 1500ms + Focus Sync | **Tier 1 (Recommended)** |
-| **Microsoft Edge** | **v86+** | ✅ Full Native | ✅ `DataTransferItem.getAsFileSystemHandle()` | ✅ Live 1500ms + Focus Sync | **Tier 1 (Recommended)** |
-| **Brave / Opera / Arc / Vivaldi** | **v86+** | ✅ Full Native | ✅ `DataTransferItem.getAsFileSystemHandle()` | ✅ Live 1500ms + Focus Sync | **Tier 1 (Recommended)** |
-| **Mozilla Firefox** | **v90+** | 🔄 Lossless Blob Download | 🔄 In-Memory Draft Drop | ⚠️ Manual (`Ctrl+Shift+R`) | **Tier 2 (Graceful Fallback)** |
-| **Apple Safari (WebKit)** | **v15.2+** | 🔄 Lossless Blob Download | 🔄 In-Memory Draft Drop | ⚠️ Manual (`Ctrl+Shift+R`) | **Tier 2 (Graceful Fallback)** |
+Native file access is feature-detected. Automated local verification for this refactor used Chrome 157; CI uses Playwright Chromium. These checks do not establish a minimum supported browser version or certify Firefox, Safari, Edge and every Chromium derivative. File-input/Blob fallback remains part of the implementation. Manual OS picker behavior is separate from mocked native-handle tests.
 
----
+## 7. Performance evidence
 
-## 7. Hardware & System Execution Profile
+Canvas buffers and visibility-aware blits are shared. Each app owns render scheduling and viewport instances. Runtime JavaScript requires no package installation; external icon assets and browser capabilities can affect offline presentation.
 
-- **RAM Footprint:** ~25 MB to 100 MB typical consumption depending on grid size, zoom depth, and undo history buffer.
-- **CPU Overhead:** 0% idle; minimal bursts during flood fill or atlas generation (< 16ms per frame, ensuring steady 60 FPS).
-- **GPU Acceleration:** Standard HTML5 Canvas 2D hardware rasterizer.
-- **Storage Requirement:** Zero local installation required; static bundle footprint is under 2 MB.
+Use `tests/benchmark-performance.js` and `tests/browser/benchmark-editors.cjs` with their recorded fixture/browser/DPR. Handler duration is not end-to-end frame latency; JS heap and connected canvas estimates exclude other allocations. There is no blanket promise of zero idle CPU, fixed RAM usage or every operation finishing below 16ms. Phase measurements and remaining coverage are recorded in `discussion/EDITOR_REFACTOR_PROGRESS.md`.
 
 ## RC2 file lifecycle and bounded processing contract
 
@@ -135,7 +126,7 @@ Workspace catalog selection validates shape before choosing the newest timestamp
 
 Both parser distributions must remain byte-identical. Public raster allocations require safe positive integer dimensions, at most 8192 per axis and 16,777,216 total pixels. Parser work budgets are implementation resource limits, not PIX2 artwork fields. See `discussion/RC2_AUDIT.md` for evidence and remaining beta coverage.
 
-## Controller boundaries after P1
+## Controller boundaries after P1/P5
 
 Studio-specific UI controllers live in `js/studio-grid.js`, `studio-slice.js`, `studio-animation.js` and `studio-source.js`. The app connects their document/view ports and callbacks; they do not import each other. `studio-atlas.js` builds atlas rasters; `studio-export.js` packages them. Shared palette storage/dropdown behavior and immutable built-in color definitions live in `editor-palette-library.js` and `editor-palette-presets.js`; each editor receives separate mutable preset arrays. Core editor gestures and persistence remain app adapters during the next migration phases. See `discussion/EDITOR_REFACTOR_PROGRESS.md` for actual gates and outstanding work.
 
