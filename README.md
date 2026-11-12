@@ -186,14 +186,14 @@ Get up and running immediately with zero configuration and zero build tools:
 ### Step 1: Launch NOIRADIX Studio
 * **Instant Online Studio (Zero Install):** Open [**https://noiradix.me/**](https://noiradix.me/) directly in your browser.
 * **Windows (1-Click Local):** Double-click [`start-noiradix-studio.bat`](start-noiradix-studio.bat). It instantly launches your default Chromium browser.
+* **Linux / macOS (Local Offline Copy):** Download or clone the repository, install Python 3 if needed, then run `chmod +x start-noiradix-studio.sh` once and `./start-noiradix-studio.sh`. It starts a loopback-only local server, opens the app in your default browser, and stays active until you press <kbd>Ctrl</kbd> + <kbd>C</kbd>. After downloading the repository, the app itself does not need an internet connection.
 * **Direct File:** Simply open [`index.html`](index.html) in any modern browser (Chrome, Edge, Brave, Opera, Arc).
 * **Local HTTP Server (Optional):**
   ```bash
-  # Python 3
-  python -m http.server 8080
+  # Python 3, from the repository root
+  python3 -m http.server 8080 --bind 127.0.0.1
 
-  # Node.js
-  npx serve .
+  # Then open http://127.0.0.1:8080 in your browser
   ```
 
 ---
@@ -350,7 +350,7 @@ Press **Play Game** and watch your character animate with crisp point filtering 
 
 ## 🌟 Key Highlights
 
-* **100% Pure Vanilla Web Stack:** Zero build tools, zero npm packages, zero runtime frameworks. Runs directly in any modern browser by double-clicking `index.html` or executing `start-noiradix-studio.bat`.
+* **100% Pure Vanilla Web Stack:** Zero build tools, zero npm packages, zero runtime frameworks. Runs in a modern browser by opening `index.html` or using the included Windows `.bat` and Linux/macOS `.sh` launchers.
 * **AI-Native Sparse Pixel Format (`.pix2`):** Only explicitly drawn pixels are serialized into clean, token-efficient text. Cleanly diffable by Git and LLMs.
 * **Game Export Studio (Anti-Bleeding Guard):**
   * Solves sub-pixel texture bleeding seams with configurable **Cell Spacing** (`0px`, `1px`, `2px`, `4px`) and **Outer Margins**.
@@ -539,6 +539,7 @@ this.load.atlas('player', 'assets/player_atlas.png', 'assets/player.json');
 noiradix-studio/
 ├── index.html                   # Single-page studio interface & modals
 ├── start-noiradix-studio.bat    # 1-click launcher for Windows
+├── start-noiradix-studio.sh     # Local browser launcher for Linux & macOS
 ├── noiradix-studio-logo.svg     # Official vector mascot logo
 ├── PIX2_SPECIFICATION.md        # Official specification for the .pix2 format
 ├── THIRD_PARTY_NOTICES.md       # Third-party licenses & acknowledgments
