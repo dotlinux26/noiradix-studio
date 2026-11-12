@@ -3745,6 +3745,26 @@ body.dark-theme .export-preview-viewport {
   gap: 8px;
 }
 
+.about-directory-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.about-directory-badges a {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.about-directory-badges img {
+  display: block;
+  max-width: min(200px, 100%);
+  height: auto;
+}
+
 .social-pill-btn {
   display: inline-flex;
   align-items: center;

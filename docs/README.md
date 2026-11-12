@@ -7,11 +7,13 @@
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
     <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
+    <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
+    <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
   </p>
 </div>
 
-NOIRADIX Studio is also listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/).
+NOIRADIX Studio is listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), and [AlternativeTo](https://alternativeto.net/software/noiradix-studio/).
 
 ---
 
@@ -29,9 +31,11 @@ NOIRADIX Studio is also listed on [VibeCodePicks](https://vibecodepicks.com/tool
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
-### 🎥 AI Programming Your Pixel Art Spritesheet Animation with PIX2 language?! | NOIRADIX Studio Demo
+### 🎥 Exporting Pixel Art Animations to Unity 2D with NOIRADIX Studio | NOIRADIX Demo
 
-[Watch the NOIRADIX Studio demo on YouTube](https://www.youtube.com/watch?v=XikhVI0APQg)
+[Watch the Unity 2D export and import demo](https://youtu.be/onD4kSF_uTc)
+
+See the complete workflow: export a spritesheet package from NOIRADIX Studio, then use its `.pix2.json` metadata and Unity importer to slice the sprites and create animation clips in Unity 2D.
 
 ### 🌟 60-Second Full Walkthrough (From AI Prompt to Unity 2D)
 
@@ -107,8 +111,10 @@ Both the transparent atlas PNG and `.pix2.json` metadata files appear in your de
 
 ### Step 5: 1-Click Right-Click Context Menu Import
 In your Unity Project window, **RIGHT-CLICK** the `.pix2.json` file and select:  
-👉 **NOIRADIX > Import Spritesheet & Animations**  
+👉 **NOIRADIX > Import Spritesheet and Animations**
 *(Or use the top menu bar: `Tools > NOIRADIX > Import Pix2 Spritesheet JSON...`)*.
+
+Both commands read the `.pix2.json` metadata, slice the atlas into precisely named sprites, and create native Unity `.anim` clips. For crisp pixels when importing the PNG manually, set **Filter Mode** to **Point**; manual slicing does not apply the exported frame and animation metadata.
 
 ![Step 5 - Right Click Context Menu](noiradix-export-unity-3.png)
 *Executing the 1-click automated asset processing pipeline.*

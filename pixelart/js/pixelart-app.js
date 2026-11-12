@@ -4253,6 +4253,81 @@
     dom.fileInput.click();
   }
 
+  function showPix2ImportError(message) {
+    const errorEl = document.getElementById('pa-import-pix2-error');
+    if (!errorEl) return;
+    errorEl.textContent = message;
+    errorEl.classList.remove('hidden');
+  }
+
+  function importPix2CodeAsNewArtwork() {
+    const sourceEl = document.getElementById('pa-import-pix2-source');
+    const errorEl = document.getElementById('pa-import-pix2-error');
+    const rawSource = sourceEl ? sourceEl.value.trim() : '';
+    if (errorEl) {
+      errorEl.textContent = '';
+      errorEl.classList.add('hidden');
+    }
+    if (!rawSource) {
+      showPix2ImportError('Paste PIX2 source code before importing.');
+      return false;
+    }
+
+    // Accept common Markdown code fences from AI chats while parsing only the PIX2 body.
+    const source = rawSource
+      .replace(/^```(?:pix2)?[ \t]*\r?\n/i, '')
+      .replace(/\r?\n```\s*$/, '');
+
+    let parsed;
+    try {
+      parsed = _PIX2.parseValidated(source, { profile: 'pixelart' });
+      if (!parsed || !parsed.cells || !Object.keys(parsed.cells).length) {
+        throw new Error('The PIX2 document has no cells to edit.');
+      }
+      const validation = _PIX2.validate(parsed, { profile: 'pixelart', strict: false });
+      if (!validation.valid) {
+        throw new Error((validation.errors && validation.errors[0]) || 'The PIX2 document is invalid.');
+      }
+    } catch (error) {
+      showPix2ImportError(error.message || 'Could not parse this PIX2 document.');
+      return false;
+    }
+
+    const sourceTitle = typeof parsed.meta?.title === 'string' ? parsed.meta.title.trim() : '';
+    const title = (sourceTitle || 'Imported PIX2 Artwork').slice(0, 80);
+    const session = createPaProjectSession(title, parsed, null);
+    if (!session) return false;
+
+    session.fileName = `${sanitizeFilename(title)}.pix2`;
+    session.isDirty = false;
+    state.history = [];
+    state.historyIndex = -1;
+    state.lastHistoryPixels = null;
+    pushHistory();
+    currentFileHandle = null;
+    currentFileName = null;
+    lastKnownFileModified = 0;
+    lastSavedContent = '';
+    pendingExternalConflict = null;
+    documentRevision = 0;
+    lastSavedRevision = 0;
+    const btnReload = document.getElementById('btn-reload-file');
+    if (btnReload) {
+      btnReload.classList.remove('pulse-warning');
+      btnReload.title = 'Reload linked file from disk (Ctrl+Shift+R)';
+    }
+    updateDocumentTitle();
+    markDocumentSaved();
+    triggerAutosave(true);
+    saveCurrentPaSession();
+    renderPaProjectTabs();
+    document.getElementById('modal-import-pix2-code')?.classList.add('hidden');
+    sourceEl.value = '';
+    setTimeout(fitCanvasToViewport, 50);
+    showToast(`Imported PIX2 as a new artwork tab: ${title}`, 'success');
+    return true;
+  }
+
   const enqueueArtworkSave = _FileSave.createQueue();
   let activeSaveOperations = 0;
 
@@ -4881,6 +4956,22 @@
 
     document.getElementById('btn-open-file').addEventListener('click', openFileNative);
     dom.fileInput.addEventListener('change', handleFileSelected);
+
+    document.getElementById('btn-import-pix2-code').addEventListener('click', () => {
+      const sourceEl = document.getElementById('pa-import-pix2-source');
+      const errorEl = document.getElementById('pa-import-pix2-error');
+      sourceEl.value = '';
+      errorEl.textContent = '';
+      errorEl.classList.add('hidden');
+      document.getElementById('modal-import-pix2-code').classList.remove('hidden');
+      setTimeout(() => sourceEl.focus(), 0);
+    });
+    document.getElementById('btn-confirm-import-pix2').addEventListener('click', importPix2CodeAsNewArtwork);
+    document.getElementById('pa-import-pix2-source').addEventListener('input', () => {
+      const errorEl = document.getElementById('pa-import-pix2-error');
+      errorEl.textContent = '';
+      errorEl.classList.add('hidden');
+    });
 
     document.getElementById('btn-save-pix2').addEventListener('click', () => saveFileNative(false));
     document.getElementById('btn-export-png').addEventListener('click', openExportModal);

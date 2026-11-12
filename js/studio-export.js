@@ -255,7 +255,7 @@ namespace NOIRADIX.Editor
             ImportPix2Json(selectedPath);
         }
 
-        [MenuItem("Assets/NOIRADIX/Import Spritesheet & Animations", false, 30)]
+        [MenuItem("Assets/NOIRADIX/Import Spritesheet and Animations", false, 30)]
         public static void ImportSelectedAsset()
         {
             var selected = Selection.activeObject;
@@ -269,7 +269,7 @@ namespace NOIRADIX.Editor
             ImportPix2Json(Path.GetFullPath(path));
         }
 
-        [MenuItem("Assets/NOIRADIX/Import Spritesheet & Animations", true)]
+        [MenuItem("Assets/NOIRADIX/Import Spritesheet and Animations", true)]
         public static bool ValidateImportSelectedAsset()
         {
             var selected = Selection.activeObject;
@@ -571,11 +571,14 @@ STEP 2: PLACE THE SPRITESHEET AND METADATA TOGETHER
 STEP 3: 1-CLICK AUTOMATIC IMPORT
   - Method A (Right-Click Context Menu):
       In Unity Project Window, RIGHT-CLICK the "${baseName}.pix2.json" file
-      -> Select "NOIRADIX > Import Spritesheet & Animations".
+      -> Select "NOIRADIX > Import Spritesheet and Animations".
 
   - Method B (Top Menu Bar):
       In Unity's top menu bar, click "Tools > NOIRADIX > Import Pix2 Spritesheet JSON..."
       and select the .json file.
+
+  Both methods read the .pix2.json metadata, slice the atlas into precisely named
+  sprites, and create native Unity .anim clips from the animation data.
 
 --------------------------------------------------------------------------------
 WHAT THE IMPORTER DOES AUTOMATICALLY:
@@ -586,6 +589,10 @@ WHAT THE IMPORTER DOES AUTOMATICALLY:
   [x] Automatically slices all frames with exact pixel bounds and custom pivots.
   [x] Automatically creates native Unity Animation Clips (.anim) in an "Animations/"
       subfolder with preconfigured frame rates and looping!
+
+The importer uses the exported metadata for exact sprite rectangles and animation
+clips. If importing the PNG manually, set its Filter Mode to Point for crisp pixels;
+manual slicing does not apply the .pix2.json frame and animation metadata.
 
 Ready to drag directly into your Scene or Animator Controller!
 NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio

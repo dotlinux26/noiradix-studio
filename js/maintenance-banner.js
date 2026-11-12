@@ -4,7 +4,7 @@
  *
  * Requirements:
  * - Bilingual: Top Vietnamese, Bottom English (no toggle switch, both displayed).
- * - Periodic: Re-displays every 30 minutes after dismissal.
+ * - Periodic: Re-displays every 3 hours after dismissal.
  * - Responsive: Works smoothly on desktop, tablet, and mobile without obstructing core tools.
  * - Dismissible: User can close/dismiss anytime.
  * - Modular & Toggable: Master toggle (enabled: true/false) to enable/disable cleanly without dirtying code.
@@ -14,7 +14,7 @@
   'use strict';
 
   const STORAGE_KEY = 'noira_maintenance_dismissed_at';
-  const DEFAULT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+  const DEFAULT_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 hours
 
   const DEFAULT_CONFIG = {
     enabled: true, // Master toggle: set false to disable cleanly
@@ -319,7 +319,7 @@
         </div>
 
         <div class="noira-mb-footer">
-          <span>Auto re-checks every 30 minutes</span>
+          <span>Auto re-checks every 3 hours</span>
           <button type="button" class="noira-mb-dismiss-action">Got it</button>
         </div>
       `;

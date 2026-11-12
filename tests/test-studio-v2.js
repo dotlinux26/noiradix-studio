@@ -32,12 +32,12 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.1.4', 'Studio version must be 2.1.4');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.1.4', 'PixelArt version must be 2.1.4');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.1.5', 'Studio version must be 2.1.5');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.1.5', 'PixelArt version must be 2.1.5');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.1 version manifest verified (Studio 2.1.4 / PixelArt 2.1.4 / PIX2 1.1)');
+  pass('NOIRADIX 2.1 version manifest verified (Studio 2.1.5 / PixelArt 2.1.5 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -543,7 +543,7 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
   assert(typeof MB.show === 'function', 'MaintenanceBanner must export show');
   assert(typeof MB.dismiss === 'function', 'MaintenanceBanner must export dismiss');
   assert(typeof MB.setEnabled === 'function', 'MaintenanceBanner must export setEnabled');
-  assert(bannerJs.includes('30 * 60 * 1000'), 'MaintenanceBanner must configure 30 minutes interval');
+  assert(bannerJs.includes('3 * 60 * 60 * 1000'), 'MaintenanceBanner must configure 3 hours interval');
 
   // 4. Structure & Layers Buttons Centered Flex
   assert(styleCss.includes('.structure-action-group') && styleCss.includes('justify-content: center'),

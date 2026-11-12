@@ -9,10 +9,12 @@
     <a href="https://discord.gg/SJwsdGWubF"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join the NOIRADIX Discord community"></a>
     <a href="https://sourceforge.net/projects/noiradix-studio/"><img src="https://img.shields.io/sourceforge/dt/noiradix-studio.svg" alt="SourceForge Downloads"></a>
     <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
+    <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
+    <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.4-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.5-8b5cf6.svg" alt="Studio Version"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.1-6366f1.svg" alt="PIX2 Standard"></a>
     <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
     <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
@@ -30,7 +32,7 @@
 
 **Draw and edit** · **Organize frames and layers** · **Preview animation** · **Export for Unity**
 
-[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the demo](https://www.youtube.com/watch?v=XikhVI0APQg) · [Explore PixelArt](https://noiradix.me/pixelart/) · [Join Discord](https://discord.gg/SJwsdGWubF)
+[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the Unity 2D export demo](https://youtu.be/onD4kSF_uTc) · [Explore PixelArt](https://noiradix.me/pixelart/) · [Join Discord](https://discord.gg/SJwsdGWubF)
 
 </div>
 
@@ -44,7 +46,7 @@
 
 NOIRADIX Studio is a lightweight, vanilla-JavaScript editor built around the open `.pix2` text format. PIX2 keeps sprite and animation data structured and editable, while the canvas remains the place to draw, inspect, and refine the result.
 
-> Find NOIRADIX Studio on [SourceForge](https://sourceforge.net/projects/noiradix-studio/) and [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/).
+> Find NOIRADIX Studio on [SourceForge](https://sourceforge.net/projects/noiradix-studio/), [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), and [AlternativeTo](https://alternativeto.net/software/noiradix-studio/).
 
 > [!TIP]
 > **Looking for standalone 2D pixel painting without animation timelines?**  
@@ -126,9 +128,11 @@ We do not attempt to out-compete monolithic 1,000-feature drawing apps on brush 
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
-### 🎥 AI Programming Your Pixel Art Spritesheet Animation with PIX2 language?! | NOIRADIX Studio Demo
+### 🎥 Exporting Pixel Art Animations to Unity 2D with NOIRADIX Studio | NOIRADIX Demo
 
-[Watch the NOIRADIX Studio demo on YouTube](https://www.youtube.com/watch?v=XikhVI0APQg)
+[Watch the Unity 2D export and import demo](https://youtu.be/onD4kSF_uTc)
+
+See the complete workflow: export a spritesheet package from NOIRADIX Studio, then use its `.pix2.json` metadata and Unity importer to slice the sprites and create animation clips in Unity 2D.
 
 ### 🌟 60-Second Full Walkthrough (From AI Prompt to Unity 2D)
 
@@ -293,8 +297,10 @@ Both the transparent atlas PNG and `.pix2.json` metadata files appear in your de
 
 ### Step 5: 1-Click Right-Click Context Menu Import
 In your Unity Project window, **RIGHT-CLICK** the `.pix2.json` file and select:  
-👉 **NOIRADIX > Import Spritesheet & Animations**  
+👉 **NOIRADIX > Import Spritesheet and Animations**
 *(Or use the top menu bar: `Tools > NOIRADIX > Import Pix2 Spritesheet JSON...`)*.
+
+Both commands read the `.pix2.json` metadata, slice the atlas into precisely named sprites, and create native Unity `.anim` clips. For crisp pixels when importing the PNG manually, set **Filter Mode** to **Point**; manual slicing does not apply the exported frame and animation metadata.
 
 ![Step 5 - Right Click Context Menu](docs/noiradix-export-unity-3.png)
 *Executing the 1-click automated asset processing pipeline.*

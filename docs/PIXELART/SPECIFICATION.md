@@ -1,8 +1,8 @@
 # NOIRADIX PixelArt — Functional & UI/UX Specification
 
 **Document ID:** `docs/PIXELART/SPECIFICATION.md`  
-**Version:** 1.6.0  
-**Date:** 2026-11-08  
+**Version:** 1.6.1
+**Date:** 2026-11-12
 **Route:** `/pixelart/`  
 **License:** Apache-2.0  
 
@@ -57,6 +57,7 @@ The workspace follows a responsive split-view architecture:
 * **File Operations:**
   * **New Canvas (`Alt+N`):** Opens dimension picker modal with presets up to $1024 \times 1024$.
   * **Open File (`Ctrl+O`):** Reads `.pix2` file from disk via File System Access API or file input.
+  * **Import PIX2 Code:** Opens a paste dialog, validates PIX2 with the PixelArt profile, and creates a new editable artwork tab without replacing other open artwork. Accepts plain source and fenced `pix2` code; invalid input leaves existing sessions untouched. The imported draft can be saved to disk afterward.
   * **Save / Download (`Ctrl+S`):** Downloads `.pix2` source.
   * **Export PNG:** Opens export modal with integer scale multipliers ($1\times, 2\times, 4\times, 8\times, 16\times, 32\times$).
 * **AI Assistant:** Opens AI Prompt Generator & PIX2 Code Injector modal.

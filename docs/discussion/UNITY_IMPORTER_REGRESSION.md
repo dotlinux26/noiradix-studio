@@ -17,3 +17,13 @@
 - **Legacy fallback:** Older Unity versions compile the `TextureImporter.spritesheet` branch. The obsolete API is excluded from modern Unity builds.
 - **Asset paths:** The generated animation directory is normalized to forward slashes before passing it to `AssetDatabase.CreateAsset`.
 - **Verification:** Source review and PIX2 package-data checks only so far. The generated file was refreshed in the supplied download folder. Unity compilation and import/reimport still need to be exercised in Unity 2021.1, 2021.2+, and a legacy version if those targets are supported.
+
+## Import command naming and workflow clarity
+
+- **App:** NOIRADIX Studio Unity package exporter
+- **Repro:** In Unity's Project window, open the context menu for an exported `.pix2.json` file.
+- **Observed:** The menu label used `&`, while the menu screenshot did not visibly show the conjunction, making it unclear that the importer both slices sprites and creates animation clips.
+- **Expected:** The context-menu command says `Import Spritesheet and Animations`; both the context menu and top-menu workflow explain that JSON metadata drives exact sprite slicing and native `.anim` clip creation.
+- **Implementation:** Rename the Unity menu item and validator to use the word `and`; update the generated package instructions and both README guides. Clarify that manually importing a PNG can remain crisp with Point filtering, but does not apply PIX2 frame/animation metadata.
+- **Verification:** Source and documentation reviewed; `git diff --check` passed. Unity UI rendering and generated-package import have not been rerun in Unity.
+- **Remaining coverage:** Confirm the visible label and both import paths in a supported Unity Editor version.
