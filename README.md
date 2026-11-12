@@ -6,6 +6,7 @@
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
     <a href="https://noiradix.me/pixelart/"><img src="https://img.shields.io/badge/PixelArt%20Studio-noiradix.me%2Fpixelart-ec4899.svg?logo=artstation&logoColor=white" alt="Live PixelArt Studio"></a>
+    <a href="https://sourceforge.net/projects/noiradix-studio/"><img src="https://img.shields.io/sourceforge/dt/noiradix-studio.svg" alt="SourceForge Downloads"></a>
     <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
@@ -42,7 +43,7 @@
 
 NOIRADIX Studio is a lightweight, vanilla-JavaScript editor built around the open `.pix2` text format. PIX2 keeps sprite and animation data structured and editable, while the canvas remains the place to draw, inspect, and refine the result.
 
-> Listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/). The listing is being updated to distinguish the four-direction demo from the full animation options and to describe the Unity export accurately.
+> Find NOIRADIX Studio on [SourceForge](https://sourceforge.net/projects/noiradix-studio/) and [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/).
 
 > [!TIP]
 > **Looking for standalone 2D pixel painting without animation timelines?**  
