@@ -9,12 +9,10 @@
     <a href="https://discord.gg/SJwsdGWubF"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join the NOIRADIX Discord community"></a>
     <a href="https://sourceforge.net/projects/noiradix-studio/"><img src="https://img.shields.io/sourceforge/dt/noiradix-studio.svg" alt="SourceForge Downloads"></a>
     <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
-    <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
-    <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.5-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.6-8b5cf6.svg" alt="Studio Version"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.1-6366f1.svg" alt="PIX2 Standard"></a>
     <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
     <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
@@ -664,3 +662,12 @@ Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26)
 ```
 
 See [NOTICE](NOTICE), [pix2/README.md](pix2/README.md), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions and third-party notices.
+
+---
+
+## Listings
+
+<div align="center">
+  <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
+  <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
+</div>

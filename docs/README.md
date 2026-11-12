@@ -7,8 +7,6 @@
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
     <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
-    <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
-    <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
   </p>
 </div>
@@ -332,3 +330,12 @@ All development in NOIRADIX Studio adheres to three non-negotiable principles:
 ## RC2 shared editor maintenance
 
 See the [refactor plan](discussion/EDITOR_REFACTOR_PLAN.md), [phase report](discussion/EDITOR_REFACTOR_PROGRESS.md) and [agent handbook](agents/README.md) for current module ownership, evidence and verification commands. Historical discussions retain their original scope.
+
+---
+
+## Listings
+
+<div align="center">
+  <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
+  <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
+</div>

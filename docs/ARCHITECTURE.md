@@ -1,6 +1,6 @@
 # NOIRADIX Studio — Core Architecture & Design Philosophy
 
-**Document Version:** 2.1.5 (stable)
+**Document Version:** 2.1.6 (stable)
 **Project:** NOIRADIX Studio — Structured Pixel Art Editor & Open Sprite Description Language  
 **Target Architecture:** Zero-dependency, browser-native, offline-capable, AI-native structured sprite authoring.  
 
