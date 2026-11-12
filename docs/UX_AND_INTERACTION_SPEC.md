@@ -1,6 +1,6 @@
 # NOIRADIX Studio 2.0 — UX & Interaction Specification
 
-> **Version:** 2.1.7
+> **Version:** 2.1.8
 > **Format Specification:** PIX2 1.1 Structural Graphics  
 > **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)  
 

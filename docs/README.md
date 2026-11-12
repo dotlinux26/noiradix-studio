@@ -6,12 +6,11 @@
   <p><strong>A zero-dependency, AI-native structured sprite editor and directional animation suite</strong></p>
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
-    <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
   </p>
 </div>
 
-NOIRADIX Studio is listed on [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), and [AlternativeTo](https://alternativeto.net/software/noiradix-studio/).
+NOIRADIX Studio is listed on [SourceForge](https://sourceforge.net/projects/noiradix-studio/), [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), and [AlternativeTo](https://alternativeto.net/software/noiradix-studio/).
 
 ---
 
@@ -342,6 +341,8 @@ See the [refactor plan](discussion/EDITOR_REFACTOR_PLAN.md), [phase report](disc
 ## Listings
 
 <div align="center">
+  <a href="https://sourceforge.net/projects/noiradix-studio/"><img src="https://img.shields.io/sourceforge/dt/noiradix-studio.svg" alt="NOIRADIX Studio downloads on SourceForge"></a>
+  <a href="https://vibecodepicks.com/tools/noiradix-studio/?utm_source=maker&amp;utm_medium=badge&amp;utm_campaign=noiradix-studio"><img src="https://vibecodepicks.com/badge/listed.svg" alt="Listed on VibeCodePicks" width="180" height="40"></a>
   <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
   <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
 </div>
