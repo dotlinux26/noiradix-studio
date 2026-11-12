@@ -28,7 +28,7 @@
 - **Repro:** Open the About modal or either project README.
 - **Observed:** New approved listings and the corrected Unity 2D demo URL were missing; the TeaserTrack link was a static placeholder badge.
 - **Expected:** Show the official TeaserTrack badge and AlternativeTo badge, link to the approved listing pages, and use the owner's corrected YouTube video.
-- **Implementation:** Add official listing badges to the Studio About modal and README headers; update the Unity demo links to `onD4kSF_uTc`.
+- **Implementation:** Add official listing badges to the Studio About modal and README headers; retain both the PIX2/AI authoring demo (`XikhVI0APQg`) and Unity export/import demo (`onD4kSF_uTc`). See [VIDEO_DEMOS.md](VIDEO_DEMOS.md) for the correction after the PIX2 link was accidentally removed.
 - **Verification:** Source now uses the official badge and listing URLs provided by the user; browser rendering was skipped at the user's request.
 - **Remaining coverage:** Confirm TeaserTrack's badge checker detects the backlink after deployment.
 

@@ -12,7 +12,7 @@
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.6-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.7-8b5cf6.svg" alt="Studio Version"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.1-6366f1.svg" alt="PIX2 Standard"></a>
     <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
     <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
@@ -30,7 +30,7 @@
 
 **Draw and edit** · **Organize frames and layers** · **Preview animation** · **Export for Unity**
 
-[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the Unity 2D export demo](https://youtu.be/onD4kSF_uTc) · [Explore PixelArt](https://noiradix.me/pixelart/) · [Join Discord](https://discord.gg/SJwsdGWubF)
+[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the PIX2 and AI demo](https://www.youtube.com/watch?v=XikhVI0APQg) · [Watch the Unity 2D demo](https://youtu.be/onD4kSF_uTc) · [Explore PixelArt](https://noiradix.me/pixelart/) · [Join Discord](https://discord.gg/SJwsdGWubF)
 
 </div>
 
@@ -125,6 +125,12 @@ We do not attempt to out-compete monolithic 1,000-feature drawing apps on brush 
 ## 📸 Studio Visual Tour
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
+
+### 🎥 AI Programming Your Pixel Art Spritesheet Animation with PIX2 language?! | NOIRADIX Studio Demo
+
+[Watch the PIX2 and AI programming demo](https://www.youtube.com/watch?v=XikhVI0APQg)
+
+See how an AI coding assistant can author structured PIX2 source for a sprite animation, then load and preview it in NOIRADIX Studio.
 
 ### 🎥 Exporting Pixel Art Animations to Unity 2D with NOIRADIX Studio | NOIRADIX Demo
 

@@ -29,6 +29,12 @@ NOIRADIX Studio is listed on [VibeCodePicks](https://vibecodepicks.com/tools/noi
 
 Experience desktop-grade pixel art creation directly in your browser with zero installation:
 
+### 🎥 AI Programming Your Pixel Art Spritesheet Animation with PIX2 language?! | NOIRADIX Studio Demo
+
+[Watch the PIX2 and AI programming demo](https://www.youtube.com/watch?v=XikhVI0APQg)
+
+See how an AI coding assistant can author structured PIX2 source for a sprite animation, then load and preview it in NOIRADIX Studio.
+
 ### 🎥 Exporting Pixel Art Animations to Unity 2D with NOIRADIX Studio | NOIRADIX Demo
 
 [Watch the Unity 2D export and import demo](https://youtu.be/onD4kSF_uTc)
