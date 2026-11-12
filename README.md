@@ -6,12 +6,13 @@
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
     <a href="https://noiradix.me/pixelart/"><img src="https://img.shields.io/badge/PixelArt%20Studio-noiradix.me%2Fpixelart-ec4899.svg?logo=artstation&logoColor=white" alt="Live PixelArt Studio"></a>
+    <a href="https://discord.gg/SJwsdGWubF"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join the NOIRADIX Discord community"></a>
     <a href="https://sourceforge.net/projects/noiradix-studio/"><img src="https://img.shields.io/sourceforge/dt/noiradix-studio.svg" alt="SourceForge Downloads"></a>
     <a href="https://vibecodepicks.com/tools/noiradix-studio/"><img src="https://img.shields.io/badge/Listed%20on-VibeCodePicks-6366f1.svg" alt="Listed on VibeCodePicks"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.3-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.4-8b5cf6.svg" alt="Studio Version"></a>
     <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.1-6366f1.svg" alt="PIX2 Standard"></a>
     <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
     <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
@@ -29,7 +30,7 @@
 
 **Draw and edit** · **Organize frames and layers** · **Preview animation** · **Export for Unity**
 
-[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the demo](https://www.youtube.com/watch?v=XikhVI0APQg) · [Explore PixelArt](https://noiradix.me/pixelart/)
+[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the demo](https://www.youtube.com/watch?v=XikhVI0APQg) · [Explore PixelArt](https://noiradix.me/pixelart/) · [Join Discord](https://discord.gg/SJwsdGWubF)
 
 </div>
 

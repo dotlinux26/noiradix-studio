@@ -1,6 +1,6 @@
 # NOIRADIX Studio 2.0 — Product Specification
 
-> **Version:** 2.1.3
+> **Version:** 2.1.4
 > **Format Specification:** PIX2 1.1 Structural Graphics  
 > **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)  
 > **License:** Apache 2.0 / MIT Dual License  
