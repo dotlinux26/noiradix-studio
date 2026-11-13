@@ -10,7 +10,7 @@
   </p>
 </div>
 
-NOIRADIX Studio is listed on [SourceForge](https://sourceforge.net/projects/noiradix-studio/), [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), and [AlternativeTo](https://alternativeto.net/software/noiradix-studio/).
+NOIRADIX Studio is listed on [SourceForge](https://sourceforge.net/projects/noiradix-studio/), [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), [AlternativeTo](https://alternativeto.net/software/noiradix-studio/), [SaaSCity](https://saascity.io/live/noiradix-studio), and [Project Radar](https://getprojectradar.com/notes/noiradix-studio); the project also holds an [OpenHunts Club membership badge](https://openhunts.com).
 
 ---
 
@@ -345,4 +345,7 @@ See the [refactor plan](discussion/EDITOR_REFACTOR_PLAN.md), [phase report](disc
   <a href="https://vibecodepicks.com/tools/noiradix-studio/?utm_source=maker&amp;utm_medium=badge&amp;utm_campaign=noiradix-studio"><img src="https://vibecodepicks.com/badge/listed.svg" alt="Listed on VibeCodePicks" width="180" height="40"></a>
   <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
   <a href="https://alternativeto.net/software/noiradix-studio/about/?utm_source=badge&amp;utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="NOIRADIX Studio | AlternativeTo" width="183" height="59"></a>
+  <a href="https://saascity.io/live/noiradix-studio" target="_blank" rel="noopener"><img src="https://saascity.io/badges/featured-light.svg" alt="Featured on SaaSCity" width="150" height="54"></a>
+  <a href="https://openhunts.com" target="_blank" title="OpenHunts Club"><img alt="OpenHunts Club Member" height="105" src="https://cdn.openhunts.com/badges/club.webp" style="width: 195px; height: auto;" width="486"></a>
+  <a href="https://getprojectradar.com/notes/noiradix-studio" target="_blank" rel="noopener"><img src="https://getprojectradar.com/badge/featured-on-project-radar-light.svg" alt="Featured on Project Radar" width="236" height="54"></a>
 </div>
