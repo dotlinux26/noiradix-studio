@@ -32,6 +32,7 @@
   <a href="https://saascity.io/live/noiradix-studio" target="_blank" rel="noopener"><img src="https://saascity.io/badges/featured-light.svg" alt="Featured on SaaSCity" width="150" height="54"></a>
   <a href="https://openhunts.com" target="_blank" title="OpenHunts Club"><img alt="OpenHunts Club Member" height="105" src="https://cdn.openhunts.com/badges/club.webp" style="width: 195px; height: auto;" width="486"></a>
   <a href="https://getprojectradar.com/notes/noiradix-studio" target="_blank" rel="noopener"><img src="https://getprojectradar.com/badge/featured-on-project-radar-light.svg" alt="Featured on Project Radar" width="236" height="54"></a>
+  <a href="https://www.producthunt.com/products/noiradix-studio?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-noiradix-studio" target="_blank" rel="noopener noreferrer"><img alt="NOIRADIX Studio - Browser-based pixel art editor with one-click Unity export | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1307477&amp;theme=light&amp;t=1794570075140"></a>
 </div>
 
 <div align="center">

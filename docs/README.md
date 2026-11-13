@@ -10,7 +10,7 @@
   </p>
 </div>
 
-NOIRADIX Studio is listed on [SourceForge](https://sourceforge.net/projects/noiradix-studio/), [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), [AlternativeTo](https://alternativeto.net/software/noiradix-studio/), [SaaSCity](https://saascity.io/live/noiradix-studio), and [Project Radar](https://getprojectradar.com/notes/noiradix-studio); the project also holds an [OpenHunts Club membership badge](https://openhunts.com).
+NOIRADIX Studio is listed on [SourceForge](https://sourceforge.net/projects/noiradix-studio/), [VibeCodePicks](https://vibecodepicks.com/tools/noiradix-studio/), [TeaserTrack](https://teasertrack.cc/tool/noiradix-studio), [AlternativeTo](https://alternativeto.net/software/noiradix-studio/), [SaaSCity](https://saascity.io/live/noiradix-studio), [Project Radar](https://getprojectradar.com/notes/noiradix-studio), and [Product Hunt](https://www.producthunt.com/products/noiradix-studio); the project also holds an [OpenHunts Club membership badge](https://openhunts.com).
 
 ---
 
@@ -348,4 +348,5 @@ See the [refactor plan](discussion/EDITOR_REFACTOR_PLAN.md), [phase report](disc
   <a href="https://saascity.io/live/noiradix-studio" target="_blank" rel="noopener"><img src="https://saascity.io/badges/featured-light.svg" alt="Featured on SaaSCity" width="150" height="54"></a>
   <a href="https://openhunts.com" target="_blank" title="OpenHunts Club"><img alt="OpenHunts Club Member" height="105" src="https://cdn.openhunts.com/badges/club.webp" style="width: 195px; height: auto;" width="486"></a>
   <a href="https://getprojectradar.com/notes/noiradix-studio" target="_blank" rel="noopener"><img src="https://getprojectradar.com/badge/featured-on-project-radar-light.svg" alt="Featured on Project Radar" width="236" height="54"></a>
+  <a href="https://www.producthunt.com/products/noiradix-studio?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-noiradix-studio" target="_blank" rel="noopener noreferrer"><img alt="NOIRADIX Studio - Browser-based pixel art editor with one-click Unity export | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1307477&amp;theme=light&amp;t=1794570075140"></a>
 </div>
