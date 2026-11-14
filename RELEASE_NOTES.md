@@ -1,9 +1,9 @@
 # NOIRADIX Studio 2.0.0 & PIX2 1.1 Release Notes
 
-> **Release Version:** NOIRADIX Studio v2.0.0 / PixelArt v2.0.0 / PIX2 Standard v1.1  
-> **Release Date:** November 2026  
-> **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)  
-> **License:** Apache 2.0 / MIT Dual License  
+> **Release Version:** NOIRADIX Studio v2.0.0 / PixelArt v2.0.0 / PIX2 Standard v1.1
+> **Release Date:** November 2026
+> **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)
+> **Application code license:** Apache License 2.0. PIX2 specification text is CC BY 4.0. See the repository license files for exact scope.
 
 ---
 
@@ -92,7 +92,7 @@ For generative AI models (Claude, ChatGPT, Gemini), artists, and game developers
 1. **Zero External Runtime Dependencies:** Pure standard ECMAScript / Vanilla JavaScript. No bundlers, no npm runtime dependencies, no build steps required.
 2. **Dual-File SHA-256 Parity:** Shared format core `js/pix2-format.js` and `pix2/js/pix2-format.js` are strictly cryptographically identical.
 3. **Canonical Domain Enforcement:** Exclusively `https://noiradix.me/` across all codebases, metadata, schemas, and documentation.
-4. **Comprehensive Test Suite:** 12 automated test suites encompassing 205 unit and regression assertions passing 100% locally and on CI.
+4. **Historical test report:** This release's original report recorded 12 suites and 205 assertions. Those are historical results, not the current test inventory; run the current test runner for present-day coverage.
 
 ---
 

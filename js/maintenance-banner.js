@@ -16,8 +16,19 @@
   const STORAGE_KEY = 'noira_maintenance_dismissed_at';
   const DEFAULT_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 hours
 
+  function isDevelopmentEnvironment(locationLike = global.location) {
+    if (!locationLike) return false;
+    const hostname = String(locationLike.hostname || '').toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+    try {
+      return new URLSearchParams(locationLike.search || '').get('noira-maintenance') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
   const DEFAULT_CONFIG = {
-    enabled: true, // Master toggle: set false to disable cleanly
+    enabled: isDevelopmentEnvironment(), // Development hosts only; production and file:// stay quiet by default.
     intervalMs: DEFAULT_INTERVAL_MS,
     storageKey: STORAGE_KEY,
     autoCheckIntervalMs: 60 * 1000, // Check every 60 seconds
@@ -218,7 +229,7 @@
     }
 
     /**
-     * Determines whether 15 minutes have passed since last dismissal
+     * Determines whether the configured repeat interval has passed since dismissal.
      */
     shouldShow() {
       if (!this.config.enabled) return false;
@@ -384,6 +395,7 @@
 
   const NoiraMaintenanceBanner = {
     MaintenanceBanner,
+    isDevelopmentEnvironment,
     init,
     getInstance,
     show: () => getInstance().show(),

@@ -1,9 +1,9 @@
 # NOIRADIX Studio 2.0 — Product Specification
 
-> **Version:** 2.1.8
-> **Format Specification:** PIX2 1.1 Structural Graphics  
-> **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)  
-> **License:** Apache 2.0 / MIT Dual License  
+> **Version:** 2.2.0
+> **Format Specification:** PIX2 1.1 Structural Graphics
+> **Canonical Domain:** [https://noiradix.me/](https://noiradix.me/)
+> **Application code license:** Apache License 2.0. PIX2 reference code is Apache-2.0 and PIX2 specification text is CC BY 4.0; see the respective license files.
 
 ---
 

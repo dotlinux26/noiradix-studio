@@ -24,6 +24,12 @@ independently under dual licensing:
    - docs/PIX2/PIX2_AI_AUTHORING_GUIDE.md
    - docs/PIX2/PIX2_FUTURE_DIRECTIONS.md
    - docs/PIX2/PIX2_EXAMPLES.md
+   - specification/PIX2-SPEC.md
+   - specification/PIX2-GRAMMAR.md
+   - specification/PIX2-AI-GUIDE.md
+   - pix2/README.md
+   - pix2/test-vectors/README.md
+   - pix2/test-vectors/* (PIX2 conformance fixture files)
 
 2. PIX2 Reference Engine & Compiler:
    Licensed under the Apache License, Version 2.0 (Apache-2.0).

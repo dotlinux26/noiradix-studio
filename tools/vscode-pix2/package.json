@@ -4,6 +4,7 @@
   "description": "Syntax highlighting and language configuration for PIX2 (Structured Pixel Art Language)",
   "version": "1.0.0",
   "publisher": "dotlinux26",
+  "license": "Apache-2.0",
   "engines": {
     "vscode": "^1.70.0"
   },

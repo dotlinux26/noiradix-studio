@@ -150,6 +150,10 @@ When an AI drafts or modifies a cell, it can write **either** sparse coordinates
 
 `<col>` can be an integer palette ID (e.g. `1`, `2`) or a direct hex color (e.g. `#ffffff`). `dims` accepts either comma delimiter (`10,12`) or 'x' delimiter (`10x12`).
 
+### Reference serializer behavior (not a PIX2 1.1 requirement)
+
+The current NOIRADIX reference parser rasterizes drawing commands into pixel data, and its canonical serializer emits explicit pixel records. A parse/serialize round trip preserves the resulting pixels but does not preserve whether they were originally authored as `line`, `rect`, or `fill`. PIX2 1.1 does not require this normalization; retaining vector primitives could be explored later as an optional authoring/serialization mode.
+
 ---
 
 ## 5. Complete Step-by-Step AI Instructions
@@ -188,7 +192,7 @@ When an LLM is asked to create or modify a `.pix2` character, it must follow thi
 
 ## 6. Official Reference File: `Noiradix_Ghost.pix2` (Synthesized by Gemini 3.8 Flash)
 
-The complete official sprite template [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2) was **entirely authored and drawn by AI (Gemini 3.8 Flash)** using the `.pix2` deterministic specification. It implements 16 cells in a 4×4 grid with complete 4-directional locomotion:
+The project attributes the complete sprite template [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2) to Gemini 3.8 Flash using the `.pix2` specification. The checked-in file demonstrates a 16-cell 4×4 sheet with 4-directional locomotion; repository contents demonstrate the artifact, not independent proof of its generation provenance:
 
 ```pix2
 # ==============================================================================
@@ -307,10 +311,16 @@ Use unique node IDs and explicit ownership. Layers reference a cell. Groups and 
 
 ```pix2
 @pix2 1.1
+@meta
+  title: "Structural Example"
+  author: "PIX2 Example"
+  version: "1.1"
 @grid
   cols: 1
   rows: 1
   default_cell: 16x16
+@palette
+  1: #38bdf8
 @cell cell_0_0
 @layer body
   cell: cell_0_0
@@ -327,6 +337,7 @@ Use unique node IDs and explicit ownership. Layers reference a cell. Groups and 
   opacity: 0.5
   tags: [face, eyes]
   p 6,5 #38bdf880
+@end
 ```
 
 | Property | Layer | Group | Region | Meaning |
@@ -379,7 +390,7 @@ PIX2 1.1 formalizes the **Platformer 2D (Left/Right)** animation template, cater
 
 ### 8.6 Flagship PIX2 1.1 Structural Reference: `Arch-Lich Grim Reaper 48x48.pix2` (Synthesized by Gemini Argon 4.0)
 
-The flagship PIX2 1.1 structural reference sprite sheet [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) was **entirely synthesized by AI (Gemini Argon 4.0)** to validate high-resolution structural game asset generation. It implements 16 cells in a 4×4 grid at 48×48 resolution with 4-directional locomotion:
+The project attributes the PIX2 1.1 structural reference sprite sheet [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) to Gemini Argon 4.0. The checked-in file demonstrates 16 cells in a 4×4 grid at 48×48 resolution with 4-directional locomotion; attribution is project context, not a conformance or performance benchmark:
 - **Hierarchical Decomposition:** Each cell defines `@layer aura_X_Y` ("Spectral Soulfire", `opacity: 0.9`, `@region reg_aura_X_Y`, `tags: [aura, fx]`) and `@layer body_X_Y` ("Reaper Body", `@group grp_cloak_X_Y`, `@region reg_robe_X_Y`).
 - **Porter-Duff Compositing:** Semi-translucent floating soulfire wisps blend smoothly over dark tattered gothic robes and background transparency without manual pixel baking.
 - **29-Color Cohesive Palette:** Gothic shadows, bone highlights, crimson accents, and glowing cyan/blue soulfire.

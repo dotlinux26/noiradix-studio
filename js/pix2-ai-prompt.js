@@ -13,7 +13,7 @@
 const Pix2AiPrompt = (() => {
   'use strict';
 
-  function formatSpecBlock(width, height, cols, rows, version, profile, mode, brief, source, limits) {
+  function formatSpecBlock(width, height, cols, rows, version, profile, mode, brief, source, limits, includeSource) {
     const lines = [];
     const push = (...items) => {
       for (const item of items) {
@@ -719,11 +719,25 @@ const Pix2AiPrompt = (() => {
     if (mode === 'surgical-patch' || mode === 'all-in-one') {
       push(
         '',
-        '### Mode D: Surgical Patch & Hot-Fix Protocol',
-        '1. Precision Targeting: Target ONLY the specific `@cell`, `@layer`, or `@region` requiring fixes.',
-        '2. Zero Token Wastage: Do not touch uncorrupted cells or unrelated layers.',
-        '3. Color Preservation: When recoloring, update the specific palette index in `@palette` or replace',
-        '   the hex code within the active `@region` without altering adjacent outlines.'
+        '### Mode D: Targeted Repair (Full-Document Output)',
+        'The source below is the complete current document and the Apply action replaces that document.',
+        'Return the COMPLETE valid PIX2 document, never a partial @cell/@palette fragment.',
+        'Change only the requested cell, layer or region and preserve every unrelated cell, animation,',
+        'palette entry and structural node. Do not claim that partial output is automatically merged.'
+      );
+    }
+
+    if (mode === 'frame-patch') {
+      push(
+        '',
+        '### Mode D: Single-Frame PIX2 Patch (Frame-Scoped Import)',
+        'The source below is a standalone valid PIX2 document containing exactly one target frame.',
+        'Return one COMPLETE valid PIX2 document with the required header, metadata, grid, palette,',
+        'and exactly one @cell block. Do not return a partial directive or a whole spritesheet.',
+        'Keep the target @cell ID, PIX2 version, cell dimensions and grid position unchanged.',
+        'Change only what the user requested. Preserve all unmodified pixels and the frame hierarchy.',
+        'Do not add or rename animations: frame-scoped import replaces only this cell; the project',
+        'keeps its existing animations and all other frames. New structural IDs must be unique.'
       );
     }
 
@@ -776,15 +790,32 @@ const Pix2AiPrompt = (() => {
       '### Target Canvas Specifications:',
       '- Resolution : ' + width + ' × ' + height + ' pixels per cell',
       '- Grid Layout: ' + cols + ' columns × ' + rows + ' rows (' + totalCells + ' frames total)',
-      '- Profile     : ' + profile + ' (Studio Standard)',
-      '',
-      '### Current Canonical Source Document (Use as baseline data):',
-      '```pix2',
-      source.trimEnd(),
-      '```',
-      '',
-      'Synthesize the complete, compliant PIX2 1.1 document below:'
+      '- Profile     : ' + profile + ' (Studio Standard)'
     );
+
+    if (includeSource) {
+      push(
+        '',
+        '### Current Canonical Source Document (Use as baseline data):',
+        '```pix2',
+        source.trimEnd(),
+        '```',
+        '',
+        mode === 'frame-patch'
+          ? 'Return the complete, compliant one-frame PIX2 document described above:'
+          : 'Synthesize the complete, compliant PIX2 1.1 document below:'
+      );
+    } else {
+      push(
+        '',
+        '### Source Context',
+        'No project source or artwork data is included in this prompt. Use only the user instructions',
+        'and format rules above. Ask for the smallest needed excerpt if the requested edit depends on',
+        'existing artwork. Do not invent that you have inspected the user\'s project.',
+        '',
+        'Generate a complete PIX2 document only when the user has provided enough design and layout details.'
+      );
+    }
 
     return lines.join('\n');
   }
@@ -800,6 +831,7 @@ const Pix2AiPrompt = (() => {
     profile = 'studio',
     detailed = true,
     mode = 'all-in-one',
+    includeSource = true,
   }) {
     const limits = (typeof PIX2 !== 'undefined' && PIX2.PROFILES && PIX2.PROFILES[profile])
       ? PIX2.PROFILES[profile]
@@ -816,9 +848,9 @@ const Pix2AiPrompt = (() => {
 
     const cleanSource = (source && typeof source === 'string' && source.trim())
       ? source
-      : '@pix2 1.1\n@meta\n  title: "New Project"\n  version: "1.1"\n@grid\n  cols: ' + cols + '\n  rows: ' + rows + '\n  default_cell: ' + width + 'x' + height + '\n@palette\n  1: #000000\n@end';
+      : includeSource ? '@pix2 1.1\n@meta\n  title: "New Project"\n  version: "1.1"\n@grid\n  cols: ' + cols + '\n  rows: ' + rows + '\n  default_cell: ' + width + 'x' + height + '\n@palette\n  1: #000000\n@end' : '';
 
-    return formatSpecBlock(width, height, cols, rows, version, profile, mode, brief, cleanSource, limits);
+    return formatSpecBlock(width, height, cols, rows, version, profile, mode, brief, cleanSource, limits, includeSource);
   }
 
   return { build };

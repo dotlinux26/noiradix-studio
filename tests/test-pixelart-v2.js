@@ -186,7 +186,7 @@ console.log('\nTest 4: Modular Component Export & Manifest Structure');
 
   const exportResult = ModularExport.exportModularComponents(doc, { mode: 'modular', trimmed: false });
   assert.ok(exportResult.manifest, 'Manifest generated');
-  assert.strictEqual(exportResult.manifest.generator, 'NOIRADIX Studio 2.1.8');
+  assert.strictEqual(exportResult.manifest.generator, 'NOIRADIX Studio 2.2.0');
   assert.strictEqual(exportResult.manifest.formatVersion, '1.1');
   assert.strictEqual(exportResult.manifest.components.length, 2, '2 components exported');
   assert.ok(exportResult.zip, 'ZIP archive generated');

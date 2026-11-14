@@ -4,7 +4,7 @@
  * Professional Pixel Art Editor & Structured Sprite Authoring Environment
  *
  * Author: Nguyen Duc Canh (dotlinux26)
- * Copyright: (c) 2026 dotlinux26 (Nguyen Duc Canh). All rights reserved.
+ * Copyright: (c) 2026 dotlinux26 (Nguyen Duc Canh). Licensed under Apache-2.0.
  * License: Apache-2.0
  */
 
@@ -22,6 +22,7 @@
   let currentFileHandle = null;
   let currentFileName = 'player_wispling.pix2';
   let currentFilePath = null;
+  let importCodeDestination = null;
   let isDocumentDirty = false;
   let documentRevision = 0;
   let lastSavedRevision = 0;
@@ -76,6 +77,10 @@
   const studioDocumentModel = {
     get doc() { return state.doc; }, set doc(value) { state.doc = value; },
     get activeTabId() { return state.activeTabId; }, set activeTabId(value) { state.activeTabId = value; },
+    get activeLayerId() { return state.activeLayerId; }, set activeLayerId(value) { state.activeLayerId = value; },
+    get activeGroupId() { return state.activeGroupId; }, set activeGroupId(value) { state.activeGroupId = value; },
+    get activeRegionId() { return state.activeRegionId; }, set activeRegionId(value) { state.activeRegionId = value; },
+    get isolatedNodeId() { return state.isolatedNodeId; }, set isolatedNodeId(value) { state.isolatedNodeId = value; },
     beginStroke: () => state.beginStroke(),
     endStroke: label => state.endStroke(label),
     saveSnapshot: label => state.saveSnapshot(label),
@@ -206,25 +211,46 @@
     });
   }
 
-  async function persistFileHandle(handle) {
-    if (!handle) return;
+  async function persistFileHandle(handle, sessionId = activeProjectId) {
+    if (!handle) return false;
     try {
       const db = await getDb();
       const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(handle, 'current_file');
+      const record = { schema: 1, handle, sessionId };
+      const store = tx.objectStore(STORE_NAME);
+      store.put(record, 'current_file');
+      if (sessionId) store.put(record, `session:${sessionId}`);
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onabort = tx.onerror = () => reject(tx.error || new Error('File handle persistence transaction failed'));
+      });
+      return true;
     } catch (err) {
       console.warn('Failed storing handle in IndexedDB:', err);
+      return false;
     }
   }
 
-  async function retrievePersistedFileHandle() {
+  async function retrievePersistedFileHandle(sessionId = null) {
     try {
       const db = await getDb();
       return new Promise((resolve) => {
         const tx = db.transaction(STORE_NAME, 'readonly');
-        const req = tx.objectStore(STORE_NAME).get('current_file');
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
+        const store = tx.objectStore(STORE_NAME);
+        const unwrap = (value) => {
+          resolve(value && value.schema === 1 && value.handle
+            ? { handle: value.handle, sessionId: value.sessionId || null }
+            : value ? { handle: value, sessionId: null } : null);
+        };
+        const readCurrent = () => {
+          const req = store.get('current_file');
+          req.onsuccess = () => unwrap(req.result || null);
+          req.onerror = () => resolve(null);
+        };
+        if (!sessionId) return readCurrent();
+        const req = store.get(`session:${sessionId}`);
+        req.onsuccess = () => req.result ? unwrap(req.result) : readCurrent();
+        req.onerror = () => readCurrent();
       });
     } catch (err) {
       return null;
@@ -261,7 +287,11 @@
                 const doc = PIX2.parse(item.content);
                 const session = new ProjectSession(item.id, item.title, doc, null, item.fileName, item.filePath);
                 session.isDirty = Boolean(item.isDirty);
-                session.lastSavedContent = item.content;
+                session.lastSavedContent = typeof item.lastSavedContent === 'string'
+                  ? item.lastSavedContent
+                  : session.isDirty ? '' : item.content;
+                session.lastKnownFileModified = Number.isSafeInteger(item.lastKnownFileModified)
+                  ? item.lastKnownFileModified : 0;
                 session.activeTabId = item.activeTabId || 'tab-grid-overview';
                 session.openCellTabs = Array.isArray(item.openCellTabs) ? item.openCellTabs : [];
                 projectSessions.push(session);
@@ -274,6 +304,21 @@
             const activeId = data.activeId && projectSessions.some(p => p.id === data.activeId)
               ? data.activeId
               : projectSessions[0].id;
+            for (const session of projectSessions) {
+              const savedFile = await retrievePersistedFileHandle(session.id);
+              const isSessionHandle = savedFile?.sessionId === session.id;
+              const isLegacyActiveHandle = session.id === activeId && !savedFile?.sessionId;
+              if (savedFile && (isSessionHandle || isLegacyActiveHandle) && savedFile.handle.name === session.fileName) {
+                if (session.id === activeId) {
+                  const recovery = await StudioFileRecovery.reconnect(session, savedFile.handle, PIX2);
+                  if (!recovery.linked && recovery.reason === 'disk-read-failed') {
+                    console.warn('Could not verify the restored Studio file handle; keeping the browser workspace draft.', recovery.error);
+                  }
+                } else {
+                  session.fileHandle = savedFile.handle;
+                }
+              }
+            }
             switchProjectSession(activeId);
             return true;
           }
@@ -295,7 +340,8 @@
 
     // 2. Try restoring persisted FileSystemFileHandle from IndexedDB (Only if matching active file)
     try {
-      const savedHandle = await retrievePersistedFileHandle();
+      const savedFile = await retrievePersistedFileHandle();
+      const savedHandle = savedFile?.handle;
       if (savedHandle && (!activeFileName || savedHandle.name === activeFileName)) {
         currentFileHandle = savedHandle;
         currentFileName = savedHandle.name;
@@ -453,6 +499,14 @@
     dom.sliceRulerCorner = document.getElementById('slice-ruler-corner');
     dom.btnCellResizeFrame = document.getElementById('btn-cell-resize-frame');
     dom.chkResizeFrameCenter = document.getElementById('chk-resize-frame-center');
+    dom.btnCopyFramePix2 = document.getElementById('btn-copy-frame-pix2');
+    dom.btnCopyFrameAiPrompt = document.getElementById('btn-copy-frame-ai-prompt');
+    dom.btnImportFramePix2 = document.getElementById('btn-import-frame-pix2');
+    dom.modalImportFrameCode = document.getElementById('modal-import-frame-code');
+    dom.importFrameCodeTextarea = document.getElementById('import-frame-code-textarea');
+    dom.importFrameCodeContext = document.getElementById('import-frame-code-context');
+    dom.importFrameCodeError = document.getElementById('import-frame-code-error');
+    dom.btnConfirmImportFrameCode = document.getElementById('btn-confirm-import-frame-code');
 
     // Grid Overview Zoom Controls
     dom.btnGridZoomOut = document.getElementById('btn-grid-zoom-out');
@@ -478,6 +532,7 @@
     dom.btnApplyCode = document.getElementById('btn-apply-code');
     dom.btnCopyAiPrompt = document.getElementById('btn-copy-ai-prompt');
     dom.selectAiPromptMode = document.getElementById('select-ai-prompt-mode');
+    dom.selectAiPromptContext = document.getElementById('select-ai-prompt-context');
     dom.btnCopyRawCode = document.getElementById('btn-copy-raw-code');
     dom.btnToggleEditCode = document.getElementById('btn-toggle-edit-code');
     dom.codeModeBadge = document.getElementById('code-mode-badge');
@@ -637,7 +692,15 @@
     dom.btnConfirmResizeFrame = document.getElementById('btn-confirm-resize-frame');
 
     // Import Code Modal elements
+    dom.modalImportCodeDestination = document.getElementById('modal-import-code-destination');
+    dom.btnCloseImportDestination = document.getElementById('btn-close-import-destination');
+    dom.btnCancelImportDestination = document.getElementById('btn-cancel-import-destination');
+    dom.btnImportCodeCurrent = document.getElementById('btn-import-code-current');
+    dom.btnImportCodeNewTab = document.getElementById('btn-import-code-new-tab');
+    dom.importCurrentProjectLabel = document.getElementById('import-current-project-label');
     dom.modalImportCode = document.getElementById('modal-import-code');
+    dom.importCodeModalTitle = document.getElementById('import-code-modal-title');
+    dom.importCodeFilenameSection = document.getElementById('import-code-filename-section');
     dom.importFileNameInput = document.getElementById('import-file-name-input');
     dom.importCodeTextarea = document.getElementById('import-code-textarea');
     dom.importCodeError = document.getElementById('import-code-error');
@@ -722,6 +785,8 @@
         fileName: s.fileName,
         filePath: s.filePath,
         isDirty: Boolean(s.isDirty),
+        lastSavedContent: s.lastSavedContent || '',
+        lastKnownFileModified: s.lastKnownFileModified || 0,
         activeTabId: s.activeTabId,
         openCellTabs: s.openCellTabs,
         content: (typeof PIX2 !== 'undefined' && s.doc) ? PIX2.serialize(s.doc) : (s.lastSavedContent || '')
@@ -774,6 +839,7 @@
     currentFileHandle = target.fileHandle;
     currentFileName = target.fileName;
     currentFilePath = target.filePath;
+    if (!currentFileHandle) clearPersistedFileHandle();
     isDocumentDirty = target.isDirty;
     documentRevision = target.revision || 0;
     lastSavedRevision = target.lastSavedRevision || 0;
@@ -798,6 +864,7 @@
     setDirty(target.isDirty, false);
     renderProjectTabs();
     refreshAll();
+    if (currentFileHandle) checkAndReloadExternalFileChanges(false, true);
   }
 
   function createProjectSession(doc, title = 'Untitled.pix2', fileHandle = null) {
@@ -1902,17 +1969,55 @@
   // IMPORT PIX2 CODE MODAL (Paste & Load Direct to Studio)
   // ===========================================================================
 
-  function openImportCodeModal() {
+  function openImportCodeDestinationModal() {
     if (typeof handleBeforeLeaveCodeTab === 'function' && !handleBeforeLeaveCodeTab()) {
       return;
     }
-    if (isDocumentDirty) {
-      if (!confirm('You have unsaved changes. Discard and import new code?')) {
-        return;
-      }
+    const current = getActiveSession();
+    if (dom.btnImportCodeCurrent) dom.btnImportCodeCurrent.disabled = !current;
+    if (dom.importCurrentProjectLabel) {
+      dom.importCurrentProjectLabel.textContent = current
+        ? `Replace “${current.fileName || current.title}”. You can undo before closing; the disk file changes only when you save.`
+        : 'Open a project first to replace its contents.';
     }
+    if (!dom.modalImportCodeDestination) return openImportCodeModal('new-tab');
+    dom.modalImportCodeDestination.classList.remove('hidden');
+    setTimeout(() => (dom.btnImportCodeCurrent?.disabled ? dom.btnImportCodeNewTab : dom.btnImportCodeCurrent)?.focus(), 0);
+  }
+
+  function closeImportCodeDestinationModal() {
+    if (dom.modalImportCodeDestination) dom.modalImportCodeDestination.classList.add('hidden');
+    dom.btnImportCode?.focus();
+  }
+
+  function chooseImportCodeDestination(destination) {
+    if (destination === 'current' && !getActiveSession()) {
+      showToast('Open a project before importing into current work.', 'warning');
+      return;
+    }
+    closeImportCodeDestinationModal();
+    openImportCodeModal(destination);
+  }
+
+  function openImportCodeModal(destination = 'new-tab') {
+    if (destination !== 'current' && destination !== 'new-tab') return;
+    if (destination === 'current' && !getActiveSession()) return;
+    importCodeDestination = destination;
     if (!dom.modalImportCode) return;
 
+    if (dom.importCodeModalTitle) {
+      dom.importCodeModalTitle.textContent = destination === 'current'
+        ? 'Replace Current Project with PIX2'
+        : 'Import .PIX2 as a New Tab';
+    }
+    if (dom.importCodeFilenameSection) {
+      dom.importCodeFilenameSection.style.display = destination === 'current' ? 'none' : '';
+    }
+    if (dom.btnConfirmImportCode) {
+      dom.btnConfirmImportCode.innerHTML = destination === 'current'
+        ? '<i class="fa-solid fa-file-import"></i> Replace Current Project'
+        : '<i class="fa-solid fa-file-import"></i> Import &amp; Load into New Tab';
+    }
     if (dom.importFileNameInput) {
       dom.importFileNameInput.value = 'imported_sprite.pix2';
     }
@@ -1937,6 +2042,7 @@
     if (dom.modalImportCode) {
       dom.modalImportCode.classList.add('hidden');
     }
+    importCodeDestination = null;
   }
 
   function showImportCodeError(msg) {
@@ -2001,7 +2107,10 @@
       return;
     }
 
-    if (!parsedDoc || !parsedDoc.cells || parsedDoc.cells.size === 0) {
+    const importedCellIds = parsedDoc && parsedDoc.cells
+      ? (parsedDoc.cells instanceof Map ? Array.from(parsedDoc.cells.keys()) : Object.keys(parsedDoc.cells))
+      : [];
+    if (!parsedDoc || importedCellIds.length === 0) {
       showImportCodeError('Invalid document: No cell or sprite frames found in .pix2 code.');
       return;
     }
@@ -2017,6 +2126,52 @@
       }
     } else {
       targetFileName = sanitizeSafeFilename(targetFileName, '.pix2', 'imported_sprite');
+    }
+
+    if (importCodeDestination === 'current') {
+      const session = getActiveSession();
+      if (!session) {
+        showImportCodeError('The current project is no longer available. Choose New Tab or reopen a project.');
+        return;
+      }
+
+      const previousContent = PIX2.serialize(state.doc);
+      const importedContent = PIX2.serialize(parsedDoc);
+      if (previousContent === importedContent) {
+        closeImportCodeModal();
+        refreshAll();
+        showToast('The imported PIX2 is identical to the current project; nothing changed.', 'info');
+        return;
+      }
+
+      // This operation replaces the active PIX2 document, but keeps its project
+      // session and file handle. The old content remains an undo snapshot and is
+      // written over on disk only after the user explicitly saves.
+      state.saveSnapshot('Before Import PIX2 Project');
+      if (state.history[state.historyIndex]) state.history[state.historyIndex].activeTab = 'tab-grid-overview';
+      state.activeTabId = 'tab-grid-overview';
+      state.openCellTabs = [];
+      state.activeLayerId = null;
+      state.activeGroupId = null;
+      state.activeRegionId = null;
+      state.isolatedNodeId = null;
+      state.selection = null;
+      selectedGridCellId = importedCellIds[0] || null;
+      regionSelection.reset();
+      if (!state.applyDocument(parsedDoc, 'Import PIX2 Project')) {
+        showImportCodeError('The PIX2 project could not be applied to the current session.');
+        return;
+      }
+      triggerEventAutosave();
+      centerCellCanvas();
+      centerGridCanvas();
+      closeImportCodeModal();
+      renderProjectTabs();
+      refreshAll();
+      saveCurrentSessionState();
+      persistAllProjectSessions();
+      showToast(`Replaced current project with ${importedCellIds.length} PIX2 frames. Undo is available; disk changes require Save.`, 'success');
+      return;
     }
 
     // 1. Save state of current session first so existing tabs and work are preserved
@@ -2058,7 +2213,8 @@
     refreshAll();
     persistAllProjectSessions();
 
-    showToast(`Successfully imported "${targetFileName}" as new project tab (${parsedDoc.cells.size} frames)!`, 'success');
+    importCodeDestination = null;
+    showToast(`Successfully imported "${targetFileName}" as new project tab (${importedCellIds.length} frames)!`, 'success');
   }
 
   function refreshAll() {
@@ -4377,17 +4533,18 @@
         session.isDirty = session.revision !== revision || PIX2.serialize(session.doc) !== text;
         session.lastKnownFileModified = modified;
         session.pendingExternalConflict = null;
+        let fileHandlePersisted = !handle;
         if (handle) {
           session.fileHandle = handle;
           session.fileName = handle.name;
           session.filePath = handle.name;
+          fileHandlePersisted = await persistFileHandle(handle, session.id);
         }
         if (active) {
           if (handle) {
             currentFileHandle = handle;
             currentFileName = session.fileName;
             currentFilePath = session.filePath;
-            persistFileHandle(handle);
           }
           lastSavedContent = text;
           lastKnownFileModified = modified;
@@ -4397,9 +4554,14 @@
           if (!isDocumentDirty) setDirty(false);
           updateFileStatusUI();
           renderProjectTabs();
-          if (interactive) showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName, 'success');
+          if (interactive && (!handle || fileHandlePersisted)) {
+            showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName, 'success');
+          }
         }
         await persistAllProjectSessions();
+        if (handle && !fileHandlePersisted) {
+          showToast(`Saved to ${handle.name}, but the browser could not remember its file link. Reopen it after a reload to keep direct saving.`, 'warning');
+        }
         return true;
       } catch (error) {
         if (error.name !== 'AbortError') showToast('Save failed: ' + error.message, 'error');
@@ -4423,7 +4585,7 @@
   // REAL-TIME FILE WATCHER & LIVE HOT-RELOAD (External AI & Tool Collaboration)
   // ===========================================================================
 
-  async function checkAndReloadExternalFileChanges(force = false) {
+  async function checkAndReloadExternalFileChanges(force = false, verifyUnchangedTimestamp = false) {
     if (!currentFileHandle || isExternalReloading || activeStudioSaves) return;
     if (typeof currentFileHandle.getFile !== 'function') return;
 
@@ -4438,7 +4600,7 @@
       const currentModified = file.lastModified;
 
       // Check if file modified time is newer than our recorded timestamp
-      if (!force && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified) {
+      if (!force && !verifyUnchangedTimestamp && lastKnownFileModified > 0 && currentModified <= lastKnownFileModified) {
         isExternalReloading = false;
         return;
       }
@@ -4522,13 +4684,13 @@
   function initFileWatcher() {
     // 1. Focus listener: window gets active focus when switching from external editor/AI
     window.addEventListener('focus', () => {
-      checkAndReloadExternalFileChanges(false);
+      checkAndReloadExternalFileChanges(false, true);
     });
 
     // 2. Visibility change listener (tab becomes visible)
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
-        checkAndReloadExternalFileChanges(false);
+        checkAndReloadExternalFileChanges(false, true);
       }
     });
 
@@ -4558,7 +4720,7 @@
     showToast: (...args) => showToast(...args),
     triggerEventAutosave: (...args) => triggerEventAutosave(...args)
   });
-  const { renderCodeEditor, handleBeforeLeaveCodeTab, toggleCodeEditMode, copyRawPix2Code, applyCodeToDoc, updateAiGuidePane, copyAiPrompt } = sourceController;
+  const { renderCodeEditor, handleBeforeLeaveCodeTab, toggleCodeEditMode, copyRawPix2Code, applyCodeToDoc, updateAiGuidePane, copyAiPrompt, copyActiveFrameCode, copyActiveFrameAiPrompt, openFrameCodeImport, closeFrameCodeImport, applyFrameCodeImport } = sourceController;
 
 
   function escapeHtml(str) {
@@ -4788,10 +4950,13 @@
     lastKnownFileModified = session.lastKnownFileModified;
     pendingExternalConflict = null;
     setDirty(false);
-    if (handle) persistFileHandle(handle);
+    const fileHandlePersisted = handle ? await persistFileHandle(handle, session.id) : true;
     persistAllProjectSessions();
     updateFileStatusUI();
-    showToast('Opened ' + file.name + ' in a document tab', 'success');
+    showToast(fileHandlePersisted
+      ? 'Opened ' + file.name + ' in a document tab'
+      : `Opened ${file.name}, but the browser could not remember its file link. Reopen it after a reload to keep direct saving.`,
+    fileHandlePersisted ? 'success' : 'warning');
   }
 
   async function handleFileOpenFromHandle(handle) {
@@ -5864,10 +6029,26 @@
     dom.resizeFrameW?.addEventListener('keydown', onResizeFrameKeydown);
     dom.resizeFrameH?.addEventListener('keydown', onResizeFrameKeydown);
 
-    // Import PIX2 Code Modal Events
+    // Import PIX2 Code Destination and Modal Events
+    dom.btnCloseImportDestination?.addEventListener('click', closeImportCodeDestinationModal);
+    dom.btnCancelImportDestination?.addEventListener('click', closeImportCodeDestinationModal);
+    dom.btnImportCodeCurrent?.addEventListener('click', () => chooseImportCodeDestination('current'));
+    dom.btnImportCodeNewTab?.addEventListener('click', () => chooseImportCodeDestination('new-tab'));
+    dom.modalImportCodeDestination?.addEventListener('click', (e) => {
+      if (e.target === dom.modalImportCodeDestination) closeImportCodeDestinationModal();
+    });
+    dom.modalImportCodeDestination?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeImportCodeDestinationModal();
+    });
     dom.btnCloseImportModal?.addEventListener('click', closeImportCodeModal);
     dom.btnCancelImportCode?.addEventListener('click', closeImportCodeModal);
     dom.btnConfirmImportCode?.addEventListener('click', confirmImportCode);
+    dom.modalImportCode?.addEventListener('click', (e) => {
+      if (e.target === dom.modalImportCode) closeImportCodeModal();
+    });
+    dom.modalImportCode?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeImportCodeModal();
+    });
     dom.btnImportPasteClipboard?.addEventListener('click', pasteClipboardIntoImport);
     dom.btnImportClearCode?.addEventListener('click', () => {
       if (dom.importCodeTextarea) {
@@ -6904,12 +7085,18 @@
     dom.modalDemoChooser?.addEventListener('click', (e) => {
       if (e.target === dom.modalDemoChooser) closeDemoChooserModal();
     });
-    bindAction('btn-import-code', openImportCodeModal);
+    bindAction('btn-import-code', openImportCodeDestinationModal);
 
     // Code Editor Buttons
     if (dom.btnApplyCode) dom.btnApplyCode.addEventListener('click', applyCodeToDoc);
     if (dom.btnCopyAiPrompt) dom.btnCopyAiPrompt.addEventListener('click', copyAiPrompt);
     if (dom.btnCopyRawCode) dom.btnCopyRawCode.addEventListener('click', copyRawPix2Code);
+    if (dom.btnCopyFramePix2) dom.btnCopyFramePix2.addEventListener('click', copyActiveFrameCode);
+    if (dom.btnCopyFrameAiPrompt) dom.btnCopyFrameAiPrompt.addEventListener('click', copyActiveFrameAiPrompt);
+    if (dom.btnImportFramePix2) dom.btnImportFramePix2.addEventListener('click', openFrameCodeImport);
+    bindAction('btn-close-import-frame-code', closeFrameCodeImport);
+    bindAction('btn-cancel-import-frame-code', closeFrameCodeImport);
+    if (dom.btnConfirmImportFrameCode) dom.btnConfirmImportFrameCode.addEventListener('click', applyFrameCodeImport);
     if (dom.btnToggleEditCode) dom.btnToggleEditCode.addEventListener('click', toggleCodeEditMode);
     if (dom.codeTextarea) {
       dom.codeTextarea.addEventListener('keydown', (e) => {
@@ -7137,7 +7324,7 @@
       // Import Code (Ctrl + I)
       if ((e.ctrlKey || e.metaKey) && key === 'i') {
         e.preventDefault();
-        openImportCodeModal();
+        openImportCodeDestinationModal();
         return;
       }
 

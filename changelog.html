@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8fafc">
+  <meta name="description" content="NOIRADIX Studio and PixelArt release history, generated from the repository's versioned release notes.">
+  <link rel="canonical" href="https://noiradix.me/changelog.html">
+  <link rel="icon" type="image/svg+xml" href="noiradix-studio-logo.svg">
+  <link rel="stylesheet" href="css/changelog.css">
+  <title>NOIRADIX // CHANGELOG</title>
+</head>
+<body>
+  <main class="terminal-shell">
+    <header class="terminal-header">
+      <a class="brand" href="./" aria-label="Back to NOIRADIX Studio">
+        <img src="noiradix-studio-logo.svg" width="36" height="36" alt="">
+        <span>NOIRADIX<span class="brand-slash">//</span>LOG</span>
+      </a>
+      <nav class="top-actions" aria-label="Project links">
+        <a href="./">← EDITOR</a>
+        <a href="https://discord.gg/SJwsdGWubF" target="_blank" rel="noopener noreferrer">DISCORD ↗</a>
+      </nav>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">SYSTEM ARCHIVE · RELEASE NOTES</p>
+      <h1 id="page-title">CHANGELOG<span class="cursor" aria-hidden="true">_</span></h1>
+      <p class="intro-copy">Release history for NOIRADIX Studio and PixelArt.</p>
+    </section>
+
+    <section class="release-list" aria-label="Release history">
+      <details class="release-entry" open>
+  <summary><span class="release-version">v2.2.0</span><span class="release-source">docs/releases/v2.2.0.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.2.0
+
+## Highlights
+
+- Added frame-scoped PIX2 copy, AI prompt and import actions in the Studio cell editor. Import replaces the selected frame while preserving other cells and animation data.
+- Added an explicit destination step for full PIX2 code import: replace the active project with undo available, or create a separate project tab. The current file is not written until the user saves.
+- Fixed frame actions to resolve the active cell through Studio&#39;s narrow document port, and kept frame controls in one horizontally draggable row.
+- Added an instructions-only AI prompt option alongside full-document context. Full-document Apply is explicitly documented as replacement, not a partial merge.
+- Clarified PIX2 serialization behavior: the reference serializer may normalize drawing primitives into pixel records; PIX2 1.1 does not require this canonical form.
+- Made Unity sprite asset names unique when display names repeat, while retaining display names in exported metadata.
+- Limited the maintenance notice to development hosts by default; it can be explicitly enabled with `?noira-maintenance=1`.
+- Reorganized the README around the user workflow and documented verified product behavior, AI context limits, and current CI checks.
+- Added an offline-capable static changelog page generated from the versioned Markdown release notes. It displays their raw text without a runtime Markdown dependency, and links from both About dialogs to release history, GitHub issue templates, and Discord.
+- Corrected architecture, format examples, license scope, performance-proposal status and historical test-count references.
+- On workspace restore, reconnect the active project to its previously granted file handle and reconcile draft bytes against disk. Preserve the saved-content baseline so disk changes made while the app was closed still raise the external-change conflict instead of silently replacing a draft.
+- Warn when a disk write succeeds but the browser cannot persist its file handle, so the user knows direct saving may need the file to be reopened after reload.
+- Verify external file contents on window focus even when the filesystem timestamp is unchanged; the regular heartbeat remains timestamp-gated to avoid repeatedly reading large projects.
+- Fixed TexturePacker / NOIRADIX atlas JSON preview integration, added frame geometry and image-bound validation, and bounded imported metadata, file sizes, and decoded raster allocations.
+
+## Compatibility
+
+- Studio and PixelArt report version 2.2.0. PIX2 remains at version 1.1, with PIX2 1.0 read compatibility retained.
+- Existing full-document PIX2 import behavior remains replacement. Frame import is a separate operation and validates a one-frame document before replacing the active frame.
+- The serializer&#39;s canonical pixel output is an implementation choice, not a required PIX2 1.1 representation.
+
+## Verification
+
+- `node tests/check-readme-test-count.cjs` — passed (22 Node regression suites).
+- `node tests/run-all.cjs --syntax` — passed (36 production JavaScript files).
+- `node tests/run-all.cjs` — passed (22 Node regression suites).
+- `node tests/benchmark-performance.js` — passed all 8 gates on the documented fixtures; observed maxima were under 16 ms in this run.
+- `node tests/run-all.cjs --browser` — passed all 6 browser suites in Chrome 157 for Studio and PixelArt, including atlas JSON import, changelog generation, offline navigation, responsive layout, and feedback links.
+- `git diff --check` — passed.
+- The maintainer reports a successful manual Unity import check. Unity Editor is not available in automated CI, so this release does not claim compatibility across untested Unity versions.
+
+## Limits and future work
+
+- AI context-window and output limits depend on the selected provider and model; consult current provider documentation. Frame-scoped prompts reduce the supplied project context but cannot guarantee that a model will return valid PIX2.
+- An MCP adapter for bounded frame/range reads and validated patches is a future direction and is not included in this release.
+- Large-canvas typed-array storage remains a proposal; current supported workload and performance should be judged from the maintained tests and benchmarks, not historical estimates.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.2.0.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.8</span><span class="release-source">docs/releases/v2.1.8.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.1.8
+
+## Highlights
+
+- Moved the four approved directory links (SourceForge, VibeCodePicks, TeaserTrack and AlternativeTo) directly below the README verdict, with the official VibeCodePicks badge and existing official badges.
+- Added the VibeCodePicks listing badge and SourceForge project link to the Studio About dialog and documented the directory listings in the documentation portal.
+- Replaced stale, keyword-stuffed Studio metadata with concise descriptions of verified product capabilities; removed the unsupported `meta keywords` list.
+- Updated Studio structured data to version 2.1.8 and added the canonical listing references.
+- Added canonical and social preview metadata for PixelArt and added its URL to the sitemap.
+
+## Compatibility and format
+
+- Both applications report version 2.1.8.
+- No PIX2 syntax, parsing, serialization, import, export or artwork behavior changed. PIX2 remains version 1.1.
+
+## Verification
+
+- `node tests/run-all.cjs --syntax` — passed (35 production JavaScript files).
+- `node tests/run-all.cjs` — passed (20 Node suites).
+- `node tests/benchmark-performance.js` — passed all performance gates.
+- `node tests/run-all.cjs --browser` — passed all 3 browser suites in Chrome for Studio and PixelArt.
+- `git diff --check` — passed.
+- GitHub Actions tag workflow — passed, and the stable v2.1.8 GitHub release was published.
+- GitHub Pages deployment from `main` — passed; live Studio and PixelArt pages returned HTTP 200 with the new metadata.
+
+## Limitations
+
+- Directory badges link to the listings but cannot ensure that external sites provide followed inbound links or improve search rankings.
+- Google does not use the `meta keywords` tag for ranking; this release removes it rather than maintaining a keyword list.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.8.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.7</span><span class="release-source">docs/releases/v2.1.7.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.1.7
+
+Stable maintenance release. PIX2 remains version 1.1, with PIX2 1.0 read compatibility.
+
+## Highlights
+
+- Restored the original PIX2 and AI authoring demo alongside the Unity 2D export/import demo.
+- Added distinct links for both demos to the Studio About dialog, root README, and documentation portal.
+- Updated app version displays, cache-busting references, current product specifications, tests, and the README version badge to 2.1.7.
+
+## Compatibility and limitations
+
+- No PIX2 grammar, serialization, storage, or compatibility changes.
+- Both demo links are external YouTube destinations; NOIRADIX remains usable offline apart from external links.
+
+## Verification
+
+- `node tests/run-all.cjs --syntax`: passed, 35 production JavaScript files.
+- `node tests/run-all.cjs`: passed, all 20 Node suites.
+- `node tests/benchmark-performance.js`: passed all 8 performance gates; the slowest measured p95 was 13.572 ms for 2.5× scaling of 4,096 pixels.
+- `git diff --check`: passed.
+- GitHub Actions runs syntax, all Node suites, performance benchmarks, and all three browser suites on the pushed tag before publishing this release.
+- See [the two-demo content decision](../discussion/VIDEO_DEMOS.md).</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.7.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.6</span><span class="release-source">docs/releases/v2.1.6.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.1.6
+
+Stable documentation maintenance release. PIX2 remains version 1.1, with PIX2 1.0 read compatibility.
+
+## Highlights
+
+- Moved the TeaserTrack and AlternativeTo image badges from the README header to the end of the root README and documentation portal, keeping the product and quick-start information at the top.
+- Updated the Studio and PixelArt app version displays, cache-busting references, release badge, tests, and current product specifications to 2.1.6.
+
+## Compatibility and limitations
+
+- No application behavior, PIX2 grammar, serialization, storage, or compatibility changes in this release.
+- The prior v2.1.5 tag remains attached to its original verified commit; this release contains the README badge placement update.
+
+## Verification
+
+- `node tests/run-all.cjs --syntax`: passed, 35 production JavaScript files.
+- `node tests/run-all.cjs`: passed, all 20 Node suites.
+- `node tests/benchmark-performance.js`: passed all 8 performance gates; the slowest measured p95 was 5.233 ms for 2.5× scaling of 4,096 pixels.
+- `git diff --check`: passed.
+- GitHub Actions runs syntax, all Node suites, performance benchmarks, and all three browser suites on the pushed tag before publishing this release.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.6.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.5</span><span class="release-source">docs/releases/v2.1.5.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.1.5
+
+Stable maintenance release. PIX2 remains version 1.1, with PIX2 1.0 read compatibility.
+
+## Highlights
+
+- Added a PixelArt **Import PIX2** action that validates pasted source and opens it in a separate artwork tab.
+- Added the official TeaserTrack and AlternativeTo listing badges and updated listing references in the product documentation.
+- Corrected the Unity 2D demo link and clarified that Unity sprite slicing and animation creation use the exported `.pix2.json` metadata and importer.
+- Changed the maintenance notice recheck interval from 30 minutes to 3 hours.
+- Improved the PixelArt About dialog metadata contrast in light and dark themes.
+- Updated both app version displays, cache-busting references, and product specification versions to 2.1.5.
+
+## Compatibility and limitations
+
+- No PIX2 grammar, serialization, storage, or compatibility changes. PIX2 1.0 read compatibility remains supported.
+- The PIX2 paste-import action relies on the shared parser and PixelArt validation profile. Invalid input is rejected without replacing existing artwork tabs.
+- Browser visual/interaction checks were skipped at the user&#39;s request for this release checkpoint. See [the implementation discussion](../discussion/PIXELART_IMPORT_AND_LISTING_UPDATES.md) for the specific unverified browser cases.
+
+## Verification
+
+- `node tests/run-all.cjs --syntax`: passed, 35 production JavaScript files.
+- `node tests/run-all.cjs`: passed, all 20 Node suites.
+- `node tests/benchmark-performance.js`: passed all 8 performance gates; the slowest measured p95 was 4.848 ms for 2.5× scaling of 4,096 pixels.
+- `git diff --check`: passed.
+- GitHub Actions runs syntax, all Node suites, performance benchmarks, and all three browser suites on the pushed tag before publishing this release.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.5.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.4</span><span class="release-source">docs/releases/v2.1.4.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt 2.1.4
+
+Stable maintenance release. PIX2 remains version 1.1, with PIX2 1.0 read compatibility.
+
+## Highlights
+
+- Updated the Studio and PixelArt Discord community links to the current invite.
+- Added a Linux and macOS launcher for downloading and running the browser app locally with Python 3.
+- Updated product and Unity export descriptions to state that the Unity importer creates sprite assets and native `.anim` clips; Animator Controller setup remains in Unity.
+- Refreshed README and product metadata for the current SourceForge listing and supported workflow.
+- Updated visible app versions, cache-busting references, and release documentation to 2.1.4.
+
+## Compatibility and limitations
+
+- No PIX2 grammar, serialization, storage, or compatibility changes. PIX2 1.0 read compatibility remains supported.
+- The Linux/macOS launcher requires Python 3 and a desktop browser opener (`open` on macOS or `xdg-open` on Linux). It binds the local server to `127.0.0.1` and stops when the launcher is interrupted.
+- The local app is client-side; external links and optional third-party services still require an internet connection.
+
+## Verification
+
+- `node tests/run-all.cjs --syntax`: passed, 35 production JavaScript files.
+- `node tests/run-all.cjs`: passed, all 20 Node suites.
+- `node tests/benchmark-performance.js`: passed all performance gates; measured operations remained under the 16 ms interactive budget.
+- `node tests/run-all.cjs --browser`: passed all 3 browser suites in Chrome 157, including both Studio and PixelArt workflows.
+- `bash -n start-noiradix-studio.sh`: passed. Native Linux/macOS browser launching was not exercised in this Windows environment.
+- `git diff --check`: passed before release commit.
+- GitHub Actions reruns syntax, Node, benchmark, and browser gates on the pushed tag before publishing the release.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.4.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.3</span><span class="release-source">docs/releases/v2.1.3.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt 2.1.3
+
+Stable maintenance release. PIX2 remains version 1.1, with PIX2 1.0 read compatibility.
+
+## Highlights
+
+- Unity 2021.1 and newer use the Sprite Data Provider API for atlas slicing metadata; Unity 2021.2 and newer also register sprite name/file-ID pairs.
+- Older Unity versions retain a compile-time fallback using `TextureImporter.spritesheet`.
+- Reimports preserve sprite IDs for unchanged frame names, and generated animation asset paths use Unity&#39;s forward-slash convention.
+- Fixed the generated importer completion string so exported C# compiles instead of containing literal line breaks inside a string.
+
+## Compatibility and limitations
+
+- No PIX2 grammar, serialization or storage format change. PIX2 1.0 read compatibility remains supported.
+- The legacy branch intentionally uses Unity&#39;s obsolete sprite-sheet API to support older editor versions.
+- The repository environment has no Unity Editor, so compiling and exercising the modern and legacy branches inside their target Unity versions remains an external integration check.
+
+## Verification
+
+Local syntax and Node suite results are recorded with the release workflow. GitHub Actions runs syntax, all Node suites, performance benchmarks and browser tests before publishing this tag. See [the Unity importer compatibility note](../discussion/UNITY_IMPORTER_REGRESSION.md).</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.3.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.2</span><span class="release-source">docs/releases/v2.1.2.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt 2.1.2
+
+Stable release. PIX2 remains version 1.1, with PIX2 1.0 read compatibility.
+
+## Highlights
+
+- Studio and PixelArt share the raster mutation, palette, floating-selection and transform foundations delivered in the 2.1.2 beta cycle, while retaining app-specific viewport, history and persistence adapters.
+- Studio feature controllers for grid, slicing, animation, source/AI and export use explicit app ports.
+- Native file writes, recovery, project tabs, source publication and asynchronous export handling received hardening during the beta cycle.
+- Added the Arch-Lich Grim Reaper and Cute Cat PIX2 sample projects.
+- Fixed the generated Unity importer completion dialog: escaped newlines now remain inside the C# string instead of breaking the generated script across lines and preventing Unity compilation.
+
+## Compatibility and limitations
+
+- No PIX2 grammar, serialization or storage format change. PIX2 1.0 read compatibility remains supported.
+- The Unity importer correction was checked in the generated-script template and repository release gates. A Unity Editor compiler is not available in this repository environment, so compilation in a real Unity project remains an external integration check.
+- The shared editor architecture still preserves app-specific history, viewport and autosave wiring. The release does not claim closure of every historical UX request.
+
+## Verification
+
+See the CI run attached to tag `v2.1.2` and [the editor refactor progress report](../discussion/EDITOR_REFACTOR_PROGRESS.md). Local verification results are recorded in [the Unity importer regression note](../discussion/UNITY_IMPORTER_REGRESSION.md).</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.2.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.2-beta.2</span><span class="release-source">docs/releases/v2.1.2-beta.2.md</span></summary>
+  <pre># v2.1.2-beta.2 — Shared editor refactor
+
+Review prerelease on `rc2`. PIX2 remains 1.1 with 1.0 read compatibility. Main and the production website are unchanged by this release.
+
+- Studio grid, slicing, animation, source/AI and export are separated into feature controllers with explicit app ports.
+- Palette data/library, raster mutation and floating selection settlement are shared by Studio and PixelArt.
+- Selection cancellation retains original document/node ownership. Flips, quarter-turn and cumulative free rotation share source sampling.
+- No-op history keeps redo; Studio Apply Code and external reload retain undoable history.
+- Validated source publication prevents partial invalid documents from replacing artwork. Failed PixelArt reload restores the code view.
+- Export metadata/per-frame source remain stable across asynchronous PNG encoding.
+- CI discovers every Node and browser regression suite; architecture, history, file lifecycle and agent verification docs reflect the implementation.
+
+Phase-by-phase decisions, findings and evidence: [refactor report](../discussion/EDITOR_REFACTOR_PROGRESS.md). This beta retains app-specific history/viewport/autosave wiring and existing paste presentation. Manual OS pickers, other browser engines and long-duration stress remain additional coverage; it is not an exhaustive closure of every historical product request.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.2-beta.2.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.2-beta.1</span><span class="release-source">docs/releases/v2.1.2-beta.1.md</span></summary>
+  <pre># v2.1.2-beta.1
+
+Review beta on `rc2`; PIX2 remains 1.1 with 1.0 read compatibility.
+
+- Shared queued native file writes preserve the originating tab, handle and unsaved edits.
+- Quoted strings round-trip; resource profiles and bounded raster/import/export allocations are enforced.
+- Studio demo/native opening use ordinary independent sessions; duplicate filenames remain distinct.
+- Browser recovery ignores malformed catalogs; PixelArt saves preserve grid metadata.
+- Export preview reuses its raster for zoom and rejects oversized output.
+- CI covers all 19 Node suites and three browser runners, with independent branch queues.
+
+Validation and remaining platform/interaction coverage: [RC2 audit](../discussion/RC2_AUDIT.md). This prerelease does not close every historical UX request and does not deploy or merge RC2 into main.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.2-beta.1.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.1</span><span class="release-source">docs/releases/v2.1.1.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt 2.1.1
+
+This patch release introduces the official Arch-Lich Grim Reaper 48×48 reference template, provides resilient automated browser test harness execution in CI environments, documents AI cognitive model feedback, and aligns version manifests across the platform.
+
+### Highlights
+- **Arch-Lich Grim Reaper 48×48 Template**: Integrates the production-grade 4×4 boss sprite matrix authored under PIX2 1.1 with multi-layer Scene Graph hierarchy (`@layer aura`, `@group cloak`, `@region robe`, `@region skull`, `@layer weapon`), directional walk cycles (down, up, right, left), and 29-color spectral palette.
+- **Reference Template Chooser**: Quick-start modal dialog for switching between the micro Noiradix Ghost (16×16) and macro Arch-Lich Reaper (48×48) templates directly from the toolbar or empty workspace state.
+- **AI Argon 4.0 Parser Compatibility (RFC-PARSER-01 &amp; RFC-PARSER-02)**: Resolves dimension delimiter compatibility in `rect` commands (supporting both `WxH` and `W,H`), and hardens inline comment lexing in `@palette` so comments (using `#` or `;`) and hex-like comment words are cleanly isolated without throwing invalid coordinate or hex color diagnostics.
+- **AI Cognitive Feedback Documentation**: Records Gemini Argon 4.0 analysis of scanline rasterization vs. shape fills and inline palette comments in [`docs/ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md`](../ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md) and [`docs/ENGINEERING/KNOWN_LIMITATIONS.md`](../ENGINEERING/KNOWN_LIMITATIONS.md).
+- **CI Test Harness Hardening**: Hardens Playwright browser testing with robust executable resolution fallback and dynamic timeout thresholds tailored for multi-core CI virtual machines.
+
+[PIX2 1.1 specification](https://github.com/dotlinux26/noiradix-studio/blob/v2.1.1/PIX2_SPECIFICATION.md) · [Canonical Application](https://noiradix.me/)</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.1.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
+  <summary><span class="release-version">v2.1.0</span><span class="release-source">docs/releases/v2.1.0.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt 2.1.0
+
+This release stabilizes the shared editor and the PIX2 1.1 reference implementation. The file header stays `@pix2 1.1`, and both editors continue to read PIX2 1.0.
+
+- Grid Overview can zoom below 1×. Fit and Shift+Space fit the sprite sheet with its grid labels and spacing. The Grid backing canvas is capped at 4096 pixels per side.
+- Studio and PixelArt share tools, document tabs, Layers, raster transforms, viewport rendering, adaptive rulers and browser workspace storage. Reload restores finished edits and open tabs. IndexedDB backs up workspaces when localStorage cannot store them.
+- Layers show the frontmost sibling first. Drag up to bring a node forward. Use Alt+double-click in Region Select to cycle through overlapping Regions in the active Layer. A Group resize that would erase an entire populated Region is cancelled.
+- The compiler preserves mixed Group/Region order across save and reload, supports inherited Layer/Group/Region opacity, and diagnoses malformed opacity, parent cycles and excessive Group depth. Ink scales pixel alpha at paint time. Modular export and flattening share the same compositor.
+
+Automated checks include Node conformance, security and round-trip tests, plus Chromium editor and workspace tests with a dense 512×512 artwork, a 4×4 sheet of 512×512 frames, legacy conversion and quota fallback. Browser drafts preserve finished edits. Native multi-file handles, undo history across reload and platform-specific GPU performance are tracked separately.
+
+[PIX2 1.1 specification](https://github.com/dotlinux26/noiradix-studio/blob/v2.1.0/PIX2_SPECIFICATION.md) · [Verification ledger](https://github.com/dotlinux26/noiradix-studio/blob/v2.1.0/docs/discussion/STABILIZATION_LEDGER.md)</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.1.0.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+    </section>
+
+    <section class="feedback-panel" aria-labelledby="feedback-title">
+      <div>
+        <p class="eyebrow">COMMUNITY CHANNEL</p>
+        <h2 id="feedback-title">Found a bug or have an idea?</h2>
+        <p>Send reproducible reports through the repository templates, or talk with the community on Discord.</p>
+      </div>
+      <div class="feedback-actions">
+        <a class="action action-primary" href="https://github.com/dotlinux26/noiradix-studio/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">REPORT A BUG ↗</a>
+        <a class="action" href="https://github.com/dotlinux26/noiradix-studio/issues/new?template=feature_request.yml" target="_blank" rel="noopener noreferrer">SUGGEST A FEATURE ↗</a>
+        <a class="action action-discord" href="https://discord.gg/SJwsdGWubF" target="_blank" rel="noopener noreferrer">JOIN DISCORD ↗</a>
+      </div>
+    </section>
+
+    <footer class="terminal-footer"><span>NOIRADIX / RELEASE ARCHIVE</span><a href="./">RETURN TO WORKSPACE ↑</a><span>END OF INDEX</span></footer>
+  </main>
+</body>
+</html>

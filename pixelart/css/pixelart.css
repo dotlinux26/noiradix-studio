@@ -1761,6 +1761,28 @@ button.pa-dim-badge:focus-visible,
   text-underline-offset: 2px;
 }
 
+.pa-about-changelog {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-card-hover);
+  background: color-mix(in srgb, var(--bg-card-hover) 88%, #7c82ff 12%);
+  color: var(--text-main);
+  text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.pa-about-changelog:hover,
+.pa-about-changelog:focus-visible { border-color: #8d83ff; background: var(--bg-card-hover); }
+.pa-about-changelog-icon { color: #8a7dff; font-size: 15px; }
+.pa-about-changelog-copy { display: grid; gap: 2px; }
+.pa-about-changelog-copy strong { font-size: 12px; }
+.pa-about-changelog-copy small { color: var(--text-muted); font-size: 10px; }
+.pa-about-changelog-cta { margin-left: auto; color: #8a7dff; font-size: 10px; font-weight: 700; white-space: nowrap; }
+
 .pa-presets-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

@@ -64,7 +64,7 @@
       "url": "https://github.com/dotlinux26"
     },
     "screenshot": "https://noiradix.me/docs/noiradix-editor.png",
-    "softwareVersion": "2.1.8",
+    "softwareVersion": "2.2.0",
     "sameAs": [
       "https://github.com/dotlinux26/noiradix-studio",
       "https://sourceforge.net/projects/noiradix-studio/",
@@ -90,7 +90,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" onerror="this.onerror=null;">
 
   <!-- Studio Custom CSS -->
-  <link rel="stylesheet" href="css/style.css?v=2.1.8">
+  <link rel="stylesheet" href="css/style.css?v=2.2.0">
   <link rel="stylesheet" href="css/editor-tools.css">
   <link rel="stylesheet" href="css/tab-strip.css">
 </head>
@@ -99,10 +99,10 @@
   <!-- ================= TOP NAVIGATION / APP HEADER ================= -->
   <header class="studio-header">
     <div class="header-left">
-      <div class="brand-badge" id="btn-brand-about" title="About NOIRADIX Studio (v2.1.8) by dotlinux26 - Click for info" style="cursor: pointer;">
+      <div class="brand-badge" id="btn-brand-about" title="About NOIRADIX Studio (v2.2.0) by dotlinux26 - Click for info" style="cursor: pointer;">
         <img src="noiradix-studio-logo.svg" alt="NOIRADIX Logo" class="brand-logo-img">
         <span class="brand-title">NOIRADIX</span>
-        <span class="brand-ver">v2.1.8</span>
+        <span class="brand-ver">v2.2.0</span>
       </div>
 
       <!-- Professional File Document Header Widget -->
@@ -384,6 +384,17 @@
             </button>
             <span id="label-cell-resolution" class="info-badge">16 × 16 px</span>
             <span id="label-mouse-coords" class="info-badge">X: 0, Y: 0</span>
+            <div class="flex-row gap-6 align-center" role="group" aria-label="Active frame PIX2 actions">
+              <button type="button" id="btn-copy-frame-pix2" class="btn btn-xs btn-secondary" title="Copy a valid PIX2 document containing only this frame">
+                <i class="fa-solid fa-copy"></i> Frame Code
+              </button>
+              <button type="button" id="btn-copy-frame-ai-prompt" class="btn btn-xs btn-secondary" title="Copy the complete PIX2 AI prompt scoped to this frame">
+                <i class="fa-solid fa-robot"></i> Frame AI
+              </button>
+              <button type="button" id="btn-import-frame-pix2" class="btn btn-xs btn-secondary" title="Import PIX2 code into this frame while preserving the rest of the project">
+                <i class="fa-solid fa-file-import"></i> Import Frame
+              </button>
+            </div>
           </div>
         </div>
 
@@ -760,8 +771,12 @@
                 <option value="full-character">🧙‍♂️ Full Character (4-Dir / 8-Dir Generation)</option>
                 <option value="walk-animation">🎬 Walk Cycle &amp; Animation Generator</option>
                 <option value="accessory-equipment">🗡️ Accessory &amp; Equipment Overlay</option>
-                <option value="surgical-patch">🩹 Surgical Frame / Color Patch</option>
+                <option value="surgical-patch">🩹 Targeted Repair (full document)</option>
                 <option value="raw-spec">📋 Complete PIX2 Cognitive Reference</option>
+              </select>
+              <select id="select-ai-prompt-context" class="modern-select select-xs" title="Choose whether to include PIX2 source context">
+                <option value="full-document" selected>Prompt + full PIX2 context</option>
+                <option value="instructions-only">Prompt instructions only</option>
               </select>
               <button id="btn-copy-ai-prompt" class="btn btn-sm btn-primary" title="Copy structured prompt for AI LLM">
                 <i class="fa-solid fa-robot"></i> Copy for AI Prompt
@@ -1782,19 +1797,44 @@
   </div>
 
   <!-- ================= IMPORT PIX2 CODE MODAL ================= -->
-  <div id="modal-import-code" class="studio-modal-backdrop hidden">
+  <div id="modal-import-code-destination" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="import-code-destination-title">
+    <div class="studio-modal-dialog import-destination-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title" id="import-code-destination-title">
+          <i class="fa-solid fa-file-import text-accent"></i>
+          <span>Where should this PIX2 project go?</span>
+        </div>
+        <button id="btn-close-import-destination" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="studio-modal-body import-code-modal-body">
+        <button type="button" id="btn-import-code-current" class="import-destination-option">
+          <span class="import-destination-icon"><i class="fa-solid fa-file-pen"></i></span>
+          <span><strong>Replace current project</strong><small id="import-current-project-label">Replace the active project contents. You can undo before closing; changes are not written to disk until you save.</small></span>
+        </button>
+        <button type="button" id="btn-import-code-new-tab" class="import-destination-option">
+          <span class="import-destination-icon"><i class="fa-regular fa-square-plus"></i></span>
+          <span><strong>Open as a new tab</strong><small>Keep the current project open and import this PIX2 as a separate project.</small></span>
+        </button>
+      </div>
+      <div class="studio-modal-footer">
+        <button id="btn-cancel-import-destination" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-import-code" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="import-code-modal-title">
     <div class="studio-modal-dialog import-code-modal-dialog">
       <div class="studio-modal-header">
         <div class="modal-title">
           <i class="fa-solid fa-file-import text-accent"></i>
-          <span>Import .PIX2 Code</span>
+          <span id="import-code-modal-title">Import .PIX2 Code</span>
         </div>
         <button id="btn-close-import-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
       <div class="studio-modal-body import-code-modal-body">
         <!-- 1. Target File Name -->
-        <div class="template-section">
+        <div class="template-section" id="import-code-filename-section">
           <label class="form-label" for="import-file-name-input">
             <i class="fa-solid fa-file-code"></i> File Name (.pix2):
           </label>
@@ -1827,6 +1867,28 @@
         <button id="btn-confirm-import-code" class="btn btn-accent">
           <i class="fa-solid fa-file-import"></i> Import &amp; Load into Studio
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FRAME-SCOPED PIX2 PATCH MODAL ================= -->
+  <div id="modal-import-frame-code" class="studio-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="import-frame-code-title">
+    <div class="studio-modal-dialog import-code-modal-dialog">
+      <div class="studio-modal-header">
+        <div class="modal-title" id="import-frame-code-title">
+          <i class="fa-solid fa-file-import text-accent"></i>
+          <span>Import PIX2 into Active Frame</span>
+        </div>
+        <button type="button" id="btn-close-import-frame-code" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="studio-modal-body import-code-modal-body">
+        <p id="import-frame-code-context" class="field-hint">Paste one complete PIX2 document containing exactly one frame. Only the active frame will be replaced.</p>
+        <textarea id="import-frame-code-textarea" class="import-code-textarea full-width" rows="16" spellcheck="false" placeholder="Paste one complete PIX2 document containing the edited frame…"></textarea>
+        <div id="import-frame-code-error" class="hidden" role="alert" style="margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; font-size: 12px; font-family: monospace; white-space: pre-wrap;"></div>
+      </div>
+      <div class="studio-modal-footer">
+        <button type="button" id="btn-cancel-import-frame-code" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-confirm-import-frame-code" class="btn btn-accent"><i class="fa-solid fa-file-import"></i> Replace Active Frame</button>
       </div>
     </div>
   </div>
@@ -1905,7 +1967,7 @@
         <div class="modal-title" id="about-modal-title">
           <img src="noiradix-studio-logo.svg" alt="NOIRADIX" class="about-logo-icon">
           <span>About NOIRADIX Studio</span>
-          <span class="badge-tag">v2.1.8</span>
+          <span class="badge-tag">v2.2.0</span>
           <span class="badge-tag" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4);">PIX2 1.1</span>
         </div>
         <button id="btn-close-about-modal" class="icon-round-btn btn-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
@@ -1984,6 +2046,12 @@
             </div>
           </div>
         </div>
+
+        <a class="about-changelog-link" href="changelog.html" target="_blank" rel="noopener noreferrer">
+          <span class="about-changelog-icon"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
+          <span class="about-changelog-copy"><strong>Release history</strong><small>Browse changes, fixes, and updates by version.</small></span>
+          <span class="about-changelog-cta">VIEW CHANGELOG <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></span>
+        </a>
 
         <!-- Creator & Community Section -->
         <div class="about-creator-section">
@@ -2091,39 +2159,40 @@
   </div>
 
   <!-- ================= SCRIPTS ================= -->
-  <script src="js/version.js?v=2.1.8"></script>
-  <script src="js/default-sample.js?v=2.1.8"></script>
-  <script src="js/sample-reaper.js?v=2.1.8"></script>
-  <script src="js/pix2-format.js?v=2.1.8"></script>
-  <script src="js/selection-transform.js?v=2.1.8"></script>
-  <script src="js/structure-operations.js?v=2.1.8"></script>
-  <script src="js/region-selection.js?v=2.1.8"></script>
-  <script src="js/pix2-ai-prompt.js?v=2.1.8"></script>
-  <script src="js/editor-menu.js?v=2.1.8"></script>
-  <script src="js/editor-outliner.js?v=2.1.8"></script>
-  <script src="js/editor-toolbar.js?v=2.1.8"></script>
-  <script src="js/editor-palette-presets.js?v=2.1.8"></script>
-  <script src="js/editor-state.js?v=2.1.8"></script>
-  <script src="js/tools.js?v=2.1.8"></script>
-  <script src="js/studio-atlas.js?v=2.1.8"></script>
-  <script src="js/modular-export.js?v=2.1.8"></script>
-  <script src="js/studio-export.js?v=2.1.8"></script>
-  <script src="js/import-slice.js?v=2.1.8"></script>
-  <script src="js/animation-player.js?v=2.1.8"></script>
-  <script src="js/tab-strip.js?v=2.1.8"></script>
-  <script src="js/viewport-pan-zoom.js?v=2.1.8"></script>
-  <script src="js/editor-rulers.js?v=2.1.8"></script>
-  <script src="js/editor-canvas.js?v=2.1.8"></script>
-  <script src="js/editor-workspace-storage.js?v=2.1.8"></script>
-  <script src="js/editor-palette-library.js?v=2.1.8"></script>
-  <script src="js/editor-floating-selection.js?v=2.1.8"></script>
-  <script src="js/editor-file-save.js?v=2.1.8"></script>
-  <script src="js/maintenance-banner.js?v=2.1.8"></script>
-  <script src="js/studio-slice.js?v=2.1.8"></script>
-  <script src="js/studio-grid.js?v=2.1.8"></script>
-  <script src="js/studio-animation.js?v=2.1.8"></script>
-  <script src="js/studio-source.js?v=2.1.8"></script>
-  <script src="js/app.js?v=2.1.8"></script>
+  <script src="js/version.js?v=2.2.0"></script>
+  <script src="js/default-sample.js?v=2.2.0"></script>
+  <script src="js/sample-reaper.js?v=2.2.0"></script>
+  <script src="js/pix2-format.js?v=2.2.0"></script>
+  <script src="js/selection-transform.js?v=2.2.0"></script>
+  <script src="js/structure-operations.js?v=2.2.0"></script>
+  <script src="js/region-selection.js?v=2.2.0"></script>
+  <script src="js/pix2-ai-prompt.js?v=2.2.0"></script>
+  <script src="js/editor-menu.js?v=2.2.0"></script>
+  <script src="js/editor-outliner.js?v=2.2.0"></script>
+  <script src="js/editor-toolbar.js?v=2.2.0"></script>
+  <script src="js/editor-palette-presets.js?v=2.2.0"></script>
+  <script src="js/editor-state.js?v=2.2.0"></script>
+  <script src="js/tools.js?v=2.2.0"></script>
+  <script src="js/studio-atlas.js?v=2.2.0"></script>
+  <script src="js/modular-export.js?v=2.2.0"></script>
+  <script src="js/studio-export.js?v=2.2.0"></script>
+  <script src="js/import-slice.js?v=2.2.0"></script>
+  <script src="js/animation-player.js?v=2.2.0"></script>
+  <script src="js/tab-strip.js?v=2.2.0"></script>
+  <script src="js/viewport-pan-zoom.js?v=2.2.0"></script>
+  <script src="js/editor-rulers.js?v=2.2.0"></script>
+  <script src="js/editor-canvas.js?v=2.2.0"></script>
+  <script src="js/editor-workspace-storage.js?v=2.2.0"></script>
+  <script src="js/studio-file-recovery.js?v=2.2.0"></script>
+  <script src="js/editor-palette-library.js?v=2.2.0"></script>
+  <script src="js/editor-floating-selection.js?v=2.2.0"></script>
+  <script src="js/editor-file-save.js?v=2.2.0"></script>
+  <script src="js/maintenance-banner.js?v=2.2.0"></script>
+  <script src="js/studio-slice.js?v=2.2.0"></script>
+  <script src="js/studio-grid.js?v=2.2.0"></script>
+  <script src="js/studio-animation.js?v=2.2.0"></script>
+  <script src="js/studio-source.js?v=2.2.0"></script>
+  <script src="js/app.js?v=2.2.0"></script>
 
 
   <!-- ================= SEARCH ENGINE & ACCESSIBILITY SEMANTIC ARCHITECTURE ================= -->

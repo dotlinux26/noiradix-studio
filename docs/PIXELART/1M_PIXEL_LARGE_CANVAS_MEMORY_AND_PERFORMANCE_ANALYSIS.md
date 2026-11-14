@@ -1,11 +1,13 @@
 # NOIRADIX PixelArt — 1 Million Pixel ($1024 \times 1024$) Memory, Latency & Architectural Discussion
 
-**Document ID:** `docs/PIXELART/1M_PIXEL_LARGE_CANVAS_MEMORY_AND_PERFORMANCE_ANALYSIS.md`  
-**Version:** 1.0.0  
-**Author:** Nguyen Duc Canh (@dotlinux26) & Antigravity Pair Assistant  
-**Date:** 2026-11-08  
-**Topic:** Root Cause Analysis of 300MB RAM Consumption, 3–4s Flood Fill Freezes, Ruler Desynchronization, and the TypedArray Engine Solution  
-**Status:** Architecture Discussion & Engineering Blueprint  
+**Document ID:** `docs/PIXELART/1M_PIXEL_LARGE_CANVAS_MEMORY_AND_PERFORMANCE_ANALYSIS.md`
+**Version:** 1.0.0
+**Author:** Nguyen Duc Canh (@dotlinux26) & Antigravity Pair Assistant
+**Date:** 2026-11-08
+**Topic:** Root Cause Analysis of 300MB RAM Consumption, 3–4s Flood Fill Freezes, Ruler Desynchronization, and the TypedArray Engine Solution
+**Status:** Historical architecture proposal; not an implemented design or verified benchmark
+
+> **Evidence note (2026-11-14):** The heap-per-pixel values, GC pauses, localStorage payload size, and projected frame times below are estimates/hypotheses from the original investigation, not controlled measurements of the current checkout. The proposed `Uint32Array` engine is not implemented by this document. Current pixel storage and supported editor profiles must be checked in source; use the maintained benchmark runner with a stated fixture before making performance claims.
 
 ---
 

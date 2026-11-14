@@ -2,29 +2,20 @@
   <img src="noiradix-studio-logo.svg" alt="NOIRADIX Studio Logo" width="128" height="128">
   <h1>NOIRADIX Studio</h1>
   <p><strong>Draw pixel art. Build sprite animations. Bring them into Unity.</strong></p>
-
   <p>
     <a href="https://noiradix.me/"><img src="https://img.shields.io/badge/Live%20Studio-noiradix.me-brightgreen.svg?logo=googlechrome&logoColor=white" alt="Live Studio"></a>
     <a href="https://noiradix.me/pixelart/"><img src="https://img.shields.io/badge/PixelArt%20Studio-noiradix.me%2Fpixelart-ec4899.svg?logo=artstation&logoColor=white" alt="Live PixelArt Studio"></a>
     <a href="https://discord.gg/SJwsdGWubF"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join the NOIRADIX Discord community"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-    <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Language-PIX2%20DSL-8b5cf6.svg" alt="Language: PIX2 DSL"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.1.8-8b5cf6.svg" alt="Studio Version"></a>
-    <a href="PIX2_SPECIFICATION.md"><img src="https://img.shields.io/badge/Standard-PIX2_v1.1-6366f1.svg" alt="PIX2 Standard"></a>
-    <a href="https://github.com/dotlinux26"><img src="https://img.shields.io/badge/Author-dotlinux26-8b5cf6.svg" alt="Author"></a>
-    <a href="DONATE.md"><img src="https://img.shields.io/badge/Donate-Sponsor%20%E2%99%A5-ff69b4.svg" alt="Donate"></a>
-    <a href="CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg" alt="Code of Conduct"></a>
-    <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
-    <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security-Private%20Reporting-success.svg" alt="Security Policy"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.2.0-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/PIX2-1.1-6366f1.svg" alt="PIX2 Standard"></a>
   </p>
 </div>
 
-> **Verdict:** NOIRADIX Studio is a free, open-source browser pixel art and sprite animation editor for pixel artists and 2D game developers. Draw sprites, organize sprite sheets, preview 4-direction, 8-direction and platformer clips, and export Unity 2D atlases with PIX2 metadata and native `.anim` clips.
+> **Verdict:** NOIRADIX Studio is a free, open-source browser pixel-art and sprite-animation editor for artists and 2D game developers. Draw and organize frames, preview 4-direction, 8-direction and platformer clips, then export a Unity package with sprite metadata and native `.anim` clips.
 
-## Find NOIRADIX Studio
-
-<div align="center" aria-label="Official NOIRADIX Studio listings">
+<div align="center" aria-label="NOIRADIX Studio listings">
   <a href="https://sourceforge.net/projects/noiradix-studio/"><img src="https://img.shields.io/sourceforge/dt/noiradix-studio.svg" alt="NOIRADIX Studio downloads on SourceForge"></a>
   <a href="https://vibecodepicks.com/tools/noiradix-studio/?utm_source=maker&amp;utm_medium=badge&amp;utm_campaign=noiradix-studio"><img src="https://vibecodepicks.com/badge/listed.svg" alt="Listed on VibeCodePicks" width="180" height="40"></a>
   <a href="https://teasertrack.cc/tool/noiradix-studio?ref=badge"><img src="https://teasertrack.cc/tool/noiradix-studio/badge.svg?theme=light" alt="Featured on TeaserTrack" width="200" height="43"></a>
@@ -32,650 +23,197 @@
   <a href="https://saascity.io/live/noiradix-studio" target="_blank" rel="noopener"><img src="https://saascity.io/badges/featured-light.svg" alt="Featured on SaaSCity" width="150" height="54"></a>
   <a href="https://openhunts.com" target="_blank" title="OpenHunts Club"><img alt="OpenHunts Club Member" height="105" src="https://cdn.openhunts.com/badges/club.webp" style="width: 195px; height: auto;" width="486"></a>
   <a href="https://getprojectradar.com/notes/noiradix-studio" target="_blank" rel="noopener"><img src="https://getprojectradar.com/badge/featured-on-project-radar-light.svg" alt="Featured on Project Radar" width="236" height="54"></a>
-  <a href="https://www.producthunt.com/products/noiradix-studio?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-noiradix-studio" target="_blank" rel="noopener noreferrer"><img alt="NOIRADIX Studio - Browser-based pixel art editor with one-click Unity export | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1307477&amp;theme=light&amp;t=1794570075140"></a>
+  <a href="https://www.producthunt.com/products/noiradix-studio?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-noiradix-studio" target="_blank" rel="noopener noreferrer"><img alt="NOIRADIX Studio on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1307477&amp;theme=light&amp;t=1794570075140"></a>
 </div>
 
-<div align="center">
+**Open:** [NOIRADIX Studio](https://noiradix.me/) · [PixelArt](https://noiradix.me/pixelart/) · [Source](https://github.com/dotlinux26/noiradix-studio) · [Discord](https://discord.gg/SJwsdGWubF)
 
-### A complete pixel-art workflow, in your browser
+**Demos:** [PIX2 and AI workflow](https://www.youtube.com/watch?v=XikhVI0APQg) · [Unity export and import](https://youtu.be/onD4kSF_uTc)
 
-**Draw and edit** · **Organize frames and layers** · **Preview animation** · **Export for Unity**
-
-[Open NOIRADIX Studio](https://noiradix.me/) · [Watch the PIX2 and AI demo](https://www.youtube.com/watch?v=XikhVI0APQg) · [Watch the Unity 2D demo](https://youtu.be/onD4kSF_uTc) · [Explore PixelArt](https://noiradix.me/pixelart/) · [Join Discord](https://discord.gg/SJwsdGWubF)
-
-</div>
-
-| What you can do | What it means |
+| Workflow | What it does |
 |---|---|
-| **Make pixel art** | Draw in the sprite-sheet Studio or open **PixelArt** for a standalone artwork canvas. Both run in the browser; the project is open source under Apache 2.0. |
-| **Build and preview animation** | Work with **4-direction**, **8-direction**, **Platformer 2D**, and custom animation clips. Four-direction is the demo example, not the product limit. |
-| **Export to Unity 2D** | Download a package with an atlas PNG, metadata, and `Pix2UnityImporter.cs`. Importing it slices the sprites and generates native `.anim` AnimationClip assets. **It does not generate an Animator Controller asset.** |
-| **Use PIX2 with an AI assistant** | Copy a PIX2 prompt, ask a separate coding assistant to produce PIX2 text, then paste that text into Studio. AI is an optional external step; NOIRADIX does not generate art by itself. |
-| **Work offline** | The app is client-side and designed to work offline after its files are available locally or cached by the browser; no account or install is required. |
+| Draw and edit | Studio edits sprite-sheet frames; PixelArt is a standalone artwork canvas. |
+| Organize and animate | Use layers, groups, regions, palettes and symmetry; preview 4-dir, 8-dir, platformer and custom clips. |
+| Import and export | Import full PIX2 into the current project (undoable; saved to disk only on Save) or a new tab. Import one frame into the active cell without replacing other frames. Export PNG/TexturePacker data or a Unity package. |
+| Use PIX2 with AI | Copy a prompt with optional source context, ask an external assistant for PIX2, then copy or import code. AI is not built into the app. |
 
-NOIRADIX Studio is a lightweight, vanilla-JavaScript editor built around the open `.pix2` text format. PIX2 keeps sprite and animation data structured and editable, while the canvas remains the place to draw, inspect, and refine the result.
+## Start here
 
-> [!TIP]
-> **Looking for standalone 2D pixel painting without animation timelines?**  
-> Check out [**NOIRADIX PixelArt**](https://noiradix.me/pixelart/) (`pixelart/index.html`) — our new sibling tool featuring dynamic canvas sizing (16×16 to 512×512), pure 2D illustration tools, a live two-way PIX2 source code editor, and AI prompt studio. See [`docs/PIXELART/`](docs/PIXELART/README.md).
+Open [noiradix.me](https://noiradix.me/), choose **New** or **Open**, draw by double-clicking a frame, and use **Preview** to check animation. For local/offline use, download the repository and run `start-noiradix-studio.bat` on Windows or `./start-noiradix-studio.sh` on Linux/macOS. The app itself has no account or server dependency; initial access requires the hosted site or local files.
 
----
+### Unity 2D workflow
 
-## 💡 The Core Philosophy: Why NOIRADIX & `.pix2` Exist
+1. Export **Unity 2D Package** from Studio.
+2. Copy the atlas PNG and `.pix2.json` metadata into the Unity project, and place `Pix2UnityImporter.cs` in an `Editor/` folder.
+3. Right-click the metadata and choose **NOIRADIX → Import Spritesheet and Animations**, or use the Tools menu.
 
-> **"Let machines write the coordinate math. Let humans enjoy the visual canvas."**
+The importer uses the metadata for exact frame rectangles and creates sprite assets and `.anim` clips. Importing the PNG alone does not include the slicing or animation metadata. Unity Animator Controller and scene setup are done in Unity; NOIRADIX does not export a prebuilt controller.
 
-### 1. Nobody Wants to Manually Code Pixels by Hand
-Let’s be honest: no human artist or game developer is going to sit down and type thousands of coordinate lines like `pixel 4,5 #ffffff` by hand. That would be tedious and impractical.
-* **The `.pix2` text format is designed for Machines & AI (LLMs):** It gives language models (Claude, ChatGPT, Gemini) a clean, symbolic grammar to express sprites with symmetry math and geometry algorithms in seconds.
-* **NOIRADIX Studio is designed for Humans:** A visual, tactile workbench where you draw with a mouse or tablet, scrub timelines, test walk cycles, and tweak pixels effortlessly.
-* **`.pix2` is the Transparent Bridge:** A human-readable and machine-readable intermediate representation that replaces mysterious, proprietary binary blobs with clean, Git-diffable code.
+## Demos and screenshots
 
-### 2. Logic-Driven Code Over Blurry Diffusion Models
-Most generative AI tools rely on heavy diffusion models that hallucinate anti-aliased, blurry pixels, mismatched eye heights, and distorted palettes that cannot be used in real pixel art games.
-* With `.pix2`, an LLM doesn't "hallucinate" pixels; it **computes exact discrete coordinates**:
-  ```python
-  # Exact bilateral mirror symmetry formula
-  x_mirror = width - 1 - x
-  ```
-* The result is **100% deterministic, crisp, integer-grid pixel art** without expensive GPUs or blurry diffusion artifacts.
+### Videos
 
-> [!NOTE]
-> **Output Quality Depends on Model Reasoning & Human Retouching:**  
-> `.pix2` guarantees integer coordinates and crisp borders, but **it is not a magical artistic oracle**. The aesthetic quality, anatomical proportion, and color harmony generated by AI are **strictly bounded by the reasoning power of the LLM model** you use (e.g. Claude 3.7 Sonnet, GPT-4o, Gemini 2.5 Pro vs. compact lightweight models).  
-> Raw AI generation serves as **rapid structural scaffolding and timing draft in seconds**. Turning AI-generated scaffolding into game-ready art **still requires human eyes and artist touch** — fine-tuning palettes, adjusting facial expressions, and adding nuanced pixel details inside NOIRADIX Studio.
+[AI programming with PIX2](https://www.youtube.com/watch?v=XikhVI0APQg) · [Exporting and importing in Unity 2D](https://youtu.be/onD4kSF_uTc)
 
-### 3. Exclusively Focused on 2D Pixel Art
-NOIRADIX Studio focuses on pixel art, sprite-sheet organization, animation preview, and a repeatable Unity 2D import path. The export package automates atlas slicing and creates native Unity `.anim` clips; you can then use those clips in your own Animator Controller or let Unity create a controller when you add a clip to a GameObject. The package does **not** contain a prebuilt Animator Controller.
-
-### 4. Clear Boundary: Native Import & Slice vs. Vector Autotracing
-A common architectural boundary in NOIRADIX is the distinction between raster slicing and vector autotracing:
-* **NOIRADIX does not perform heuristic vector autotracing.** We reject error-prone image-to-vector curve fitting algorithms that smear sharp pixel clusters into distorted Bézier shapes.
-* **Native Import & Slice Pipeline (Studio 2.0):** Instead, NOIRADIX Studio 2.0 includes a dedicated, mathematically exact **Import & Slice Pipeline** for raster images (`.png`, `.jpg`, `.webp`) and atlas metadata (`TexturePacker` JSON Hash/Array, `Aseprite` JSON, Uniform Grid):
-  - **1:1 Discrete Pixel Ingestion:** Slices raster frames directly into discrete `.pix2` cell frames with 100% color fidelity and pure alpha transparency.
-  - **Structural Layer Preservation:** Slices can be routed into dedicated structural layers (`@layer`) and named regions (`@region`).
-  - **Automated Clip Assembly:** Parses atlas animation sequences, frame tags, and frame rates directly into working playback clips without manual re-linking.
-  - **Import Code (<kbd>Ctrl</kbd> + <kbd>I</kbd>):** Dedicated instant modal for pasting raw `.pix2` DSL code generated by AI assistants (Claude, ChatGPT, Gemini).
-
----
-
-## 💎 The Strategic Edge: "Sprite as Structured Data" (SaaD)
-
-Traditional tools treat sprites as opaque raster bitmaps (PNGs). NOIRADIX establishes an entirely different paradigm: **Sprite as Structured Data**.  
-We do not attempt to out-compete monolithic 1,000-feature drawing apps on brush plugins. Instead, we solve how 2D game artwork is **represented, programmatically manipulated, versioned, and repurposed**:
-
-```
-[ Human Artists ] ── (Visual Touch & Polish) ──┐
-                                               ▼
-[ AI Models ]    ── (Coordinate Logic)   ──► [ .pix2 DSL ] ──► [ Game Engines (Unity / Godot) ]
-                                            (Structured Data)   (1-Click Native Clips & Atlas)
-```
-
-### The 5 Architectural Pillars of `.pix2`:
-
-1. **Deterministic Rendering:**  
-   The same `.pix2` document and specification version will produce the exact same pixel matrix across every machine and renderer. Regenerating or tweaking code never introduces random pixel mutations, eye shifts, or blurred outlines.
-2. **Data-Level Editability:**  
-   Artwork can be modified programmatically at the coordinate, palette, or cell layer. Instead of repainting 32 individual frames by hand, software agents or scripts can re-index palette IDs, adjust symmetry axes, or swap weapon attachments with mathematical precision.
-3. **Modular Reusability:**  
-   A base character skeleton can effortlessly generate dozens of equipment overlays, armor variations, or directional walk cycles without redrawing the baseline artwork from scratch.
-4. **Ecosystem Interoperability:**  
-   Because `.pix2` is an open, human-readable specification, any toolchain, pipeline script, or game engine in Python, C#, Rust, or JavaScript can easily build custom parsers, validators, procedural generators, and automated CI importers.
-5. **Git-Native Versionability:**  
-   Sprites cease to be opaque binary blobs polluting Git repositories and Git LFS. Every single visual change is a clean text diff that can be reviewed in GitHub Pull Requests, branched, merged, and safely rolled back.
-
-> [!TIP]
-> **Beyond 2D Sprites: Researching Coordinate-Aware High-Resolution Editing**  
-> Wondering how structured coordinates could apply to Full HD or 2K raster workflows without bloating into millions of text lines? Read our non-normative research proposal:  
-> 📄 **[PIX2 Future Directions: Coordinate-Aware Raster Editing](docs/PIX2/PIX2_FUTURE_DIRECTIONS.md)** — exploring ROI selection, localized PIX2 Patch application, and deterministic image modification.
-
----
-
-## 📸 Studio Visual Tour
-
-Experience desktop-grade pixel art creation directly in your browser with zero installation:
-
-### 🎥 AI Programming Your Pixel Art Spritesheet Animation with PIX2 language?! | NOIRADIX Studio Demo
-
-[Watch the PIX2 and AI programming demo](https://www.youtube.com/watch?v=XikhVI0APQg)
-
-See how an AI coding assistant can author structured PIX2 source for a sprite animation, then load and preview it in NOIRADIX Studio.
-
-### 🎥 Exporting Pixel Art Animations to Unity 2D with NOIRADIX Studio | NOIRADIX Demo
-
-[Watch the Unity 2D export and import demo](https://youtu.be/onD4kSF_uTc)
-
-See the complete workflow: export a spritesheet package from NOIRADIX Studio, then use its `.pix2.json` metadata and Unity importer to slice the sprites and create animation clips in Unity 2D.
-
-### 🌟 60-Second Full Walkthrough (From AI Prompt to Unity 2D)
+60-second workflow walkthrough:
 
 https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
 
-*Comprehensive 60-second video walkthrough: Authoring sprites in NOIRADIX Studio, dynamic AI prompt generation, real-time directional animation playback, and 1-click Unity 2D package export.*
+![Browser to Unity workflow](docs/noiradix-export-unity-9-gif-fullstack-preview-web.gif)
 
----
+### Editor tour
 
-### 🚀 Live Workflow Preview: Browser to Unity 2D in 1 Click
-![Full-Stack Web to Unity Workflow](docs/noiradix-export-unity-9-gif-fullstack-preview-web.gif)
-*Real-time demonstration of authoring sprite animations in NOIRADIX Studio, exporting the game package, and 1-click importing directly into Unity 6.*
+![PIX2 and AI prompt workflow](docs/noiradix-pix2-1.1.png)
 
----
+![Arch-Lich 48x48 canvas preview](docs/arch-lich-48x48-render.png)
 
-### 1. AI-Native Coding in Action: Gemini Argon 4.0 Authoring PIX2 1.1
-![Gemini Argon 4.0 Coding PIX2 1.1 in Chat](docs/noiradix-pix2-1.1.png)
-*Live demonstration of Gemini Argon 4.0 authoring structured PIX2 1.1 code directly in chat: Compiling directional animation tracks (`@animation walk_down`, `walk_up`, `walk_right`, `walk_left`), scanline coordinates, and multi-layer Scene Graph hierarchy without hallucinating invalid pixel coordinates.*
+![Sprite-sheet grid and frame inspector](docs/noiradix-grid-overview-pix2-1.1.png)
 
----
+![Pixel editor with layers and regions](docs/noiradix-editor-pix2-1.1.png)
 
-### 2. High-Fidelity Canvas Rendering: Arch-Lich Grim Reaper (48×48)
-![Arch-Lich Grim Reaper 48x48 Render in NOIRADIX Studio](docs/arch-lich-48x48-render.png)
-*The resulting 48×48 Arch-Lich Grim Reaper boss rendered in NOIRADIX Studio: Crisp coordinate grid, floating soulfire aura (`opacity: 0.9`), gothic tattered cowl, skeletal ribcage, and curved executioner scythe rendered 100% sharp without blur.*
+![Directional animation preview](docs/noiradix-grid-animation.png)
 
----
+![PIX2 code and AI prompt panel](docs/noiradix-COPYFORAI.png)
 
-### 3. Sprite Sheet Matrix & Boss Locomotion Layout (48×48 Arch-Lich Grim Reaper)
-![Sprite Sheet Matrix Overview - 48x48 Arch-Lich Grim Reaper](docs/noiradix-grid-overview-pix2-1.1.png)
-*Multi-cell 4×4 matrix featuring the 48×48 Arch-Lich Grim Reaper boss with 4 directional tracks (Down, Up, Right, Left), frame sequences, and real-time Inspector.*
+### Unity import walkthrough
 
----
+Export options:
 
-### 4. Precision Pixel Editor with Structure & Layers Hierarchy Deck
-![Precision Pixel Editor with Structure & Layers](docs/noiradix-editor-pix2-1.1.png)
-*First-class structural graphics: Structure & Layers deck (`+ Layer`, `📁 Group`, `⛶ Region`), Region semantic tags, active cell view, and non-destructive Porter-Duff alpha compositing.*
+![Unity export options](docs/noiradix-export-unity.png)
 
----
+Package contents:
 
-### 5. Directional Animation Studio (Real-Time Playback)
-![Directional Animation Studio](docs/noiradix-grid-animation.png)
-*Floating real-time playback player supporting 4-direction, Platformer 2D, and 8-direction compass previews, variable FPS slider, and loop controls.*
+![Unity package files](docs/noiradix-zip-unity.png)
 
----
+Copy the PNG and metadata into the Unity project:
 
-### 6. AI-Native PIX2 Code & 1-Click Prompt Studio
-![AI Code & Prompt Generator](docs/noiradix-COPYFORAI.png)
-*1-Click "Copy for AI Prompt" with 600–800 line cognitive guide, token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, live syntax highlighting with swatch preview, safe View-Only mode, and real-time disk hot-reload.*
+![Copying export files into Unity](docs/noiradix-export-unity-1.png)
 
----
+![Assets in the Unity project](docs/noiradix-export-unity-2.png)
 
-## 🚀 Quick Start Guide (5 Minutes)
+Run the importer:
 
-Get up and running immediately with zero configuration and zero build tools:
+![NOIRADIX importer context menu](docs/noiradix-export-unity-3.png)
 
-### Step 1: Launch NOIRADIX Studio
-* **Instant Online Studio (Zero Install):** Open [**https://noiradix.me/**](https://noiradix.me/) directly in your browser.
-* **Windows (1-Click Local):** Double-click [`start-noiradix-studio.bat`](start-noiradix-studio.bat). It instantly launches your default Chromium browser.
-* **Linux / macOS (Local Offline Copy):** Download or clone the repository, install Python 3 if needed, then run `chmod +x start-noiradix-studio.sh` once and `./start-noiradix-studio.sh`. It starts a loopback-only local server, opens the app in your default browser, and stays active until you press <kbd>Ctrl</kbd> + <kbd>C</kbd>. After downloading the repository, the app itself does not need an internet connection.
-* **Direct File:** Simply open [`index.html`](index.html) in any modern browser (Chrome, Edge, Brave, Opera, Arc).
-* **Local HTTP Server (Optional):**
-  ```bash
-  # Python 3, from the repository root
-  python3 -m http.server 8080 --bind 127.0.0.1
+![Unity import summary](docs/noiradix-export-unity-4.png)
 
-  # Then open http://127.0.0.1:8080 in your browser
-  ```
+![Generated animation clips](docs/noiradix-export-unity-5.png)
 
----
+![Unity animation timeline](docs/noiradix-export-unity-6.png)
 
-### Step 2: Create, Open, or Import a Sprite Project
-* **Create a New Project:** Press <kbd>Ctrl</kbd> + <kbd>N</kbd> or click the **New** button in the top navigation bar. Enter your file name (e.g. `hero_knight.pix2`) and select a layout preset:
-  * **4-Direction Walk:** 4 rows × 4 columns (16 frames) — *Down, Up, Right, Left*.
-  * **8-Direction Combat:** 8 rows × 4 columns (32 frames) — *Full compass locomotion*.
-  * **Action Strip:** 1 row × 6 columns — *Single animation sequence (dash, slash, jump)*.
-  * **Single Frame:** 1 row × 1 column — *Static item, icon, tile, or portrait*.
-* **Import PIX2 Code (<kbd>Ctrl</kbd> + <kbd>I</kbd>):** Click the **Import** button (<i class="fa-solid fa-file-import"></i>) in the top navigation bar to paste `.pix2` DSL code directly generated by AI assistants (Gemini, Claude, ChatGPT) and load it instantly into the Studio. *(Note: NOIRADIX does not auto-convert raster PNG/JPG files into `.pix2`; the Import tool is strictly for `.pix2` text code and project files).*
-* **Open an Existing Project:** Drag and drop any `.pix2` file onto the window, or click **Open** (<kbd>Ctrl</kbd> + <kbd>O</kbd>).
+![Sliced sprites in the scene](docs/noiradix-export-unity-7.png)
 
----
+Animator and scene setup are performed in Unity:
 
-### Step 3: Draw in the Precision Cell Editor
-1. In the **Sprite Sheet Layout**, double-click any frame (or click **Edit Frame Pixels**).
-2. The Studio opens the **Cell Editor** with high-precision tools:
-   * **Pencil (<kbd>B</kbd>):** Discrete pixel placement.
-   * **Bilateral Symmetry Axis (<kbd>S</kbd>):** Draw bilateral symmetrical characters automatically (`sym_dot` formula).
-   * **Dynamic Pixel Rulers:** Live X/Y rulers update as you zoom (<kbd>Ctrl</kbd> + Mouse Wheel, `4×` to `64×`) and pan (<kbd>Space</kbd> + Drag or <kbd>H</kbd>).
-   * **Eyedropper (<kbd>I</kbd>) & Palette Swatches:** Pick colors from the canvas or click any swatch in the bottom palette.
-   * **Line (<kbd>L</kbd>), Rectangle (<kbd>U</kbd>), Paint Bucket (<kbd>G</kbd>), Eraser (<kbd>E</kbd>).**
+![Unity Animator scene setup](docs/noiradix-export-unity-8.png)
 
----
+![Animation playing in Unity](docs/noiradix-export-unity-8-gif.gif)
 
-### Step 4: Preview Real-Time Animations
-1. Click the **Preview** button in the top bar or press <kbd>Space</kbd> while on the grid to toggle the **Animation Studio** floating panel.
-2. Select your compass direction (`Down`, `Up`, `Right`, `Left`, etc.).
-3. Drag the **FPS Slider** to adjust playback speed (1 to 30 FPS).
-4. Watch character walk cycles update live as you paint!
+### PIX2 reference feedback
 
----
+The following text is reproduced verbatim from an external review so its claims can be checked directly. It is not a verified project statement or formal conformance review; see the [audit record](docs/discussion/V2_2_0_AUDIT_AND_PLAN.md) for what was reproduced, accepted as intentional, corrected or left unverified.
 
-### Step 5: Supercharge with AI Coding Assistants
-NOIRADIX Studio is designed from day one to pair-program with AI (ChatGPT, Claude, Gemini, Antigravity, Cursor):
-1. Click the **AI** / **Spec** button in the top navigation bar.
-2. Click **"Copy Prompt for AI"** — this generates a structured system prompt containing the exact mathematical coordinate rules, color palette, and current character state.
-3. Paste the prompt into your AI coding assistant and ask it to design characters, synthesize walk cycles, or generate equipment overlays.
-4. Save the generated `.pix2` code to disk — NOIRADIX Studio's **Real-Time Live Watcher** automatically reloads the canvas and animation timeline instantly!
+**Điểm cần lưu ý**
 
----
+**1. Định dạng không tiết kiệm token như README nói. Đây là vấn đề lớn nhất.**
 
-### Step 6: Save to Disk & Memory Draft Protection
-* **Direct Disk Save (<kbd>Ctrl</kbd> + <kbd>S</kbd>):** In Chromium browsers (Chrome, Edge, Brave), NOIRADIX Studio writes directly to your local `.pix2` file using the File System Access API without disruptive download prompts.
-* **In-Memory Draft Safety:** When working on an unsaved new file, the statusbar displays an amber badge (`⚠️ In-Memory Draft`). Your work is cached safely in memory so refreshing the page (<kbd>F5</kbd>) will never lose your unsaved edits.
-* **Project Base Directory:** Click the **Folder icon** in the statusbar to set your game project root (e.g. `D:/MyGame/Assets`). The **Copy Path** button will then copy full, absolute filesystem paths directly to your clipboard.
+- Mỗi pixel được lưu thành một dòng `pixel x,y id`, tốn khoảng 7,8 token.
+- File mẫu Arch-Lich 48×48 có 16 khung, 17.560 pixel, nặng 276 KB, tức khoảng 137 nghìn token.
+- Nút “Copy for AI” chèn nguyên file này vào prompt, tổng cộng khoảng 146 nghìn token. Sau đó nó yêu cầu model viết lại *toàn bộ* file, tức khoảng 137 nghìn token đầu ra, vượt giới hạn của phần lớn model.
+- Ngay cả chế độ sửa từng chỗ (“surgical-patch”) cũng kết thúc bằng yêu cầu đó, và khi dán code vào thì app luôn thay cả file chứ không gộp.
+- Các lệnh `line`, `rect`, `fill` mà AI viết bị đổi hết thành từng pixel khi đọc vào, và không bao giờ được lưu lại. Vì thế mọi file mẫu trong repo đều là bản đã bị trải phẳng. Câu chuyện README kể về cách Gemini vẽ mẫu này không kiểm chứng được từ repo.
+- **Cách sửa rẻ:** khi lưu, gộp các dải pixel cùng màu thành `line x1,y x2,y c`. Lệnh này đã có sẵn trong ngữ pháp nên không phải đổi spec. Mình đo thì giảm được 28% đến 56% token. Bước tiếp theo nên là gửi riêng từng khung hoặc vùng cho AI, rồi gộp kết quả vào file.
 
----
+**2. Tài liệu rất nhiều (86 file .md) nhưng nhiều chỗ không khớp code. Điều này đáng lo với một định dạng tự nhận là “open standard”.**
 
-### Step 7: Export to Your Game Engine
-1. Click **Export** in the top navigation bar.
-2. Choose your game engine target:
-   * **Unity 2D Spritesheet Package (.ZIP):** Atlas PNG + JSON Metadata + C# `Pix2UnityImporter.cs` + `README_UNITY_IMPORT.txt` for 1-click automatic sprite slicing and `.anim` AnimationClip generation.
-   * **TexturePacker JSON (.ZIP):** Universal Hash format ready for Godot 4, Phaser, Pixi.js, Defold, Raylib, and GameMaker.
-   * **PNG Spritesheet Only:** High-res transparent atlas with configurable Cell Spacing (`0px`–`4px`) and Extrude Edge Pixels to eliminate GPU bleeding seams.
-   * **Individual Sliced Frames (.ZIP):** Numbered transparent PNGs.
+- `ARCHITECTURE.md` liệt kê xuất GIF/WebP, cú pháp `Player.cell_id.pixel(x,y)` và các lệnh như `set_pixel`, nhưng code không có.
+- Giấy phép không thống nhất: release notes ghi “Apache 2.0 / MIT”, file LICENSE là Apache-2.0, còn version.js lại ghi “All rights reserved”.
+- Ngay trong spec: phần ngữ pháp bắt buộc có `@meta` và `@palette`, nhưng ví dụ 1.1 của chính spec lại bỏ cả hai.
+- Số lượng test trong README (134) và release notes (205) đều đã lỗi thời.
 
----
+**3. Cấu trúc code.** `app.js` dài 7.434 dòng gói trong một hàm duy nhất, với khoảng 73 biến trạng thái dùng chung. `pixelart-app.js` gần 6.000 dòng. Tác giả đang tách dần thành module (đã có 22 module dùng chung cho hai app, đây là hướng tốt). Tuy vậy vẫn còn code trùng: hai bộ ghi ZIP riêng, và hai hàm escape HTML ngay trong `app.js`.
 
-## 🎮 Unity 2D Engine Integration Walkthrough
+**4. Khó mở rộng cho ảnh lớn.** Mỗi lần undo, Studio lưu nguyên văn bản cả file, và mỗi nét vẽ phải chuyển cả file thành văn bản 2–3 lần. Với sprite 16–64px (đúng đối tượng của app) thì không sao. Chính tác giả đã viết tài liệu đề xuất chuyển sang `Uint32Array` cho ảnh lớn, nhưng code chưa làm.
 
-NOIRADIX Studio delivers a seamless, zero-friction bridge into Unity 2D:
+**5. Vài điểm nhỏ:**
 
-### Step 1: Configure & Export Unity 2D Package (.ZIP)
-In NOIRADIX Studio, click **Export** in the top navigation bar. Select **Unity 2D Sprite Package** and configure your anti-bleed spacing (recommended: `1px Bleed Guard` with `Extrude Edge Pixels` checked). Click **Export Unity 2D Package (.ZIP)**.
+- Khi xuất Unity, sprite được đặt tên theo tên hiển thị của khung (không bắt buộc khác nhau), nên hai khung trùng tên sẽ đè lên nhau.
+- README mang nặng tính quảng cáo.
+- Bản ghi là “Stable” nhưng banner “đang bảo trì, có thể lỗi” bật sẵn và hiện lại mỗi 3 giờ.
 
-![Step 1 - Export Modal in Studio](docs/noiradix-export-unity.png)
-*Configuring sprite sheet padding, extrude edge guards, and Unity metadata in NOIRADIX Studio.*
+## PIX2 and AI context
 
----
+PIX2 is a readable, structured text format for sprite frames, palettes, animation clips and PIX2 1.1 layer/group/region data. It is sparse and diffable, but **not token-compressed**. The current reference serializer normalizes raster primitives such as `line`, `rect` and `fill` into explicit pixel records. This preserves the rendered pixels, not the original primitive syntax; PIX2 1.1 does not require this normalization.
 
-### Step 2: Download & Inspect the Unity Package (.ZIP)
-Open the downloaded `{project}_unity_package.zip` archive. It contains the sprite atlas PNG, `.pix2.json` metadata, `Pix2UnityImporter.cs`, and `README_UNITY_IMPORT.txt`.
+The prompt tool provides **instructions only** and **prompt plus full PIX2 context**. In a frame editor, **Frame AI** copies the complete guidance with that frame as context; **Import Frame** validates a one-frame document and replaces only that frame while preserving the rest of the sheet and its animations. Full-document Apply replaces the active document; it is not a partial merge.
 
-![Step 2 - ZIP Package Contents](docs/noiradix-zip-unity.png)
-*Package contents: atlas texture, metadata JSON, 1-click C# importer script, and instruction guide.*
+Context and output limits vary by model and provider. Check the model's current documented input window and output budget. For a large project, use frame-scoped prompts rather than assuming a full sheet will fit. An MCP adapter for bounded frame/range reads and validated patches is a future direction, not a shipped feature.
 
----
+## Features
 
-### Step 3: Drag Sprites & Metadata into Unity
-Drag the sprite atlas PNG and `.pix2.json` metadata file directly into your Unity project directory (e.g. `Assets/_Game/Art/Sprites/Noiradix/`). Make sure `Pix2UnityImporter.cs` is inside your project's `Editor/` folder (`Assets/_Game/Editor/`).
+- Pixel tools, brush/eraser sizing and opacity, palette controls, symmetry, rulers, selection transforms and zoom.
+- PIX2 1.0 read compatibility and PIX2 1.1 structural editing.
+- 4-direction, 8-direction, platformer and custom animation preview.
+- Raster spritesheet import and slicing with frame tags/animation metadata where supported.
+- Unity package (atlas PNG, `.pix2.json`, C# importer and guide), TexturePacker JSON, PNG atlas and individual frames.
+- Static browser application with local launchers for Windows, Linux and macOS.
 
-![Step 3 - Drag Files into Unity](docs/noiradix-export-unity-1.png)
-*Dragging the exported atlas and JSON metadata from File Explorer into Unity's Project tab.*
+## Browser and file access
 
----
+The app runs in modern browsers. Direct file read/write and live file watching depend on browser APIs and user permissions; Chrome and Edge provide the fullest File System Access workflow. Other browsers use the available file-input/download and browser-storage fallbacks. Feature availability can vary by browser version and whether the app is opened from HTTPS, localhost or `file://`.
 
-### Step 4: Files Placed in Unity Project Tab
-Both the transparent atlas PNG and `.pix2.json` metadata files appear in your designated sprite directory:
+## Other export targets
 
-![Step 4 - Assets Placed in Unity](docs/noiradix-export-unity-2.png)
-*Prismatic sprite atlas and JSON metadata ready for 1-click automatic processing.*
+The TexturePacker JSON export can be used with engine loaders that support the TexturePacker Hash format. For example, Phaser's atlas loader accepts a PNG and its JSON metadata:
 
----
-
-### Step 5: 1-Click Right-Click Context Menu Import
-In your Unity Project window, **RIGHT-CLICK** the `.pix2.json` file and select:  
-👉 **NOIRADIX > Import Spritesheet and Animations**
-*(Or use the top menu bar: `Tools > NOIRADIX > Import Pix2 Spritesheet JSON...`)*.
-
-Both commands read the `.pix2.json` metadata, slice the atlas into precisely named sprites, and create native Unity `.anim` clips. For crisp pixels when importing the PNG manually, set **Filter Mode** to **Point**; manual slicing does not apply the exported frame and animation metadata.
-
-![Step 5 - Right Click Context Menu](docs/noiradix-export-unity-3.png)
-*Executing the 1-click automated asset processing pipeline.*
-
----
-
-### Step 6: Import Complete Confirmation
-An import summary dialog confirms that all 16 frames were sliced and 4 native `.anim` Animation Clips were generated:
-
-![Step 6 - Import Complete Dialog](docs/noiradix-export-unity-4.png)
-*Confirmation dialog displaying sliced frame count, animation clips generated, and target file path.*
-
----
-
-### Step 7: Automatic `Animations/` Folder Creation
-The importer automatically creates an `Animations/` subfolder right beside your sprite containing all 4 directional Animation Clips:
-
-![Step 7 - Generated Animations Folder](docs/noiradix-export-unity-5.png)
-*The `Animations` directory is automatically generated containing `walk_down`, `walk_left`, `walk_right`, and `walk_up`.*
-
----
-
-### Step 8: Native Animation Timeline & Keyframe Verification
-Open the native Unity Animation window on `walk_down` to see all 4 keyframes pre-wired with 6 FPS timing, loop settings, and sprite curve bindings:
-
-![Step 8 - Animation Window Timeline](docs/noiradix-export-unity-6.png)
-*Native Unity Animation Dopesheet timeline with 4 keyframes bound to SpriteRenderer.m_Sprite.*
-
----
-
-### Step 9: Sliced Sub-Sprites & Dragging into Scene
-Click the expand arrow next to the sprite atlas to view all 16 sliced sub-sprites (`Noiradix Down 0`, `Noiradix Down 1`, etc.). Drag `Noiradix Down 0` directly into your Scene:
-
-![Step 9 - Sliced Sub-Sprites in Scene](docs/noiradix-export-unity-7.png)
-*All 16 sliced sub-sprites visible in the Project tab and placed directly into the Scene viewport.*
-
----
-
-### Step 10: Add an Animation Clip to a Scene
-Drag an imported animation clip onto a GameObject with a `SpriteRenderer`. Unity can create and assign an Animator Controller for that GameObject; this is a Unity editor step after importing, not an asset generated by the NOIRADIX package:
-
-![Step 10 - Scene Setup & Animator Controller](docs/noiradix-export-unity-8.png)
-*Character positioned in the scene with Unity's Animator setup. NOIRADIX generates the animation clips; Unity handles this scene setup step.*
-
----
-
-### Step 11: Live Walking Animation in Scene (Real-Time Playback)
-Press **Play Game** and watch your character animate with crisp point filtering and zero texture bleeding seams!
-
-![Step 11 - Live In Scene Walk Animation](docs/noiradix-export-unity-8-gif.gif)
-*Real-time animated walk cycle running smoothly inside Unity 6.*
-
----
-
-## 🌟 Key Highlights
-
-* **100% Pure Vanilla Web Stack:** Zero build tools, zero npm packages, zero runtime frameworks. Runs in a modern browser by opening `index.html` or using the included Windows `.bat` and Linux/macOS `.sh` launchers.
-* **AI-Native Sparse Pixel Format (`.pix2`):** Only explicitly drawn pixels are serialized into clean, token-efficient text. Cleanly diffable by Git and LLMs.
-* **Game Export Studio (Anti-Bleeding Guard):**
-  * Solves sub-pixel texture bleeding seams with configurable **Cell Spacing** (`0px`, `1px`, `2px`, `4px`) and **Outer Margins**.
-  * **Extrude Edge Pixels:** Clones border pixels into padding to eliminate GPU texture filtering artifacts in Unity, Godot, and WebGL.
-  * **Export Scaling:** Crisp pixel-perfect scaling (`1×` native, `2×`, `3×`, `4×`).
-  * **Custom Sprite Pivots:** Presets for `Bottom-Center (0.5, 0.0)` (standard for 2D Top-Down RPG characters), `Center (0.5, 0.5)`, and `Top-Left (0.0, 1.0)`.
-* **Universal Game Engine Targets:**
-  * **Unity 2D Spritesheet Package (.ZIP):** Atlas PNG + Unity Metadata JSON + included C# `Pix2UnityImporter.cs` script for 1-click automatic sprite slicing and `.anim` AnimationClip generation.
-  * **TexturePacker Standard JSON (.ZIP):** Universal Hash format directly readable by Godot, Phaser, Pixi.js, Defold, Raylib, and GameMaker.
-  * **PNG Spritesheet Only:** High-res transparent atlas with spacing and extrude baked in.
-  * **Individual Sliced Frames (.ZIP):** Standalone numbered PNG frames.
-* **Character Action & Direction Template Generator:**
-  * Auto 4-Direction (`Down`, `Up`, `Right`, `Left`) and Auto 8-Direction (`Down`, `Up`, `Right`, `Left`, `Down-Left`, `Down-Right`, `Up-Left`, `Up-Right`).
-  * One-click action presets: `idle`, `walk`, `run`, `attack`, `dash`, `hurt`, `death`.
-  * **100% Artwork Preservation:** Automatically expands grid dimensions without overwriting or erasing existing drawn pixels.
-* **Visual Row & Column Management:**
-  * Dedicated `×` delete buttons directly on each Row Card and Column Badge with detailed impact confirmation dialogs (protects against accidental artwork loss).
-* **Direct Disk File Access (`Ctrl+S`):**
-  * Uses the modern Chromium File System Access API (`showOpenFilePicker` / `showSaveFilePicker`) with persistent `FileSystemFileHandle` caching via IndexedDB. Direct save without popup interruptions.
-* **Smooth Ergonomic Navigation:**
-  * Native scrollbars hidden across toolbars and bottom statusbar. Full horizontal mouse-wheel scrolling and click-and-drag panning (`cursor: grab / grabbing`).
-
----
-
-## ⌨️ Essential Keyboard Shortcuts
-
-| Shortcut | Context | Action |
-|:---|:---:|:---|
-| <kbd>Ctrl</kbd> + <kbd>N</kbd> | Global | Create a new sprite project (Modal with presets) |
-| <kbd>Ctrl</kbd> + <kbd>I</kbd> | Global | Import / Paste .PIX2 DSL code directly (Modal) |
-| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Global | Open `.pix2` file from disk |
-| <kbd>Ctrl</kbd> + <kbd>S</kbd> | Global | Direct disk save (Chromium) / Download |
-| <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Global | Undo last canvas stroke or grid edit |
-| <kbd>Ctrl</kbd> + <kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Global | Redo |
-| <kbd>Ctrl</kbd> + <kbd>0</kbd> | Global | Reset zoom and re-center canvas (Grid, Studio, or Editor) |
-| <kbd>Space</kbd> | Grid Overview | Toggle Animation Studio floating player |
-| <kbd>Space</kbd> + Drag | Cell Editor | Pan canvas smoothly in any direction |
-| <kbd>Ctrl</kbd> + Mouse Wheel | Cell Editor | Anchor-centered zoom (`4×` to `64×`) |
-| <kbd>B</kbd> | Cell Editor | Pencil Tool (Discrete pixels) |
-| <kbd>E</kbd> | Cell Editor | Eraser Tool |
-| <kbd>I</kbd> | Cell Editor | Eyedropper Tool (Sample color under cursor) |
-| <kbd>G</kbd> | Cell Editor | Paint Bucket Tool (4-way flood fill) |
-| <kbd>L</kbd> | Cell Editor | Discrete Line Tool (Bresenham) |
-| <kbd>U</kbd> / <kbd>R</kbd> | Cell Editor | Rectangle Tool |
-| <kbd>M</kbd> / <kbd>V</kbd> | Cell Editor | Marquee Selection Tool |
-| <kbd>H</kbd> | Cell Editor | Hand (Pan) Tool (Pan viewport without holding Space) |
-| <kbd>S</kbd> | Cell Editor | Toggle Bilateral Symmetry Mirror Axis (`sym_dot`) |
-| <kbd>X</kbd> | Cell Editor | Swap Primary & Secondary Colors |
-| <kbd>D</kbd> | Cell Editor | Reset Default Colors (`#57546f` / `#ffffff`) |
-| <kbd>Esc</kbd> | Cell Editor | Close cell editor tab / Return to Overview |
-
-*For complete keyboard shortcut documentation across all views and operating systems, see [KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md).*
-
----
-
-## 🎨 Official AI Reference Templates & Breakthrough Case Studies
-
-NOIRADIX Studio provides two flagship, production-ready reference character templates synthesized entirely by AI assistants, demonstrating the dramatic leap in fidelity and structural capability from `.pix2` v1.0 to v1.1:
-
-| Template | File | Synthesized By | Resolution | Grid Layout | Target Gameplay | Format Standard |
-| :--- | :--- | :---: | :---: | :---: | :--- | :---: |
-| **NOIRADIX Ghost** | [`samples/Noiradix_Ghost.pix2`](samples/Noiradix_Ghost.pix2) | **Gemini 3.8 Flash** | 16×16 px | 4×4 (16 cells) | Retro / Micro RPG Protagonist | PIX2 1.0 / 1.1 |
-| **Arch-Lich Grim Reaper** | [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) | **Gemini Argon 4.0** | 48×48 px | 4×4 (16 cells) | Dark Fantasy Boss / Action RPG | **PIX2 1.1 Structural** |
-
----
-
-### 👻 Template 1: NOIRADIX Ghost (16×16 Micro RPG Mascot)
-*Entirely authored and drawn by **Gemini 3.8 Flash** using the deterministic `.pix2` specification.*
-* **Faithful Mascot Silhouette:** Features the official NOIRADIX Ghost mascot with raised friendly arms and expressive eyes based on [`noiradix-studio-logo.svg`](noiradix-studio-logo.svg).
-* **4-Directional Locomotion (16 Cells, 4×4 Grid, 16×16 px):**
-  * `walk_down`: Frontal perspective with bilateral symmetry (`sym_dot`), dark purple eyes (`#46435c`), blush cheeks (`#ffb0bc`), and waving ghost sleeves.
-  * `walk_up`: Back perspective showing cowl fold lines and undulating tail (strictly zero eyes or blush).
-  * `walk_right` & `walk_left`: 3/4 side profiles featuring trailing wisps and forward-reaching arms.
-* **Compact 7-Color Palette:** `#57546f` (outline), `#f8f7fb` (body primary), `#dde8ef` (shadow), `#ffb0bc` (blush), `#ffd0d8` (highlight), `#48b8e8` (magic sparkles).
-* **Production-Ready Walk Cycles:** All 4 animation strips are pre-wired at `6 fps` loop and instantly playable in the Animation Studio.
-
----
-
-### 💀 Template 2: Arch-Lich Grim Reaper (48×48 Boss — PIX2 1.1 Structural Showcase)
-*Synthesized by **Gemini Argon 4.0** leveraging PIX2 1.1 Hierarchical Scene Graph & SaaD architecture.*
-
-The **Arch-Lich Grim Reaper** [`samples/Arch-Lich Grim Reaper 48x48.pix2`](samples/Arch-Lich%20Grim%20Reaper%2048x48.pix2) is a massive 3,000+ line structural document demonstrating the true industrial power of PIX2 1.1 for complex, high-resolution boss characters:
-* **Boss-Scale Resolution (48×48 px):** 16 frames in a 4×4 atlas layout (2,304 pixels per frame, 36,864 pixels total across the sheet).
-* **Rich 29-Color Dark Fantasy Palette:**
-  * Spectral soulfire blues and glowing cyans: `#00ffcc`, `#00aaff`, `#0044aa`, `#d4e4f7`, `#01e6b9`.
-  * Deep gothic shadow slates: `#07080d`, `#121524`, `#1e243b`, `#2e3859`, `#465582`.
-  * Crimson cowl & phylactery accents: `#38122e`, `#691b4c`, `#a32668`, `#ff1144`.
-  * Bone / skull highlights: `#ffffff`, `#e3dac9`, `#b5a893`, `#786c5c`.
-* **Multi-Layer Structural Hierarchy per Frame:**
-  * `@layer aura_X_Y`: "Spectral Soulfire" with declared `opacity: 0.9` and `@region reg_aura_X_Y` (`tags: [aura, fx]`) containing floating ethereal wisps.
-  * `@layer body_X_Y`: "Reaper Body" (`opacity: 1.0`, `blend: normal`) housing `@group grp_cloak_X_Y` ("Gothic Tattered Shroud", `tags: [cloth, cloak]`) and `@region reg_robe_X_Y` ("Sculpted Robe & Tatters", `tags: [cloth, robe]`).
-* **Synchronized 4-Direction Walk/Hover Cycles:**
-  * `walk_down`: Frontal floating stance with skull cowl, hollow soulfire eyes, tattered hem swaying rhythmically, and soulfire particles orbiting the lich.
-  * `walk_up`: Back view with deep sculpted cowl hood folds, billowing shroud ribbons, and floating soul wisps.
-  * `walk_right` & `walk_left`: Profile hovering pose with outstretched skeletal hand, scythe shaft alignment, and trailing cape wisps.
-
----
-
-## 🧠 Breakthrough Case Study & Lesson: High-Fidelity Character Synthesis with Gemini Argon 4.0 & PIX2 1.1
-
-The synthesis of the **Arch-Lich Grim Reaper 48×48** marked a major breakthrough for NOIRADIX Studio and generative AI in game asset production:
-
-### Why 48×48 Pixel Art Previously Broke Generative AI
-![Gemini Argon 4.0 Synthesizing PIX2 1.1 Structural Code](docs/noiradix-pix2-1.1.png)
-*Gemini Argon 4.0 generating structured PIX2 1.1 directives, animations (`walk_down`, `walk_up`, `walk_right`, `walk_left`), and Scene Graph layers directly in chat.*
-
-In 16×16 sprites, a canvas has 256 pixels per frame. An LLM can handle a flat pixel list with moderate success. But scaling to **48×48 (2,304 pixels per frame, 36,864 pixels per sheet)** breaks flat formats completely:
-1. **Context Drift & Spatial Confusion:** Without structural hierarchy, the AI loses track of which coordinates belong to the scythe, which belong to the face, and which belong to the floating aura.
-2. **Color Clashing & Diffusion Bleed:** Flat coordinate models accidentally blend translucent aura effects into solid robe pixels, creating noisy, anti-aliased mud and dirty borders.
-3. **Locomotion Desynchronization:** Across 16 frames, floating limbs jitter and change size by 4-5 pixels, destroying the visual cohesion of the character.
-
-### How PIX2 1.1 & Gemini Argon 4.0 Solved This (The 4 Architectural Principles)
-
-![Gemini Argon 4.0 Architectural Feedback](docs/gemini-argon-feedback.png)
-*Gemini Argon 4.0 technical feedback on scanline rasterization vs. shape fills, layer ordering, and lossless coordinate alignment.*
-
-#### 1. CRT-Style Scanline Rasterization (`line` & `sym_dot`)
-Instead of guessing organic shapes or relying on unsupported geometric fill commands, Gemini Argon 4.0 formulated pixel art as **scanline mathematics** (`line x1,y x2,y <color>`). By scanning row-by-row like a CRT rasterizer:
-* Fills are guaranteed 100% solid with zero interior voids, pinhole gaps, or stray transparent artifacts.
-* Curves for the pointed gothic hood, bone skull contours, skeletal pauldrons, and curved scythe blade remain mathematically smooth and symmetrical across all 16 frames.
-
-#### 2. Exact Bilateral Axis Coordinates across 48px Grids (`x_left = 47 - x_right`)
-On an even 48×48 coordinate grid `(0..47, 0..47)`, the true center axis lies precisely at `23.5`. Gemini Argon 4.0 mapped bilateral anatomical symmetry using the invariant:
-$$x_{\text{left}} = 47 - x_{\text{right}}$$
-This guarantees that the glowing red soulfire eye sockets (X=21 and X=26), skull temples, and bone pauldrons are anchored with millimeter precision, eliminating the grotesque facial warping common in diffusion models.
-
-#### 3. View-Dependent Dynamic Z-Ordering (`@layer` Inversion)
-The Scene Graph architecture allows direction-aware depth sorting without redrawing character assets:
-* **Frontal & Profile Views (`down`, `right`, `left`):** `@layer weapon` renders after `@layer body`, so the Executioner Scythe overlaps in front of the tattered robes.
-* **Rear Back View (`up`):** The layer order is inverted—`@layer weapon` renders *before* `@layer body`, automatically tucking the scythe shaft behind the billowing cowl and shroud.
-
-#### 4. Semantic Hierarchy (`@layer` → `@group` → `@region`) & Native Alpha
-Instead of dumping 36,000 raw pixels into a flat array, PIX2 1.1 gave **Gemini Argon 4.0** a clear hierarchical scaffold:
-```
-@cell cell_0_0
-  ├── @layer aura_0_0 (Spectral Soulfire, opacity: 0.9)
-  │     └── @region reg_aura_0_0 (tags: [aura, fx])
-  ├── @layer body_0_0 (Reaper Body, opacity: 1.0)
-  │     ├── @group grp_cloak_0_0 (tags: [cloth, cloak])
-  │     │     └── @region reg_robe_0_0 (tags: [cloth, robe])
-  │     └── @group grp_head_0_0 (tags: [head])
-  │           ├── @region reg_hood_0_0 (tags: [hood, cloth])
-  │           └── @region reg_skull_0_0 (tags: [skull, bone])
-  └── @layer weapon_0_0 (Executioner Soul Scythe)
-        └── @region reg_scythe_0_0 (tags: [weapon, blade])
-```
-Because the model synthesizes each node separately, it reasons about the **skull and shroud anatomy independently from the magical soulfire FX**. Declarative opacity (`opacity: 0.9`) offloads Porter-Duff alpha blending to NOIRADIX Studio's compositor, freeing the AI from calculating manual background-color blending math.
-
-> **Takeaway:** PIX2 1.1 proves that **Sprite-as-Structured-Data (SaaD)** scales cleanly from tiny 16×16 retro characters to massive 48×48 boss monsters with production-ready structural fidelity.
-
----
-
-## 🌐 Browser Compatibility & Recommended Setup
-
-NOIRADIX Studio operates in two tiers based on modern browser file capabilities:
-
-| Browser Tier | Supported Browsers | Recommended Version | Direct Disk `Ctrl+S` | Drag-and-Drop Handle Binding | Real-Time Live Watcher | Status |
-|:---|:---|:---:|:---:|:---:|:---:|:---:|
-| **Tier 1 — Full Native (Recommended)** | **Google Chrome, Microsoft Edge, Brave, Opera, Arc, Vivaldi** | **v86+** (Chromium engine) | ✅ Yes (Direct write via `createWritable()`, zero popups) | ✅ Yes (Binds `FileSystemFileHandle` on drop) | ✅ Yes (Live auto-reload on external file edits) | **Optimal (100% Desktop-Grade Experience)** |
-| **Tier 2 — Graceful Fallback** | **Mozilla Firefox** | **v90+** (Gecko engine) | 🔄 Fallback (Triggers direct file download) | 🔄 Fallback (In-Memory Draft) | ⚠️ Manual Only (Click reload button or `Ctrl+Shift+R`) | **Fully Supported (Lossless Web Fallback)** |
-| **Tier 2 — Graceful Fallback** | **Apple Safari** (macOS, iPadOS, iOS) | **v15.2+** (WebKit engine) | 🔄 Fallback (Triggers direct file download) | 🔄 Fallback (In-Memory Draft) | ⚠️ Manual Only (Click reload button or `Ctrl+Shift+R`) | **Fully Supported (Lossless Web Fallback)** |
-
-> [!TIP]
-> **Why Chromium is Recommended:** Google Chrome, Microsoft Edge, Brave, and Opera implement the **File System Access API** (`window.showOpenFilePicker`, `showSaveFilePicker`, and `DataTransferItem.getAsFileSystemHandle()`). This unlocks instant `Ctrl+S` disk commits, drag-and-drop linking, and real-time external change detection when working alongside external AI coding assistants or VS Code. In Firefox and Safari, the studio gracefully falls back to lossless HTML5 file downloads with zero data loss.
-
----
-
-## 🎮 Other Game Engine Targets
-
-### Godot 4
-1. Select **TexturePacker Standard (JSON Hash)** in the Export dialog.
-2. Drop the generated `.png` and `.json` files into your Godot project.
-3. Import into an `AnimatedSprite2D` or use a standard AtlasTexture resource.
-
-### Phaser / Pixi.js / WebGL
-Load the exported atlas directly using the standard Phaser atlas loader:
-```javascript
+```js
 this.load.atlas('player', 'assets/player_atlas.png', 'assets/player.json');
 ```
 
----
+See the [Unity export guide](docs/ENGINEERING/UNITY_EXPORT.md) and [PIX2 specification](PIX2_SPECIFICATION.md) for format details.
 
-## 📂 Repository Structure
+## Keyboard shortcuts
 
-```
-noiradix-studio/
-├── index.html                   # Single-page studio interface & modals
-├── start-noiradix-studio.bat    # 1-click launcher for Windows
-├── start-noiradix-studio.sh     # Local browser launcher for Linux & macOS
-├── noiradix-studio-logo.svg     # Official vector mascot logo
-├── PIX2_SPECIFICATION.md        # Official specification for the .pix2 format
-├── THIRD_PARTY_NOTICES.md       # Third-party licenses & acknowledgments
-├── LICENSE                      # Apache-2.0 open-source license
-├── README.md                    # Main studio documentation & visual guide
-│
-├── css/
-│   └── style.css                # Polished design system (Light & Dark themes)
-│
-├── js/
-│   ├── pix2-format.js           # Core parser, serializer, & Bresenham rasterizer
-│   ├── editor-state.js          # Undo/redo stack, document store, & tabs
-│   ├── tools.js                 # Pencil, Line, Rect, Bucket Fill, Eraser
-│   ├── animation-player.js      # Timeline playback engine
-│   ├── default-sample.js        # Built-in NOIRADIX Ghost character mascot template
-│   └── app.js                   # UI controllers, modal managers, & export pipeline
-│
-├── samples/
-│   └── Noiradix_Ghost.pix2      # Official 4-direction NOIRADIX Ghost mascot template
-│
-├── docs/                        # Complete technical documentation suite
-│   ├── README.md                # Documentation master index & contributor map
-│   ├── PRODUCT_SPEC.md          # Master product requirements & design principles
-│   ├── UX_AND_INTERACTION_SPEC.md # Interaction rules, tabs, & floating panels
-│   ├── KEYBOARD_SHORTCUTS.md    # Master keyboard shortcut reference
-│   ├── PIX2/                    # Formal .pix2 grammar, data models, & AI guides
-│   ├── FEATURES/                # Deep dives into grid, animation, palette, and zoom
-│   └── ENGINEERING/             # System architecture, test plan, & roadmaps
-│
-├── pix2/                        # Standalone PIX2 standard distribution
-│   ├── README.md                # Language specification overview & creator credits
-│   ├── SPECIFICATION.md         # Historical language specification v1.0
-│   ├── LICENSE-CODE             # Apache-2.0 license for reference engine
-│   ├── LICENSE-SPEC             # CC BY 4.0 license for standard specifications
-│   ├── js/                      # Canonical reference JavaScript implementation
-│   └── test-vectors/            # Normative conformance test vectors for 3rd-party ports
-│
-└── tests/
-    ├── test-roundtrip.js            # Semantic determinism & feature verification suite (96 tests)
-    ├── test-security.js             # Malicious payload & anti-DoS defense suite (20 tests)
-    ├── test-tmLanguage.js           # TextMate regex pattern & capture group suite (6 checks)
-    └── test-vectors-conformance.js  # Normative conformance test vector suite (11 tests)
-```
+| Shortcut | Action |
+|---|---|
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | New / open / save project |
+| `Ctrl+I` | Import PIX2 code as a project |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| `Space` | Toggle animation preview from the grid |
+| `B` / `E` / `I` / `G` | Brush / eraser / eyedropper / fill |
+| `L` / `U` | Line / rectangle |
+| `H` or `Space` + drag | Pan canvas |
+| `Ctrl` + mouse wheel | Zoom in the cell editor |
 
----
+For the full list, see [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md).
 
-## 🧪 Testing & Quality Assurance
+## Tests and CI
 
-Run the automated test suites using Node.js (134 tests, zero external npm dependencies):
+**Current test inventory for v2.2.0: 22 Node regression suites.** Each suite reports its own checks; they are not combined into one assertion total. `tests/run-all.cjs` discovers the suites, and CI checks this count against the README.
+
 ```bash
-# 1. Semantic roundtrip & feature tests (96/96)
-node tests/test-roundtrip.js
-
-# 2. Malicious payload & anti-DoS defenses (20/20)
-node tests/test-security.js
-
-# 3. TextMate regex pattern & capture group checks (6/6)
-node tests/test-tmLanguage.js
-
-# 4. Normative test vector conformance (11/11)
-node tests/test-vectors-conformance.js
+node tests/run-all.cjs --syntax
+node tests/run-all.cjs
+node tests/benchmark-performance.js
+node tests/run-all.cjs --browser
 ```
 
-Verify JavaScript engine syntax across root and standalone packages:
-```bash
-node --check js/app.js
-node --check js/pix2-format.js
-node --check js/editor-state.js
-node --check js/animation-player.js
-node --check js/tools.js
-node --check pix2/js/pix2-format.js
-```
+GitHub Actions runs syntax, Node, benchmark and browser checks before deploying the `main` branch to Pages or publishing a tagged release. See [the workflow](.github/workflows/deploy.yml) for the exact commands and environment.
 
----
+## Documentation
 
-## 📚 Master Documentation Index
+- [PIX2 1.1 specification](PIX2_SPECIFICATION.md)
+- [Architecture and implementation boundaries](docs/ARCHITECTURE.md)
+- [Agent handbook](docs/agents/README.md)
+- [Documentation index](docs/README.md)
+- [PIX2 AI authoring guide](docs/PIX2/PIX2_AI_AUTHORING_GUIDE.md)
+- [Release notes](docs/releases/)
 
-Looking for detailed technical deep-dives, EBNF grammars, or engineering roadmaps? Visit the full documentation suite:
+## About and license
 
-👉 **[Explore the NOIRADIX Studio Documentation Hub (`docs/README.md`)](docs/README.md)**
+Created by Nguyen Duc Canh ([@dotlinux26](https://github.com/dotlinux26)) · [Contact](mailto:0206canh@gmail.com) · [Support development](DONATE.md)
 
-* **[PIX2 1.1 Language Specification](PIX2_SPECIFICATION.md)**
-* **[AI Authoring & Prompting Guide](docs/PIX2/PIX2_AI_AUTHORING_GUIDE.md)**
-* **[Grid & Cell Model Architecture](docs/FEATURES/GRID_AND_CELL_MODEL.md)**
-* **[Animation Engine & Directional Locomotion](docs/FEATURES/ANIMATION_MODEL.md)**
-* **[System Architecture & Boundaries](docs/ENGINEERING/ARCHITECTURE.md)**
-
----
-
-## 💖 Donate & Sponsor
-
-If you find NOIRADIX Studio useful in your game development pipeline, please consider supporting its continuous development:
-
-* 👉 **[GitHub Sponsors (@dotlinux26)](https://github.com/sponsors/dotlinux26)**
-* 🍵 **[Ko-fi (@dotlinux26)](https://ko-fi.com/dotlinux26)**
-* See [DONATE.md](DONATE.md) for full domestic and international options.
-
----
-
-## 👤 Author & Maintainer
-
-* **Created & Maintained by:** Nguyen Duc Canh ([@dotlinux26](https://github.com/dotlinux26))
-* **Email:** [0206canh@gmail.com](mailto:0206canh@gmail.com)
-
----
-
-## 📄 License & Copyright
-
-- **NOIRADIX Studio Application & Visual Editor:** Licensed under the [Apache License, Version 2.0](LICENSE).
-- **PIX2 Language Specification (`pix2/SPECIFICATION.md`):** Governed as an open standard and licensed under [Creative Commons Attribution 4.0 International (CC BY 4.0)](pix2/LICENSE-SPEC).
-- **PIX2 Reference Engine (`pix2/js/pix2-format.js`):** Licensed under the [Apache License, Version 2.0](pix2/LICENSE-CODE).
-
-```text
-Copyright (c) 2026 Nguyen Duc Canh (@dotlinux26)
-```
-
-See [NOTICE](NOTICE), [pix2/README.md](pix2/README.md), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions and third-party notices.
-
----
+- Studio and PixelArt application code: [Apache License 2.0](LICENSE).
+- PIX2 reference code: [Apache License 2.0](pix2/LICENSE-CODE).
+- PIX2 specification text: [CC BY 4.0](pix2/LICENSE-SPEC).
+- See [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md) for attributions and component licenses.

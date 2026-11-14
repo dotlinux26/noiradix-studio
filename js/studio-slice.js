@@ -1265,15 +1265,20 @@ const StudioSlice = (() => {
         }));
       } else if (method === 'atlas') {
         if (importSliceState.jsonAtlas) {
-          const plan = ImportSlice.parseAtlasJSON(importSliceState.jsonAtlas, {
+          const atlasFrames = ImportSlice.parseAtlasJSON(importSliceState.jsonAtlas, {
             width: importSliceState.image.width,
             height: importSliceState.image.height,
+            maxFrames: PIX2.PROFILES.studio.maxTotalCells,
+            maxFrameDim: PIX2.PROFILES.studio.maxCellDim,
           });
-          importSliceState.frames = (plan.frames || []).map((f, i) => {
+          importSliceState.frames = atlasFrames.map((f, i) => {
             const colVal =
               f.frameIndex !== undefined ? f.frameIndex : f.col !== undefined ? f.col : i;
             return {
               ...f,
+              frame: { x: f.x, y: f.y, w: f.w, h: f.h },
+              sourceSize: { w: f.sourceW, h: f.sourceH },
+              spriteSourceSize: { x: f.trimX, y: f.trimY, w: f.trimW, h: f.trimH },
               col: colVal,
               frameIndex: colVal,
               row: f.row !== undefined ? f.row : 0,
@@ -1334,12 +1339,23 @@ const StudioSlice = (() => {
 
     function handleSingleFileToImportSlice(file) {
       if (!file) return;
+      const maxImportBytes = PIX2?.PROFILES?.studio?.maxFileSize || 20 * 1024 * 1024;
+      if (file.size > maxImportBytes) {
+        showToast(`Import file exceeds the ${Math.floor(maxImportBytes / (1024 * 1024))} MB safety limit.`, 'error');
+        return;
+      }
       const name = file.name.toLowerCase();
       if (name.endsWith('.png')) {
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
+            try {
+              PIX2.assertRasterSize(img.width, img.height);
+            } catch (err) {
+              showToast(`Image import rejected: ${err.message}`, 'error');
+              return;
+            }
             importSliceState.image = img;
             if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
             if (dom.importSliceFileName) dom.importSliceFileName.textContent = file.name;
@@ -1385,6 +1401,11 @@ const StudioSlice = (() => {
     }
 
     function handlePairDropToImportSlice(pngFile, jsonFile) {
+      const maxImportBytes = PIX2?.PROFILES?.studio?.maxFileSize || 20 * 1024 * 1024;
+      if (!pngFile || !jsonFile || pngFile.size > maxImportBytes || jsonFile.size > maxImportBytes) {
+        showToast(`Each import file must be no larger than ${Math.floor(maxImportBytes / (1024 * 1024))} MB.`, 'error');
+        return;
+      }
       const jsonReader = new FileReader();
       jsonReader.onload = (je) => {
         try {
@@ -1399,6 +1420,12 @@ const StudioSlice = (() => {
           pngReader.onload = (pe) => {
             const img = new Image();
             img.onload = () => {
+              try {
+                PIX2.assertRasterSize(img.width, img.height);
+              } catch (err) {
+                showToast(`Image import rejected: ${err.message}`, 'error');
+                return;
+              }
               importSliceState.image = img;
               if (dom.importSliceFileInfo) dom.importSliceFileInfo.style.display = 'block';
               if (dom.importSliceFileName) dom.importSliceFileName.textContent = pngFile.name;

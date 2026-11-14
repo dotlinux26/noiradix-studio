@@ -19,7 +19,11 @@ Parse and validate before publishing into a working document. `PIX2.parseValidat
 
 ## Watch and recovery
 
-Capture file identity, active session and revision for an asynchronous read; discard stale completions. Dirty in-memory content requires conflict handling before external replacement. Native file access and watcher availability depend on browser capabilities and permission, not a promised minimum browser version.
+Studio stores the current native handle in IndexedDB with its project-session ID. On workspace restoration, reconnect only that session's matching filename/ID before activating it. Compare the on-disk PIX2 with the restored workspace: identical content is clean; a clean stale workspace adopts valid disk content; a dirty draft is preserved. Keep the previous saved-content baseline and file timestamp so an external edit made while the app was closed can be detected and surfaced as a conflict.
+
+Capture file identity, active session and revision for an asynchronous read; discard stale completions. Dirty in-memory content requires conflict handling before external replacement. On window focus, compare file contents even if the filesystem timestamp is unchanged; periodic polling may use timestamps to avoid repeatedly reading large documents. Native file access and watcher availability depend on browser capabilities and permission, not a promised minimum browser version. If the saved handle cannot be read after reload, keep the browser draft and show it as unlinked rather than claiming it is saved to disk.
+
+The download fallback is not a persistent file connection. A downloaded file cannot be silently mapped back to its original path after reload; reopen it or use Save As to grant a writable handle.
 
 Browser recovery is independent of disk saving. See `HISTORY_AUTOSAVE_RECOVERY_SPEC.md` for catalogs, current timing, fallback behavior and storage failure limits.
 
@@ -31,4 +35,4 @@ An export retains invocation-time metadata/animations across PNG encoding. Per-f
 
 ## Evidence
 
-`tests/browser/test-file-lifecycle.cjs` exercises both normal entry points with delayed/failing native-handle simulations, duplicate names, late edits, Save As, permission denial, cancelled pickers, retry and invalid external reload. `test-workspace.cjs` reads downloaded Unity/TexturePacker/frame archives and checks a delayed PNG export snapshot. Manual OS pickers and other browser engines remain separate review coverage. Phase-by-phase findings: `discussion/EDITOR_REFACTOR_PROGRESS.md`.
+`tests/browser/test-file-lifecycle.cjs` exercises both normal entry points with delayed/failing native-handle simulations, duplicate names, late edits, Save As, permission denial, cancelled pickers, retry and invalid external reload. `tests/browser/test-disk-restore.cjs` covers Studio handle reconnection and disk reconciliation through both HTTP and `file://`, including clean stale workspaces, dirty drafts and same-timestamp external edits. `test-workspace.cjs` reads downloaded Unity/TexturePacker/frame archives and checks a delayed PNG export snapshot. Manual OS pickers and other browser engines remain separate review coverage. Phase-by-phase findings: `discussion/EDITOR_REFACTOR_PROGRESS.md`.

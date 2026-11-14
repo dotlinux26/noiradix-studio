@@ -33,39 +33,56 @@
   /**
    * Parse atlas JSON in NOIRADIX or TexturePacker (Hash or Array) format
    */
-  function parseAtlasJSON(jsonInput) {
+  function parseAtlasJSON(jsonInput, options = {}) {
     let obj = jsonInput;
     if (typeof obj === 'string') {
+      if (obj.length > 20 * 1024 * 1024) throw new Error('Atlas JSON exceeds the 20 MB safety limit.');
       try {
         obj = JSON.parse(obj);
       } catch (err) {
         throw new Error(`Failed to parse Atlas JSON: ${err.message}`);
       }
     }
-    if (!obj || typeof obj !== 'object') {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
       throw new Error('Atlas JSON must be an object');
     }
 
     const normalizedFrames = [];
+    const maxFrames = Number.isSafeInteger(options.maxFrames) && options.maxFrames > 0
+      ? Math.min(options.maxFrames, 16384)
+      : 16384;
+    const maxFrameDim = Number.isSafeInteger(options.maxFrameDim) && options.maxFrameDim > 0
+      ? Math.min(options.maxFrameDim, 8192)
+      : 8192;
+    const atlasWidth = Number.isSafeInteger(options.width) && options.width > 0 ? options.width : null;
+    const atlasHeight = Number.isSafeInteger(options.height) && options.height > 0 ? options.height : null;
+    const addFrame = (name, item) => {
+      if (normalizedFrames.length >= maxFrames) throw new Error(`Atlas frame limit exceeded (${maxFrames})`);
+      const frame = normalizeFrameItem(name, item);
+      validateAtlasFrame(frame, atlasWidth, atlasHeight, maxFrameDim);
+      normalizedFrames.push(frame);
+    };
 
     if (Array.isArray(obj.frames)) {
       // TexturePacker Array format
       for (const item of obj.frames) {
         if (!item || !item.frame) continue;
         const fname = item.filename || item.name || `frame_${normalizedFrames.length}`;
-        normalizedFrames.push(normalizeFrameItem(fname, item));
+        addFrame(fname, item);
       }
     } else if (obj.frames && typeof obj.frames === 'object') {
       // TexturePacker Hash or NOIRADIX standard format
-      for (const fname in obj.frames) {
+      for (const fname of Object.keys(obj.frames)) {
         const item = obj.frames[fname];
         if (!item || !item.frame) continue;
-        normalizedFrames.push(normalizeFrameItem(fname, item));
+        addFrame(fname, item);
       }
     } else if (obj.components && Array.isArray(obj.components)) {
       // NOIRADIX Modular Manifest format
       for (const comp of obj.components) {
-        normalizedFrames.push({
+        if (!comp || typeof comp !== 'object' || !comp.size) continue;
+        if (normalizedFrames.length >= maxFrames) throw new Error(`Atlas frame limit exceeded (${maxFrames})`);
+        const frame = {
           name: comp.name || comp.id,
           id: comp.id,
           x: comp.trimOffset ? comp.trimOffset.x : 0,
@@ -82,13 +99,38 @@
           trimH: comp.trimOffset ? comp.trimOffset.h : comp.size.h,
           pivotX: comp.pivot ? comp.pivot.x : 0.5,
           pivotY: comp.pivot ? comp.pivot.y : 0.5
-        });
+        };
+        validateAtlasFrame(frame, atlasWidth, atlasHeight, maxFrameDim);
+        normalizedFrames.push(frame);
       }
     } else {
       throw new Error('Unrecognized Atlas JSON schema. Expected .frames (array or hash) or .components.');
     }
 
     return normalizedFrames;
+  }
+
+  function validateAtlasFrame(frame, atlasWidth, atlasHeight, maxFrameDim) {
+    for (const key of ['x', 'y', 'w', 'h', 'sourceW', 'sourceH', 'trimX', 'trimY', 'trimW', 'trimH']) {
+      const value = frame[key];
+      if (!Number.isSafeInteger(value) || value < 0 || (key === 'w' || key === 'h' || key === 'sourceW' || key === 'sourceH') && value === 0) {
+        throw new Error(`Atlas frame "${String(frame.name)}" has invalid ${key}; expected a non-negative safe integer${key === 'w' || key === 'h' || key === 'sourceW' || key === 'sourceH' ? ' greater than zero' : ''}.`);
+      }
+    }
+    for (const key of ['pivotX', 'pivotY']) {
+      if (!Number.isFinite(frame[key]) || Math.abs(frame[key]) > 1000000) {
+        throw new Error(`Atlas frame "${String(frame.name)}" has invalid ${key}.`);
+      }
+    }
+    if (frame.x > 8192 || frame.y > 8192 || frame.w > maxFrameDim || frame.h > maxFrameDim ||
+        frame.sourceW > maxFrameDim || frame.sourceH > maxFrameDim || frame.w * frame.h > 16777216 ||
+        frame.sourceW * frame.sourceH > 16777216) {
+      throw new Error(`Atlas frame "${String(frame.name)}" exceeds supported raster limits.`);
+    }
+    if (atlasWidth !== null && atlasHeight !== null &&
+        (frame.x + frame.w > atlasWidth || frame.y + frame.h > atlasHeight)) {
+      throw new Error(`Atlas frame "${String(frame.name)}" exceeds the ${atlasWidth}×${atlasHeight} image bounds.`);
+    }
   }
 
   function normalizeFrameItem(name, item) {

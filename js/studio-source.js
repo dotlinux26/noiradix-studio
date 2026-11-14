@@ -1,6 +1,208 @@
 /** Studio source controller. App supplies document and view ports. */
 const StudioSource = (() => {
+  const AI = typeof Pix2AiPrompt !== 'undefined' ? Pix2AiPrompt : null;
   function create({ state, dom, view, escapeHtml, refreshAll, showToast, triggerEventAutosave }) {
+    let framePatchTargetCellId = null;
+
+    function getActiveFrame() {
+      if (!state.doc || !state.doc.cells || !state.activeTabId) return null;
+      // Studio passes a narrow document model that intentionally exposes the
+      // active tab ID but not EditorState.getActiveCell(). Resolve the cell
+      // directly from that stable tab identity.
+      return state.doc.cells[state.activeTabId] || null;
+    }
+
+    function buildFrameDocument(cellId) {
+      const source = PIX2.parseValidated(PIX2.serialize(state.doc));
+      const cell = source.cells[cellId];
+      if (!cell) throw new Error('The active frame no longer exists.');
+      source.cells = { [cellId]: cell };
+      source.animations = {};
+      source.meta.grid = { ...source.meta.grid, cols: 1, rows: 1 };
+      source.palette = {};
+      cell.row = 0;
+      cell.col = 0;
+      return source;
+    }
+
+    function copyText(text, successMessage) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => showToast(successMessage, 'success'))
+          .catch(() => showToast('Clipboard unavailable; copy the text manually.', 'error'));
+        return;
+      }
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand('copy');
+      input.remove();
+      showToast(copied ? successMessage : 'Clipboard unavailable; copy the text manually.', copied ? 'success' : 'error');
+    }
+
+    function copyActiveFrameCode() {
+      const cell = getActiveFrame();
+      if (!cell) return showToast('Open a frame in the pixel editor first.', 'warning');
+      try {
+        const frameDoc = buildFrameDocument(cell.id);
+        copyText(PIX2.serialize(frameDoc), `Copied PIX2 code for ${cell.name || cell.id}`);
+      } catch (err) {
+        showToast(`Could not prepare frame code: ${err.message}`, 'error');
+      }
+    }
+
+    function copyActiveFrameAiPrompt() {
+      const cell = getActiveFrame();
+      if (!cell) return showToast('Open a frame in the pixel editor first.', 'warning');
+      if (!AI) return showToast('PIX2 AI prompt module is unavailable.', 'error');
+      if (state.doc.meta.version !== '1.1') {
+        return showToast('Frame AI prompt currently requires PIX2 1.1. Frame code copy/import still supports PIX2 1.0.', 'warning');
+      }
+      try {
+        const frameDoc = buildFrameDocument(cell.id);
+        const size = cell.size || state.doc.meta.cellSize;
+        const prompt = AI.build({
+          brief: `Edit only the active frame (${cell.id}). Follow the requested visual change and preserve every other pixel and structural node unless the request specifically changes it.`,
+          source: PIX2.serialize(frameDoc),
+          version: state.doc.meta.version,
+          width: size.w,
+          height: size.h,
+          cols: 1,
+          rows: 1,
+          profile: 'studio',
+          mode: 'frame-patch',
+        });
+        copyText(prompt, `Copied complete PIX2 AI prompt for ${cell.name || cell.id}`);
+      } catch (err) {
+        showToast(`Could not prepare frame prompt: ${err.message}`, 'error');
+      }
+    }
+
+    function openFrameCodeImport() {
+      const cell = getActiveFrame();
+      if (!cell || !dom.modalImportFrameCode) return showToast('Open a frame in the pixel editor first.', 'warning');
+      framePatchTargetCellId = cell.id;
+      if (dom.importFrameCodeTextarea) dom.importFrameCodeTextarea.value = '';
+      if (dom.importFrameCodeContext) {
+        dom.importFrameCodeContext.textContent = `Target: ${cell.name || cell.id} (${cell.id}). Paste one complete PIX2 document containing exactly one frame. Only this frame will be replaced; other frames and animation clips remain unchanged.`;
+      }
+      if (dom.importFrameCodeError) {
+        dom.importFrameCodeError.textContent = '';
+        dom.importFrameCodeError.classList.add('hidden');
+      }
+      dom.modalImportFrameCode.classList.remove('hidden');
+      setTimeout(() => dom.importFrameCodeTextarea?.focus(), 50);
+    }
+
+    function closeFrameCodeImport() {
+      if (dom.modalImportFrameCode) dom.modalImportFrameCode.classList.add('hidden');
+      framePatchTargetCellId = null;
+    }
+
+    function setFrameImportError(message) {
+      if (dom.importFrameCodeError) {
+        dom.importFrameCodeError.textContent = message;
+        dom.importFrameCodeError.classList.remove('hidden');
+      } else showToast(message, 'error');
+    }
+
+    function collectNodeIds(doc, excludedCellId) {
+      const ids = new Set(Object.keys(doc.cells).filter((id) => id !== excludedCellId));
+      const visit = (node) => {
+        if (!node) return;
+        if (node.id) ids.add(node.id);
+        for (const child of node.children || []) visit(child);
+      };
+      for (const [cellId, cell] of Object.entries(doc.cells)) {
+        if (cellId === excludedCellId) continue;
+        for (const layer of cell.layers || []) visit(layer);
+      }
+      return ids;
+    }
+
+    function rekeyFrameNodes(cell, reservedIds, targetCellId) {
+      const nodes = [];
+      const visit = (node) => {
+        if (!node) return;
+        nodes.push(node);
+        for (const child of node.children || []) visit(child);
+      };
+      for (const layer of cell.layers || []) visit(layer);
+      const idMap = new Map();
+      let nextId = 1;
+      for (const node of nodes) {
+        const oldId = node.id;
+        if (!reservedIds.has(oldId)) {
+          reservedIds.add(oldId);
+          continue;
+        }
+        let candidate;
+        do {
+          candidate = `framepatch_${String(targetCellId).replace(/[^A-Za-z0-9_]/g, '_')}_${nextId++}`;
+        } while (reservedIds.has(candidate));
+        reservedIds.add(candidate);
+        idMap.set(oldId, candidate);
+        node.id = candidate;
+      }
+      for (const node of nodes) {
+        node.cell = targetCellId;
+        if (node.parent && idMap.has(node.parent)) node.parent = idMap.get(node.parent);
+      }
+    }
+
+    function applyFrameCodeImport() {
+      const rawCode = dom.importFrameCodeTextarea?.value.trim() || '';
+      if (!rawCode) return setFrameImportError('Paste a complete one-frame PIX2 document first.');
+      const targetId = framePatchTargetCellId;
+      const currentCell = targetId && state.doc && state.doc.cells[targetId];
+      if (!currentCell) return setFrameImportError('The target frame changed or was removed. Close this dialog and reopen it from the frame.');
+
+      try {
+        const patchDoc = PIX2.parseValidated(rawCode);
+        const patchCellIds = Object.keys(patchDoc.cells || {});
+        if (patchCellIds.length !== 1) throw new Error(`Expected exactly one frame, found ${patchCellIds.length}.`);
+        if (patchDoc.meta.version !== state.doc.meta.version) {
+          throw new Error(`PIX2 version mismatch: project is ${state.doc.meta.version}, imported frame is ${patchDoc.meta.version}.`);
+        }
+        if (Object.keys(patchDoc.animations || {}).length) {
+          throw new Error('Frame-only import cannot change animation clips. Remove @animation sections and try again.');
+        }
+        const targetSize = currentCell.size || state.doc.meta.cellSize;
+        const patchSize = patchDoc.meta.cellSize;
+        if (!patchSize || patchSize.w !== targetSize.w || patchSize.h !== targetSize.h) {
+          throw new Error(`Frame dimensions must remain ${targetSize.w}×${targetSize.h}px.`);
+        }
+
+        const nextDoc = PIX2.parseValidated(PIX2.serialize(state.doc));
+        const importedCell = patchDoc.cells[patchCellIds[0]];
+        const replacement = JSON.parse(JSON.stringify(importedCell));
+        replacement.id = targetId;
+        replacement.row = currentCell.row;
+        replacement.col = currentCell.col;
+        replacement.size = currentCell.size ? { ...currentCell.size } : undefined;
+        rekeyFrameNodes(replacement, collectNodeIds(nextDoc, targetId), targetId);
+        nextDoc.cells[targetId] = replacement;
+        const validatedDoc = PIX2.parseValidated(PIX2.serialize(nextDoc));
+
+        state.activeLayerId = null;
+        state.activeGroupId = null;
+        state.activeRegionId = null;
+        state.isolatedNodeId = null;
+        state.saveSnapshot('Before Frame Import');
+        if (state.applyDocument(validatedDoc, 'Import Frame Code')) {
+          triggerEventAutosave();
+          refreshAll();
+          closeFrameCodeImport();
+          showToast(`Imported PIX2 into ${currentCell.name || targetId}; other frames and animations were preserved.`, 'success');
+        }
+      } catch (err) {
+        setFrameImportError(err.message || 'Invalid frame PIX2 code.');
+      }
+    }
+
     function splitLineComment(rawLine) {
       if (!rawLine) return { code: '', comment: '' };
       const code = PIX2.stripComment(rawLine);
@@ -517,10 +719,10 @@ const StudioSource = (() => {
         <p class="guide-desc">Use <code>line x0,y0 x1,y1 &lt;col&gt;</code> for diagonal sword blades and staff shafts.</p>
       `;
       } else if (mode === 'surgical-patch') {
-        if (titleEl) titleEl.textContent = '🩹 Surgical Frame / Color Patch';
+        if (titleEl) titleEl.textContent = '🩹 Targeted Repair (full document)';
         contentEl.innerHTML = `
-        <h4>1. Surgical Frame-Level Addressing</h4>
-        <p class="guide-desc">Output ONLY the specific <code>@cell &lt;id&gt;</code> or <code>@palette</code> directives that need changes, keeping all other frames untouched to save tokens and prevent regressions.</p>
+        <h4>1. Targeted Repair</h4>
+        <p class="guide-desc">The current Apply action replaces the full document. Return the complete PIX2 document, preserve all untouched cells and structure, and make only the requested frame/color changes.</p>
         <pre><code>; Recolor eyes to Glowing Cyan
 @cell cell_0_0
   p ${m.eyes.leftX},${m.eyes.y[0]} #00ffff  p ${m.eyes.rightX},${m.eyes.y[0]} #00ffff</code></pre>
@@ -541,6 +743,7 @@ const outText = PIX2.serialize(doc);</code></pre>
     function copyAiPrompt() {
       if (!state.doc) return;
       const mode = dom.selectAiPromptMode?.value || 'all-in-one';
+      const contextMode = dom.selectAiPromptContext?.value || 'full-document';
       const { version, cellSize, grid } = state.doc.meta;
       const briefs = {
         'full-character':
@@ -559,7 +762,7 @@ const outText = PIX2.serialize(doc);</code></pre>
         'Edit or extend the sprite sheet according to the user brief. Keep frame alignment, dimensions and palette continuity.';
       const prompt = Pix2AiPrompt.build({
         brief,
-        source: PIX2.serialize(state.doc),
+        source: contextMode === 'instructions-only' ? '' : PIX2.serialize(state.doc),
         version,
         width: cellSize.w,
         height: cellSize.h,
@@ -567,10 +770,11 @@ const outText = PIX2.serialize(doc);</code></pre>
         rows: grid.rows,
         detailed: mode !== 'compact',
         mode,
+        includeSource: contextMode !== 'instructions-only',
       });
       navigator.clipboard
         .writeText(prompt)
-        .then(() => showToast('Copied PIX2 AI prompt', 'success'))
+        .then(() => showToast(contextMode === 'instructions-only' ? 'Copied PIX2 instructions without artwork context' : 'Copied PIX2 prompt with full project context', 'success'))
         .catch(() => showToast('Clipboard unavailable', 'error'));
     }
     return {
@@ -581,7 +785,14 @@ const outText = PIX2.serialize(doc);</code></pre>
       applyCodeToDoc,
       updateAiGuidePane,
       copyAiPrompt,
+      copyActiveFrameCode,
+      copyActiveFrameAiPrompt,
+      openFrameCodeImport,
+      closeFrameCodeImport,
+      applyFrameCodeImport,
     };
   }
   return { create };
 })();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = StudioSource;

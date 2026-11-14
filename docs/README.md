@@ -22,6 +22,7 @@ NOIRADIX Studio is listed on [SourceForge](https://sourceforge.net/projects/noir
 - [Repository workflow for agents](../AGENTS.md)
 - [Agent handbook and verification workflow](agents/README.md)
 - [Release process and verification gates](ENGINEERING/RELEASE_PROCESS.md)
+- [Static release changelog](../changelog.html) — generated from the versioned notes in `docs/releases/`.
 - [Gemini Argon 4.0 PIX2 1.1 Field Report & Parser Findings](ENGINEERING/AI_ARGON_PARSER_FEEDBACK_REPORT.md)
 
 ## 📸 Studio Visual Tour
@@ -74,7 +75,7 @@ https://github.com/user-attachments/assets/5098357c-daa5-44da-90a8-a1fc23f0c42f
 
 ### 4. AI-Native PIX2 Code & 1-Click Prompt Studio
 ![AI Code & Prompt Generator](noiradix-COPYFORAI.png)
-*1-Click "Copy Prompt for AI", token-efficient sparse `.pix2` syntax, zero-hallucination coordinates, and real-time disk hot-reload.*
+*Copy a specialized PIX2 prompt with optional project context, sparse structured source, integer coordinates, and real-time disk hot-reload.*
 
 ---
 

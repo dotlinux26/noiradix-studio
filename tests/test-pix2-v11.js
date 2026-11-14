@@ -4,6 +4,17 @@
 const assert = require('assert');
 const PIX2 = require('../js/pix2-format.js');
 
+// The normative structural example must include all sections required by its EBNF.
+const fs = require('node:fs');
+const specText = fs.readFileSync(require('node:path').join(__dirname, '../PIX2_SPECIFICATION.md'), 'utf8');
+const structuralExampleSection = specText.split('### 8.1.1 Structural records')[1] || '';
+const structuralExample = structuralExampleSection.match(/```pix2\n([\s\S]*?)\n```/);
+assert.ok(structuralExample, 'PIX2 specification must contain a structural PIX2 example');
+const parsedStructuralExample = PIX2.parseValidated(structuralExample[1]);
+assert.equal(Object.keys(parsedStructuralExample.cells).length, 1);
+assert.ok(Object.keys(parsedStructuralExample.palette).length > 0);
+console.log('  [PASS] Normative PIX2 1.1 structural example parses with required metadata and palette.');
+
 console.log('====================================================');
 console.log('RUNNING PIX2 1.1 SPECIFICATION & INTEGRATION SUITE');
 console.log('====================================================\n');

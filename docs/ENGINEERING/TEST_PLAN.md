@@ -132,6 +132,6 @@ TEST RESULTS: 96 / 96 PASSED (Roundtrip & Features)
 SECURITY TEST RESULTS: 21 / 21 PASSED (Defenses & Anti-DoS)
 REGEX PATTERN RESULTS: 6 / 6 PASSED (TextMate Regex Patterns)
 CONFORMANCE TEST RESULTS: 11 / 11 PASSED (Normative Vectors)
-TOTAL ACCEPTANCE: 134 / 134 PASSED (100%)
+Historical acceptance count from the original plan: 134 / 134. This is not the current suite inventory; run `node tests/run-all.cjs` for current results.
 ====================================================
 ```

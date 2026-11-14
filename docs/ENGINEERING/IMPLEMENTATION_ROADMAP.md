@@ -98,7 +98,7 @@
 - **NOIRADIX Studio Application:** Total Feature Freeze. Active development closed. Enters maintenance-only mode (bug fixes, security patches).
 - **PIX2 Reference Engine:** Frozen (Production v1.0). Fully verified against normative test vectors.
 - **PIX2 v1.0 Standard:** Frozen v1.0 Standard Specification (Production Ready). EBNF, lexical grammar, drawing primitives semantics, and test vector baselines are fully decoupled, immutable, normative, and synchronized.
-- **Acceptance Status:** 134/134 tests passing cleanly in continuous integration.
+- **Historical acceptance report:** 134/134 tests passed in the original CI run; this is not the current test inventory.
 
 ---
 

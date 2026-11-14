@@ -66,6 +66,28 @@ assert.strictEqual(parsedArray.length, 1);
 assert.strictEqual(parsedArray[0].name, 'spell_0.png');
 pass('TexturePacker Array JSON parsed correctly');
 
+assert.throws(
+  () => ImportSlice.parseAtlasJSON({ frames: { 'bad.png': { frame: { x: '1\"><img src=x onerror=alert(1)>', y: 0, w: 8, h: 8 } } } }),
+  /invalid x/,
+  'Untrusted atlas geometry must reject strings before it reaches HTML attributes or raster operations',
+);
+assert.throws(
+  () => ImportSlice.parseAtlasJSON(tpArrayJson, { width: 7, height: 8 }),
+  /exceeds the 7×8 image bounds/,
+  'Atlas frame rectangles must stay within the imported image dimensions',
+);
+assert.throws(
+  () => ImportSlice.parseAtlasJSON({ frames: Array.from({ length: 3 }, (_, i) => ({ filename: `f${i}.png`, frame: { x: 0, y: 0, w: 1, h: 1 } })) }, { maxFrames: 2 }),
+  /frame limit exceeded/,
+  'Atlas metadata must respect the configured frame-count resource limit',
+);
+assert.throws(
+  () => ImportSlice.parseAtlasJSON({ frames: [{ filename: 'too-large.png', frame: { x: 0, y: 0, w: 513, h: 1 } }] }, { maxFrameDim: 512 }),
+  /exceeds supported raster limits/,
+  'Atlas frames must respect the destination editor cell-dimension profile',
+);
+pass('Atlas metadata validates untrusted geometry, image bounds and frame-count limits');
+
 // -----------------------------------------------------------------------------
 // Test 2: Grid Slicing Calculation
 // -----------------------------------------------------------------------------

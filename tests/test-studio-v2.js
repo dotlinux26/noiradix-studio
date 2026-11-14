@@ -15,6 +15,7 @@ const Tools = require('../js/tools.js');
 const EditorState = require('../js/editor-state.js');
 const AnimationPlayer = require('../js/animation-player.js');
 const ImportSlice = require('../js/import-slice.js');
+const StudioExport = require('../js/studio-export.js');
 const NOIRADIX_VERSION = require('../js/version.js');
 
 let passCount = 0;
@@ -32,12 +33,12 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.1.8', 'Studio version must be 2.1.8');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.1.8', 'PixelArt version must be 2.1.8');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.0', 'Studio version must be 2.2.0');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.0', 'PixelArt version must be 2.2.0');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.1 version manifest verified (Studio 2.1.8 / PixelArt 2.1.8 / PIX2 1.1)');
+  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.0 / PixelArt 2.2.0 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -544,6 +545,20 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
   assert(typeof MB.dismiss === 'function', 'MaintenanceBanner must export dismiss');
   assert(typeof MB.setEnabled === 'function', 'MaintenanceBanner must export setEnabled');
   assert(bannerJs.includes('3 * 60 * 60 * 1000'), 'MaintenanceBanner must configure 3 hours interval');
+  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: 'noiradix.me', search: '' }), false,
+    'Production host must not show the development maintenance notice by default');
+  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: 'localhost', search: '' }), true,
+    'Local development host should retain the maintenance notice');
+  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: 'noiradix.me', search: '?noira-maintenance=1' }), true,
+    'Explicit maintenance query flag should enable the notice for diagnosis');
+  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: '', search: '' }), false,
+    'file:// pages should not show the maintenance notice by default');
+
+  // 5. Unity sprite identity must not depend on editable/non-unique labels.
+  const repeatedLabelA = StudioExport.uniqueUnitySpriteName({ name: 'Walk', id: 'cell_0_0' });
+  const repeatedLabelB = StudioExport.uniqueUnitySpriteName({ name: 'Walk', id: 'cell_0_1' });
+  assert.notStrictEqual(repeatedLabelA, repeatedLabelB,
+    'Same display names on different cells must map to unique Unity sprite names');
 
   // 4. Structure & Layers Buttons Centered Flex
   assert(styleCss.includes('.structure-action-group') && styleCss.includes('justify-content: center'),

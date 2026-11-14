@@ -1,135 +1,61 @@
-# NOIRADIX Studio — Core Architecture & Design Philosophy
+# NOIRADIX Studio and PixelArt — Architecture
 
-**Document Version:** 2.1.8 (stable)
-**Project:** NOIRADIX Studio — Structured Pixel Art Editor & Open Sprite Description Language  
-**Target Architecture:** Zero-dependency, browser-native, offline-capable, AI-native structured sprite authoring.  
+**Status:** Maintained overview. Product and PIX2 contracts are defined by their dedicated specifications; this page describes the current implementation boundaries.
 
----
+## Product boundaries
 
-## 1. Executive Vision: Sprite Editor + Sprite Description Language
+- **Studio** owns sprite-sheet grids, frame editing, animation, slicing/import, atlas generation and game-engine packages.
+- **PixelArt** owns the standalone artwork canvas.
+- Both applications run as static browser applications. They share PIX2 parsing, serialization, raster operations and selected editor components from `js/`; each keeps its DOM, viewport instances, history and autosave/session wiring.
+- PIX2 is the editable project source. PNG/atlas and engine packages are derived exports.
 
-PIX2 is deliberately **NOT** just another raster paint tool (like Aseprite, LibreSprite, or Pixelorama).  
-While conventional editors treat sprites as flat arrays of bitmap RGBA integers (where semantic structure, frame roles, and directional relationships are discarded upon rasterization), **PIX2 treats sprites as addressable, structured code**.
+## Current shared boundaries
 
-```
-                           +-------------------------------------+
-                           |        Human Creator (Studio)       |
-                           +------------------+------------------+
-                                              |
-                                              v
-+-----------------------+          +---------------------+          +-----------------------+
-|  AI Agent / Generator | <======> |   .PIX2 SOURCE OF   | <======> |  PNG / Sprite Sheet   |
-| (Discrete Operations) |          |        TRUTH        |          |   (Export Artifact)   |
-+-----------------------+          +---------------------+          +-----------------------+
-                                              ^
-                                              |
-                           +------------------+------------------+
-                           |  PIX2 Parser / Serializer / Engine  |
-                           +-------------------------------------+
-```
+| Responsibility | Current owner |
+|---|---|
+| PIX2 parsing, validation, normalization, serialization and migration | `js/pix2-format.js`; standalone copy `pix2/js/pix2-format.js` must remain byte-identical |
+| Raster edits and structural ownership operations | `js/tools.js`, `js/structure-operations.js` |
+| Selection transforms and Region selection behavior | `js/selection-transform.js`, `js/region-selection.js`, `js/editor-floating-selection.js` |
+| Canvas helpers, ruler geometry and shared zoom ladder | `js/editor-canvas.js`, `js/editor-rulers.js`, `js/viewport-pan-zoom.js` |
+| Shared toolbar, outliner, menus and document tabs | `js/editor-toolbar.js`, `js/editor-outliner.js`, `js/editor-menu.js`, `js/tab-strip.js` |
+| Studio grid, slice, animation, source, atlas and export controllers | `js/studio-grid.js`, `js/studio-slice.js`, `js/studio-animation.js`, `js/studio-source.js`, `js/studio-atlas.js`, `js/studio-export.js` |
+| Shared save primitives and browser workspace storage | `js/editor-file-save.js`, `js/editor-workspace-storage.js` |
+| Studio restored-session disk reconciliation | `js/studio-file-recovery.js` |
+| Studio entry point and app-specific orchestration | `js/app.js` |
+| PixelArt entry point and app-specific orchestration | `pixelart/js/pixelart-app.js` |
 
-### Core Invariants
-1. **Single Source of Truth (`.pix2`):** The `.pix2` file is the master project document. PNG images are purely derived, exported artifacts.
-2. **Sparse Pixel Storage:** Only explicitly drawn pixels are stored. A missing coordinate record $(x, y)$ means 100% pure transparency. The engine **never** generates an implicit solid background canvas.
-3. **Lossless RGBA Fidelity:** Supports `#RGB`, `#RGBA`, `#RRGGBB`, and `#RRGGBBAA`. Non-opaque alpha ($0 < \alpha < 255$) is strictly preserved across import, parse, store, serialize, and export.
-4. **Decoupled Identity:** Cell identifiers (`id`) are decoupled from grid row/col indices. A cell can be named `hero_idle_down`, `attack_slash_02`, etc., and assigned to any animation.
-5. **Zero Runtime Dependencies:** Runs directly in any modern web browser via static HTML5, CSS3, Vanilla JavaScript, and Canvas 2D. No node runtime, no npm packages, no cloud upload, and 100% offline capable.
+The app entry points still contain substantial UI and lifecycle orchestration. Their line counts alone do not establish a defect. Move code only when it creates a concrete shared rule, reduces duplicated ownership, or makes an independently testable boundary; do not move app-specific history, session, viewport or DOM wiring into a generic engine.
 
----
+## PIX2 serialization and AI workflow
 
-## 2. Four-Layer System Architecture
+PIX2 stores sparse artwork as readable text. The current canonical serializer normalizes raster commands to explicit pixel records; parsing a `line`, `rect` or `fill` and serializing it does not preserve the original drawing command. This is deterministic and diffable, but it is not a compressed or token-minimal representation. Large sheets can make full-document prompts exceed an AI model's context window.
 
-```
-Layer 4: Interoperability Layer
-  - Lossless Transparent PNG Export (Atlas & Individual Cell)
-  - Unity Sprite Sheet Metadata & JSON Slicing Configs
-  - Multi-frame Animated GIF / WebP Exporters
+The AI prompt is guidance plus the serialized source document. Applying code parses and validates the submitted document, then replaces the active document; it is not a patch-merging protocol. Any UI mode that asks for partial directives must therefore either merge them by stable IDs or clearly request a complete document. See `docs/discussion/V2_2_0_AUDIT_AND_PLAN.md` for the verified issue and current remediation status.
 
-Layer 3: NOIRADIX Studio UI Layer
-  - Grid Workspace (Sprite sheet layout, cell selection, row/col add/remove)
-  - Pixel Editor (Pencil, Eraser, Eyedropper, Bucket, Line, Rect, Marquee Select, Symmetry)
-  - Dedicated Animation Studio (Timeline, thumbnails, reorder, FPS, playback, Onion Skin)
-  - Floating Animation Studio (Compact draggable 4-dir / 8-dir / custom animation dial)
-  - PIX2 Code & AI Studio (Bidirectional live code view, AI prompt generation)
+## Rendering, coordinates and history
 
-Layer 2: PIX2 Engine Core
-  - Strict Token Lexer (Disambiguates ';' comments and '#' non-hex tokens)
-  - Deterministic Parser & Serializer (Semantic Roundtrip Invariant)
-  - Central Editor State & Snapshot History (Undo / Redo stack)
-  - Precision PNG Slicer (Configurable gap, margins, cell dimensions, alpha preservation)
-  - Document Lifecycle Manager (File System Access API, Autosave, Recovery)
+- Artwork coordinates are integer cell coordinates. Canvas/screen transforms, zoom, hover, selection overlays and isolation are view state and are not serialized.
+- Both editors use shared viewport/ruler helpers but own their viewport instance and render scheduling.
+- Studio history currently records canonical document snapshots around edits. This is simple and deterministic at the product's intended sprite sizes, with text size and snapshot cost growing with artwork complexity. No blanket performance claim is made for arbitrarily large artwork.
+- PixelArt has its own artwork history adapter. Do not assume its memory/history behavior is identical to Studio.
 
-Layer 1: PIX2 Language Specification
-  - Grammar EBNF, direct addressing syntax (`Player.cell_id.pixel(x,y) = color`)
-  - Semantic validation constraints & formal schema
-```
+## Export and external compatibility
 
----
+Studio builds atlas geometry in `js/studio-atlas.js` and packages Unity, TexturePacker, PNG and frame exports in `js/studio-export.js`. Unity's importer consumes the exported JSON for exact sprite rectangles, point filtering, pivots and animation frames; importing the PNG alone does not carry that metadata. Unity-specific behavior still needs verification in supported Unity versions in addition to JavaScript package tests.
 
-## 3. The Three Coordinate Systems
+The generated package writers are currently separate implementations. Consolidating them is a maintenance opportunity only if the shared module preserves each package's path, byte, download and error-handling contracts; do not treat similar CRC/ZIP code as proof that its callers are interchangeable.
 
-To eliminate layout, zoom, and viewport scaling bugs, PIX2 strictly separates three coordinate spaces:
+## Licensing
 
-| Coordinate Space | Type | Mathematical Domain | Description |
-| :--- | :--- | :--- | :--- |
-| **Cell Space** | Integer | $(x, y) \in [0, W-1] \times [0, H-1]$ | Local pixel coordinate within a specific sprite cell (e.g. $16 \times 16$). |
-| **Sheet Space** | Integer | $(X, Y) \in [0, \text{SheetW}-1] \times [0, \text{SheetH}-1]$ | Global pixel coordinate on the compiled sprite sheet atlas. |
-| **Screen Space** | Float | $(x_s, y_s) \in \mathbb{R}^2$ | Physical CSS/Client pixels on the monitor. Screen coordinates are **never** stored in `.pix2`. |
+- Application code: Apache License 2.0 (`LICENSE`).
+- PIX2 reference code: Apache License 2.0 (`pix2/LICENSE-CODE`).
+- PIX2 specification text: CC BY 4.0 (`pix2/LICENSE-SPEC`).
+- Third-party assets retain their own licenses as listed in `THIRD_PARTY_NOTICES.md`.
 
-Pointer-to-cell mapping must use the actual view transform, including fractional Fit zoom, canvas layout and DPR. Artwork zoom limits depend on dimensions; `js/viewport-pan-zoom.js` defines the shared ladder and cap. View state is never serialized into artwork.
+There is no project-wide Apache/MIT dual license. Check the relevant license file before redistributing a component.
 
----
+## Verification and limits
 
-## 4. AI-Native Pixel Addressing & Surgical Edits
+Use `docs/agents/VERIFICATION.md` for current commands. Historical suite totals in older roadmap and release documents describe their original run only. Browser, operating-system file dialogs and Unity Editor behavior are not fully established by Node tests. Record fixture, environment and exact checks when claiming verification.
 
-Instead of using latent diffusion which hallucinates blurry pixels and destroys artistic line-work, an AI interacts with PIX2 through discrete, surgical mathematical operations:
-
-```
-Player.cell_id.pixel(x, y) = Color
-```
-
-### Standard AI Mutation Operations:
-1. `set_pixel(cell_id, x, y, color)`: Plots a single pixel.
-2. `erase_pixel(cell_id, x, y)`: Deletes the record at $(x, y)$, reverting to pure transparency.
-3. `fill_region(cell_id, x, y, color)`: Flood fills connected matching color region.
-4. `move_region(cell_id, x1, y1, w, h, dx, dy)`: Translates a bounding box by integer offsets.
-5. `mirror_region(cell_id, axisX)`: Reflects pixels horizontally across a central axis.
-6. `replace_color(cell_id, old_color, new_color)`: Re-indexes or swaps palette colors.
-7. `add_frame(anim_id, cell_id)`: Appends cell to an animation sequence.
-8. `remove_frame(anim_id, index)`: Removes a frame from an animation sequence.
-
----
-
-## 5. Deployment & Distribution Architecture
-
-- **Web Static Hosting:** Hostable on any static server or CDN (GitHub Pages, Cloudflare Pages, Netlify) with zero backend.
-- **Desktop / Portable Edition:** Single zip folder containing `index.html`, `css/`, `js/`, `engine/`, and `samples/`. Double-click `index.html` or `start-pix2-studio.bat` to launch immediately without installing runtimes.
-- **Open Format Ecosystem:** See repository license files for applicable terms when distributing the parser or format documentation.
-
----
-
-## 6. Browser capabilities and measured support
-
-Native file access is feature-detected. Automated local verification for this refactor used Chrome 157; CI uses Playwright Chromium. These checks do not establish a minimum supported browser version or certify Firefox, Safari, Edge and every Chromium derivative. File-input/Blob fallback remains part of the implementation. Manual OS picker behavior is separate from mocked native-handle tests.
-
-## 7. Performance evidence
-
-Canvas buffers and visibility-aware blits are shared. Each app owns render scheduling and viewport instances. Runtime JavaScript requires no package installation; external icon assets and browser capabilities can affect offline presentation.
-
-Use `tests/benchmark-performance.js` and `tests/browser/benchmark-editors.cjs` with their recorded fixture/browser/DPR. Handler duration is not end-to-end frame latency; JS heap and connected canvas estimates exclude other allocations. There is no blanket promise of zero idle CPU, fixed RAM usage or every operation finishing below 16ms. Phase measurements and remaining coverage are recorded in `discussion/EDITOR_REFACTOR_PROGRESS.md`.
-
-## RC2 file lifecycle and bounded processing contract
-
-The 2.1.2-beta.1 implementation shares native write ordering, permissions and stream cleanup in `js/editor-file-save.js`. Apps own their session, history and persistence wiring. A save captures text, revision, originating session and handle before asynchronous work. Completion publishes only to that session; later edits remain dirty. Watcher reads are discarded if the handle, active session or revision changes while awaiting I/O.
-
-Workspace catalog selection validates shape before choosing the newest timestamp across localStorage and IndexedDB. This is browser recovery, separate from disk saving; unavailable or cleared browser storage cannot guarantee recovery.
-
-Both parser distributions must remain byte-identical. Public raster allocations require safe positive integer dimensions, at most 8192 per axis and 16,777,216 total pixels. Parser work budgets are implementation resource limits, not PIX2 artwork fields. See `discussion/RC2_AUDIT.md` for evidence and remaining beta coverage.
-
-## Controller boundaries after P1/P5
-
-Studio-specific UI controllers live in `js/studio-grid.js`, `studio-slice.js`, `studio-animation.js` and `studio-source.js`. The app connects their document/view ports and callbacks; they do not import each other. `studio-atlas.js` builds atlas rasters; `studio-export.js` packages them. Shared palette storage/dropdown behavior and immutable built-in color definitions live in `editor-palette-library.js` and `editor-palette-presets.js`; each editor receives separate mutable preset arrays. Core editor gestures and persistence remain app adapters during the next migration phases. See `discussion/EDITOR_REFACTOR_PROGRESS.md` for actual gates and outstanding work.
-
-## Mutation publication after P2
-
-Shared `Tools.editRaster` accepts a resolved source target and bounded integer coordinates and reports changed keys, optional before/after diff and dirty bounds. It does not resolve active application globals or publish history. App adapters resolve permissions, composite affected pixels, update their view and commit history. No-op commands must preserve revision, dirty state and redo. Dimension or structural changes remain edits even if the raster composite is unchanged.
+The document `docs/PIXELART/1M_PIXEL_LARGE_CANVAS_MEMORY_AND_PERFORMANCE_ANALYSIS.md` is a historical architecture proposal, not evidence that a typed-array engine or its projected performance is implemented. Likewise, old roadmaps and release notes may describe superseded plans; check current source before treating them as behavior contracts.

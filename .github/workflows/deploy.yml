@@ -31,6 +31,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Check README test inventory
+        run: node tests/check-readme-test-count.cjs
+
+      - name: Check generated changelog page
+        run: node scripts/build-changelog-page.cjs --check
+
+      - name: Check patch whitespace
+        run: git diff --check
+
       - name: Verify all production JavaScript syntax
         run: node tests/run-all.cjs --syntax
 

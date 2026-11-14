@@ -11,7 +11,7 @@ This handbook applies to repository work by coding agents. Read the current chec
 | [Release process](../ENGINEERING/RELEASE_PROCESS.md) | Version, tag and publication |
 | [Current discussions](../discussion/) | Findings, decisions and remaining gaps |
 
-The current upgrade is developed on `rc2`. Use the user's latest branch instruction. A request to publish documentation to `main` applies to that documentation change. Keep feature work on its review branch.
+Branch choice follows the user's latest explicit instruction. Do not infer a review branch from an earlier task or a stale note in this handbook.
 
 English and Vietnamese are both accepted. Use concrete repro steps, expected behavior, observed behavior, commit IDs and verification results. A historical PASS describes its recorded fixture and commit.
 

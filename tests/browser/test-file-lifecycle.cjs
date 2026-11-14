@@ -169,7 +169,21 @@ const assert = require('node:assert/strict');
       await page.keyboard.press('Control+s');
       await page.waitForFunction(() => window.files.C.writes.length === 2);
       assert.equal(await page.evaluate(() => window.files.C.content), retrySource);
+      await page.waitForFunction(() => document.querySelector('.project-tab.active .project-tab-dirty-dot') === null);
       assert.equal(await dirty(), 0, 'Retry succeeds after denied/cancelled saves');
+      if (!pa) {
+        await page.waitForFunction(() => document.querySelector('#studio-toast')?.textContent.includes('could not remember its file link'));
+        assert.match(await page.locator('#studio-toast').textContent(), /Reopen it after a reload/,
+          'A successful disk write with failed handle persistence must explain how to restore direct saving');
+        const sameTimestampExternal = retrySource.replace(/title: "[^"]+"/, 'title: "External Same Time"');
+        await page.evaluate(text => { window.files.C.content = text; }, sameTimestampExternal);
+        await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+        await page.waitForFunction(() => state.doc.meta.title === 'External Same Time');
+        assert.equal(await dirty(), 0, 'Clean Studio session reloads a same-timestamp external edit on focus');
+        await page.evaluate(text => { window.files.C.content = text; }, retrySource);
+        await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+        await page.waitForFunction(() => PIX2.serialize(state.doc) === window.files.C.content);
+      }
       const readsBeforeInvalid = await page.evaluate(() => {
         window.files.C.content = '@pix2 1.1\n@cell c\n p nope #fff';
         window.files.C.modified = 300;

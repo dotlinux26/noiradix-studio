@@ -21,6 +21,7 @@ const MODES = [
   'walk-animation',
   'accessory-equipment',
   'surgical-patch',
+  'frame-patch',
   'raw-spec'
 ];
 
@@ -56,6 +57,37 @@ const masterPrompt = Pix2AiPrompt.build({
   rows: 2,
   mode: 'all-in-one'
 });
+
+const framePatchPrompt = Pix2AiPrompt.build({
+  brief: 'Recolor only the highlighted frame feature',
+  source: '@pix2 1.1\n@meta\n  title: "Frame"\n  version: "1.1"\n@grid\n  cols: 1\n  rows: 1\n  default_cell: 16x16\n@palette\n  1: #333333\n@cell cell_target\n  grid_pos: 0,0\n@layer l_target\n  cell: cell_target\n@region r_target\n  cell: cell_target\n  parent: l_target\n  pixel 1,1 1\n@end',
+  width: 16,
+  height: 16,
+  cols: 1,
+  rows: 1,
+  mode: 'frame-patch',
+});
+assert(framePatchPrompt.includes('exactly one @cell block'), 'Frame prompt must request one complete cell document');
+assert(framePatchPrompt.includes('keeps its existing animations and all other frames'), 'Frame prompt must explain preserved project scope');
+assert(framePatchPrompt.includes('@cell cell_target'), 'Frame prompt must carry the active frame source');
+const frameSourceSection = framePatchPrompt.slice(framePatchPrompt.lastIndexOf('### Current Canonical Source Document'));
+assert(!frameSourceSection.includes('@cell cell_0_0'), 'Frame source payload must not include unrelated project cells');
+totalPass++;
+
+const instructionsOnlyPrompt = Pix2AiPrompt.build({
+  brief: 'Create a new 16px slime character',
+  source: '@pix2 1.1\n@meta\n  title: "PRIVATE ARTWORK"\n@end',
+  width: 16,
+  height: 16,
+  cols: 1,
+  rows: 1,
+  includeSource: false,
+  mode: 'full-character',
+});
+assert(instructionsOnlyPrompt.includes('No project source or artwork data is included'), 'Instruction-only prompt must explain missing source context');
+assert(!instructionsOnlyPrompt.includes('PRIVATE ARTWORK'), 'Instruction-only prompt must not leak project source');
+assert(!instructionsOnlyPrompt.includes('### Current Canonical Source Document'), 'Instruction-only prompt must omit the source block');
+totalPass++;
 
 const REQUIRED_TOKENS = [
   '@pix2 1.1',

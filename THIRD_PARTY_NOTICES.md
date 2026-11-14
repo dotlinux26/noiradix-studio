@@ -1,42 +1,30 @@
 # Third-Party Notices & Licenses
 
-NOIRADIX Studio incorporates third-party open-source assets and libraries under their respective permissive open-source licenses.
+This file records third-party materials that are bundled with or loaded by the repository's web pages. Their licenses remain separate from the NOIRADIX project licenses. It is not a blanket license grant for every asset displayed by the website.
 
 ---
 
 ### 1. Font Awesome Free (v6.5.1)
-* **Author / Provider:** Fonticons, Inc. (https://fontawesome.com)
-* **License:**
-  * Icons (SVG/PNG): [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
-  * Fonts (WOFF2/TTF in `css/webfonts/`): [SIL Open Font License 1.1 (OFL-1.1)](http://scripts.sil.org/OFL)
-  * Code (CSS/JS in `css/fontawesome/`): [MIT License](https://opensource.org/licenses/MIT)
-* **Notice:**
-  Font Awesome Free is free, open source, and GPL friendly. Used for user interface iconography across the desktop workbench, toolbar buttons, and status indicators.
+* **Author / provider:** Fonticons, Inc. ([Font Awesome](https://fontawesome.com))
+* **Used files:** `css/fontawesome/all.min.css` and `css/webfonts/fa-*.woff2` / `fa-brands-400.ttf`.
+* **Licenses by material:** Icon artwork — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); webfonts — [SIL OFL 1.1](https://openfontlicense.org/); CSS/code — [MIT](https://opensource.org/license/mit/).
+* **Attribution:** Font Awesome Free by Fonticons, Inc. See [Font Awesome's license information](https://fontawesome.com/license/free). The bundled stylesheet also retains its upstream attribution header.
+* **Remote stylesheet:** `index.html` and `pixelart/index.html` load the local stylesheet and also request the Font Awesome 6.5.1 stylesheet from cdnjs. If the CDN request fails, the local stylesheet remains available. This makes an external request to cdnjs on page load; no Font Awesome JavaScript kit is used.
 
 ---
 
-### 2. Google Fonts: Inter
-* **Author:** Rasmus Andersson (https://rsms.me/inter/)
-* **License:** [SIL Open Font License, 1.1](http://scripts.sil.org/OFL)
-* **Copyright:** Copyright (c) 2016-2024 The Inter Project Authors.
-
----
-
-### 3. Google Fonts: JetBrains Mono
-* **Author:** JetBrains (https://www.jetbrains.com/lp/mono/)
-* **License:** [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
-* **Copyright:** Copyright 2020-2024 JetBrains s.r.o.
-
----
-
-### 4. Zero External Runtime Dependencies Architecture
-NOIRADIX Studio is deliberately engineered with **Zero External Runtime Dependencies**:
+### 2. Runtime code and generated export templates
+The editor's application logic has no required third-party JavaScript package dependency. It uses browser APIs and project-maintained JavaScript modules. This does not mean the hosted pages make no external requests: see the Font Awesome fallback above and the linked images below.
 * **ZIP Archive Compiler:** Custom built-in client-side PKZIP generator and CRC-32 checksum algorithm (pure Vanilla ES6+, zero external JSZip binaries).
 * **Color Models & Quantization:** Native mathematical color space transformations (HEX, RGB, RGBA, HSL, HSV, CIELAB Delta-E distance) implemented in pure JavaScript.
 * **Canvas Rasterization:** Native HTML5 2D Canvas API with sub-pixel integer nearest-neighbor image rendering (`image-rendering: pixelated`).
-* **Cross-Engine Export Templates:** Generated C# importer script (`Pix2UnityImporter.cs`), JSON metadata, and TexturePacker compatible manifests are self-contained templates licensed under Apache 2.0.
+* **Cross-Engine Export Templates:** Generated C# importer script (`Pix2UnityImporter.cs`), JSON metadata, and TexturePacker-compatible manifests are project templates covered by Apache-2.0, subject to their generated notices.
 
----
+### 3. External images and badges
+The Studio landing page references a GitHub profile image and badge images hosted by SourceForge, VibeCodePicks, TeaserTrack, AlternativeTo, SaaSCity, OpenHunts, Project Radar, and Product Hunt. These are requested from their respective hosts and are not bundled with this repository or relicensed by its LICENSE files. Their providers retain their own terms and privacy practices.
 
-### 5. Project Copyright & License
-All other source code, interface designs, format specifications (`.pix2`), and software architecture are copyright © 2026 **dotlinux26 (Nguyen Duc Canh)** and licensed under the **Apache License 2.0**.
+### 4. NOIRADIX and PIX2 license scope
+* Application source code and project materials are covered by the root [Apache License 2.0](LICENSE), except where a file or the notices below state a different license.
+* PIX2 specification text and the enumerated normative documentation are covered by [CC BY 4.0](pix2/LICENSE-SPEC); see [`NOTICE`](NOTICE) for the maintained file list.
+* PIX2 reference implementation code is covered by [Apache-2.0](pix2/LICENSE-CODE).
+* Third-party MIT, OFL, or CC BY notices apply only to the corresponding upstream material; they do not make the whole repository dual-licensed.

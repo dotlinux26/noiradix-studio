@@ -1000,6 +1000,13 @@ body {
   white-space: nowrap;
 }
 
+.cell-info-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
 .cell-action-group {
   display: flex;
   gap: 3px;
@@ -2907,6 +2914,54 @@ body {
   max-width: 95vw;
 }
 
+.import-destination-dialog {
+  width: 520px;
+  max-width: 95vw;
+}
+
+.import-destination-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.import-destination-option:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--bg-card-hover);
+}
+
+.import-destination-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.import-destination-option > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-destination-option small {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.import-destination-icon {
+  color: var(--accent-primary);
+  font-size: 18px;
+  width: 24px;
+  flex: 0 0 24px;
+  text-align: center;
+}
+
 .template-modal-body,
 .new-file-modal-body {
   padding: 16px 20px;
@@ -3601,6 +3656,42 @@ body.dark-theme .export-preview-viewport {
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
+
+.about-changelog-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d7dfed;
+  border-radius: 9px;
+  background: linear-gradient(100deg, #f8faff, #f1f5fb);
+  color: #202b3b;
+  text-decoration: none;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.about-changelog-link:hover,
+.about-changelog-link:focus-visible {
+  border-color: #9aa9ff;
+  box-shadow: 0 5px 16px rgba(79, 70, 229, .11);
+  transform: translateY(-1px);
+}
+
+.about-changelog-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: #e9eaff;
+  color: #5146e5;
+}
+
+.about-changelog-copy { display: grid; gap: 3px; }
+.about-changelog-copy strong { font-size: 13px; }
+.about-changelog-copy small { color: #64748b; font-size: 11px; }
+.about-changelog-cta { margin-left: auto; color: #5146e5; font-size: 10px; font-weight: 800; white-space: nowrap; }
 
 @media (max-width: 580px) {
   .about-pixelart-promo {

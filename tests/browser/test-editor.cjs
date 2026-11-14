@@ -52,6 +52,8 @@ const fixture = `@pix2 1.1
         deviceScaleFactor: Number(process.env.EDITOR_QA_DPR || 1),
         acceptDownloads: true,
       });
+      const testOrigin = new URL(process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769').origin;
+      await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: testOrigin });
       page.setDefaultTimeout(25000);
       const errors = [];
       page.on('pageerror', (e) => {
@@ -111,6 +113,31 @@ const fixture = `@pix2 1.1
       if (await about.count()) await about.first().click();
       const canvas = page.locator(pa ? '#pa-canvas-main' : '#cell-overlay');
       await canvas.waitFor({ state: 'visible' });
+      if (!pa) {
+        const infoRow = page.locator('.cell-info-badges');
+        const infoDisplay = await infoRow.evaluate((el) => getComputedStyle(el).display);
+        assert.equal(infoDisplay, 'flex', 'frame controls should stay in one horizontal row');
+        const frameCode = await page.locator('#btn-copy-frame-pix2').boundingBox();
+        const frameAi = await page.locator('#btn-copy-frame-ai-prompt').boundingBox();
+        const frameImport = await page.locator('#btn-import-frame-pix2').boundingBox();
+        assert.ok(Math.abs(frameCode.y - frameAi.y) < 1 && Math.abs(frameAi.y - frameImport.y) < 1,
+          'Frame Code, Frame AI and Import Frame must share one row');
+        await page.locator('#btn-copy-frame-pix2').click();
+        await page.waitForFunction(() => document.querySelector('#studio-toast')?.textContent?.startsWith('Copied PIX2 code for'));
+        const copiedFrame = PIX2.parseValidated(await page.evaluate(() => navigator.clipboard.readText()));
+        assert.deepEqual(Object.keys(copiedFrame.cells), ['cell_0_0'], 'Frame Code clipboard should contain only the active frame');
+        await page.locator('#btn-copy-frame-ai-prompt').click();
+        await page.waitForFunction(() => document.querySelector('#studio-toast')?.textContent?.startsWith('Copied complete PIX2 AI prompt'));
+        const framePrompt = await page.evaluate(() => navigator.clipboard.readText());
+        assert.match(framePrompt, /Single-Frame PIX2 Patch/);
+        assert.match(framePrompt, /@cell cell_0_0/);
+        assert.doesNotMatch(framePrompt, /@cell cell_other/);
+        await page.locator('#btn-import-frame-pix2').click();
+        await page.locator('#modal-import-frame-code').waitFor({ state: 'visible' });
+        assert.match(await page.locator('#import-frame-code-context').textContent(), /cell_0_0/,
+          'frame actions should resolve the active cell from the shared document model');
+        await page.locator('#btn-cancel-import-frame-code').click();
+      }
       const source = () =>
         page.evaluate(
           (pa) =>
@@ -836,6 +863,91 @@ const fixture = `@pix2 1.1
         for (let i = 0; i < 14; i++) await page.locator('#btn-zoom-in').click();
         assert.equal(await canvas.evaluate(c => c.width), 4096, '1024px artwork caps its backing at 4x');
         assert.equal(await canvas.evaluate(c => c.height), 4096);
+      }
+      if (!pa) {
+        const beforeFrameImport = await source();
+        const replacementFrame = fixture
+          .replace('Editor QA', 'Frame Import QA')
+          .replace('default_cell: 16x16', 'default_cell: 512x512');
+        await page.evaluate(() => {
+          state.activeLayerId = 'back';
+          state.activeGroupId = 'old-group';
+          state.activeRegionId = 'red';
+          state.isolatedNodeId = 'red';
+          state.selection = { x: 1, y: 1, w: 2, h: 2 };
+        });
+        await page.locator('#btn-import-frame-pix2').click();
+        await page.locator('#modal-import-frame-code').waitFor({ state: 'visible' });
+        await page.locator('#import-frame-code-textarea').fill(replacementFrame);
+        await page.locator('#btn-confirm-import-frame-code').click();
+        await page.waitForFunction(() =>
+          document.querySelector('#studio-toast')?.textContent?.startsWith('Imported PIX2 into') ||
+          !document.querySelector('#import-frame-code-error')?.classList.contains('hidden'));
+        const frameImportToast = await page.locator('#studio-toast').textContent();
+        const frameImportError = await page.locator('#import-frame-code-error').textContent();
+        assert.match(frameImportToast, /^Imported PIX2 into/, `frame import failed: ${frameImportError}`);
+        assert.equal(await page.evaluate(() => state.activeLayerId), null, 'frame import should clear stale layer focus');
+        assert.equal(await page.evaluate(() => state.activeGroupId), null, 'frame import should clear stale group focus');
+        assert.equal(await page.evaluate(() => state.activeRegionId), null, 'frame import should clear stale region focus');
+        assert.equal(await page.evaluate(() => state.isolatedNodeId), null, 'frame import should exit stale isolation');
+        assert.equal(await page.evaluate(() => state.selection), null, 'frame import should clear the old selection bounds');
+        const frameImportHistoryIndex = await page.evaluate(() => state.historyIndex);
+        await page.keyboard.press('Control+z');
+        await page.waitForTimeout(150);
+        const afterFrameImportUndo = await source();
+        const undoHistoryIndex = await page.evaluate(() => state.historyIndex);
+        assert.equal(undoHistoryIndex, frameImportHistoryIndex - 1, 'frame import should be one undoable document operation');
+        assert.equal(afterFrameImportUndo, beforeFrameImport, 'undo should restore the exact previous frame document');
+
+        const originalProject = await source();
+        const projectTabCount = await page.locator('.project-tabs-strip .project-tab').count();
+        const importedCurrent = fixture.replace('Editor QA', 'Imported Into Current');
+
+        await page.locator('#btn-import-code').click();
+        await page.locator('#modal-import-code-destination').waitFor({ state: 'visible' });
+        await page.locator('#btn-import-code-current').click();
+        await page.locator('#modal-import-code').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('#import-code-filename-section').evaluate(el => getComputedStyle(el).display), 'none',
+          'Current-project replacement should not expose a misleading new filename field');
+        await page.locator('#import-code-textarea').fill(importedCurrent);
+        await page.locator('#btn-confirm-import-code').click();
+        await page.waitForFunction(() => document.querySelector('#studio-toast')?.textContent?.startsWith('Replaced current project with'));
+        assert.equal(await page.locator('.project-tabs-strip .project-tab').count(), projectTabCount,
+          'Replacing current project must keep the same project tab');
+        assert.equal(await page.evaluate(() => state.doc.meta.title), 'Imported Into Current');
+        assert.equal(await page.evaluate(() => state.activeTabId), 'tab-grid-overview');
+        assert.equal(await page.evaluate(() => state.isolatedNodeId), null);
+        await page.keyboard.press('Control+z');
+        await page.waitForFunction(expected => PIX2.serialize(state.doc) === expected, originalProject);
+        assert.equal(await page.evaluate(() => state.activeTabId), 'tab-grid-overview',
+          'Undoing replacement should restore the previous project in a consistent grid view');
+
+        const noOpHistoryIndex = await page.evaluate(() => state.historyIndex);
+        await page.locator('#btn-import-code').click();
+        await page.locator('#modal-import-code-destination').waitFor({ state: 'visible' });
+        await page.locator('#btn-import-code-current').click();
+        await page.locator('#modal-import-code').waitFor({ state: 'visible' });
+        await page.locator('#import-code-textarea').fill(originalProject);
+        await page.locator('#btn-confirm-import-code').click();
+        await page.waitForFunction(() => document.querySelector('#studio-toast')?.textContent?.includes('identical to the current project'));
+        assert.equal(await page.evaluate(() => state.historyIndex), noOpHistoryIndex,
+          'Importing identical PIX2 into current project must not create undo history');
+        assert.equal(await source(), originalProject, 'No-op current import must not alter project contents');
+
+        const importedNewTab = fixture.replace('Editor QA', 'Imported As New Tab');
+        await page.locator('#btn-import-code').click();
+        await page.locator('#modal-import-code-destination').waitFor({ state: 'visible' });
+        await page.locator('#btn-import-code-new-tab').click();
+        await page.locator('#modal-import-code').waitFor({ state: 'visible' });
+        assert.notEqual(await page.locator('#import-code-filename-section').evaluate(el => getComputedStyle(el).display), 'none',
+          'New-tab import should allow naming the imported file');
+        await page.locator('#import-code-textarea').fill(importedNewTab);
+        await page.locator('#btn-confirm-import-code').click();
+        await page.waitForFunction(() => document.querySelector('#studio-toast')?.textContent?.startsWith('Successfully imported'));
+        assert.equal(await page.locator('.project-tabs-strip .project-tab').count(), projectTabCount + 1,
+          'New-tab import should create one separate project session');
+        await page.locator('.project-tabs-strip .project-tab').first().click();
+        await page.waitForFunction(expected => PIX2.serialize(state.doc) === expected, originalProject);
       }
       assert.deepEqual(errors, [], name + ' console exceptions');
       console.log(

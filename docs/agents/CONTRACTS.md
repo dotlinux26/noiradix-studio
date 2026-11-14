@@ -21,6 +21,7 @@
 | Native write permission/queue/stream cleanup | `js/editor-file-save.js` |
 | Studio feature controllers | `js/studio-grid.js`, `js/studio-animation.js`, `js/studio-slice.js`, `js/studio-source.js`, `js/studio-atlas.js`, `js/studio-export.js` |
 | Browser workspace storage | `js/editor-workspace-storage.js` |
+| Studio reconnect/reconcile of an active saved-file handle | `js/studio-file-recovery.js` |
 | AI format rules | `js/pix2-ai-prompt.js` |
 | Studio document/frame history, file handles, UI and animation | `js/editor-state.js`, `js/app.js` and the Studio adapters |
 | Standalone artwork history, file handles and UI | `pixelart/js/pixelart-app.js` |

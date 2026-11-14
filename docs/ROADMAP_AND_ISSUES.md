@@ -80,7 +80,7 @@ Phase 4: AI Agent Interface & Security Hardening (COMPLETED)
   - Real-time external hot-reload & smart conflict resolution (Live Human-AI pairing)
   - Contextual AI prompt generator (4 specialized prompt modes)
   - Complete client-side security hardening (Zero XSS, Prototype Pollution & DoS defenses)
-  - 134/134 Automated tests passing across 4 suites
+  - Historical report: 134/134 automated tests across 4 suites at the time of this roadmap; not the current suite inventory.
 
 Phase 5: Total Feature Freeze & Specification Finalization (COMPLETED / CLOSED)
   - Canonical snake_case AST enforcement (cell_size)
@@ -89,7 +89,7 @@ Phase 5: Total Feature Freeze & Specification Finalization (COMPLETED / CLOSED)
   - Unified canonical specification (pix2/SPECIFICATION.md & EBNF determinism)
   - Structured Diagnostic API contract ({ code, severity, message, cell_id, coordinate })
   - VS Code language tooling with TextMate grammar
-  - Continuous Integration via GitHub Actions running all 4 test suites (134/134 passing)
+  - Historical CI report: 4 suites (134/134) at the time of this roadmap. Use the current workflow and test runner for present-day status.
 ```
 
 ---

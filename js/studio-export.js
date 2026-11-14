@@ -5,6 +5,11 @@ const StudioExport = (() => {
     typeof window !== 'undefined' ? window.NOIRADIX_VERSION : require('./version.js');
   const ModularExport =
     typeof window !== 'undefined' ? window.ModularExport : require('./modular-export.js');
+
+  function uniqueUnitySpriteName(frame) {
+    return `${frame.name} [${frame.id}]`;
+  }
+
   function create({
     sanitizeSafeFilename,
     downloadBlob,
@@ -180,15 +185,21 @@ const StudioExport = (() => {
       if (currentExportFormat === 'unity') {
         const pngBytes = await canvasToUint8Array(atlasData.canvas);
 
+        // Display names are editable and may repeat. Unity's sprite lookup and
+        // animation references need a deterministic unique key, so include the
+        // stable PIX2 cell ID while retaining the original label in metadata.
+        const unitySpriteNameByCellId = new Map(
+          atlasData.frameRects.map((fr) => [fr.id, uniqueUnitySpriteName(fr)]),
+        );
+
         // Build Unity Metadata JSON
         const unityAnimList = [];
         const anims = doc.animations || {};
         for (const k in anims) {
           const anim = anims[k];
-          const fNames = (anim.frames || []).map((cid) => {
-            const c = doc.cells[cid];
-            return c && c.name ? c.name : cid;
-          });
+          const fNames = (anim.frames || []).map(
+            (cid) => unitySpriteNameByCellId.get(cid) || uniqueUnitySpriteName({ name: doc.cells[cid]?.name || cid, id: cid }),
+          );
           unityAnimList.push({
             clipName: k,
             fps: anim.fps || 6,
@@ -212,7 +223,8 @@ const StudioExport = (() => {
             scale: opts.scale,
           },
           frames: atlasData.frameRects.map((fr) => ({
-            name: fr.name,
+            name: unitySpriteNameByCellId.get(fr.id),
+            displayName: fr.name,
             cellId: fr.id,
             x: fr.x,
             y: fr.y,
@@ -577,7 +589,7 @@ STEP 3: 1-CLICK AUTOMATIC IMPORT
       In Unity's top menu bar, click "Tools > NOIRADIX > Import Pix2 Spritesheet JSON..."
       and select the .json file.
 
-  Both methods read the .pix2.json metadata, slice the atlas into precisely named
+  Both methods read the .pix2.json metadata, slice the atlas into uniquely named
   sprites, and create native Unity .anim clips from the animation data.
 
 --------------------------------------------------------------------------------
@@ -739,6 +751,6 @@ NOIRADIX Studio: https://github.com/dotlinux26/noiradix-studio
 
     return { execute };
   }
-  return { create };
+  return { create, uniqueUnitySpriteName };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = StudioExport;
