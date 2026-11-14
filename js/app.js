@@ -4545,6 +4545,7 @@
           session.fileHandle = handle;
           session.fileName = handle.name;
           session.filePath = handle.name;
+          session.title = handle.name.replace(/\.pix2$/i, '');
           fileHandlePersisted = await persistFileHandle(handle, session.id);
         }
         if (active) {
@@ -4560,6 +4561,7 @@
           isDocumentDirty = session.isDirty;
           if (!isDocumentDirty) setDirty(false);
           updateFileStatusUI();
+          updateProjectTitleUI();
           renderProjectTabs();
           if (interactive && (!handle || fileHandlePersisted)) {
             showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName, 'success');
@@ -4960,6 +4962,7 @@
     const fileHandlePersisted = handle ? await persistFileHandle(handle, session.id) : true;
     persistAllProjectSessions();
     updateFileStatusUI();
+    updateProjectTitleUI();
     showToast(fileHandlePersisted
       ? 'Opened ' + file.name + ' in a document tab'
       : `Opened ${file.name}, but the browser could not remember its file link. Reopen it after a reload to keep direct saving.`,

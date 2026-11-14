@@ -4384,6 +4384,8 @@
             currentFileHandle = handle;
             currentFileName = handle.name;
             persistFileHandle(handle);
+            state.title = handle.name.replace(/\.[^/.]+$/, '');
+            if (dom.docTitle) dom.docTitle.value = state.title;
           }
           lastKnownFileModified = modified;
           lastSavedContent = text;
@@ -4391,6 +4393,7 @@
           lastSavedRevision = revision;
           setDirty(documentRevision !== lastSavedRevision || _PIX2.serialize(state.doc) !== text);
           triggerAutosave(true);
+          updateDocumentTitle();
           showToast(handle ? 'Saved to ' + handle.name : 'Downloaded ' + fileName);
         }
         if (_hasDocument) persistPaWorkspace();

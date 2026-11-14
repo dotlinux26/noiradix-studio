@@ -33,12 +33,12 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.1', 'Studio version must be 2.2.1');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.1', 'PixelArt version must be 2.2.1');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.2', 'Studio version must be 2.2.2');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.2', 'PixelArt version must be 2.2.2');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.1 / PixelArt 2.2.1 / PIX2 1.1)');
+  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.2 / PixelArt 2.2.2 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -664,6 +664,33 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
     'index.html must load js/sample-reaper.js');
 
   pass('Arch-Lich Grim Reaper 48x48 PIX2 1.1 template and Demo Chooser UI verified');
+}
+
+// ---------------------------------------------------------------------------
+// Test 15: Save & Import Header Title Synchronization Invariant
+// ---------------------------------------------------------------------------
+{
+  console.log('\nTest 15: Save & Import Header Title Synchronization Invariant');
+
+  const appJs = fs.readFileSync(path.join(__dirname, '..', 'js/app.js'), 'utf8');
+  const paAppJs = fs.readFileSync(path.join(__dirname, '..', 'pixelart/js/pixelart-app.js'), 'utf8');
+
+  // Verify Studio saveStudioSnapshot synchronizes updateProjectTitleUI with updateFileStatusUI
+  const saveSnapshotMatch = appJs.match(/function saveStudioSnapshot[\s\S]*?updateFileStatusUI\(\);\s*updateProjectTitleUI\(\);\s*renderProjectTabs\(\);/);
+  assert(saveSnapshotMatch,
+    'saveStudioSnapshot must synchronize updateProjectTitleUI() immediately alongside updateFileStatusUI() on active disk save');
+
+  // Verify Studio openStudioDocument synchronizes updateProjectTitleUI
+  const openDocMatch = appJs.match(/function openStudioDocument[\s\S]*?updateFileStatusUI\(\);\s*updateProjectTitleUI\(\);/);
+  assert(openDocMatch,
+    'openStudioDocument must synchronize updateProjectTitleUI() when opening a document with handle');
+
+  // Verify PixelArt saveFileNative synchronizes docTitle and updateDocumentTitle
+  const paSaveMatch = paAppJs.match(/function saveFileNative[\s\S]*?dom\.docTitle\.value = state\.title;[\s\S]*?updateDocumentTitle\(\);/);
+  assert(paSaveMatch,
+    'PixelArt saveFileNative must update docTitle and updateDocumentTitle() on active disk save');
+
+  pass('Header title widgets and bottom status pills synchronize immediately on save across both apps without page reload');
 }
 
 console.log('\n====================================================');

@@ -18,15 +18,15 @@
     },
     studio: {
       name: 'NOIRADIX Studio',
-      version: '2.2.1',
+      version: '2.2.2',
       channel: 'Stable',
-      displayVersion: 'v2.2.1'
+      displayVersion: 'v2.2.2'
     },
     pixelart: {
       name: 'NOIRADIX PixelArt',
-      version: '2.2.1',
+      version: '2.2.2',
       channel: 'Stable',
-      displayVersion: 'v2.2.1'
+      displayVersion: 'v2.2.2'
     },
     format: {
       name: 'PIX2',
