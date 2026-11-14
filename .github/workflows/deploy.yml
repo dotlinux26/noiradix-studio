@@ -57,6 +57,7 @@ jobs:
       - name: Exercise both editor entry points
         env:
           EDITOR_QA_CHANNEL: chromium
+          EDITOR_QA_URL: http://127.0.0.1:8769
         run: |
           export NODE_PATH="$RUNNER_TEMP/noiradix-qa/node_modules"
           python3 -m http.server 8769 --bind 127.0.0.1 > "$RUNNER_TEMP/noiradix-http.log" 2>&1 &

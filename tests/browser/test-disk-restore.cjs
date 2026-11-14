@@ -54,7 +54,7 @@ function source(title, color = '#ff0000') {
         };
       }, scenario);
 
-      const entryPoint = process.env.EDITOR_QA_FILE_URL || (process.env.EDITOR_QA_URL || 'http://127.0.0.1:8783') + '/';
+      const entryPoint = process.env.EDITOR_QA_FILE_URL || (process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + '/';
       await page.goto(entryPoint);
       await page.waitForFunction(title => window.state.doc?.meta?.title === title, scenario.expected);
       const shouldLink = !scenario.handleSessionId;
@@ -85,7 +85,7 @@ function source(title, color = '#ff0000') {
     const realHandlePage = await browser.newPage({ viewport: { width: 1280, height: 850 } });
     realHandlePage.setDefaultTimeout(15000);
     await realHandlePage.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
-    await realHandlePage.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8783') + '/');
+    await realHandlePage.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + '/');
     await realHandlePage.locator('.project-tab.active').waitFor();
     await realHandlePage.waitForTimeout(250);
     const diskSource = source('Real Handle Saved');

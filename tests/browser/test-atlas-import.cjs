@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
     page.on('pageerror', error => errors.push(error.message));
     await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     await page.addInitScript(() => localStorage.setItem('noiradix_about_seen', 'true'));
-    await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8783') + '/');
+    await page.goto((process.env.EDITOR_QA_URL || 'http://127.0.0.1:8769') + '/');
     await page.evaluate(() => { window.__qaErrors = []; });
     await page.locator('[data-tab-id="tab-import-slice"]').click();
 
