@@ -1314,10 +1314,17 @@
   function initAnimationPlayers() {
     if (dom.animCanvas) {
       animPlayer = new AnimationPlayer(dom.animCanvas);
-      animPlayer.scale = 8;
+      animPlayer.scale = 'fit';
       window.animPlayer = animPlayer;
       animPlayer.start();
       updateFloatingPlayButtonUI();
+
+      const previewWrapper = document.getElementById('anim-canvas-wrapper');
+      if (previewWrapper && typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => {
+          if (animPlayer && animPlayer.scale === 'fit') animPlayer.render();
+        }).observe(previewWrapper);
+      }
     }
 
     if (dom.studioAnimCanvas) {
@@ -6926,15 +6933,23 @@
       animCanvasWrapper.addEventListener('wheel', (e) => {
         e.preventDefault();
         if (!animPlayer) return;
-        const scales = [4, 6, 8, 10, 'fit'];
+        const scales = [4, 6, 8, 10];
         let curIdx = scales.indexOf(animPlayer.scale);
-        if (curIdx === -1) curIdx = 2; // default 8
-        if (e.deltaY < 0 && curIdx < scales.length - 1) {
-          curIdx++;
-        } else if (e.deltaY > 0 && curIdx > 0) {
-          curIdx--;
+        const fitScale = animPlayer.getFitScale();
+        let nextScale = animPlayer.scale;
+        if (curIdx === -1) {
+          if (e.deltaY < 0) {
+            nextScale = scales.find((scale) => scale > fitScale) || 'fit';
+          } else {
+            nextScale = scales.filter((scale) => scale < fitScale).at(-1) || 'fit';
+          }
+        } else if (e.deltaY < 0) {
+          if (curIdx < scales.length - 1) nextScale = scales[curIdx + 1];
+          else if (fitScale > scales[curIdx]) nextScale = 'fit';
+        } else {
+          if (curIdx > 0) nextScale = scales[curIdx - 1];
+          else if (fitScale < scales[curIdx]) nextScale = 'fit';
         }
-        const nextScale = scales[curIdx];
         animPlayer.scale = nextScale;
         document.querySelectorAll('#anim-zoom-group [data-scale]').forEach(b => {
           b.classList.toggle('active', b.dataset.scale === String(nextScale));
@@ -7234,7 +7249,8 @@
       btn.addEventListener('click', () => {
         document.querySelectorAll('[data-dir]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        animPlayer.setDirection(btn.dataset.dir);
+        const animationName = animPlayer.setDirection(btn.dataset.dir);
+        if (dom.floatingAnimSelect) dom.floatingAnimSelect.value = animationName || '';
       });
     });
   }

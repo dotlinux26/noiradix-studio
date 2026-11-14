@@ -185,15 +185,19 @@ const StudioAnimation = (() => {
 
       if (dom.floatingAnimSelect) {
         dom.floatingAnimSelect.innerHTML = '';
+        const autoOption = document.createElement('option');
+        autoOption.value = '';
+        autoOption.textContent = 'Auto by direction';
+        dom.floatingAnimSelect.appendChild(autoOption);
         animNames.forEach((name) => {
           const opt = document.createElement('option');
           opt.value = name;
           opt.textContent = name;
           dom.floatingAnimSelect.appendChild(opt);
         });
-        if (view.animPlayer && view.animPlayer.activeAnimationName) {
-          dom.floatingAnimSelect.value = view.animPlayer.activeAnimationName;
-        }
+        dom.floatingAnimSelect.value = view.animPlayer && view.animPlayer.activeAnimationName
+          ? view.animPlayer.activeAnimationName
+          : '';
       }
 
       if (dom.animClipsList) {

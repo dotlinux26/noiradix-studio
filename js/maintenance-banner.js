@@ -16,26 +16,15 @@
   const STORAGE_KEY = 'noira_maintenance_dismissed_at';
   const DEFAULT_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 hours
 
-  function isDevelopmentEnvironment(locationLike = global.location) {
-    if (!locationLike) return false;
-    const hostname = String(locationLike.hostname || '').toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
-    try {
-      return new URLSearchParams(locationLike.search || '').get('noira-maintenance') === '1';
-    } catch (_) {
-      return false;
-    }
-  }
-
   const DEFAULT_CONFIG = {
-    enabled: isDevelopmentEnvironment(), // Development hosts only; production and file:// stay quiet by default.
+    enabled: true, // Show the feedback notice on first visit in production, development, and offline file:// use.
     intervalMs: DEFAULT_INTERVAL_MS,
     storageKey: STORAGE_KEY,
     autoCheckIntervalMs: 60 * 1000, // Check every 60 seconds
-    viTitle: 'Nâng cấp & Bảo trì Hệ thống',
-    viMessage: 'Ứng dụng đang trong giai đoạn nâng cấp & bảo trì. Rất có thể một số công cụ tạm thời chưa khả dụng hoặc phát sinh lỗi, rất mong quý người dùng thông cảm!',
-    enTitle: 'System Upgrade & Maintenance',
-    enMessage: 'The application is currently undergoing upgrades and maintenance. Some tools may be temporarily unavailable or encounter errors. We appreciate your patience and understanding!'
+    viTitle: 'Thông báo bản Stable',
+    viMessage: 'Ứng dụng đang ở bản Stable, nhưng vẫn có thể còn những khía cạnh chưa được xem xét hoặc lỗi chưa phát hiện. Nếu gặp lỗi hay hành vi bất thường, mong bạn gửi góp ý để chúng tôi kiểm tra và cải thiện.',
+    enTitle: 'Stable Release Notice',
+    enMessage: 'This is a Stable release, but some areas may not have been reviewed and undiscovered bugs may remain. If you encounter a bug or unexpected behavior, please share feedback so we can investigate and improve.'
   };
 
   class MaintenanceBanner {
@@ -78,7 +67,7 @@
           box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
-          z-index: 300;
+          z-index: 900;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           box-sizing: border-box;
           opacity: 0;
@@ -91,6 +80,7 @@
         .noira-maintenance-banner.is-visible {
           opacity: 1;
           transform: translateY(0) scale(1);
+          pointer-events: auto;
         }
 
         .noira-maintenance-banner.is-visible button {
@@ -189,6 +179,24 @@
           color: #64748b;
         }
 
+        .noira-mb-feedback-links {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 0 14px 10px;
+        }
+
+        .noira-mb-feedback-links a {
+          color: #c7d2fe;
+          font-size: 11px;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+
+        .noira-mb-feedback-links a:hover {
+          color: #ffffff;
+        }
+
         .noira-mb-dismiss-action {
           background: rgba(255, 255, 255, 0.08);
           border: 1px solid rgba(255, 255, 255, 0.12);
@@ -277,7 +285,7 @@
     }
 
     /**
-     * Dismisses the banner and records timestamp for the 15-minute schedule
+     * Dismisses the banner and records the timestamp for the configured interval.
      */
     dismiss() {
       try {
@@ -306,7 +314,7 @@
               <line x1="12" y1="9" x2="12" y2="13"></line>
               <line x1="12" y1="17" x2="12.01" y2="17"></line>
             </svg>
-            <span>${this.config.enTitle}</span>
+            <span>${this.config.viTitle} · ${this.config.enTitle}</span>
           </div>
           <button type="button" class="noira-mb-close-btn" aria-label="Close notification" title="Dismiss">
             ✕
@@ -329,8 +337,13 @@
           </div>
         </div>
 
+        <div class="noira-mb-feedback-links">
+          <a href="https://github.com/dotlinux26/noiradix-studio/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">Báo lỗi / Report a bug</a>
+          <a href="https://discord.gg/SJwsdGWubF" target="_blank" rel="noopener noreferrer">Discord cộng đồng / Community Discord</a>
+        </div>
+
         <div class="noira-mb-footer">
-          <span>Auto re-checks every 3 hours</span>
+          <span>Nhắc lại sau 3 giờ / Reappears after 3 hours</span>
           <button type="button" class="noira-mb-dismiss-action">Got it</button>
         </div>
       `;
@@ -395,7 +408,6 @@
 
   const NoiraMaintenanceBanner = {
     MaintenanceBanner,
-    isDevelopmentEnvironment,
     init,
     getInstance,
     show: () => getInstance().show(),

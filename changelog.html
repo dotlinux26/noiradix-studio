@@ -31,6 +31,41 @@
 
     <section class="release-list" aria-label="Release history">
       <details class="release-entry" open>
+  <summary><span class="release-version">v2.2.1</span><span class="release-source">docs/releases/v2.2.1.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.2.1
+
+## Highlights
+
+- The floating Animation Studio preview now opens in Fit mode and recalculates its fit when the preview area changes size. Fixed zoom choices remain available.
+- Direction controls now cycle through clips tagged for the chosen direction in document order, wrapping to the first matching clip. Directions without tagged clips retain the legacy row-based fallback.
+- The animation selector follows direction-driven playback and exposes an Auto by direction option.
+- The bilingual Stable notice now appears on first visit across hosted and local-file modes, explains that Stable does not mean every area has been reviewed, and invites reproducible bug reports. Dismissal is remembered for three hours; the notice sits above canvas interactions and below dialogs.
+- Added focused browser coverage for animation preview fitting, direction clip cycling, and first-visit banner behavior in Studio and PixelArt.
+- Added English discussion records for the stable notice behavior, the reviewed 8-direction bat artifact, and shared editor interaction decisions.
+
+## Compatibility
+
+- Studio and PixelArt report version 2.2.1. PIX2 remains at version 1.1, with PIX2 1.0 read compatibility retained.
+- This release does not change the PIX2 grammar or serialized artwork format.
+
+## Verification
+
+- `node tests/check-readme-test-count.cjs` — passed (22 Node regression suites).
+- `node tests/run-all.cjs --syntax` — passed (36 production JavaScript files).
+- `node tests/run-all.cjs` — passed (22 Node regression suites).
+- `node tests/benchmark-performance.js` — passed all 8 gates; highest observed p95 was 5.476 ms on the documented fixtures in this run.
+- `node tests/run-all.cjs --browser` — passed all 8 browser suites in Chrome 157, including both app entry points, 512×512 Fit at DPR 2, real file-handle recovery, animation clip cycling, and banner dismissal.
+- `node scripts/build-changelog-page.cjs --check` — passed (13 versioned release notes).
+- `git diff --check` — passed.
+
+## Limits
+
+- Fit is calculated from the available preview viewport; it does not alter frame dimensions or artwork data.
+- Clip cycling requires a direction tag and valid frame references. Untagged legacy projects continue using row-based playback when no matching tagged clip exists.
+- The three-hour notice interval is its configured repeat delay; release checks verify dismissal persistence and copy, not elapsed wall-clock behavior.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.2.1.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
   <summary><span class="release-version">v2.2.0</span><span class="release-source">docs/releases/v2.2.0.md</span></summary>
   <pre># NOIRADIX Studio &amp; PixelArt v2.2.0
 

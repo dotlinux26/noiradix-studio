@@ -263,7 +263,7 @@ console.log(`\nTest 8: Animation Player Scaling & Auto-Fit Math`);
 const AnimationPlayer = require('../js/animation-player.js');
 const dummyCanvas = { width: 0, height: 0, getContext: () => null, parentElement: { clientWidth: 192, clientHeight: 192 } };
 const animP = new AnimationPlayer(dummyCanvas);
-assert(animP.scale === 8, 'AnimationPlayer default scale is 8x for clear crisp preview');
+assert(animP.scale === 'fit', 'AnimationPlayer defaults to fitting the whole frame in its preview');
 
 // Test auto-fit integer scale calculations for different sprite resolutions into 192px box
 function calcFitScale(cw, ch, maxBox = 192) {

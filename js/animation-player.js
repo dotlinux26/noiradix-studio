@@ -42,7 +42,7 @@ class AnimationPlayer {
     this.currentAction = null; // optional explicit action filter (e.g. 'idle', 'run', 'jump')
     this.fps = 6;
     this.isPlaying = true;
-    this.scale = 8; // 8x preview (crisp & large default)
+    this.scale = 'fit'; // Keep the full frame visible by default at every resolution.
     this.onionSkin = false;
     this.onFrameChange = null;
   }
@@ -136,13 +136,37 @@ class AnimationPlayer {
     }
     this.render();
     this.notifyFrameChange();
+    return animName;
   }
 
   setDirection(dirId) {
     this.currentDirection = dirId;
-    this.activeAnimationName = null; // Auto resolve by direction
+    this.currentAction = null;
     this.currentFrameIdx = 0;
+
+    const candidates = this.getAnimationsForDirection(dirId);
+    if (candidates.length > 0) {
+      const currentIndex = candidates.findIndex(([name]) => name === this.activeAnimationName);
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % candidates.length;
+      return this.setAnimation(candidates[nextIndex][0]);
+    }
+
+    // A direction without tagged clips falls back to legacy row-based playback.
+    this.activeAnimationName = null;
     this.render();
+    this.notifyFrameChange();
+    return null;
+  }
+
+  getAnimationsForDirection(dirId) {
+    const state = this.getState();
+    const doc = state && state.doc;
+    if (!doc || !doc.animations) return [];
+
+    return Object.entries(doc.animations).filter(([, anim]) =>
+      anim && anim.direction === dirId && Array.isArray(anim.frames) && anim.frames.length > 0 &&
+      anim.frames.every((cellId) => Boolean(doc.cells && doc.cells[cellId]))
+    );
   }
 
   setMode(mode) {
@@ -246,6 +270,11 @@ class AnimationPlayer {
           return anims[name];
         }
       }
+      for (const anim of Object.values(anims)) {
+        if (anim && anim.direction === this.currentDirection && anim.frames && anim.frames.length > 0) {
+          return anim;
+        }
+      }
       for (const name in anims) {
         const a = anims[name];
         if (a && a.direction === this.currentDirection && a.frames && a.frames.length > 0) {
@@ -264,11 +293,16 @@ class AnimationPlayer {
           return anims[name];
         }
       }
+      for (const anim of Object.values(anims)) {
+        if (anim && anim.direction === this.currentDirection && anim.frames && anim.frames.length > 0) {
+          return anim;
+        }
+      }
     }
 
-    // Return first available animation
-    const firstKey = Object.keys(anims)[0];
-    return firstKey ? anims[firstKey] : null;
+    // Never silently play a clip tagged for a different direction. getActiveFrames()
+    // can use the legacy row mapping when the requested direction has no clip.
+    return null;
   }
 
   getActiveFrames() {
@@ -322,6 +356,27 @@ class AnimationPlayer {
     return rowCells;
   }
 
+  getFitScale() {
+    const state = this.getState();
+    if (!state || !state.doc) return 1;
+    const { w: cw, h: ch } = state.doc.meta.cellSize;
+    const studioVp = this.canvas && this.canvas.closest
+      ? this.canvas.closest('.anim-studio-viewport')
+      : null;
+    if (studioVp) {
+      const maxW = Math.max(160, studioVp.clientWidth - 120);
+      const maxH = Math.max(160, studioVp.clientHeight - 120);
+      return Math.max(1, Math.min(24, Math.floor(Math.min(maxW / cw, maxH / ch))));
+    }
+
+    const preview = this.canvas && this.canvas.closest
+      ? this.canvas.closest('.anim-canvas-wrapper')
+      : null;
+    const maxW = Math.max(1, (preview && preview.clientWidth ? preview.clientWidth : 192) - 16);
+    const maxH = Math.max(1, (preview && preview.clientHeight ? preview.clientHeight : 192) - 16);
+    return Math.max(1, Math.min(32, Math.floor(Math.min(maxW / cw, maxH / ch))));
+  }
+
   render() {
     const state = this.getState();
     if (!this.canvas || !this.ctx || !state || !state.doc) return;
@@ -335,16 +390,7 @@ class AnimationPlayer {
 
     let effScale = 8;
     if (this.scale === 'fit' || typeof this.scale === 'string') {
-      const studioVp = this.canvas.closest ? this.canvas.closest('.anim-studio-viewport') : null;
-      if (studioVp) {
-        // Measure viewport bounds with safe margins so fit scale is 100% stable (Zero infinite loop)
-        const maxW = Math.max(160, studioVp.clientWidth - 120);
-        const maxH = Math.max(160, studioVp.clientHeight - 120);
-        effScale = Math.max(1, Math.min(24, Math.floor(Math.min(maxW / cw, maxH / ch))));
-      } else {
-        // Floating preview panel wrapper has fixed size of 192px
-        effScale = Math.max(1, Math.min(12, Math.floor(192 / Math.max(cw, ch))));
-      }
+      effScale = this.getFitScale();
     } else {
       effScale = Math.max(1, Math.min(32, Number(this.scale) || 8));
     }

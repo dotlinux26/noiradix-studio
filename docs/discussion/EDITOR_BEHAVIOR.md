@@ -1,66 +1,68 @@
-# Quyết định thao tác chung cho hai editor
+# Shared interaction decisions for both editors
 
-## Chọn và chỉnh sửa
+## Selection and editing
 
-| Thao tác | Hành vi |
+| Interaction | Behavior |
 |---|---|
-| Chọn Layer trong Layers | Giới hạn việc tìm Region trên canvas vào Layer đó. Khi chưa chọn Layer, lần chọn canvas đầu tiên xác lập phạm vi. |
-| Click Region Select | Hit-test theo thứ tự vẽ từ trên xuống. Vùng bị ẩn, khóa hoặc có alpha bằng 0 được bỏ qua. Vùng đang chọn có viền sáng, giữ nguyên khi rê chuột ra ngoài. |
-| Click Region nằm trong Group | Chọn Group ngoài cùng trong phạm vi hiện tại. Kéo hoặc nhấn phím mũi tên dịch chuyển các Region trong Group cùng nhau. Giới hạn dịch chuyển theo toàn bộ bounding box để giữ pixel. |
-| Shift, Ctrl hoặc Cmd và click | Thêm hoặc bỏ đối tượng khỏi tập chọn trên canvas hoặc trong Layers. Group gom các đối tượng liền nhau cùng parent để giữ thứ tự vẽ. Ungroup trả các con về đúng vị trí trong thứ tự đó. |
-| Ctrl/Cmd+G hoặc Ctrl/Cmd+Shift+G | Group khi chọn nhiều node, Ungroup khi chọn đúng một Group. Dùng cùng lệnh với nút trên toolbar và Layers. Bỏ qua khi đang isolation, mở dialog hoặc nhập liệu. G riêng vẫn chọn Paint Bucket. |
-| Double-click Region | Mở isolation đúng Region dưới con trỏ, kể cả khi nó nằm trong Group. Viewport ẩn các Region khác, giữ alpha hiện có và định tuyến thao tác raster vào Region cô lập. |
-| Alt + double-click | Duyệt các Region có pixel tại điểm click trong Layer đang chọn, từ trước ra sau. Dùng tiếp khi đang isolation để sang Region bị che. Node ẩn, khóa hoặc trong suốt hoàn toàn được bỏ qua. |
-| Esc | Hủy thao tác kéo chưa commit. Khi đang isolation, Esc trả về Region Select cùng focus ban đầu. Esc tiếp theo bỏ viền chọn. |
-| Marquee | Chọn theo mặt nạ pixel. Copy, cut, paste, fill và biến đổi raster trong Studio đọc và ghi payload của Region đích. Trạng thái floating giữ đích từ lúc lift. |
-| Brush và Eraser | Cọ vuông 1–32 px, mỗi công cụ có kích thước riêng. Cỡ lẻ bám tâm pixel, cỡ chẵn bám giao điểm lưới gần con trỏ. Viền dự báo dùng đúng footprint vẽ hoặc xóa, kể cả khi sát mép. Brush, Eraser và Ink mỗi mục có một dòng với thanh kéo và ô số đồng bộ. |
-| Node opacity | Layer chỉnh 0–100% trên UI. Layer, Group và Region lưu 0–1 trong PIX2 1.1. Composite nhân alpha RGBA với opacity của Region và các node cha. Ink % ghi alpha vào nét vẽ. |
+| Select a Layer in Layers | Restricts canvas Region hit-testing to that Layer. If no Layer is selected, the first canvas selection establishes the scope. |
+| Click Region Select | Hit-tests from front to back. Hidden, locked, or fully transparent Regions are skipped. The selected Region keeps its highlight after the pointer leaves it. |
+| Click a Region inside a Group | Selects the outermost Group in the current scope. Dragging or using the arrow keys moves all Regions in that Group together. Movement is constrained by the full bounding box to preserve pixels. |
+| Shift, Ctrl, or Cmd and click | Adds or removes an object from the selection on the canvas or in Layers. Group combines adjacent objects with the same parent to preserve draw order. Ungroup restores children to their positions in that order. |
+| Ctrl/Cmd+G or Ctrl/Cmd+Shift+G | Groups when multiple nodes are selected; ungroups when exactly one Group is selected. The shortcuts match the toolbar and Layers commands. They are ignored during isolation, dialogs, or text entry. G alone still selects Paint Bucket. |
+| Double-click a Region | Enters isolation for the Region under the pointer, including a Region inside a Group. The viewport hides other Regions, preserves existing alpha, and routes raster edits to the isolated Region. |
+| Alt+double-click | Cycles through Regions with pixels at the clicked point in the selected Layer, from front to back. Continue while isolated to reach an obscured Region. Fully transparent, hidden, and locked nodes are skipped. |
+| Esc | Cancels an uncommitted drag. In isolation, Esc returns to Region Select and restores the original focus. A second Esc clears the selection outline. |
+| Marquee | Selects a pixel mask. Studio copy, cut, paste, fill, and raster transforms read and write the target Region's pixel payload. A floating selection retains its target from the moment it is lifted. |
+| Brush and Eraser | Each tool has an independent square size from 1–32 px. Odd sizes are centered on a pixel; even sizes are centered on the nearest grid intersection. The cursor preview matches the paint or erase footprint, including at canvas edges. Brush, Eraser, and Ink each occupy one row with a synchronized slider and numeric input. |
+| Node opacity | The UI edits Layer opacity from 0–100%. Layers, Groups, and Regions store opacity from 0–1 in PIX2 1.1. The composite multiplies RGBA alpha by the opacity of the Region and its ancestors. Ink % sets alpha on new strokes. |
 
-Giữ hai công cụ trên cùng toolbar vì chúng thao tác trên hai loại dữ liệu. Marquee thao tác trên pixel của một đích vẽ. Region Select thao tác trên node có định danh và cây Group. Kéo, nudge, scale và rotate áp dụng cho các Region con trong cùng khung tọa độ, giữ cây và ID. Scale và rotate dự báo khung trước khi commit. Clipboard đối tượng vẫn mở. [Adobe Illustrator về chọn Group](https://helpx.adobe.com/illustrator/desktop/manage-objects/select-objects/select-object-groups-and-nested-object-groups.html), [Adobe Illustrator về isolation](https://helpx.adobe.com/ie/illustrator/desktop/manage-objects/select-objects/isolate-objects.html), [Aseprite về cọ và opacity](https://aseprite.org/docs/context-bar).
+Keep both selection tools in the same toolbar because they operate on different data. Marquee edits pixels on a paint target. Region Select operates on identified nodes and the Group tree. Drag, nudge, scale, and rotate apply to child Regions in the same coordinate space while preserving the tree and IDs. Scale and rotate preview the bounds before commit. Object clipboard support remains open. See [Adobe Illustrator Group selection](https://helpx.adobe.com/illustrator/desktop/manage-objects/select-objects/select-object-groups-and-nested-object-groups.html), [Adobe Illustrator isolation](https://helpx.adobe.com/ie/illustrator/desktop/manage-objects/select-objects/isolate-objects.html), and [Aseprite brush and opacity controls](https://aseprite.org/docs/context-bar).
 
-**New Group** tạo folder trống. **Group** gom các node đã chọn và đề xuất tên `Group`, `Group 2`… theo các tên đã dùng trong cùng parent. Hai lệnh có icon riêng. Group và Ungroup có mặt trên toolbar chính và trong dải cuộn ngang của Layers. Double-click tên hoặc F2 để sửa nhãn, Enter xác nhận và Esc hủy. Hai Group có thể được đổi tên trùng nhau. Chọn, kéo, đổi thứ tự và Ungroup đều dùng ID ổn định. Tooltip tên hiện cả ID để phân biệt.
+**New Group** creates an empty folder. **Group** groups selected nodes and suggests `Group`, `Group 2`, and so on based on names already used under the same parent. The commands use distinct icons. Group and Ungroup are available in the main toolbar and the horizontally scrollable Layers action bar. Double-click a name or press F2 to rename it; Enter confirms and Esc cancels. Two Groups may have the same name. Selection, dragging, reordering, and Ungroup use stable IDs. Tooltips include IDs to distinguish duplicate names.
 
-Layers dùng chung renderer và hiển thị trên cùng trước ở mỗi cấp Layer, Group và Region. Kéo lên hoặc dùng Move Up đưa node ra trước. Có thể thả Layer vào khe sát dòng hoặc qua các dòng con của Layer đích. File PIX2 tiếp tục lưu thứ tự từ sau ra trước, nên tác phẩm cũ giữ nguyên hình. Kéo mép giữa canvas và inspector để đổi độ rộng. Studio mặc định 360 px và mỗi app nhớ độ rộng riêng. Shift+Space đưa canvas về mức vừa khung.
+Layers uses a shared renderer and displays frontmost nodes first at each Layer, Group, and Region level. Drag upward or use Move Up to bring a node forward. A Layer can be dropped into the gap beside a row or across child rows of the target Layer. PIX2 continues to store order back-to-front, preserving the appearance of existing artwork. Drag the divider between the canvas and inspector to resize the panel. Studio defaults to 360 px, and each app remembers its own width. Shift+Space fits the canvas to the viewport.
 
-Thu nhỏ Group hoặc Region dùng nearest neighbor trên lưới pixel và có thể mất chi tiết. Phóng trở lại dùng dữ liệu hiện tại. Undo khôi phục dữ liệu trước phép thu nhỏ. Nếu phép lấy mẫu làm mất toàn bộ pixel của bất kỳ Region có nội dung nào, cả phép biến đổi bị hủy và hiện tên Region cần giữ. Chọn Region khác trong Layers có thể thoát isolation và hiện lại toàn bộ hình, kể cả phần trước đó bị ẩn khỏi viewport.
+Scaling a Group or Region down uses nearest-neighbor sampling on the pixel grid and may lose detail. Scaling it back up uses the current data. Undo restores the pre-scale data. If sampling would remove every pixel from any non-empty Region, the entire transform is canceled and the affected Region is named. Selecting another Region in Layers can exit isolation and show the full artwork again, including content previously hidden from the viewport.
 
-Hai editor dùng cùng thanh công cụ dọc. Nút có khung vuông 34×34 px. Khi thanh tràn, giữ chuột kéo lên xuống ngay trên dải nút. Con trỏ đổi từ bàn tay mở sang nắm tay khi kéo và thao tác kéo không kích hoạt nút bên dưới.
+Both editors use the same vertical toolbar. Buttons have a 34×34 px square frame. When the toolbar overflows, drag vertically over the button rail. The cursor changes from an open hand to a closed hand while dragging, and the drag does not activate the button underneath.
 
-Preview Studio có nút −, + và Fit, cùng zoom bằng bánh xe. Mép dưới điều chỉnh chiều cao. Khi bật Fit, ảnh tự vừa với viewport sau resize. Canvas giữ độ phân giải gốc của frame và dùng CSS để phóng ảnh.
+The right-side Preview has −, +, and Fit controls, plus mouse-wheel zoom. When Fit is active, the image fits the viewport again after resize. The bottom edge adjusts the panel height. The canvas retains the frame's original resolution and uses CSS to scale the image.
 
-## Ranh giới code
+The floating Animation Studio defaults to Fit so the full frame remains visible, including for large sprites. Fit is recalculated when the preview area changes size; users can still choose a fixed zoom level. Each direction-button press selects the next clip with valid frames tagged for that `direction`, following file order. Changing direction starts with that direction's first clip. If no tagged clip exists for a direction, playback uses the legacy row fallback and never silently plays a clip tagged for another direction.
 
-| Module | Trách nhiệm |
+## Code boundaries
+
+| Module | Responsibility |
 |---|---|
-| `js/structure-operations.js` | Lookup kèm đường tổ tiên, kiểm quyền chỉnh sửa, hit-test, reparent, group và ungroup. |
-| `js/region-selection.js` | Tập node được chọn theo cell/layer/isolation, preview viền, drag, nudge, scale và rotate. |
-| `js/editor-outliner.js`, `js/editor-menu.js` | Cây Layers, đổi tên, menu canvas và menu node, reorder theo ID. |
-| `js/editor-toolbar.js` | Một thanh công cụ dọc dùng chung cho hai editor, cùng thứ tự nút và icon. |
-| `js/tab-strip.js`, `css/tab-strip.css` | Một component tab tài liệu theo giao diện Studio. `NoiraTabStrip.render(strip, sessions, activeId, options)` nhận session có `id`, `fileName` hoặc `title`, `filePath` và `isDirty` tùy chọn. App cung cấp `onActivate`, `onClose` và `onReorder`. |
-| `js/pix2-ai-prompt.js` | Quy tắc PIX2 theo phiên bản và profile. Hai app dùng chung prompt với source canonical và brief riêng. |
-| `js/tools.js` | Định tuyến đích raster, brush footprint, symmetry, clipping, alpha cọ, hình học và căn biên. |
-| `js/pix2-format.js` | Composite chuẩn. Isolation và tính lại các pixel vừa đổi trả về view riêng để bảo toàn cache đầy đủ. Bản standalone được kiểm byte-for-byte. |
-| `js/viewport-pan-zoom.js` | Hình học pan/zoom, nấc zoom, Fit và trần theo khổ canvas dùng chung cho PixelArt và Studio Sprite Editor. Chứa binder kéo thanh công cụ và resize panel. Hai thanh Slice dùng một lần đăng ký mỗi thanh. |
-| `js/editor-rulers.js` | Bộ vẽ thước hai trục lấy từ PixelArt. Dùng chung nhãn giãn theo zoom, vạch phụ, DPR và highlight con trỏ/marquee. |
-| `js/editor-canvas.js` | Checkerboard dùng lại, composite theo tọa độ cọ đổi, ghi pixel vào buffer 1×, blit phần canvas trong tầm nhìn và giữ điểm neo zoom theo vị trí layout thực. |
-| Hai app controller | Nối DOM, viewport, history, autosave và luồng công việc riêng. PixelArt cập nhật composite theo các tọa độ vừa đổi trong stroke để tránh duyệt toàn bộ canvas ở mỗi pointermove. |
+| `js/structure-operations.js` | Ancestor-aware lookup, edit permission checks, hit-testing, reparenting, grouping, and ungrouping. |
+| `js/region-selection.js` | Per-cell/layer/isolation node selection, outline preview, drag, nudge, scale, and rotate. |
+| `js/editor-outliner.js`, `js/editor-menu.js` | Layers tree, renaming, canvas and node context menus, and ID-based reordering. |
+| `js/editor-toolbar.js` | One shared vertical toolbar for both editors, with the same order and icons. |
+| `js/tab-strip.js`, `css/tab-strip.css` | Shared Studio-style document-tab component. `NoiraTabStrip.render(strip, sessions, activeId, options)` accepts sessions with optional `id`, `fileName` or `title`, `filePath`, and `isDirty`. The app supplies `onActivate`, `onClose`, and `onReorder`. |
+| `js/pix2-ai-prompt.js` | Version- and profile-specific PIX2 rules. Both apps share the canonical prompt and use app-specific briefs. |
+| `js/tools.js` | Raster-target routing, brush footprint, symmetry, clipping, stroke alpha, geometry, and edge alignment. |
+| `js/pix2-format.js` | Canonical compositing. Isolation and incremental pixel updates return a separate view to preserve the full cache. The standalone copy is checked byte-for-byte. |
+| `js/viewport-pan-zoom.js` | Shared pan/zoom geometry, zoom steps, Fit, and canvas-size limits for PixelArt and Studio Sprite Editor. Also provides toolbar dragging and panel resizing. Both Slice bars use the same single-registration binder. |
+| `js/editor-rulers.js` | Shared two-axis ruler renderer from PixelArt, including zoom-aware label spacing, minor ticks, DPR, and pointer/marquee highlights. |
+| `js/editor-canvas.js` | Shared checkerboard, composite updates for changed coordinates, 1× pixel buffers, viewport blitting, and zoom anchoring against actual layout position. |
+| App controllers | Connect DOM, viewport, history, autosave, and app-specific workflows. PixelArt updates composites only at changed stroke coordinates to avoid scanning the whole canvas on every pointer move. |
 
-## Lỗi bổ sung phát hiện khi chạy thật
+## Additional issues found during hands-on use
 
-- Studio xử lý 0% layer opacity như 100% vì dùng `Number(value) || 100`. Input hiện chấp nhận 0 và giữ giá trị trước đó nếu nhập rỗng.
-- Studio từng truyền nhầm thứ tự tham số khi preview ellipse. Thuật toán Studio cũng khởi đầu ở hai mép trên/dưới thay vì đường giữa, gây hình rỗng có pixel giữa và góc bị tô. Hai editor dùng thuật toán với điểm khởi đầu giữa từ PixelArt, cùng đường raster cho preview và commit.
-- Nút Rotate 90° của Studio gọi sai tên API khi chưa có marquee. Hai editor hiện dùng chung phép xoay pixel đúng 90° cho marquee. Vùng đã được nhấc lên giữ preview cho tới Enter. Khung được dịch vào trong canvas nếu vừa. Nếu khung xoay lớn hơn canvas, thao tác dừng trước khi nhấc pixel.
-- Studio từng dùng trần 64× cố định và in nhãn thước cách nhau 4 pixel nguồn. Với khổ lớn, Fit cần xuống dưới 100% và nhãn cũ chồng lên nhau. Hai editor dùng chung nấc 10%–64× và trần theo cạnh dài hơn. Cạnh dưới 128 px cho tối đa 64×, từ 128 px là 32×, từ 256 px là 16×, từ 512 px là 8×. Bộ vẽ thước giữ khoảng cách nhãn ít nhất 40 px CSS.
-- PixelArt Undo khôi phục cây dữ liệu mới trong khi Layers giữ handler trỏ vào cây cũ. Sau Undo/Redo cấu trúc, Layers được render lại trước lần sửa tiếp theo.
-- PixelArt chặn Esc nếu input kích thước vẫn giữ focus sau click canvas. Click canvas chuyển focus ra khỏi input để áp dụng giá trị và khôi phục phím tắt.
-- Studio dùng hai binder kéo ngang trên cùng hai thanh Slice. Cả hai app dùng chung một binder theo viewport.
-- Inspector của Slice từng dựng lại cả bảng sau mỗi phím nhập tên, tag hoặc số frame. Việc nhập hiện giữ focus, và đổi tag tính lại row thay vì giữ row cũ của atlas hoặc lưới.
-- Studio Save/Undo dự án mới bị mất snapshot ban đầu khi adapter ghi đè history rỗng hoặc đổi index 0 thành -1.
-- Banner bảo trì từng che modal Create và nhận click ở phần chữ nằm trên nút Delete Slice. Modal đứng trước banner. Chỉ nút đóng và Got it của banner nhận click. Tần suất vẫn là 30 phút.
-- Studio commit Slice từng sửa thẳng dự án đang mở. PixelArt mở file qua fallback từng thay nội dung tab hiện tại. Hai luồng hiện tạo dự án riêng. PNG PixelArt đưa pixel alpha vào Region nguồn và báo kích thước vượt profile.
+- Studio treated 0% Layer opacity as 100% because it used `Number(value) || 100`. The input now accepts zero and preserves the previous value when the field is empty.
+- Studio once passed ellipse-preview parameters in the wrong order. Its algorithm also started from the top and bottom edges instead of the center line, leaving center and corner pixels in hollow ellipses. Both editors now use PixelArt's center-origin algorithm and the same raster path for preview and commit.
+- Studio's Rotate 90° button called the wrong API when no marquee existed. Both editors now use the shared exact 90° pixel rotation for marquees. A lifted selection keeps its preview until Enter. The selection is shifted inward when it fits; if the rotated bounds exceed the canvas, the operation stops before lifting pixels.
+- Studio once used a fixed 64× zoom ceiling and ruler labels every four source pixels. Large canvases need Fit below 100%, and the old labels overlapped. Both editors now share 10%–64× zoom steps and a ceiling based on the longest canvas edge: up to 64× below 128 px, 32× from 128 px, 16× from 256 px, and 8× from 512 px. The ruler keeps at least 40 CSS px between labels.
+- PixelArt Undo restored a new data tree while Layers retained handlers pointing to the old tree. Layers now rerenders after structural Undo/Redo before the next edit.
+- PixelArt blocked Esc when the size input retained focus after clicking the canvas. Clicking the canvas now moves focus away from the input, applies its value, and restores keyboard shortcuts.
+- Studio once used two horizontal-drag binders on the same Slice bars. Both apps now use one shared viewport binder.
+- The Slice Inspector once rebuilt its entire table after each keystroke in a name, tag, or frame number. Editing now retains focus, and changing a tag recalculates the row instead of keeping a stale atlas/grid row.
+- Studio Save/Undo on a new project once lost the initial snapshot when the adapter overwrote an empty history or changed index 0 to -1.
+- The maintenance banner once covered the Create modal and received clicks over the Delete Slice button. The modal now appears above the banner; only the banner's close and Got it controls receive clicks. The interval remains 30 minutes.
+- Studio Slice commit once edited the open project directly. PixelArt's fallback open flow once replaced the current tab. Both workflows now create a separate project. PixelArt PNG import puts alpha pixels in the source Region and reports dimensions beyond the profile limit.
 
-## Phương án phím tắt isolation
+## Isolation shortcut proposal
 
-Double-click Region vào isolation, Esc thoát và giữ focus Region. Có thể bổ sung Ctrl+Enter hoặc Cmd+Enter cho người đang thao tác bằng bàn phím. Điều kiện đề xuất là một Region được chọn, đang mở canvas, không có marquee đang chờ xác nhận và focus ở ngoài ô nhập hoặc menu. Enter dành cho xác nhận marquee. Phương án phím mới đang ở mức thảo luận.
+Double-clicking a Region enters isolation; Esc exits and restores focus to that Region. Ctrl+Enter or Cmd+Enter could be added for keyboard users. Proposed conditions: exactly one Region is selected, the canvas is active, no marquee is waiting for confirmation, and focus is outside text inputs and menus. Enter remains reserved for confirming a marquee. The new shortcut is still under discussion.
 
-Xem [sổ kiểm chứng](STABILIZATION_LEDGER.md) và [audit engine chung](EDITOR_ENGINE_AUDIT.md) để biết case đã chạy và các mục tiếp theo.
+See the [stabilization ledger](STABILIZATION_LEDGER.md) and [shared engine audit](EDITOR_ENGINE_AUDIT.md) for executed cases and follow-up items.

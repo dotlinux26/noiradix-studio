@@ -1,0 +1,9 @@
+# Stable build feedback notice
+
+- **Apps:** NOIRADIX Studio and NOIRADIX PixelArt; both load `js/maintenance-banner.js`.
+- **Repro:** Open Studio or PixelArt in a new browser profile, or load the static app with `file://` for the first time.
+- **Observed:** The notice was disabled by default outside localhost, so a new visit to the public/offline app did not show it even without a dismissal timestamp.
+- **Expected:** The notice should not imply a Stable build is under active maintenance or that tools are broadly unavailable. It should say that Stable does not mean every area has been reviewed or every bug found, invite reports, and offer direct community and bug-report links in Vietnamese and English. Show it on a first visit in all hosting modes, then repeat three hours after dismissal. In Grid Overview, the notice must receive clicks rather than letting the canvas's grab-to-pan interaction consume them.
+- **Implementation:** Updated the bilingual copy and title; added links to the GitHub bug-report template and current Discord invite; enabled first-visit display in production, development and `file://`, while retaining the three-hour dismissal interval. Raised the banner to z-index 900 (above the canvas, below modal dialogs) and enabled pointer events while visible.
+- **Verification:** `node tests/run-all.cjs --syntax` passed (36 production JavaScript files); `node tests/run-all.cjs` passed (22 suites); `node tests/run-all.cjs --browser` passed (7 suites, Chrome 157). The focused browser test confirmed first-visit display without a query override, bilingual copy, both feedback links, 3-hour text and dismissal persistence in Studio and PixelArt. `git diff --check` passed.
+- **Remaining coverage:** Do not wait three hours in a UI test; exercise the notice, links and dismissal in each app and verify repeat timing through the configured interval contract.

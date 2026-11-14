@@ -59,6 +59,10 @@ function zipEntries(bytes) {
         .locator('#btn-about-close-done, #btn-pa-about-close-done')
         .filter({ visible: true });
       if (await about.count()) await about.first().click();
+      const feedbackNotice = page.locator('.noira-maintenance-banner');
+      await feedbackNotice.waitFor({ state: 'visible', timeout: 3000 });
+      await feedbackNotice.getByRole('button', { name: 'Got it' }).click();
+      await page.waitForFunction(() => !document.querySelector('.noira-maintenance-banner')?.classList.contains('is-visible'));
       const palette = page.locator(pa ? '#pa-palette-select' : '#palette-select');
       assert.equal(await palette.locator('option').filter({ hasText: 'QA <palette> (2)' }).count(), 1);
       assert.equal(await palette.locator('optgroup').count(), 3);

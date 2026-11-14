@@ -33,12 +33,12 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.0', 'Studio version must be 2.2.0');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.0', 'PixelArt version must be 2.2.0');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.1', 'Studio version must be 2.2.1');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.1', 'PixelArt version must be 2.2.1');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.0 / PixelArt 2.2.0 / PIX2 1.1)');
+  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.1 / PixelArt 2.2.1 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -109,9 +109,60 @@ console.log('\nTest 2: Platformer 2D Animation Controls & Diagnostics');
 }
 
 // -----------------------------------------------------------------------------
-// Test 3: Structural Interoperability (Tools & EditorState)
+// Test 3: Floating preview fit and direction-tagged clip cycling
 // -----------------------------------------------------------------------------
-console.log('\nTest 3: Tools & EditorState Structural Hierarchy Interoperability');
+console.log('\nTest 3: Animation Preview Fit & Direction Clip Cycling');
+{
+  const mockCanvas = {
+    width: 64,
+    height: 64,
+    getContext: () => ({ imageSmoothingEnabled: false, fillRect: () => {}, clearRect: () => {} })
+  };
+  const player = new AnimationPlayer(mockCanvas);
+  assert.strictEqual(player.scale, 'fit', 'Floating preview defaults to Fit');
+
+  global.window = {
+    state: {
+      doc: {
+        meta: { cellSize: { w: 64, h: 64 }, grid: { rows: 4, cols: 4 } },
+        cells: Object.fromEntries(['down_a', 'down_b', 'down_c', 'up_a', 'invalid'].map((id) => [id, { id, pixels: {} }])),
+        animations: {
+          fly_down: { direction: 'down', frames: ['down_a'], fps: 8 },
+          fly_up: { direction: 'up', frames: ['up_a'], fps: 7 },
+          glide_down: { direction: 'down', frames: ['down_b'], fps: 10 },
+          flap_down: { direction: 'down', frames: ['down_c'], fps: 12 },
+          broken_down: { direction: 'down', frames: ['missing_cell'], fps: 6 },
+        }
+      }
+    }
+  };
+
+  assert.deepStrictEqual(player.getAnimationsForDirection('down').map(([name]) => name),
+    ['fly_down', 'glide_down', 'flap_down'], 'Only valid clips with the requested direction tag are cycled, in file order');
+  assert.strictEqual(player.setDirection('down'), 'fly_down', 'First press starts the first matching clip');
+  assert.deepStrictEqual(player.getActiveFrames(), ['down_a']);
+  assert.strictEqual(player.setDirection('down'), 'glide_down', 'Repeated press advances to the next matching clip');
+  assert.strictEqual(player.setDirection('down'), 'flap_down', 'Cycle advances through every matching clip');
+  assert.strictEqual(player.setDirection('down'), 'fly_down', 'Cycle wraps to the first matching clip');
+  assert.strictEqual(player.setDirection('up'), 'fly_up', 'Changing direction starts at that direction’s first clip');
+  assert.strictEqual(player.getActiveAnimationObj().direction, 'up');
+  assert.strictEqual(player.setDirection('left'), null, 'Missing direction tag uses legacy direction fallback');
+  assert.strictEqual(player.getActiveAnimationObj(), null, 'Missing tag never silently selects another direction clip');
+  const fitCanvas = {
+    getContext: () => null,
+    closest: (selector) => selector === '.anim-canvas-wrapper'
+      ? { clientWidth: 288, clientHeight: 288 }
+      : null,
+  };
+  const fitPlayer = new AnimationPlayer(fitCanvas);
+  assert.strictEqual(fitPlayer.getFitScale(), 4, '64px artwork fits as an integer scale in a 288px preview');
+  pass('Floating preview defaults to Fit and direction buttons cycle valid tagged clips deterministically');
+}
+
+// -----------------------------------------------------------------------------
+// Test 4: Structural Interoperability (Tools & EditorState)
+// -----------------------------------------------------------------------------
+console.log('\nTest 4: Tools & EditorState Structural Hierarchy Interoperability');
 {
   const editor = new EditorState();
   const doc = PIX2.createDocument('Structural Test', 1, 1, 16, 16);
@@ -330,6 +381,8 @@ console.log('\nTest 8: Studio 2.0 Structure & Layers DOM Contract Verification')
   const path = require('path');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
   const toolbar = fs.readFileSync(path.join(__dirname, '../js/editor-toolbar.js'), 'utf8');
+  assert.match(indexHtml, /<button class="pill-btn-xs active" data-scale="fit"/,
+    'Floating Animation Studio marks Fit as its default zoom');
 
   const requiredIds = [
     'isolation-banner',
@@ -545,14 +598,17 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
   assert(typeof MB.dismiss === 'function', 'MaintenanceBanner must export dismiss');
   assert(typeof MB.setEnabled === 'function', 'MaintenanceBanner must export setEnabled');
   assert(bannerJs.includes('3 * 60 * 60 * 1000'), 'MaintenanceBanner must configure 3 hours interval');
-  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: 'noiradix.me', search: '' }), false,
-    'Production host must not show the development maintenance notice by default');
-  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: 'localhost', search: '' }), true,
-    'Local development host should retain the maintenance notice');
-  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: 'noiradix.me', search: '?noira-maintenance=1' }), true,
-    'Explicit maintenance query flag should enable the notice for diagnosis');
-  assert.strictEqual(MB.isDevelopmentEnvironment({ hostname: '', search: '' }), false,
-    'file:// pages should not show the maintenance notice by default');
+  assert.match(bannerJs, /enabled:\s*true/, 'Maintenance feedback notice must show on a new visit in every hosting mode');
+  assert(bannerJs.includes('Ứng dụng đang ở bản Stable') && bannerJs.includes('lỗi chưa phát hiện'),
+    'Maintenance notice must explain in Vietnamese that Stable does not mean every issue has been found');
+  assert(bannerJs.includes('This is a Stable release') && bannerJs.includes('undiscovered bugs may remain'),
+    'Maintenance notice must explain in English that Stable does not mean every issue has been found');
+  assert(bannerJs.includes('issues/new?template=bug_report.yml') && bannerJs.includes('discord.gg/SJwsdGWubF'),
+    'Maintenance notice must link to the bug report template and current community Discord');
+  assert(!bannerJs.includes('enabled: isDevelopmentEnvironment()'),
+    'Notice visibility must not be gated by hostname or file:// protocol');
+  assert(bannerJs.includes('z-index: 900;') && bannerJs.includes('pointer-events: auto;'),
+    'Visible feedback banner must sit above the grid canvas and receive pointer input');
 
   // 5. Unity sprite identity must not depend on editable/non-unique labels.
   const repeatedLabelA = StudioExport.uniqueUnitySpriteName({ name: 'Walk', id: 'cell_0_0' });
