@@ -25,7 +25,7 @@
   <a href="https://getprojectradar.com/notes/noiradix-studio" target="_blank" rel="noopener"><img src="https://getprojectradar.com/badge/featured-on-project-radar-light.svg" alt="Featured on Project Radar" width="236" height="54"></a>
   <a href="https://www.producthunt.com/products/noiradix-studio?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-noiradix-studio" target="_blank" rel="noopener noreferrer"><img alt="NOIRADIX Studio on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1307477&amp;theme=light&amp;t=1794570075140"></a>
   <a href="https://www.indietools.app/products/noiradix-studio" target="_blank" rel="noopener"><img src="https://www.indietools.app/badges/listed-on-indietools-light.png" alt="Listed on IndieTools" width="176" height="56"></a>
-  <a href="https://www.saashub.com/noiradix-me?utm_source=badge&amp;utm_campaign=badge&amp;utm_content=noiradix-me&amp;badge_variant=color&amp;badge_kind=approved" target="_blank"><img src="https://cdn-b.saashub.com/img/badges/approved-color.png?v=1" alt="NOIRADIX.me badge" style="max-width: 150px;"></a>
+  <a href="https://www.saashub.com/noiradix-me?utm_source=badge&amp;utm_campaign=badge&amp;utm_content=noiradix-me&amp;badge_variant=color&amp;badge_kind=approved" target="_blank"><img src="https://cdn-b.saashub.com/img/badges/approved-color.png?v=1" alt="NOIRADIX.me badge" width="100" style="max-width: 100px;"></a>
 </div>
 
 **Open:** [NOIRADIX Studio](https://noiradix.me/) · [PixelArt](https://noiradix.me/pixelart/) · [Source](https://github.com/dotlinux26/noiradix-studio) · [Discord](https://discord.gg/SJwsdGWubF)
