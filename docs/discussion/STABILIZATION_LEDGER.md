@@ -230,3 +230,13 @@ Cả hai runner browser exit 0 trên working tree của lượt này. Các kết
 - Generated changelog: 20 versioned notes; generated-source check passes.
 - `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157.
 - `git diff --check`: PASS. Matching app versions: 2.2.8; PIX2 format remains 1.1.
+
+## v2.2.9 release verification — 2026-11-17
+
+- Scope: Active Cell Resolution header widget hook to Resize Frame, Grid Overview 2-cell selection preservation on right-click without focus loss, and freehand selection mask glow persistence under modifier keys. See `docs/releases/v2.2.9.md`.
+- `node tests/check-readme-test-count.cjs`: PASS, 24 suites.
+- `node tests/run-all.cjs --syntax`: PASS, 37 runtime files.
+- `node tests/run-all.cjs`: PASS, 24 regression suites (18/18 in Studio v2 suite).
+- `node tests/benchmark-performance.js`: PASS all 8 gates.
+- Generated changelog: 21 versioned notes; generated-source check passes.
+- `git diff --check`: PASS. Matching app versions: 2.2.9; PIX2 format remains 1.1.

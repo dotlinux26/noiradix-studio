@@ -1862,8 +1862,9 @@
     if (!state.doc || !state.doc.meta) return;
     if (!dom.modalResizeFrame) return;
 
-    const curW = state.doc.meta.cellSize ? state.doc.meta.cellSize.w : 16;
-    const curH = state.doc.meta.cellSize ? state.doc.meta.cellSize.h : 16;
+    const activeCell = state.getActiveCell?.();
+    const curW = (activeCell && activeCell.size) ? activeCell.size.w : (state.doc.meta.cellSize ? state.doc.meta.cellSize.w : 16);
+    const curH = (activeCell && activeCell.size) ? activeCell.size.h : (state.doc.meta.cellSize ? state.doc.meta.cellSize.h : 16);
 
     if (dom.resizeFrameW) dom.resizeFrameW.value = curW;
     if (dom.resizeFrameH) dom.resizeFrameH.value = curH;
@@ -2362,10 +2363,24 @@
   }
 
   function updateResolutionButtons() {
-    if (!state.doc || !state.doc.meta || !state.doc.meta.cellSize) return;
-    const curW = state.doc.meta.cellSize.w;
-    const curH = state.doc.meta.cellSize.h;
+    let curW = 16;
+    let curH = 16;
+    const activeCell = state.getActiveCell?.();
+    if (activeCell && activeCell.size) {
+      curW = activeCell.size.w;
+      curH = activeCell.size.h;
+    } else if (state.doc?.meta?.cellSize) {
+      curW = state.doc.meta.cellSize.w;
+      curH = state.doc.meta.cellSize.h;
+    }
+    const resText = `${curW}×${curH}`;
     const resKey = `${curW}x${curH}`;
+
+    const btnHeaderRes = document.getElementById('btn-header-cell-res');
+    if (btnHeaderRes) {
+      btnHeaderRes.textContent = resText;
+      btnHeaderRes.dataset.res = resKey;
+    }
 
     document.querySelectorAll('.pill-btn[data-res]').forEach(btn => {
       const isMatch = btn.dataset.res === resKey;
@@ -3235,7 +3250,8 @@
     clearOverlay();
     if (!dom.cellOverlay || !freeGesture) return;
     const ctx = dom.cellOverlay.getContext('2d');
-    EditorMultiSelection.drawMask(ctx, freeGesture.mask, state.cellZoom);
+    const mask = typeof freeGesture.mask === 'function' ? freeGesture.mask() : freeGesture.mask;
+    EditorMultiSelection.drawMask(ctx, mask, state.cellZoom);
   }
 
   // PIX2 1.1 keeps source pixels in the selected region, while cell.pixels is
@@ -3905,6 +3921,9 @@
 
       }
       SelectionTransform.drawHandles(ctx, state.selection, zoom);
+    } else if (freeGesture) {
+      const mask = typeof freeGesture.mask === 'function' ? freeGesture.mask() : freeGesture.mask;
+      EditorMultiSelection.drawMask(ctx, mask, zoom);
     }
 
     if (hoverPx !== null && hoverPy !== null && state.doc) {
@@ -5584,71 +5603,28 @@
     });
 
     // Grid Canvas Events (Instant 1-Click Selection, Move/Delete/Clone Buttons & Row Drag Reorder)
-    const handleGridCellSelect = (e) => {
-      const rect = dom.gridCanvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
-      // 1. Check if clicked on a Row Delete 'x' button
-      const hitRow = getRowDeleteHit(mx, my);
-      if (hitRow !== null) {
-        confirmAndDeleteRow(hitRow);
-        return;
-      }
-
-      // Check if clicked on a Row Duplicate button
-      const hitDupRow = getRowDuplicateHit(mx, my);
-      if (hitDupRow !== null) {
-        promptAndDuplicateRow(hitDupRow);
-        return;
-      }
-
-      // Check if clicked on a Row Move Up [▲] button
-      const hitUp = getRowMoveUpHit(mx, my);
-      if (hitUp !== null && hitUp > 0) {
-        moveRow(hitUp, hitUp - 1);
-        return;
-      }
-
-      // Check if clicked on a Row Move Down [▼] button
-      const hitDown = getRowMoveDownHit(mx, my);
-      if (hitDown !== null && state.doc && hitDown < state.doc.meta.grid.rows - 1) {
-        moveRow(hitDown, hitDown + 1);
-        return;
-      }
-
-      // 2. Check if clicked on a Column Delete 'x' button
-      const hitCol = getColDeleteHit(mx, my);
-      if (hitCol !== null) {
-        confirmAndDeleteCol(hitCol);
-        return;
-      }
-
-      // 3. Otherwise, select cell
-      const cellId = getGridCellFromPos(mx, my);
-      if (cellId) {
-        if (e.ctrlKey || e.metaKey) {
-          if (!Array.isArray(selectedGridCellIds)) selectedGridCellIds = [];
-          const idx = selectedGridCellIds.indexOf(cellId);
-          if (idx !== -1) {
-            if (selectedGridCellIds.length > 1) {
-              selectedGridCellIds.splice(idx, 1);
-            }
-          } else {
-            if (selectedGridCellIds.length >= 2) {
-              selectedGridCellIds[1] = cellId;
-            } else {
-              selectedGridCellIds.push(cellId);
-            }
+    const selectGridCell = (cellId, isCtrl) => {
+      if (isCtrl) {
+        if (!Array.isArray(selectedGridCellIds)) selectedGridCellIds = [];
+        const idx = selectedGridCellIds.indexOf(cellId);
+        if (idx !== -1) {
+          if (selectedGridCellIds.length > 1) {
+            selectedGridCellIds.splice(idx, 1);
           }
-          selectedGridCellId = cellId;
         } else {
-          selectedGridCellIds = [cellId];
-          selectedGridCellId = cellId;
+          if (selectedGridCellIds.length >= 2) {
+            selectedGridCellIds[1] = cellId;
+          } else {
+            selectedGridCellIds.push(cellId);
+          }
         }
-        renderGridOverview();
-        updateGridInspectorUI();
+        selectedGridCellId = cellId;
+      } else {
+        selectedGridCellIds = [cellId];
+        selectedGridCellId = cellId;
       }
+      renderGridOverview();
+      updateGridInspectorUI();
     };
 
     dom.gridCanvas.addEventListener('pointerdown', (e) => {
@@ -5684,7 +5660,7 @@
       // Check if clicked on a Cell
       const cellId = getGridCellFromPos(mx, my);
       if (cellId) {
-        handleGridCellSelect(e);
+        selectGridCell(cellId, e.ctrlKey || e.metaKey);
         return;
       }
 
@@ -5737,9 +5713,23 @@
     }
 
     dom.gridCanvas.addEventListener('click', (e) => {
-      // Don't trigger cell select if user was panning or dragging
+      // Don't trigger actions if user was panning or dragging
       if (isGridPanning) return;
-      handleGridCellSelect(e);
+      const rect = dom.gridCanvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      // Handle button clicks
+      const hitRow = getRowDeleteHit(mx, my);
+      if (hitRow !== null) { confirmAndDeleteRow(hitRow); return; }
+      const hitDupRow = getRowDuplicateHit(mx, my);
+      if (hitDupRow !== null) { promptAndDuplicateRow(hitDupRow); return; }
+      const hitUp = getRowMoveUpHit(mx, my);
+      if (hitUp !== null && hitUp > 0) { moveRow(hitUp, hitUp - 1); return; }
+      const hitDown = getRowMoveDownHit(mx, my);
+      if (hitDown !== null && state.doc && hitDown < state.doc.meta.grid.rows - 1) { moveRow(hitDown, hitDown + 1); return; }
+      const hitCol = getColDeleteHit(mx, my);
+      if (hitCol !== null) { confirmAndDeleteCol(hitCol); return; }
     });
 
     window.addEventListener('pointermove', (e) => {
@@ -5829,28 +5819,56 @@
         clickedCellId = getGridCellFromPos(e.clientX - rect.left, e.clientY - rect.top);
       }
 
-      // 1. If clicked on a specific cell -> select and open context menu
-      if (clickedCellId) {
-        if (!selectedGridCellIds || selectedGridCellIds.length !== 2 || !selectedGridCellIds.includes(clickedCellId)) {
-          selectedGridCellIds = [clickedCellId];
-          selectedGridCellId = clickedCellId;
+      // 1. If user right-clicks while holding Ctrl, toggle/add to selection (cap at 2)
+      if (clickedCellId && (e.ctrlKey || e.metaKey)) {
+        if (!Array.isArray(selectedGridCellIds)) selectedGridCellIds = [];
+        const idx = selectedGridCellIds.indexOf(clickedCellId);
+        if (idx === -1) {
+          if (selectedGridCellIds.length >= 2) {
+            selectedGridCellIds[1] = clickedCellId;
+          } else {
+            selectedGridCellIds.push(clickedCellId);
+          }
         }
+        selectedGridCellId = clickedCellId;
         renderGridOverview();
         updateGridInspectorUI();
         openGridContextMenu(e.clientX, e.clientY, clickedCellId);
         return;
       }
 
-      // 2. If clicked on empty area or viewport, but a cell was already focused -> open menu for focused cell
+      // 2. If 2 cells are already selected:
+      // Whether user right-clicks either of the 2 selected cells OR right-clicks empty space,
+      // preserve the 2 selected cells so the Swap Frames option stays available!
+      if (Array.isArray(selectedGridCellIds) && selectedGridCellIds.length === 2) {
+        if (!clickedCellId || selectedGridCellIds.includes(clickedCellId)) {
+          const targetCellId = clickedCellId || selectedGridCellId || selectedGridCellIds[0];
+          openGridContextMenu(e.clientX, e.clientY, targetCellId);
+          return;
+        }
+      }
+
+      // 3. If clicked on a specific cell -> select and open context menu
+      if (clickedCellId) {
+        selectedGridCellIds = [clickedCellId];
+        selectedGridCellId = clickedCellId;
+        renderGridOverview();
+        updateGridInspectorUI();
+        openGridContextMenu(e.clientX, e.clientY, clickedCellId);
+        return;
+      }
+
+      // 4. If clicked on empty area or viewport, but a cell was already focused -> open menu for focused cell
       if (selectedGridCellId) {
         openGridContextMenu(e.clientX, e.clientY, selectedGridCellId);
         return;
       }
 
-      // 3. Fallback: select first cell if none selected
+      // 5. Fallback: select first cell if none selected
       const firstCellId = Object.keys(state.doc ? state.doc.cells : {})[0];
       if (firstCellId) {
         selectedGridCellId = firstCellId;
+        selectedGridCellIds = [firstCellId];
         renderGridOverview();
         updateGridInspectorUI();
         openGridContextMenu(e.clientX, e.clientY, firstCellId);
@@ -6484,6 +6502,12 @@
 
     // Resize Frame Modal Events
     dom.btnResizeFrame?.addEventListener('click', openResizeFrameModal);
+    document.getElementById('btn-header-cell-res')?.addEventListener('click', openResizeFrameModal);
+    document.getElementById('header-cell-res-group')?.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-header-cell-res') || e.target.closest('#header-cell-res-group')) {
+        openResizeFrameModal();
+      }
+    });
     dom.btnCloseResizeFrameModal?.addEventListener('click', closeResizeFrameModal);
     dom.btnCancelResizeFrame?.addEventListener('click', closeResizeFrameModal);
     dom.btnConfirmResizeFrame?.addEventListener('click', confirmResizeFrame);
@@ -7695,8 +7719,8 @@
       });
     }
 
-    // Resolution preset buttons
-    document.querySelectorAll('[data-res]').forEach(btn => {
+    // Resolution preset buttons (excluding header trigger)
+    document.querySelectorAll('[data-res]:not(#btn-header-cell-res)').forEach(btn => {
       btn.addEventListener('click', () => {
         const dims = btn.dataset.res.split('x').map(Number);
         setResolution(dims[0], dims[1]);

@@ -1649,7 +1649,13 @@
     if (state.currentTool === 'region-select' && dom.ctxPreview) {
       regionSelection.draw(dom.ctxPreview, state.zoom, getArtworkCell(), state.activeLayerId, state.isolatedNodeId);
     }
-    if (!state.selection) return;
+    if (!state.selection) {
+      if (freeGesture && dom.ctxPreview) {
+        const mask = typeof freeGesture.mask === 'function' ? freeGesture.mask() : freeGesture.mask;
+        EditorMultiSelection.drawMask(dom.ctxPreview, mask, state.zoom);
+      }
+      return;
+    }
 
     const { x, y, w, h } = state.selection;
     const zoom = state.zoom;
@@ -2234,7 +2240,8 @@
   function renderFreeSelection() {
     clearPreviewCanvas();
     if (!freeGesture || !dom.ctxPreview) return;
-    EditorMultiSelection.drawMask(dom.ctxPreview, freeGesture.mask, state.zoom);
+    const mask = typeof freeGesture.mask === 'function' ? freeGesture.mask() : freeGesture.mask;
+    EditorMultiSelection.drawMask(dom.ctxPreview, mask, state.zoom);
   }
   function finishFreeSelection(result) {
     if (!result) return;

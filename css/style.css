@@ -587,6 +587,11 @@ body {
   flex-shrink: 0;
 }
 
+#header-cell-res-group {
+  cursor: pointer;
+  user-select: none;
+}
+
 .pill-label {
   font-size: 11px;
   color: var(--text-muted);

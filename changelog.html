@@ -31,6 +31,20 @@
 
     <section class="release-list" aria-label="Release history">
       <details class="release-entry" open>
+  <summary><span class="release-version">v2.2.9</span><span class="release-source">docs/releases/v2.2.9.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.2.9
+
+A quality-of-life and stability release resolving selection preservation, freehand mask illumination, and header resolution interactions across NOIRADIX Studio and PixelArt.
+
+## Key Changes
+
+- **Active Cell Resolution Widget &amp; Frame Resize Hook**: Replaced multi-button Cell Res bar with a unified active resolution pill widget (`#btn-header-cell-res`) that automatically reflects the working tab or active cell dimensions (`W×H`) and seamlessly opens the Frame Resize modal when clicked.
+- **Grid Overview Selection Preservation &amp; Frame Swap Context Menu**: Fixed event double-invocation (`pointerdown` vs `click`) on `dom.gridCanvas` that previously deselected frames upon mouseup. Multi-frame selections (up to 2 cells) are now strictly preserved when right-clicking cells or canvas background, ensuring the &quot;Swap Frames&quot; context menu action remains reliably accessible.
+- **Freehand Selection Mask Glow Persistence**: Resolved issue where illuminated purple selection glow disappeared when holding `Ctrl`/`Cmd` and releasing mouse without drawing. `EditorMultiSelection.drawMask` now natively handles both Set objects and function/getter references, while `state.selection` bounds remain synchronized throughout additive stroke intervals.
+- **Complete Test &amp; Manifest Synchronization**: Synchronized all versions, badges, and automated test assertions across 24 Node test suites and 10 browser verification suites.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.2.9.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
   <summary><span class="release-version">v2.2.8</span><span class="release-source">docs/releases/v2.2.8.md</span></summary>
   <pre># NOIRADIX Studio &amp; PixelArt v2.2.8
 

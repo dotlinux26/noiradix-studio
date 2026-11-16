@@ -33,8 +33,8 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.8', 'Studio version must be 2.2.8');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.8', 'PixelArt version must be 2.2.8');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.9', 'Studio version must be 2.2.9');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.9', 'PixelArt version must be 2.2.9');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
@@ -43,11 +43,11 @@ console.log('Test 1: Version Manifest & Domain Verification');
   const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const paIndexHtml = fs.readFileSync(path.join(__dirname, '..', 'pixelart/index.html'), 'utf8');
 
-  assert(indexHtml.includes('"softwareVersion": "2.2.8"'), 'index.html must specify softwareVersion 2.2.8');
-  assert(indexHtml.includes('v2.2.8'), 'index.html must display v2.2.8 badge');
-  assert(paIndexHtml.includes('v2.2.8'), 'pixelart/index.html must display v2.2.8 badge');
+  assert(indexHtml.includes('"softwareVersion": "2.2.9"'), 'index.html must specify softwareVersion 2.2.9');
+  assert(indexHtml.includes('v2.2.9'), 'index.html must display v2.2.9 badge');
+  assert(paIndexHtml.includes('v2.2.9'), 'pixelart/index.html must display v2.2.9 badge');
 
-  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.8 / PixelArt 2.2.8 / PIX2 1.1)');
+  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.9 / PixelArt 2.2.9 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -779,6 +779,69 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
   assert(gridCells.every(c => c.direction === 'left'), 'All cells in row 1 must synchronize to direction "left"');
 
   pass('Grid Frame Swap, Row Tag Synchronization, and Preview Cycling verified');
+}
+
+// -----------------------------------------------------------------------------
+// Test 17: Freehand Selection Mask Persistence, Grid Context Swap Focus & Header Cell Res Hook
+// -----------------------------------------------------------------------------
+console.log('\nTest 17: Freehand Selection Mask Persistence, Grid Context Swap Focus & Header Cell Res Hook');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const appJs = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const paAppJs = fs.readFileSync(path.join(__dirname, '../pixelart/js/pixelart-app.js'), 'utf8');
+  const multiSel = require('../js/editor-multi-selection.js');
+
+  // 1. drawMask accepts both Set and function/getter mask
+  let fillRectCalls = 0;
+  const mockCtx = {
+    save() {},
+    restore() {},
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    fillRect(x, y, w, h) { fillRectCalls++; },
+    strokeRect(x, y, w, h) {}
+  };
+
+  const maskSet = new Set(['2,3', '4,5']);
+  assert.strictEqual(multiSel.drawMask(mockCtx, maskSet, 10), true, 'drawMask must accept a Set');
+  assert.strictEqual(fillRectCalls, 2);
+
+  fillRectCalls = 0;
+  assert.strictEqual(multiSel.drawMask(mockCtx, () => maskSet, 10), true, 'drawMask must accept a function returning a Set');
+  assert.strictEqual(fillRectCalls, 2);
+
+  assert.strictEqual(multiSel.drawMask(mockCtx, new Set(), 10), false, 'Empty set must return false');
+  assert.strictEqual(multiSel.drawMask(mockCtx, () => new Set(), 10), false, 'Empty function must return false');
+
+  // 2. freeGesture exposes bounds() and mask
+  const gesture = multiSel.freeGesture([], { w: 32, h: 32 });
+  gesture.start({ x: 10, y: 10 }, false);
+  gesture.move({ x: 15, y: 12 });
+  const b = gesture.bounds();
+  assert(b !== null, 'freeGesture.bounds() must return bounding box');
+  assert.strictEqual(b.x, 10);
+  assert.strictEqual(b.y, 10);
+  assert.strictEqual(b.w, 6);
+  assert.strictEqual(b.h, 3);
+  assert(gesture.mask instanceof Set, 'gesture.mask must return Set');
+  assert(gesture.mask.has('10,10'), 'mask must contain start point');
+
+  // 3. Grid Overview context menu preserves 2 selected cells
+  assert(appJs.includes('if (Array.isArray(selectedGridCellIds) && selectedGridCellIds.length === 2)'),
+    'app.js must preserve selectedGridCellIds when 2 cells are selected');
+  assert(appJs.includes('selectGridCell(cellId, e.ctrlKey || e.metaKey)'),
+    'app.js must select grid cells on pointerdown without duplicate toggle on click');
+
+  // 4. Header Cell Res Widget in index.html and app.js
+  assert(indexHtml.includes('id="header-cell-res-group"'), 'index.html must include #header-cell-res-group');
+  assert(indexHtml.includes('id="btn-header-cell-res"'), 'index.html must include #btn-header-cell-res');
+  assert(appJs.includes("document.getElementById('btn-header-cell-res')?.addEventListener('click', openResizeFrameModal)"),
+    'app.js must hook #btn-header-cell-res to openResizeFrameModal');
+
+  pass('Freehand Selection Mask Persistence, Grid Context Swap Focus & Header Cell Res Hook verified');
 }
 
 console.log('\n====================================================');

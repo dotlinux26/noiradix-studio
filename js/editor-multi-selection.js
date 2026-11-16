@@ -98,17 +98,18 @@
   }
 
   function drawMask(context, mask, zoom, fillStyle = 'rgba(99, 102, 241, 0.45)', strokeStyle = '#a5b4fc') {
-    if (!mask || !(mask.size > 0)) return false;
+    const rawMask = typeof mask === 'function' ? mask() : mask;
+    if (!rawMask || !(rawMask.size > 0)) return false;
     context.save();
     context.fillStyle = fillStyle;
-    for (const key of mask) {
+    for (const key of rawMask) {
       const [x, y] = key.split(',').map(Number);
       context.fillRect(x * zoom, y * zoom, zoom, zoom);
     }
     if (strokeStyle) {
       context.strokeStyle = strokeStyle;
       context.lineWidth = 1;
-      for (const key of mask) {
+      for (const key of rawMask) {
         const [x, y] = key.split(',').map(Number);
         context.strokeRect(x * zoom + 0.5, y * zoom + 0.5, zoom - 1, zoom - 1);
       }
@@ -165,7 +166,9 @@
       },
       releaseModifier() { return waiting && !previous ? finish() : null; },
       cancel() { mask.clear(); previous = null; waiting = false; },
-      get mask() { return new Set(mask); }
+      get mask() { return new Set(mask); },
+      get maskSet() { return new Set(mask); },
+      bounds() { return maskBounds(mask); }
     };
   }
 
