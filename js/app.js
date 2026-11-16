@@ -824,6 +824,7 @@
   }
 
   function switchProjectSession(sessionId) {
+    if (freeGesture) { freeGesture.cancel(); freeGesture = null; isFreeSelecting = false; }
     const target = projectSessions.find(p => p.id === sessionId);
     if (!target || activeProjectId === sessionId) return;
     if (!prepareProjectSwitch()) return;
@@ -2681,7 +2682,7 @@
       return;
     }
 
-    if (!cell.layers || cell.layers.length === 0) {
+    if ((!cell.layers || cell.layers.length === 0) && state.doc.meta.version === '1.0') {
       dom.structureTreeContainer.innerHTML = `
         <div style="padding: 10px; text-align: center; color: var(--text-muted); font-size: 11px;">
           <p style="margin: 0 0 8px 0;">Flat PIX2 1.0 frame (no layers).</p>
@@ -2716,7 +2717,9 @@
       return;
     }
 
-    EditorOutliner.render(dom.structureTreeContainer, cell, state, {
+    if (!cell.layers?.length) {
+      dom.structureTreeContainer.textContent = 'This frame has no structural layers.';
+    } else EditorOutliner.render(dom.structureTreeContainer, cell, state, {
       before: commitFloatingSelection,
       selected: () => regionSelection.resolve(cell, state.activeLayerId, state.isolatedNodeId).map(node => node.id),
       focus: ({ node }, extend) => {
@@ -2756,6 +2759,24 @@
         renderCellOverlay();
       }
     });
+    if (state.doc.meta.version === '1.1') {
+      const flattenButton = document.createElement('button');
+      flattenButton.type = 'button';
+      flattenButton.className = 'btn btn-xs btn-secondary';
+      flattenButton.textContent = 'Convert document to PIX2 1.0';
+      flattenButton.title = 'Flatten all frames into a PIX2 1.0 document';
+      flattenButton.addEventListener('click', () => {
+        if (!confirm('Convert the entire document to PIX2 1.0? Layers, groups, regions, their names, tags and structural properties will be lost. Visible pixels will be flattened.')) return;
+        commitFloatingSelection();
+        const result = PIX2.flattenV11ToV10(state.doc);
+        if (!result.success) { showToast(`Conversion failed: ${result.error}`, 'error'); return; }
+        if (state.applyDocument(result.doc, 'Convert to PIX2 1.0')) triggerEventAutosave();
+        saveCurrentSessionState();
+        refreshAll();
+        showToast('Converted document to flat PIX2 1.0', 'success');
+      });
+      dom.structureTreeContainer.appendChild(flattenButton);
+    }
   }
 
   // ===========================================================================
@@ -2888,13 +2909,15 @@
     }
 
     const ctx = dom.cellCanvas.getContext('2d');
-    if (!reuseArtwork || bufferedCell !== cell || bufferedPixels !== cell.pixels ||
+    if (multiSession || !reuseArtwork || bufferedCell !== cell || bufferedPixels !== cell.pixels ||
         bufferedIsolation !== state.isolatedNodeId || cellArtwork.width !== cw || cellArtwork.height !== ch) {
       if (cellArtwork.width !== cw) cellArtwork.width = cw;
       if (cellArtwork.height !== ch) cellArtwork.height = ch;
       const source = cellArtwork.getContext('2d');
       source.clearRect(0, 0, cw, ch);
-      const pixels = state.isolatedNodeId
+      const previewOptions = state.isolatedNodeId ? { isolatedNodeId: state.isolatedNodeId, dimNonIsolated: 0 } : {};
+      const pixels = multiSession ? EditorMultiSelection.preview(multiSession,
+        { ...floatingOriginalSel, x: floatingCurrentX, y: floatingCurrentY }, { w: cw, h: ch }, PIX2, previewOptions) : state.isolatedNodeId
         ? PIX2.compositeCellLayers(cell, { w: cw, h: ch }, { isolatedNodeId: state.isolatedNodeId, dimNonIsolated: 0 })
         : cell.pixels;
       EditorCanvas.drawPixels(source, pixels, cw, ch);
@@ -3175,6 +3198,22 @@
   let floatingBaselineSel = null;
   let floatingSelectionCellId = null;
   let floatingSelectionTargetId = null;
+  let isFreeSelecting = false;
+  let freeGesture = null;
+  let multiSession = null;
+  let selectionAllLayers = false;
+  let multiScaleBaseline = null;
+  let multiRotationBaseline = null;
+  let multiRotationBounds = null;
+
+  function finishFreeSelection(result) {
+    if (!result) return;
+    freeGesture = null;
+    isFreeSelecting = false;
+    selectTool('select');
+    state.selection = result.bounds ? { ...result.bounds, mask: result.mask } : null;
+    renderCellOverlay();
+  }
 
   // PIX2 1.1 keeps source pixels in the selected region, while cell.pixels is
   // a composited cache. Keep every selection transaction bound to that source
@@ -3189,6 +3228,22 @@
     return state.getActiveRegion(cell.id);
   }
 
+  function getSelectionSourceTargets(cell) {
+    if (!cell) return [];
+    if (!cell.layers?.length) return [cell];
+    const targets = [];
+    const visit = (nodes, parentEditable = true) => {
+      for (const node of nodes || []) {
+        const editable = parentEditable && node.visible !== false && !node.locked;
+        if (!editable) continue;
+        if (node.type === 'region' && node.pixels) targets.push(node);
+        visit(node.children || [], editable);
+      }
+    };
+    visit(cell.layers);
+    return targets;
+  }
+
   function getFloatingSelectionCell() {
     return (floatingSelectionCellId && state.doc && state.doc.cells)
       ? state.doc.cells[floatingSelectionCellId]
@@ -3199,6 +3254,21 @@
     if (floatingSelectionPixels && floatingOriginalSel) return;
     const cell = state.getActiveCell();
     const target = getSelectionTarget(cell);
+    if (selectionAllLayers && cell && state.selection) {
+      state.beginStroke();
+      multiSession = EditorMultiSelection.begin(state.doc, cell,
+        EditorMultiSelection.targets(cell, true, null, state.isolatedNodeId), state.selection, state.selection.mask);
+      if (!multiSession) { state.strokePreState = null; return; }
+      floatingOriginalSel = { ...state.selection };
+      floatingSelectionCellId = cell.id;
+      floatingCurrentX = state.selection.x; floatingCurrentY = state.selection.y;
+      floatingSelectionPixels = {};
+      for (const item of multiSession.items) Object.assign(floatingSelectionPixels, item.pixels);
+      floatingBaselineSel = { ...state.selection };
+      state.syncCellComposite(cell.id);
+      renderCellEditor();
+      return;
+    }
     if (!cell || !target || !state.selection) return;
     floatingOriginalSel = { ...state.selection };
     floatingSelectionCellId = cell.id;
@@ -3227,14 +3297,31 @@
   });
 
   function commitFloatingSelection(label = 'Move Selection') {
+    if (multiSession) {
+      const cell = multiSession.cell;
+      const bounds = { ...floatingOriginalSel, x: floatingCurrentX, y: floatingCurrentY };
+      const committed = EditorMultiSelection.commit(multiSession, bounds, cell.size || state.doc.meta.cellSize, state.doc, state.getActiveCell());
+      state.syncCellComposite(cell.id);
+      multiSession = null; floatingSelectionPixels = null; floatingOriginalSel = null;
+      floatingSelectionCellId = null; floatingBaselineSel = null;
+      if (committed) { state.selection = bounds; if (state.endStroke(label)) triggerEventAutosave(); }
+      else state.strokePreState = null;
+      renderCellEditor(); renderMiniPreview();
+      return;
+    }
     if (!floatingSelectionPixels || !floatingOriginalSel) return;
     const cell = getFloatingSelectionCell();
     const size = cell && (cell.size || state.doc.meta.cellSize);
     const bounds = { x: floatingCurrentX, y: floatingCurrentY, w: floatingOriginalSel.w, h: floatingOriginalSel.h };
+    const movedMask = floatingBaselineSel?.mask ? new Set(Object.keys(floatingSelectionPixels).map(key => {
+      const [x, y] = key.split(',').map(Number);
+      return `${bounds.x + x},${bounds.y + y}`;
+    })) : null;
     const result = floatingSession.commit(state.doc, bounds, size);
     EditorCanvas.refreshSourceComposite(PIX2, result.restored);
     if (result.status === 'committed') {
       state.selection = { ...result.bounds };
+      if (movedMask) state.selection.mask = movedMask;
       if (cell.layers && cell.layers.length) state.syncCellComposite(cell.id);
       if (state.endStroke(label)) triggerEventAutosave();
       renderCellEditor();
@@ -3253,6 +3340,11 @@
   }
 
   function cancelFloatingSelection() {
+    if (multiSession) {
+      EditorMultiSelection.cancel(multiSession, multiSession.cell.size || multiSession.doc.meta.cellSize);
+      state.syncCellComposite(multiSession.cell.id);
+      multiSession = null;
+    }
     const cell = getFloatingSelectionCell();
     EditorCanvas.refreshSourceComposite(PIX2, floatingSession.cancel());
     // beginStroke() captured the pre-lift document. Cancellation leaves no
@@ -3278,13 +3370,14 @@
   }
 
   function renderMovingSelectionOverlay() {
+    if (multiSession) renderCellEditor();
     clearOverlay();
     if (!dom.cellOverlay || !floatingOriginalSel) return;
     const ctx = dom.cellOverlay.getContext('2d');
     const zoom = state.cellZoom;
 
     // Draw floating pixels moving with cursor
-    if (floatingSelectionPixels) {
+    if (floatingSelectionPixels && !multiSession) {
       for (const relKey in floatingSelectionPixels) {
         const [rx, ry] = relKey.split(',').map(Number);
         const px = floatingCurrentX + rx;
@@ -3359,6 +3452,17 @@
     const cell = state.getActiveCell();
     if (!cell) return;
     const tool = state.currentTool;
+    if (tool === 'free-select') {
+      if (!freeGesture) {
+        commitFloatingSelection();
+        state.selection = null;
+        const target = getSelectionTarget(cell);
+        freeGesture = EditorMultiSelection.freeGesture(target ? [target] : [], cell.size || state.doc.meta.cellSize);
+      }
+      freeGesture.start(coords, e.ctrlKey || e.metaKey);
+      isFreeSelecting = true;
+      return;
+    }
     if (tool === 'region-select') {
       if (e.altKey) return;
       const view = editorPointerView(e, dom.cellOverlay, state.cellZoom);
@@ -3384,6 +3488,11 @@
         isRotatingSelection = true;
         isPointerDown = true;
         ensureFloatingSelection();
+        if (multiSession) {
+          floatingSession.resetRotation();
+          multiRotationBaseline = EditorMultiSelection.snapshot(multiSession);
+          multiRotationBounds = { ...state.selection };
+        }
         const rotation = floatingSession.beginRotation(state.selection);
         if (!rotation) { isRotatingSelection = false; isPointerDown = false; return; }
         rotationGestureBaseAngle = rotation.angle;
@@ -3404,6 +3513,7 @@
         isPointerDown = true;
         ensureFloatingSelection();
         scaleOriginalPixels = { ...floatingSelectionPixels };
+        multiScaleBaseline = multiSession ? EditorMultiSelection.snapshot(multiSession) : null;
         scaleOriginalSel = { ...state.selection };
         return;
       }
@@ -3466,6 +3576,17 @@
 
   function handleCellMouseMove(e) {
     let coords = getPixelCoords(e);
+    if (isFreeSelecting && freeGesture && coords) {
+      freeGesture.move(coords);
+      clearOverlay();
+      const ctx = dom.cellOverlay.getContext('2d');
+      ctx.fillStyle = 'rgba(99,102,241,0.4)';
+      for (const key of freeGesture.mask) {
+        const [x, y] = key.split(',').map(Number);
+        ctx.fillRect(x * state.cellZoom, y * state.cellZoom, state.cellZoom, state.cellZoom);
+      }
+      return;
+    }
     updateStatusBarCoords(coords ? coords.x : null, coords ? coords.y : null);
 
     if (state.currentTool === 'pan') {
@@ -3538,6 +3659,7 @@
         scaled.w,
         scaled.h
       );
+      if (multiSession && multiScaleBaseline) EditorMultiSelection.scale(multiSession, scaleOriginalSel, scaled, multiScaleBaseline);
       renderMovingSelectionOverlay();
       return;
     }
@@ -3552,6 +3674,7 @@
 
       const rotated = floatingSession.rotate(rotationGestureBaseAngle + deltaAngle);
       if (!rotated) return;
+      if (multiSession && multiRotationBaseline) EditorMultiSelection.rotate(multiSession, multiRotationBounds, rotationGestureBaseAngle + deltaAngle, multiRotationBaseline);
       state.selection = { ...rotated.bounds };
       renderMovingSelectionOverlay();
       return;
@@ -3584,6 +3707,11 @@
   }
 
   function handleCellMouseUp(e) {
+    if (isFreeSelecting && freeGesture) {
+      isFreeSelecting = false;
+      finishFreeSelection(freeGesture.release(e.ctrlKey || e.metaKey));
+      return;
+    }
     if (state.currentTool === 'region-select' && e.button === 0) {
       const cell = state.getActiveCell();
       if (cell && regionSelection.release(cell, state.activeLayerId, state.isolatedNodeId,
@@ -3702,7 +3830,7 @@
 
       // Soft purple scrim inside selection
       ctx.fillStyle = 'rgba(99, 102, 241, 0.18)';
-      ctx.fillRect(sx, sy, sw, sh);
+      if (!EditorMultiSelection.drawMask(ctx, state.selection.mask, zoom)) ctx.fillRect(sx, sy, sw, sh);
 
       if (state.selection.w === 1 && state.selection.h === 1) {
         // Single cell: Solid crisp border without breaking into blurry dots
@@ -3787,6 +3915,20 @@
     const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
     const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
     const sel = state.selection || { x: 0, y: 0, w: cw, h: ch };
+    if (selectionAllLayers && cell.layers?.length) {
+      const entries = multiSession ? multiSession.items.map(item => ({ targetId: item.target.id, pixels: { ...item.pixels } }))
+        : EditorMultiSelection.targets(cell, true, null, state.isolatedNodeId).map(target => ({ targetId: target.id, pixels: SelectionTransform.copyPixels(target, sel) }));
+      const pixels = {};
+      entries.forEach(entry => Object.assign(pixels, entry.pixels));
+      const sourceLayers = cell.layers?.length ? JSON.parse(JSON.stringify(cell.layers)) : null;
+      const selectedPixels = new Map(entries.map(entry => [entry.targetId, entry.pixels]));
+      const prunePixels = node => { if (node.type === 'region') node.pixels = { ...(selectedPixels.get(node.id) || {}) }; (node.children || []).forEach(prunePixels); };
+      (sourceLayers || []).forEach(prunePixels);
+      state.clipboard = { w: sel.w, h: sel.h, pixels, selectionSources: entries,
+        sourceLayers, sourceCell: cell, sourceDocument: state.doc, sourceProjectId: activeProjectId, originCellId: cell.id, originX: sel.x, originY: sel.y };
+      showToast('Copied selection across layers', 'success');
+      return;
+    }
     if (floatingSelectionPixels && floatingOriginalSel) {
       state.clipboard = {
         w: floatingOriginalSel.w, h: floatingOriginalSel.h,
@@ -3819,6 +3961,7 @@
       showToast('No active selection to cut.');
       return;
     }
+    if (selectionAllLayers) { executeSelectionCopy(); executeSelectionDelete(); return; }
 
     if (!getSelectionTarget(cell) && !floatingSelectionPixels) return;
     executeSelectionCopy();
@@ -3837,6 +3980,7 @@
     for (let py = 0; py < sel.h; py++) {
       for (let px = 0; px < sel.w; px++) {
         const key = `${sel.x + px},${sel.y + py}`;
+        if (sel.mask && !sel.mask.has(key)) continue;
         if (target.pixels) delete target.pixels[key];
       }
     }
@@ -3861,6 +4005,45 @@
 
     commitFloatingSelection();
     const clip = state.clipboard;
+    if (clip.selectionSources) {
+      const sameSource = clip.sourceProjectId && clip.sourceProjectId === activeProjectId && clip.originCellId === cell.id;
+      if (!sameSource && (clip.sourceDocument !== state.doc || clip.sourceCell !== cell)) {
+        if (state.doc.meta.version !== '1.1' || !clip.sourceLayers) {
+          showToast('Convert the destination to PIX2 1.1 before pasting layered content.', 'error');
+          return;
+        }
+        const origin = { x: targetX ?? state.selection?.x ?? clip.originX, y: targetY ?? state.selection?.y ?? clip.originY };
+        const layers = StructureOps.cloneLayersForCell(state.doc, clip.sourceLayers, cell.id);
+        const offset = node => {
+          if (node.type === 'region') {
+            const pixels = node.pixels; node.pixels = {};
+            SelectionTransform.placePixels(node, pixels, origin, cell.size || state.doc.meta.cellSize);
+          }
+          (node.children || []).forEach(offset);
+        };
+        layers.forEach(offset);
+        state.beginStroke();
+        cell.layers = [...(cell.layers || []), ...layers];
+        state.syncCellComposite(cell.id);
+        if (state.endStroke('Paste Layered Selection')) triggerEventAutosave();
+        state.selection = { ...origin, w: clip.w, h: clip.h };
+        refreshAll();
+        return;
+      }
+      const targets = clip.selectionSources.map(entry => ({ entry, target: cell.layers?.length ? StructureOps.findNode(cell, entry.targetId)?.node : cell }));
+      if (targets.some(({ target }) => !target || (target !== cell && !StructureOps.isEditable(StructureOps.findNode(cell, target.id))))) {
+        showToast('A source region is missing, hidden or locked.', 'error');
+        return;
+      }
+      const origin = { x: targetX ?? state.selection?.x ?? clip.originX, y: targetY ?? state.selection?.y ?? clip.originY };
+      state.beginStroke();
+      for (const { entry, target } of targets) SelectionTransform.placePixels(target, entry.pixels, origin, cell.size || state.doc.meta.cellSize);
+      state.syncCellComposite(cell.id);
+      if (state.endStroke('Paste Across Layers')) triggerEventAutosave();
+      state.selection = { ...origin, w: clip.w, h: clip.h };
+      refreshAll();
+      return;
+    }
     const cw = (cell.size && cell.size.w) || (state.doc ? state.doc.meta.cellSize.w : 16);
     const ch = (cell.size && cell.size.h) || (state.doc ? state.doc.meta.cellSize.h : 16);
 
@@ -3906,6 +4089,16 @@
   function executeSelectionDelete() {
     const cell = state.getActiveCell();
     if (!cell) return;
+    if (selectionAllLayers && state.selection) {
+      ensureFloatingSelection();
+      if (!multiSession) return;
+      EditorMultiSelection.remove(multiSession);
+      floatingSelectionPixels = {};
+      commitFloatingSelection('Delete Selection Across Layers');
+      state.selection = null;
+      renderCellOverlay();
+      return;
+    }
 
     if (floatingSelectionPixels) {
       // User moved/lifted selection and hits Delete:
@@ -3938,6 +4131,7 @@
       for (let py = 0; py < sel.h; py++) {
         for (let px = 0; px < sel.w; px++) {
           const key = `${sel.x + px},${sel.y + py}`;
+          if (sel.mask && !sel.mask.has(key)) continue;
           if (target.pixels) delete target.pixels[key];
         }
       }
@@ -3965,6 +4159,14 @@
       showToast('Select a region to fill.');
       return;
     }
+    if (selectionAllLayers) {
+      ensureFloatingSelection();
+      if (!multiSession) return;
+      EditorMultiSelection.recolor(multiSession, state.primaryColor);
+      commitFloatingSelection('Fill Selection Across Layers');
+      renderCellOverlay();
+      return;
+    }
     commitFloatingSelection();
     const target = getSelectionTarget(cell);
     if (!target) {
@@ -3976,6 +4178,7 @@
     for (let py = 0; py < sel.h; py++) {
       for (let px = 0; px < sel.w; px++) {
         const key = `${sel.x + px},${sel.y + py}`;
+        if (sel.mask && !sel.mask.has(key)) continue;
         if (!target.pixels) target.pixels = {};
         target.pixels[key] = state.primaryColor;
       }
@@ -4001,6 +4204,7 @@
       showToast('Select an editable layer or region');
       return;
     }
+    if (multiSession) EditorMultiSelection.flip(multiSession, floatingOriginalSel, horizontal);
     if (!wasFloating) {
       commitFloatingSelection(horizontal ? 'Flip Horizontal' : 'Flip Vertical');
       refreshAll();
@@ -4066,6 +4270,7 @@
       return;
     }
     floatingSession.rotate90(bounds, size);
+    if (multiSession) EditorMultiSelection.rotate(multiSession, bounds, Math.PI / 2);
     state.selection = { ...next };
     if (!wasFloating) {
       commitFloatingSelection('Rotate selection 90°');
@@ -4087,12 +4292,14 @@
   function executeCopyGridCell(cellId) {
     if (!state.doc || !state.doc.cells[cellId]) return;
     const cell = state.doc.cells[cellId];
-    const cw = state.doc.meta.cellSize.w;
-    const ch = state.doc.meta.cellSize.h;
+    const cw = (cell.size || state.doc.meta.cellSize).w;
+    const ch = (cell.size || state.doc.meta.cellSize).h;
     state.clipboard = {
       w: cw,
       h: ch,
       pixels: { ...cell.pixels },
+      gridFrame: true,
+      layers: cell.layers ? JSON.parse(JSON.stringify(cell.layers)) : null,
       originCellId: cellId,
       originX: 0,
       originY: 0
@@ -4107,10 +4314,42 @@
       return;
     }
     const cell = state.doc.cells[cellId];
+    const size = cell.size || state.doc.meta.cellSize;
+    if (state.clipboard.gridFrame && (state.clipboard.w !== size.w || state.clipboard.h !== size.h)) {
+      showToast('Frame dimensions differ. Resize the destination before pasting.', 'error');
+      return;
+    }
     state.beginStroke();
+    if (state.doc.meta.version === '1.1' && state.clipboard.layers?.length) {
+      cell.layers = StructureOps.cloneLayersForCell(state.doc, state.clipboard.layers, cell.id);
+      state.syncCellComposite(cell.id);
+      if (state.endStroke(`Paste Frame into ${cellId}`)) triggerEventAutosave();
+      refreshAll();
+      showToast(`Pasted into "${cell.name || cellId}" (Ctrl+V)`, 'success');
+      return;
+    }
+    if (cell.layers?.length) {
+      const target = cell.layers.map(layer => StructureOps.firstEditableRegion(layer)).find(Boolean);
+      if (!target) {
+        state.strokePreState = null;
+        showToast('No visible, unlocked region is available for paste.', 'error');
+        return;
+      }
+      target.pixels ||= {};
+      for (const [key, value] of Object.entries(state.clipboard.pixels)) {
+        const match = /^(\d+),(\d+)$/.exec(key);
+        if (match && Number(match[1]) < size.w && Number(match[2]) < size.h) target.pixels[key] = value;
+      }
+      state.syncCellComposite(cell.id);
+      if (state.endStroke(`Paste Frame into ${cellId}`)) triggerEventAutosave();
+      refreshAll();
+      showToast(`Pasted into "${cell.name || cellId}" (Ctrl+V)`, 'success');
+      return;
+    }
     if (!cell.pixels) cell.pixels = {};
     for (const k in state.clipboard.pixels) {
-      if (typeof PIX2 !== 'undefined' && !PIX2.isSafeIdentifier(k)) continue;
+      const match = /^(\d+),(\d+)$/.exec(k);
+      if (!match || Number(match[1]) >= size.w || Number(match[2]) >= size.h) continue;
       cell.pixels[k] = state.clipboard.pixels[k];
     }
     if (state.endStroke(`Paste Frame into ${cellId}`)) triggerEventAutosave();
@@ -4125,14 +4364,27 @@
     if (nextC < state.doc.meta.grid.cols) {
       const nextCell = getCellAtGrid(state.doc, r, nextC);
       const nextId = nextCell ? nextCell.id : `cell_${r}_${nextC}`;
+      const sourceSize = state.doc.cells[cellId].size || state.doc.meta.cellSize;
+      const targetSize = nextCell?.size || state.doc.meta.cellSize;
+      if (sourceSize.w !== targetSize.w || sourceSize.h !== targetSize.h) {
+        showToast('Frame dimensions differ. Resize the destination before duplicating.', 'error');
+        return;
+      }
       state.beginStroke();
       if (!state.doc.cells[nextId]) {
         state.doc.cells[nextId] = { id: nextId, name: nextId, row: r, col: nextC, direction: 'none', frame: nextC, pixels: {} };
       }
-      state.doc.cells[nextId].pixels = JSON.parse(JSON.stringify(state.doc.cells[cellId].pixels || {}));
-      state.endStroke(`Duplicate Frame to ${nextId}`);
+      const source = state.doc.cells[cellId];
+      if (source.layers?.length) {
+        state.doc.cells[nextId].layers = StructureOps.cloneLayersForCell(state.doc, source.layers, nextId);
+        state.syncCellComposite(nextId);
+      } else {
+        delete state.doc.cells[nextId].layers;
+        state.doc.cells[nextId].pixels = JSON.parse(JSON.stringify(source.pixels || {}));
+      }
+      const changed = state.endStroke(`Duplicate Frame to ${nextId}`);
       selectedGridCellId = nextId;
-      triggerEventAutosave();
+      if (changed) triggerEventAutosave();
       refreshAll();
       showToast(`Duplicated to ${nextId}!`, 'success');
     } else {
@@ -4143,17 +4395,24 @@
   function flipGridCell(cellId, horizontal = true) {
     if (!state.doc || !state.doc.cells[cellId]) return;
     const cell = state.doc.cells[cellId];
-    const cw = state.doc.meta.cellSize.w;
-    const ch = state.doc.meta.cellSize.h;
+    const cw = (cell.size || state.doc.meta.cellSize).w;
+    const ch = (cell.size || state.doc.meta.cellSize).h;
     state.beginStroke();
-    const newPixels = {};
-    for (const coord in cell.pixels) {
+    const flipPixels = pixels => {
+      const newPixels = {};
+      for (const coord in pixels) {
       const [x, y] = coord.split(',').map(Number);
       const nx = horizontal ? (cw - 1 - x) : x;
       const ny = horizontal ? y : (ch - 1 - y);
-      newPixels[`${nx},${ny}`] = cell.pixels[coord];
-    }
-    cell.pixels = newPixels;
+      newPixels[`${nx},${ny}`] = pixels[coord];
+      }
+      return newPixels;
+    };
+    if (cell.layers?.length) {
+      const visit = nodes => nodes.forEach(node => { if (node.type === 'region') node.pixels = flipPixels(node.pixels || {}); if (node.children) visit(node.children); });
+      visit(cell.layers);
+      state.syncCellComposite(cellId);
+    } else cell.pixels = flipPixels(cell.pixels || {});
     if (state.endStroke(`Flip Frame ${horizontal ? 'H' : 'V'}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Flipped ${cell.name || cellId} ${horizontal ? 'Horizontally' : 'Vertically'}`);
@@ -4167,14 +4426,29 @@
     if (rowIdx < 0 || rowIdx >= rows) return;
 
     const rowTitle = inferRowTitle(rowIdx) || `Row ${rowIdx}`;
-    const cw = doc.meta.cellSize.w;
-    const ch = doc.meta.cellSize.h;
     let flippedCount = 0;
 
     state.beginStroke();
     for (let c = 0; c < cols; c++) {
       const cell = getCellAtGrid(doc, rowIdx, c) || doc.cells[`cell_${rowIdx}_${c}`];
-      if (cell && cell.pixels && Object.keys(cell.pixels).length > 0) {
+      const cw = (cell?.size || doc.meta.cellSize).w;
+      const ch = (cell?.size || doc.meta.cellSize).h;
+      if (cell && cell.layers?.length) {
+        const visit = nodes => nodes.forEach(node => {
+          if (node.type === 'region') {
+            const pixels = {};
+            for (const coord in node.pixels || {}) {
+              const [x, y] = coord.split(',').map(Number);
+              pixels[`${horizontal ? cw - 1 - x : x},${horizontal ? y : ch - 1 - y}`] = node.pixels[coord];
+            }
+            node.pixels = pixels;
+          }
+          if (node.children) visit(node.children);
+        });
+        visit(cell.layers);
+        state.syncCellComposite(cell.id);
+        flippedCount++;
+      } else if (cell && cell.pixels && Object.keys(cell.pixels).length > 0) {
         const newPixels = {};
         for (const coord in cell.pixels) {
           const [x, y] = coord.split(',').map(Number);
@@ -4196,7 +4470,11 @@
     if (!state.doc || !state.doc.cells[cellId]) return;
     const cell = state.doc.cells[cellId];
     state.beginStroke();
-    cell.pixels = {};
+    if (cell.layers?.length) {
+      const visit = nodes => nodes.forEach(node => { if (node.type === 'region') node.pixels = {}; if (node.children) visit(node.children); });
+      visit(cell.layers);
+      state.syncCellComposite(cellId);
+    } else cell.pixels = {};
     if (state.endStroke(`Clear Frame ${cellId}`)) triggerEventAutosave();
     refreshAll();
     showToast(`Cleared frame ${cell.name || cellId}`);
@@ -5084,6 +5362,25 @@
   }
 
   function bindEvents() {
+    const freeButton = document.querySelector('[data-tool="free-select"]');
+    if (freeButton) {
+      freeButton.removeAttribute('disabled');
+      freeButton.title = 'Free Selection — paint pixels; hold Ctrl to add strokes';
+    }
+    window.addEventListener('keyup', event => {
+      if ((event.key === 'Control' || event.key === 'Meta') && freeGesture) finishFreeSelection(freeGesture.releaseModifier());
+    });
+    window.addEventListener('blur', () => {
+      if (!freeGesture) return;
+      freeGesture.cancel(); freeGesture = null; isFreeSelecting = false;
+      state.selection = null; renderCellOverlay();
+    });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && freeGesture) {
+        freeGesture.cancel(); freeGesture = null; isFreeSelecting = false;
+        state.selection = null; renderCellOverlay();
+      }
+    });
     if (contextMenu) EditorMenu.populate(contextMenu);
     const inspector = document.querySelector('#view-cell-editor .right-sidebar');
     const inspectorWidth = Number(localStorage.getItem('noiradix_cell_inspector_width'));
@@ -5104,7 +5401,13 @@
         dom.toolButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         regionSelection.cancel();
-        state.currentTool = btn.dataset.tool;
+        const requestedTool = btn.dataset.tool;
+        if (requestedTool === 'select-all-layers' || selectionAllLayers) commitFloatingSelection();
+        selectionAllLayers = requestedTool === 'select-all-layers';
+        state.currentTool = selectionAllLayers ? 'select' : requestedTool;
+        if (state.currentTool !== 'free-select' && freeGesture) {
+          freeGesture.cancel(); freeGesture = null; isFreeSelecting = false;
+        }
         if (dom.canvasViewport) {
           dom.canvasViewport.classList.toggle('tool-pan', state.currentTool === 'pan');
         }
@@ -5609,6 +5912,9 @@
           triggerEventAutosave();
         }
       });
+      dom.gridCellName.addEventListener('change', () => {
+        if (state.doc) state.saveSnapshot('Rename Frame');
+      });
     }
 
     if (dom.gridCellIdInput) {
@@ -5622,15 +5928,21 @@
         }
         const newId = (typeof PIX2 !== 'undefined') ? PIX2.sanitizeKey(rawId, selectedGridCellId) : rawId;
         if (newId && state.doc && state.doc.cells[selectedGridCellId] && newId !== selectedGridCellId) {
+          if (state.doc.cells[newId]) {
+            showToast(`Cell ID "${newId}" already exists.`, 'error');
+            e.target.value = selectedGridCellId;
+            return;
+          }
           const cell = state.doc.cells[selectedGridCellId];
           delete state.doc.cells[selectedGridCellId];
           cell.id = newId;
+          const rebind = node => { node.cell = newId; (node.children || []).forEach(rebind); };
+          (cell.layers || []).forEach(rebind);
           state.doc.cells[newId] = cell;
 
           for (const animName in state.doc.animations) {
             const anim = state.doc.animations[animName];
-            const idx = anim.frames.indexOf(selectedGridCellId);
-            if (idx >= 0) anim.frames[idx] = newId;
+            anim.frames = anim.frames.map(id => id === selectedGridCellId ? newId : id);
           }
 
           selectedGridCellId = newId;
@@ -5644,6 +5956,7 @@
       dom.gridCellDir.addEventListener('change', (e) => {
         if (state.doc && state.doc.cells[selectedGridCellId]) {
           state.doc.cells[selectedGridCellId].direction = e.target.value;
+          state.saveSnapshot('Change Frame Direction');
           triggerEventAutosave();
         }
       });
@@ -6701,6 +7014,21 @@
         const cell = state.getActiveCell();
         if (!cell) return;
         commitFloatingSelection();
+        if (selectionAllLayers) {
+          const sources = EditorMultiSelection.targets(cell, true, null, state.isolatedNodeId);
+          const bounds = EditorMultiSelection.paintedBounds(sources, state.selection?.mask, state.selection);
+          const size = cell.size || state.doc.meta.cellSize;
+          if (!bounds) return;
+          const delta = EditorMultiSelection.alignmentOffset(bounds, size, direction);
+          if (!delta || (!delta.x && !delta.y)) return;
+          state.selection = { ...bounds, mask: state.selection?.mask };
+          ensureFloatingSelection();
+          if (!multiSession) return;
+          floatingCurrentX += delta.x; floatingCurrentY += delta.y;
+          commitFloatingSelection('Align Across Layers ' + direction);
+          refreshAll();
+          return;
+        }
         const target = getSelectionTarget(cell);
         if (!Tools.alignRaster(target, cell.size || state.doc.meta.cellSize, direction)) return;
         state.syncCellComposite(cell.id);
@@ -6756,7 +7084,9 @@
     bindAction('btn-sheet-align-center', () => {
       if (state.doc) {
         for (const cid in state.doc.cells) {
-          Tools.centerContent(state.doc.cells[cid], state.doc.meta.cellSize.w, state.doc.meta.cellSize.h);
+          const cell = state.doc.cells[cid];
+          const size = cell.size || state.doc.meta.cellSize;
+          Tools.centerContent(cell, size.w, size.h, 'both', null, true);
         }
         if (state.saveSnapshot('Center All Cells')) triggerEventAutosave();
         refreshAll();

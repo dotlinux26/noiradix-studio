@@ -229,7 +229,7 @@ const Tools = (function () {
     return cell;
   }
 
-  function getTargetsForTransform(cell, explicitTargetId = null) {
+  function getTargetsForTransform(cell, explicitTargetId = null, allLayers = false) {
     if (!cell) return [];
     if (!cell.layers || cell.layers.length === 0) return [cell];
     if (explicitTargetId) {
@@ -237,7 +237,7 @@ const Tools = (function () {
       return target ? [target] : [];
     }
     const activeState = (typeof window !== 'undefined' && window.state) ? window.state : null;
-    if (activeState?.getActiveCell?.() === cell &&
+    if (!allLayers && activeState?.getActiveCell?.() === cell &&
         (activeState.isolatedNodeId || activeState.activeRegionId || activeState.activeLayerId)) {
       const target = getTargetForPlot(cell);
       return target ? [target] : [];
@@ -479,38 +479,26 @@ const Tools = (function () {
   }
 
   // Align drawn contents to center
-  function alignCenter(cell, w, h, axis = 'both', explicitTargetId = null) {
-    const targets = getTargetsForTransform(cell, explicitTargetId);
+  function alignCenter(cell, w, h, axis = 'both', explicitTargetId = null, allLayers = false) {
+    const targets = getTargetsForTransform(cell, explicitTargetId, allLayers);
+    let minX = w, maxX = -1, minY = h, maxY = -1;
     for (const target of targets) {
-      if (!target.pixels) continue;
-      const coords = Object.keys(target.pixels).map(k => k.split(',').map(Number));
-      if (coords.length === 0) continue;
-
-      let minX = w, maxX = 0, minY = h, maxY = 0;
-      coords.forEach(([x, y]) => {
+      Object.keys(target.pixels || {}).forEach(k => {
+        const color = target.pixels[k];
+        if (!color || color === 'transparent' || /^#(?:[\da-f]{3}0|[\da-f]{6}00)$/i.test(color)) return;
+        const [x, y] = k.split(',').map(Number);
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
       });
-
-      const boxW = maxX - minX + 1;
-      const boxH = maxY - minY + 1;
-
-      let shiftX = 0;
-      let shiftY = 0;
-
-      if (axis === 'both' || axis === 'x') {
-        const targetLeft = Math.floor((w - boxW) / 2);
-        shiftX = targetLeft - minX;
-      }
-      if (axis === 'both' || axis === 'y') {
-        const targetTop = Math.floor((h - boxH) / 2);
-        shiftY = targetTop - minY;
-      }
-
-      if (shiftX === 0 && shiftY === 0) continue;
-
+    }
+    if (maxX < minX || maxY < minY) return;
+    const shiftX = axis === 'both' || axis === 'x' ? Math.floor((w - (maxX - minX + 1)) / 2) - minX : 0;
+    const shiftY = axis === 'both' || axis === 'y' ? Math.floor((h - (maxY - minY + 1)) / 2) - minY : 0;
+    if (!shiftX && !shiftY) return;
+    for (const target of targets) {
+      if (!target.pixels) continue;
       const newPixels = {};
       for (const k in target.pixels) {
         const [x, y] = k.split(',').map(Number);

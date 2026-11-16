@@ -1752,6 +1752,7 @@ const PIX2 = (function () {
       return { success: false, error: 'Invalid document structure' };
     }
     const flattened = JSON.parse(JSON.stringify(doc));
+    attachCellSizeAlias(flattened.meta);
     flattened.meta.version = '1.0';
     const lossReport = {
       discardedLayers: [],
@@ -1781,7 +1782,7 @@ const PIX2 = (function () {
     for (const cid in flattened.cells) {
       const cell = flattened.cells[cid];
       if (cell.layers && cell.layers.length > 0) {
-        cell.pixels = compositeCellLayers(cell, flattened.meta.cellSize);
+        cell.pixels = compositeCellLayers(cell, cell.size || flattened.meta.cellSize);
         for (const l of cell.layers) {
           collectDiscarded(l);
         }

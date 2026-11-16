@@ -15,7 +15,7 @@
 |---|---|
 | PIX2 parsing, validation, normalization, serialization and migration | `js/pix2-format.js`; standalone copy `pix2/js/pix2-format.js` must remain byte-identical |
 | Raster edits and structural ownership operations | `js/tools.js`, `js/structure-operations.js` |
-| Selection transforms and Region selection behavior | `js/selection-transform.js`, `js/region-selection.js`, `js/editor-floating-selection.js` |
+| Selection transforms and Region selection behavior | `js/selection-transform.js`, `js/region-selection.js`, `js/editor-floating-selection.js`, `js/editor-multi-selection.js` |
 | Canvas helpers, ruler geometry and shared zoom ladder | `js/editor-canvas.js`, `js/editor-rulers.js`, `js/viewport-pan-zoom.js` |
 | Shared toolbar, outliner, menus and document tabs | `js/editor-toolbar.js`, `js/editor-outliner.js`, `js/editor-menu.js`, `js/tab-strip.js` |
 | Studio grid, slice, animation, source, atlas and export controllers | `js/studio-grid.js`, `js/studio-slice.js`, `js/studio-animation.js`, `js/studio-source.js`, `js/studio-atlas.js`, `js/studio-export.js` |
@@ -30,7 +30,15 @@ The app entry points still contain substantial UI and lifecycle orchestration. T
 
 PIX2 stores sparse artwork as readable text. The current canonical serializer normalizes raster commands to explicit pixel records; parsing a `line`, `rect` or `fill` and serializing it does not preserve the original drawing command. This is deterministic and diffable, but it is not a compressed or token-minimal representation. Large sheets can make full-document prompts exceed an AI model's context window.
 
-The AI prompt is guidance plus the serialized source document. Applying code parses and validates the submitted document, then replaces the active document; it is not a patch-merging protocol. Any UI mode that asks for partial directives must therefore either merge them by stable IDs or clearly request a complete document. See `docs/discussion/V2_2_0_AUDIT_AND_PLAN.md` for the verified issue and current remediation status.
+The AI UI offers guidance alone or guidance with PIX2 context. Studio's Frame Code / Frame AI / Import Frame workflow scopes exchange to one frame; frame import validates and merges that frame into the current project rather than replacing the entire sheet. Whole-project Apply Code still replaces the parsed document and is not a generic patch protocol. See `docs/discussion/V2_2_0_AUDIT_AND_PLAN.md` for the historical review and remediation record.
+
+## Source-preserving edits and conversion
+
+`js/editor-multi-selection.js` owns multi-source selection maps, eligibility, painted masks and shared transform calculations. Each app owns its pending transaction, render preview, history and persistence. Commit validates source attachment and editability; cancellation restores lift-time source pixels. The composite cache is a render result, not a writable replacement for a structured region tree.
+
+Grid Overview whole-frame commands update or clone the region hierarchy and then refresh the composite. Copies receive document-unique node IDs and correct cell/parent links. All-layer alignment computes a single union offset rather than centering each region separately.
+
+PIX2 conversion is per document. Upgrade wraps flat artwork in default structural nodes. Flatten composites each frame at its own size, warns before discarding the hierarchy, and preserves the visible raster. App history records conversion so it can be undone. See [the selection contract](SELECTION_AND_CONTEXT_MENU.md) and [v2.2.5 report](discussion/GRID_SELECTION_WORK_IN_PROGRESS.md).
 
 ## Rendering, coordinates and history
 

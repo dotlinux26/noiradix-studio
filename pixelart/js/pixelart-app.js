@@ -505,6 +505,7 @@
   }
 
   function switchPaProjectSession(sessionId) {
+    if (freeGesture) { freeGesture.cancel(); freeGesture = null; freeDrawing = false; }
     const target = paProjectSessions.find(p => p.id === sessionId);
     if (!target || activePaProjectId === sessionId) return;
     if (!preparePaProjectSwitch()) return;
@@ -802,6 +803,33 @@
 
     const cell = getArtworkCell();
     if (!cell) return;
+    const addConversionButton = () => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pa-btn-xs';
+      const flat = state.doc.meta.version === '1.0';
+      button.textContent = flat ? 'Convert document to PIX2 1.1' : 'Convert document to PIX2 1.0';
+      button.addEventListener('click', () => {
+        if (!flat && !confirm('Convert the entire document to PIX2 1.0? Layers, groups, regions, their names, tags and structural properties will be lost. Visible pixels will be flattened.')) return;
+        prepareStructureMutation();
+        const result = flat ? _PIX2.upgradeV10ToV11(state.doc, { profile: 'pixelart' }) : _PIX2.flattenV11ToV10(state.doc);
+        if (!result.success) { showToast(`Conversion failed: ${result.error}`, 'error'); return; }
+        if (state.history[state.historyIndex]) state.history[state.historyIndex].formatVersion = state.doc.meta.version;
+        state.doc = result.doc;
+        state.activeLayerId = null;
+        state.activeRegionId = null;
+        state.isolatedNodeId = null;
+        state.selection = null;
+        rebuildArtworkBuffer();
+        repaintCanvas();
+        pushHistory();
+        syncCanvasToSource(true);
+        triggerAutosave();
+        renderPaLayersTree();
+        updateIsolationBannerUI();
+      });
+      container.appendChild(button);
+    };
     if (_StructureOps && typeof _StructureOps.normalizeRasterOwnership === 'function') {
       const normalization = _StructureOps.normalizeRasterOwnership(cell);
       if (normalization.changed && !state.activeRegionId && normalization.createdRegionIds.length) {
@@ -811,6 +839,7 @@
 
     if (!cell.layers || cell.layers.length === 0) {
       container.innerHTML = '<div class="pa-layers-empty">No structural layers. Drawing in flat root mode. Click "+ Layer" above to create layers.</div>';
+      addConversionButton();
       return;
     }
 
@@ -848,6 +877,7 @@
         renderSelectionMarquee();
       }
     });
+    addConversionButton();
   }
 
   function commitStructureMutation() {
@@ -1405,7 +1435,7 @@
     return _EditorCanvas.visibleBounds(dom.canvasMain, dom.viewport, state.w, state.h, state.zoom);
   }
 
-  function repaintCanvas() {
+  function repaintCanvas(skipSelection = false) {
     if (!dom || !dom.ctxMain) return;
     const ctx = dom.ctxMain;
     const zoom = state.zoom;
@@ -1523,7 +1553,7 @@
       }
     }
 
-    renderSelectionMarquee();
+    if (!skipSelection) renderSelectionMarquee();
     updateContainerTransform();
   }
 
@@ -1602,6 +1632,13 @@
   }
 
   function renderSelectionMarquee() {
+    if (multiSession && state.selection && state.artworkCtx) {
+      const options = state.isolatedNodeId ? { isolatedNodeId: state.isolatedNodeId, dimNonIsolated: 0 } : {};
+      const pixels = EditorMultiSelection.preview(multiSession, state.selection, state, _PIX2, options);
+      state.artworkCtx.clearRect(0, 0, state.w, state.h);
+      _EditorCanvas.drawPixels(state.artworkCtx, pixels, state.w, state.h);
+      repaintCanvas(true);
+    }
     clearPreviewCanvas();
     if (state.currentTool === 'region-select' && dom.ctxPreview) {
       regionSelection.draw(dom.ctxPreview, state.zoom, getArtworkCell(), state.activeLayerId, state.isolatedNodeId);
@@ -1613,7 +1650,7 @@
     const ctx = dom.ctxPreview;
 
     // Render floating pixels being dragged/transformed on preview canvas
-    if (state.floatingPixels) {
+    if (state.floatingPixels && !multiSession) {
       if (!state.floatingCanvas) {
         rebuildFloatingBuffer();
       }
@@ -1704,7 +1741,7 @@
     ctx.save();
     // 1. Soft scrim inside selection
     ctx.fillStyle = 'rgba(99, 102, 241, 0.18)';
-    ctx.fillRect(sx, sy, sw, sh);
+    if (!EditorMultiSelection.drawMask(ctx, state.selection.mask, zoom)) ctx.fillRect(sx, sy, sw, sh);
 
     if (w === 1 && h === 1) {
       // Single pixel cell: Draw ultra-crisp solid border + inner highlight
@@ -1753,6 +1790,11 @@
   function beginRotationGesture() {
     ensureFloatingSelection();
     if (!state.floatingPixels || !state.selection) return false;
+    if (multiSession) {
+      floatingSession.resetRotation();
+      multiRotationBaseline = EditorMultiSelection.snapshot(multiSession);
+      multiRotationBounds = { ...state.selection };
+    }
     const rotation = floatingSession.beginRotation(state.selection);
     state.rotationSessionPixels = rotation.pixels;
     state.rotationSessionSel = rotation.bounds;
@@ -1901,6 +1943,9 @@
   }
 
   function applySourceCodeToCanvas() {
+    // Explicit Apply supersedes the queued live parse. A stale parse must not
+    // replace the document after the user has resumed a canvas transaction.
+    clearTimeout(state.sourceDebounceTimer);
     state.isSyncingFromSource = true;
     const source = dom.codeEditor.value;
     if (!source || !source.trim() || state.sourcePaneMode === 'summary') {
@@ -2166,6 +2211,30 @@
     return _Tools.brushPoint(regionPointerView(event), size, state);
   }
 
+  let freeGesture = null;
+  let multiSession = null;
+  let selectionAllLayers = false;
+  let multiScaleBaseline = null;
+  let multiRotationBaseline = null;
+  let multiRotationBounds = null;
+  let freeDrawing = false;
+  function renderFreeSelection() {
+    clearPreviewCanvas();
+    if (!freeGesture || !dom.ctxPreview) return;
+    dom.ctxPreview.fillStyle = 'rgba(99,102,241,0.4)';
+    for (const key of freeGesture.mask) {
+      const [x, y] = key.split(',').map(Number);
+      dom.ctxPreview.fillRect(x * state.zoom, y * state.zoom, state.zoom, state.zoom);
+    }
+  }
+  function finishFreeSelection(result) {
+    if (!result) return;
+    freeGesture = null; freeDrawing = false;
+    selectTool('select');
+    state.selection = result.bounds ? { ...result.bounds, mask: result.mask } : null;
+    renderSelectionMarquee();
+  }
+
   function onPointerDown(e) {
     // Right click is reserved exclusively for Desktop Context Menu
     if (e.button === 2) {
@@ -2189,9 +2258,13 @@
       return;
     }
 
-    // Don't initiate drawing if click is outside canvas and not over active selection rotation handle
+    // Handles straddle the canvas edge. Accept their full hit area, including
+    // corner/side resize handles, without permitting drawing outside artwork.
     const overCanvas = isEventOverCanvas(e);
-    if (!overCanvas && !isOverRotationHandle(e)) {
+    const handleRect = dom.canvasMain.getBoundingClientRect();
+    const selectionHandle = state.selection && SelectionTransform.hitTestSelectionHandles(state.selection,
+      e.clientX - handleRect.left, e.clientY - handleRect.top, state.zoom);
+    if (!overCanvas && (!selectionHandle || selectionHandle === 'body')) {
       return;
     }
     if (document.activeElement.matches('input, textarea, select')) {
@@ -2202,6 +2275,18 @@
     if (!cell) return;
 
     let { x, y } = getPixelCoord(e);
+    if (state.currentTool === 'free-select') {
+      if (!freeGesture) {
+        if (state.floatingPixels) commitFloatingSelection();
+        state.selection = null;
+        const target = getActiveEditingTarget(cell);
+        freeGesture = EditorMultiSelection.freeGesture(target ? [target] : [], state);
+      }
+      freeGesture.start({ x, y }, e.ctrlKey || e.metaKey);
+      freeDrawing = true;
+      renderFreeSelection();
+      return;
+    }
     if (state.currentTool === 'region-select') {
       if (e.altKey) return;
       const extend = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -2262,6 +2347,7 @@
         resetRotationSession();
         ensureFloatingSelection();
         state.scaleOriginalPixels = { ...state.floatingPixels };
+        multiScaleBaseline = multiSession ? EditorMultiSelection.snapshot(multiSession) : null;
         state.scaleOriginalSel = { ...state.selection };
         dom.viewport.style.cursor = `${hit}-resize`;
         return;
@@ -2356,6 +2442,11 @@
   }
 
   function onPointerMove(e) {
+    if (freeDrawing && freeGesture) {
+      if (isEventOverCanvas(e)) freeGesture.move(getPixelCoord(e));
+      renderFreeSelection();
+      return;
+    }
     const overCanvas = isEventOverCanvas(e);
     let x = null, y = null;
     if (overCanvas) {
@@ -2454,6 +2545,7 @@
         scaled.w,
         scaled.h
       );
+      if (multiSession && multiScaleBaseline) EditorMultiSelection.scale(multiSession, state.scaleOriginalSel, scaled, multiScaleBaseline);
       rebuildFloatingBuffer();
       renderSelectionMarquee();
       return;
@@ -2544,6 +2636,11 @@
   }
 
   function onPointerUp(e) {
+    if (freeDrawing && freeGesture) {
+      freeDrawing = false;
+      finishFreeSelection(freeGesture.release(e.ctrlKey || e.metaKey));
+      return;
+    }
     state.cachedCanvasRect = null;
     if (state.isPanning) {
       state.isPanning = false;
@@ -2581,6 +2678,7 @@
       if (state.rotationSessionPixels && state.rotationSessionSel && typeof SelectionTransform !== 'undefined') {
         const rotated = floatingSession.rotate(theta);
         if (!rotated) return;
+        if (multiSession && multiRotationBaseline) EditorMultiSelection.rotate(multiSession, multiRotationBounds, theta, multiRotationBaseline);
         state.selection = { ...rotated.bounds };
         state.rotationAccumulatedAngle = theta;
         rebuildFloatingBuffer();
@@ -2682,11 +2780,25 @@
   });
 
   function commitFloatingSelection() {
+    if (multiSession) {
+      const committed = EditorMultiSelection.commit(multiSession, state.selection, state, state.doc, getArtworkCell());
+      multiSession = null;
+      state.floatingPixels = null; state.floatingOriginalSel = null; state.floatingBaselineSel = null;
+      state.floatingCanvas = null; state.floatingCtx = null;
+      rebuildArtworkBuffer(); repaintCanvas();
+      if (committed) { pushHistory(); syncCanvasToSource(); triggerAutosave(); }
+      return;
+    }
     if (!state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
+    const movedMask = (state.selection.mask || state.floatingBaselineSel?.mask) ? new Set(Object.keys(state.floatingPixels).map(key => {
+      const [x, y] = key.split(',').map(Number);
+      return `${state.selection.x + x},${state.selection.y + y}`;
+    })) : null;
     const result = floatingSession.commit(state.doc, state.selection, state);
     _EditorCanvas.refreshSourceComposite(_PIX2, result.restored);
     if (result.status === 'committed') {
+      if (movedMask) state.selection.mask = movedMask;
       rebuildArtworkBuffer();
       pushHistory();
       repaintCanvas();
@@ -2711,6 +2823,11 @@
    * immutable lift-time pixels rather than committing their preview position.
    */
   function cancelFloatingSelection() {
+    if (multiSession) {
+      EditorMultiSelection.cancel(multiSession, state);
+      multiSession = null;
+      rebuildArtworkBuffer();
+    }
     const cell = getArtworkCell();
     const restored = floatingSession.cancel();
     _EditorCanvas.refreshSourceComposite(_PIX2, restored);
@@ -2750,7 +2867,7 @@
       w: state.w,
       h: state.h
     };
-    selectTool('select');
+    selectTool(selectionAllLayers ? 'select-all-layers' : 'select');
     renderSelectionMarquee();
     showToast(`Selected entire canvas (${state.w}×${state.h})`);
   }
@@ -2758,6 +2875,19 @@
   function copySelection() {
     const cell = getArtworkCell();
     if (!cell) return;
+    if (selectionAllLayers && cell.layers?.length) {
+      const bounds = state.selection || { x: 0, y: 0, w: state.w, h: state.h };
+      const sources = multiSession ? multiSession.items.map(item => ({ targetId: item.target.id, pixels: { ...item.pixels } }))
+        : EditorMultiSelection.targets(cell, true, null, state.isolatedNodeId).map(target => ({ targetId: target.id, pixels: _SelectionTransform.copyPixels(target, bounds) }));
+      const pixels = {};
+      sources.forEach(source => Object.assign(pixels, source.pixels));
+      const sourceLayers = cell.layers?.length ? JSON.parse(JSON.stringify(cell.layers)) : null;
+      const selected = new Map(sources.map(source => [source.targetId, source.pixels]));
+      const scrub = node => { if (node.type === 'region') node.pixels = { ...(selected.get(node.id) || {}) }; (node.children || []).forEach(scrub); };
+      (sourceLayers || []).forEach(scrub);
+      state.clipboard = { w: bounds.w, h: bounds.h, pixels, selectionSources: sources, sourceLayers, sourceCell: cell, sourceDocument: state.doc, sourceProjectId: activePaProjectId, originCellId: cell.id, originX: bounds.x, originY: bounds.y };
+      return;
+    }
 
     if (state.floatingPixels && state.selection) {
       state.clipboard = {
@@ -2776,7 +2906,7 @@
     const y = state.selection ? state.selection.y : 0;
     const w = state.selection ? state.selection.w : state.w;
     const h = state.selection ? state.selection.h : state.h;
-    const copiedPixels = _SelectionTransform.copyPixels(target, { x, y, w, h });
+    const copiedPixels = _SelectionTransform.copyPixels(target, { x, y, w, h, mask: state.selection?.mask });
 
     state.clipboard = { w, h, pixels: copiedPixels };
     showToast(`Copied ${Object.keys(copiedPixels).length} pixels (${w}×${h})`);
@@ -2788,6 +2918,14 @@
   }
 
   function deleteSelection() {
+    if (selectionAllLayers && state.selection) {
+      ensureFloatingSelection();
+      if (!multiSession) return;
+      EditorMultiSelection.remove(multiSession);
+      commitFloatingSelection();
+      state.selection = null; renderSelectionMarquee();
+      return;
+    }
     if (state.floatingPixels) {
       floatingSession.clear();
       state.floatingOriginalSel = null;
@@ -2797,6 +2935,7 @@
       state.floatingBaselineTargetId = null;
       state.selection = null;
       renderSelectionMarquee();
+      rebuildArtworkBuffer();
       repaintCanvas();
       pushHistory();
       syncCanvasToSource();
@@ -2822,6 +2961,7 @@
     const { x, y, w, h } = state.selection;
     for (let py = y; py < y + h; py++) {
       for (let px = x; px < x + w; px++) {
+        if (state.selection.mask && !state.selection.mask.has(`${px},${py}`)) continue;
         delete target.pixels[`${px},${py}`];
       }
     }
@@ -2836,6 +2976,35 @@
   }
 
   function pasteSelection() {
+    if (state.clipboard?.selectionSources) {
+      if (state.floatingPixels) commitFloatingSelection();
+      const cell = getArtworkCell();
+      const clip = state.clipboard;
+      const sameSource = clip.sourceProjectId && clip.sourceProjectId === activePaProjectId && clip.originCellId === cell.id;
+      if (!sameSource && (clip.sourceDocument !== state.doc || clip.sourceCell !== cell)) {
+        if (state.doc.meta.version !== '1.1' || !clip.sourceLayers) { showToast('Convert the destination to PIX2 1.1 before pasting layered content.', 'error'); return; }
+        const origin = state.selection || { x: clip.originX, y: clip.originY };
+        const layers = _StructureOps.cloneLayersForCell(state.doc, clip.sourceLayers, cell.id);
+        const offset = node => {
+          if (node.type === 'region') { const pixels = node.pixels; node.pixels = {}; _SelectionTransform.placePixels(node, pixels, origin, state); }
+          (node.children || []).forEach(offset);
+        };
+        layers.forEach(offset);
+        cell.layers = [...(cell.layers || []), ...layers];
+        rebuildArtworkBuffer(); repaintCanvas(); pushHistory(); syncCanvasToSource(); triggerAutosave();
+        state.selection = { x: origin.x, y: origin.y, w: clip.w, h: clip.h };
+        renderSelectionMarquee();
+        return;
+      }
+      const targets = clip.selectionSources.map(entry => ({ entry, target: cell.layers?.length ? _StructureOps.findNode(cell, entry.targetId)?.node : cell }));
+      if (targets.some(({ target }) => !target || (target !== cell && !_StructureOps.isEditable(_StructureOps.findNode(cell, target.id))))) { showToast('A source region is missing, hidden or locked.', 'error'); return; }
+      const origin = state.selection || { x: clip.originX, y: clip.originY };
+      for (const { entry, target } of targets) _SelectionTransform.placePixels(target, entry.pixels, origin, state);
+      rebuildArtworkBuffer(); repaintCanvas(); pushHistory(); syncCanvasToSource(); triggerAutosave();
+      state.selection = { x: origin.x, y: origin.y, w: clip.w, h: clip.h };
+      renderSelectionMarquee();
+      return;
+    }
     if (!state.clipboard || !state.clipboard.pixels) {
       showToast('Clipboard is empty', 'error');
       return;
@@ -2875,6 +3044,15 @@
   }
 
   function fillSelection() {
+    if (selectionAllLayers && state.selection) {
+      ensureFloatingSelection();
+      if (!multiSession) return;
+      EditorMultiSelection.recolor(multiSession, state.primaryColor);
+      commitFloatingSelection();
+      renderSelectionMarquee();
+      return;
+    }
+    if (state.floatingPixels) commitFloatingSelection();
     const cell = getArtworkCell();
     const target = getActiveEditingTarget(cell);
     if (!target) return;
@@ -2898,6 +3076,7 @@
     const { x, y, w, h } = state.selection;
     for (let py = y; py < y + h; py++) {
       for (let px = x; px < x + w; px++) {
+        if (state.selection.mask && !state.selection.mask.has(`${px},${py}`)) continue;
         target.pixels[`${px},${py}`] = state.primaryColor;
       }
     }
@@ -2919,6 +3098,19 @@
   }
 
   function ensureFloatingSelection() {
+    if (selectionAllLayers && !state.floatingPixels && state.selection) {
+      const cell = getArtworkCell();
+      multiSession = EditorMultiSelection.begin(state.doc, cell,
+        EditorMultiSelection.targets(cell, true, null, state.isolatedNodeId), state.selection, state.selection.mask);
+      if (!multiSession) return;
+      state.floatingOriginalSel = { ...state.selection };
+      state.floatingBaselineSel = { ...state.selection };
+      state.floatingCurrentX = state.selection.x; state.floatingCurrentY = state.selection.y;
+      state.floatingPixels = {};
+      for (const item of multiSession.items) Object.assign(state.floatingPixels, item.pixels);
+      rebuildArtworkBuffer(); rebuildFloatingBuffer();
+      return;
+    }
     if (state.floatingPixels || !state.selection) return;
     const cell = getArtworkCell();
     const target = getActiveEditingTarget(cell);
@@ -2968,6 +3160,7 @@
         return;
       }
       floatingSession.rotate90(bounds, state);
+      if (multiSession) EditorMultiSelection.rotate(multiSession, bounds, Math.PI / 2);
       state.selection = { ...next };
       rebuildFloatingBuffer();
       repaintCanvas();
@@ -2994,6 +3187,7 @@
       resetRotationSession();
       ensureFloatingSelection();
       if (!floatingSession.flip(state.selection, true)) return;
+      if (multiSession) EditorMultiSelection.flip(multiSession, state.selection, true);
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3020,6 +3214,7 @@
       resetRotationSession();
       ensureFloatingSelection();
       if (!floatingSession.flip(state.selection, false)) return;
+      if (multiSession) EditorMultiSelection.flip(multiSession, state.selection, false);
       rebuildFloatingBuffer();
       repaintCanvas();
       renderSelectionMarquee();
@@ -3038,6 +3233,22 @@
   }
 
   function alignArtwork(direction = 'center') {
+    if (selectionAllLayers) {
+      if (state.floatingPixels) commitFloatingSelection();
+      const cell = getArtworkCell();
+      const sources = EditorMultiSelection.targets(cell, true, null, state.isolatedNodeId);
+      const bounds = EditorMultiSelection.paintedBounds(sources, state.selection?.mask, state.selection);
+      if (!bounds) return;
+      const delta = EditorMultiSelection.alignmentOffset(bounds, state, direction);
+      if (!delta || (!delta.x && !delta.y)) return;
+      state.selection = { ...bounds, mask: state.selection?.mask };
+      ensureFloatingSelection();
+      if (!multiSession) return;
+      state.selection.x += delta.x; state.selection.y += delta.y;
+      commitFloatingSelection();
+      renderSelectionMarquee();
+      return;
+    }
     commitFloatingSelection();
     if (_Tools.alignRaster(getActiveEditingTarget(), state, direction)) {
       commitStructureMutation();
@@ -3152,7 +3363,7 @@
     let pendingDiff = null;
     // Decide whether the command changed artwork BEFORE dirtying the document
     // or discarding redo. View focus and repeated no-op commands are not edits.
-    if (previousEntry && previousEntry.w === state.w && previousEntry.h === state.h &&
+    if (previousEntry && (!previousEntry.formatVersion || previousEntry.formatVersion === state.doc.meta.version) && previousEntry.w === state.w && previousEntry.h === state.h &&
         previousEntry.title === state.title) {
       let unchanged = false;
       if (cell.layers?.length) {
@@ -3184,6 +3395,7 @@
         h: state.h,
         title: state.title,
         revision: documentRevision,
+        formatVersion: state.doc.meta.version,
         pixels: { ...currPixels },
         structuralLayers: JSON.parse(JSON.stringify(cell.layers))
       };
@@ -3203,6 +3415,7 @@
         h: state.h,
         title: state.title,
         revision: documentRevision,
+        formatVersion: state.doc.meta.version,
         pixels: { ...currPixels }
       };
       state.history.push(snapshot);
@@ -3213,7 +3426,7 @@
     }
 
     const lastEntry = state.history[state.historyIndex];
-    const dimChanged = !lastEntry || Boolean(lastEntry.structuralLayers) ||
+    const dimChanged = !lastEntry || Boolean(lastEntry.structuralLayers) || (lastEntry.formatVersion && lastEntry.formatVersion !== state.doc.meta.version) ||
       (lastEntry.w !== state.w || lastEntry.h !== state.h);
     const hasStrokeDiff = state.activeStrokeChanges && Object.keys(state.activeStrokeChanges).length > 0;
 
@@ -3224,6 +3437,7 @@
         h: state.h,
         title: state.title,
         revision: documentRevision,
+        formatVersion: state.doc.meta.version,
         pixels: { ...currPixels }
       };
       state.history.push(snapshot);
@@ -3391,6 +3605,7 @@
     if (!snapshot) return;
     const cell = getArtworkCell();
     if (!cell) return;
+    if (snapshot.formatVersion) state.doc.meta.version = snapshot.formatVersion;
 
     state.w = snapshot.w;
     state.h = snapshot.h;
@@ -4739,6 +4954,22 @@
   // EVENT BINDINGS
   // ===========================================================================
   function bindEvents() {
+    const freeButton = document.querySelector('[data-tool="free-select"]');
+    if (freeButton) { freeButton.removeAttribute('disabled'); freeButton.title = 'Free Selection — paint pixels; hold Ctrl to add strokes'; }
+    window.addEventListener('keyup', event => {
+      if ((event.key === 'Control' || event.key === 'Meta') && freeGesture) finishFreeSelection(freeGesture.releaseModifier());
+    });
+    window.addEventListener('blur', () => {
+      if (!freeGesture) return;
+      freeGesture.cancel(); freeGesture = null; freeDrawing = false;
+      state.selection = null; renderSelectionMarquee();
+    });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && freeGesture) {
+        freeGesture.cancel(); freeGesture = null; freeDrawing = false;
+        state.selection = null; renderSelectionMarquee();
+      }
+    });
     if (contextMenu) EditorMenu.populate(contextMenu);
     window.NoiraViewport.bindInspectorResize(dom.splitResizer, dom.codePane, 200, 300,
       'pix2_pixelart_panel_width', width => { state.codePaneWidth = width; });
@@ -5845,6 +6076,12 @@
   }
 
   function selectTool(toolName) {
+    if (toolName === 'select-all-layers' || selectionAllLayers) {
+      if (state.floatingPixels) commitFloatingSelection();
+    }
+    selectionAllLayers = toolName === 'select-all-layers';
+    if (selectionAllLayers) toolName = 'select';
+    if (toolName !== 'free-select' && freeGesture) { freeGesture.cancel(); freeGesture = null; freeDrawing = false; }
     if (state.currentTool !== toolName && state.floatingPixels) {
       commitFloatingSelection();
     }
@@ -5854,7 +6091,7 @@
     state.currentTool = toolName;
     if (_hasDocument) {
       document.querySelectorAll('.pa-tool-btn[data-tool]').forEach((b) => {
-        b.classList.toggle('active', b.dataset.tool === toolName);
+        b.classList.toggle('active', b.dataset.tool === (selectionAllLayers ? 'select-all-layers' : toolName));
       });
     }
 

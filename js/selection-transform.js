@@ -282,6 +282,7 @@
     for (let y = 0; y < bounds.h; y++) {
       for (let x = 0; x < bounds.w; x++) {
         const key = `${bounds.x + x},${bounds.y + y}`;
+        if (bounds.mask && !bounds.mask.has(key)) continue;
         if (!source[key]) continue;
         pixels[`${x},${y}`] = source[key];
       }

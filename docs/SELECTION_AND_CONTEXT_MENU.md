@@ -85,6 +85,27 @@ Right-clicking on the Cell Editor canvas opens `#studio-context-menu` at cursor 
 - **HUD Update:** Bottom status bar and top coordinate badge show:  
   `SELECTION: [X: 2, Y: 4, W: 8, H: 6] (48 px)`
 
-## Shared floating selection lifecycle
+## Free painted-pixel selection
+
+The free-selection tool accumulates painted coordinates as a temporary mask, with a bounding box used for transform handles. Empty pixels and fully transparent colors are excluded. Dragging adds coordinates along the pointer path. Holding Ctrl/Cmd across separate strokes accumulates them; releasing the modifier after the stroke finishes finalizes the selection. Escape or loss of window focus cancels a pending gesture.
+
+Copy, cut, delete and fill act only on mask coordinates. Lifting a masked selection extracts only those source pixels. A committed transform rebuilds mask coordinates from the transformed raster. The mask is editor view state and is not a PIX2 directive.
+
+## Selection across layers
+
+The separate all-layer selection tool selects across visible, unlocked source regions in the active frame or artwork. Hidden or locked ancestors exclude their descendants. Isolation further restricts the eligible subtree. Overlapping source pixels remain separate even when an opaque region obscures another on screen.
+
+Move, nearest-neighbor scale, rotation, flip, fill and deletion apply to each selected source map and preserve its region ownership, layer order and structural properties. Alignment computes one painted union within the selection and applies one shared offset. Ctrl/Cmd+A selects the full frame without changing the all-layer scope. A PIX2 1.0 document uses its existing flat raster.
+
+Copy/cut retains source maps. Pasting back into the same project and frame resolves the original region IDs, including after Undo/Redo. Pasting layered content into a different PIX2 1.1 frame copies the hierarchy with document-unique IDs. A PIX2 1.0 destination requires explicit conversion before layered paste. Flat clipboard content continues to use the normal raster paste path.
+
+## Shared floating source ownership
 
 Both editors bind their transient fields to `js/editor-floating-selection.js`. A lift captures document, cell and source-node identity. Commit may only write that source while it remains attached and editable; a changed document or newly locked/hidden ancestor cancels the settlement. Cancel restores the lift-time source raster, not a transformed preview. App adapters refresh composite/view state and own history publication. Clipboard pixel extraction, flips and quarter-turn raster logic are shared. Studio retains immediate paste/transform commits where previously present; PixelArt retains its floating-preview commit behavior.
+
+### v2.2.5 usage notes
+
+- Select the stacked-layer selection button to edit eligible regions together. Use Ctrl/Cmd+A for the full canvas, then the existing move/resize/rotate controls. Each source region retains its pixels and structural identity.
+- The painted-selection button selects existing nontransparent pixels along the pointer path. Hold Ctrl/Cmd for disconnected strokes and release it after drawing to finish.
+- Use the conversion control in Structure & Layers to change the document format. Flattening is destructive to hierarchy and requires confirmation; Undo restores the previous state.
+- Grid copy/duplicate preserves frame structure. Whole-frame flip/clear operates on all source regions, including hidden/locked contents; this differs from the editable-region scope of canvas selection.

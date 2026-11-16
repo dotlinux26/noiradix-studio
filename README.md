@@ -8,7 +8,7 @@
     <a href="https://discord.gg/SJwsdGWubF"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join the NOIRADIX Discord community"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml"><img src="https://github.com/dotlinux26/noiradix-studio/actions/workflows/deploy.yml/badge.svg" alt="CI & Deploy"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.2.4-8b5cf6.svg" alt="Studio Version"></a>
+    <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/Studio-v2.2.5-8b5cf6.svg" alt="Studio Version"></a>
     <a href="https://github.com/dotlinux26/noiradix-studio/releases"><img src="https://img.shields.io/badge/PIX2-1.1-6366f1.svg" alt="PIX2 Standard"></a>
   </p>
 </div>
@@ -155,6 +155,9 @@ Context and output limits vary by model and provider. Check the model's current 
 
 - Pixel tools, brush/eraser sizing and opacity, palette controls, symmetry, rulers, selection transforms and zoom.
 - PIX2 1.0 read compatibility and PIX2 1.1 structural editing.
+- Select across visible, unlocked layers while preserving each region's source pixels; align the selection as one block.
+- Paint a free selection over existing pixels, holding Ctrl/Cmd to accumulate separate strokes.
+- Explicit document conversion between PIX2 1.0 and 1.1, with a loss warning before flattening layers.
 - 4-direction, 8-direction, platformer and custom animation preview.
 - Raster spritesheet import and slicing with frame tags/animation metadata where supported.
 - Unity package (atlas PNG, `.pix2.json`, C# importer and guide), TexturePacker JSON, PNG atlas and individual frames.
@@ -191,7 +194,7 @@ For the full list, see [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md).
 
 ## Tests and CI
 
-**Current test inventory for v2.2.4: 22 Node regression suites.** Each suite reports its own checks; they are not combined into one assertion total. `tests/run-all.cjs` discovers the suites, and CI checks this count against the README.
+**Current test inventory for v2.2.5: 24 Node regression suites.** Each suite reports its own checks; they are not combined into one assertion total. `tests/run-all.cjs` discovers the suites, and CI checks this count against the README.
 
 ```bash
 node tests/run-all.cjs --syntax

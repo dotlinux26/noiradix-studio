@@ -838,14 +838,18 @@ const StudioGrid = (() => {
       if (inputName === null) {
         return; // Cancelled by user
       }
-      const stateKey = (inputName.trim() || defaultName).toLowerCase().replace(/\s+/g, '_');
+      const stateStem = (inputName.trim() || defaultName).toLowerCase().replace(/\s+/g, '_');
+      let stateKey = stateStem, stateSuffix = 2;
+      while (doc.animations[stateKey]) stateKey = `${stateStem}_${stateSuffix++}`;
       const dispName = inputName.trim() || defaultName;
 
       doc.meta.grid.rows++;
       const rowCells = [];
 
       for (let c = 0; c < doc.meta.grid.cols; c++) {
-        const cid = `cell_${newR}_${c}`;
+        const stem = `cell_${newR}_${c}`;
+        let cid = stem, suffix = 2;
+        while (doc.cells[cid]) cid = `${stem}_${suffix++}`;
         doc.cells[cid] = {
           id: cid,
           name: `${dispName} ${c}`,
@@ -868,7 +872,7 @@ const StudioGrid = (() => {
         mode: 'loop',
       };
 
-      view.selectedGridCellId = `cell_${newR}_0`;
+      view.selectedGridCellId = rowCells[0];
       if (state.saveSnapshot(`Add Row ${newR} (${stateKey})`)) triggerEventAutosave();
       refreshAll();
       populateAnimDropdowns();
@@ -886,9 +890,11 @@ const StudioGrid = (() => {
       doc.meta.grid.cols++;
 
       for (let r = 0; r < doc.meta.grid.rows; r++) {
-        const cid = `cell_${r}_${newC}`;
-        const prevCid = `cell_${r}_${newC - 1}`;
-        const prevCell = doc.cells[prevCid];
+        const stem = `cell_${r}_${newC}`;
+        let cid = stem, suffix = 2;
+        while (doc.cells[cid]) cid = `${stem}_${suffix++}`;
+        const prevCell = getCellAtGrid(doc, r, newC - 1);
+        const prevCid = prevCell?.id;
 
         // Find if this row is part of an animation
         let rowAnim = null;
@@ -981,7 +987,10 @@ const StudioGrid = (() => {
       // 3. Clone all cells in the row
       for (let c = 0; c < cols; c++) {
         const srcCell = getCellAtGrid(doc, sourceRowIdx, c);
-        const newCellId = `${cleanPrefix}_${c}`;
+        const stem = `${cleanPrefix}_${c}`;
+        let newCellId = stem;
+        let idSuffix = 2;
+        while (doc.cells[newCellId]) newCellId = `${stem}_${idSuffix++}`;
 
         const newCell = {
           id: newCellId,
@@ -992,8 +1001,12 @@ const StudioGrid = (() => {
           direction: srcCell && srcCell.direction ? srcCell.direction : 'none',
           pixels: {},
         };
+        if (srcCell?.size) newCell.size = { ...srcCell.size };
 
-        if (srcCell && srcCell.pixels) {
+        if (srcCell && srcCell.layers?.length) {
+          newCell.layers = StructureOps.cloneLayersForCell(doc, srcCell.layers, newCellId);
+          newCell.pixels = { ...srcCell.pixels };
+        } else if (srcCell && srcCell.pixels) {
           for (const coord in srcCell.pixels) {
             newCell.pixels[coord] = srcCell.pixels[coord];
           }
@@ -1104,6 +1117,8 @@ const StudioGrid = (() => {
           const cell = doc.cells[oldId];
           const newId = renameMap[oldId];
           cell.id = newId;
+          const rebind = node => { node.cell = newId; (node.children || []).forEach(rebind); };
+          (cell.layers || []).forEach(rebind);
           newCells[newId] = cell;
         }
         doc.cells = newCells;
@@ -1188,6 +1203,8 @@ const StudioGrid = (() => {
             col: c,
           };
           cell.id = newId;
+          const rebind = node => { node.cell = newId; (node.children || []).forEach(rebind); };
+          (cell.layers || []).forEach(rebind);
           cell.row = newR;
           cell.col = c;
           newCells[newId] = cell;
@@ -1270,6 +1287,8 @@ const StudioGrid = (() => {
             col: c,
           };
           cell.id = newId;
+          const rebind = node => { node.cell = newId; (node.children || []).forEach(rebind); };
+          (cell.layers || []).forEach(rebind);
           cell.row = r;
           cell.col = newC;
           newCells[newId] = cell;

@@ -114,6 +114,26 @@ const StructureOps = (function () {
     for (const child of node.children || []) refreshParentage(child, cellId, node.id);
   }
 
+  // IDs in PIX2 are document-wide, including when frames are duplicated.
+  function cloneLayersForCell(doc, layers, cellId) {
+    const used = new Set();
+    const collect = nodes => (nodes || []).forEach(node => { used.add(node.id); collect(node.children); });
+    Object.values(doc.cells || {}).forEach(cell => collect(cell.layers));
+    const copy = JSON.parse(JSON.stringify(layers || []));
+    function rebind(node, parent) {
+      const base = `${node.id}_copy`;
+      let id = base, suffix = 2;
+      while (used.has(id)) id = `${base}_${suffix++}`;
+      used.add(id);
+      node.id = id;
+      node.cell = cellId;
+      node.parent = parent || undefined;
+      (node.children || []).forEach(child => rebind(child, id));
+    }
+    copy.forEach(node => rebind(node, null));
+    return copy;
+  }
+
   function moveNode(cell, nodeId, targetParentId = null, targetIndex = null) {
     const source = findNode(cell, nodeId);
     if (!source) return { ok: false, reason: 'missing-source' };
@@ -219,7 +239,7 @@ const StructureOps = (function () {
     return { changed, createdRegionIds, migratedPixelCount };
   }
 
-  return { findNode, isEditable, firstEditableRegion, hitRegion, pickIsolationRegion, groupNodes, ungroupNode, moveNode, reorderNode, bounds, normalizeRasterOwnership };
+  return { findNode, isEditable, firstEditableRegion, hitRegion, pickIsolationRegion, groupNodes, ungroupNode, moveNode, reorderNode, bounds, normalizeRasterOwnership, cloneLayersForCell };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = StructureOps;

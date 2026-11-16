@@ -185,3 +185,15 @@ Cả hai runner browser exit 0 trên working tree của lượt này. Các kết
 2. `IO-02–06`, `PROJ-03–04`. Chạy các ca native handle, Save A/B và reload recovery bằng file thử. Kiểm nhiều tab qua reload và trạng thái file thay đổi khi đang ghi.
 3. `IMP-02`, `ANIM-01–02`, `EXP-01–05`. Chạy thêm fixtures rotated/trimmed/multipage, animation và kiểm Unity trong ứng dụng đích.
 4. `PERF-01–02`, `QA-01`, `REL-01–03`. Đo browser và kiểm conformance/release theo từng case đã có bằng chứng.
+
+## v2.2.5 release verification — 2026-11-17
+
+- Scope: Grid source persistence, shared multi-source and painted selection, document conversion, source-parse race and edge resize handles. See `docs/releases/v2.2.5.md` and `GRID_SELECTION_WORK_IN_PROGRESS.md` for behavior and limits.
+- `node tests/check-readme-test-count.cjs`: PASS, 24 suites.
+- `node tests/run-all.cjs --syntax`: PASS, 37 runtime files.
+- `node tests/run-all.cjs`: PASS, 24 suites, including root/standalone compiler byte parity.
+- `node tests/benchmark-performance.js`: PASS all 8 gates; highest p95 4.807 ms in this local Node run. This is fixture-specific, not a browser latency guarantee.
+- Generated changelog: 17 versioned notes; generated-source check passes. Historical notes are retained as historical evidence.
+- Browser release rerun and remote publication status are recorded below when observed.
+- `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157, including dense 512×512 DPR 2 editor fixtures, the new Grid roundtrip suite and both-app selection/conversion regressions.
+- `git diff --check`: PASS. Matching app versions: 2.2.5; PIX2 format remains 1.1. Release is published by the existing tag workflow after its independent CI gates.

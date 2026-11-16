@@ -386,7 +386,7 @@ PIX2 1.1 formalizes the **Platformer 2D (Left/Right)** animation template, cater
 
 - **100% Backward Compatible:** Any PIX2 1.0 flat document loads seamlessly in PIX2 1.1 editors without modification.
 - **Lossless Upgrade:** Flat cells are automatically wrapped into an implicit root layer upon structural mutation (`PIX2.upgradeV10ToV11`).
-- **Deterministic Downgrade:** Structural hierarchies flatten losslessly into standard PIX2 1.0 cells (`PIX2.flattenV11ToV10`) by baking composite layers into direct pixel records.
+- **Deterministic Downgrade:** `PIX2.flattenV11ToV10` bakes the visible composite into PIX2 1.0 pixel records. This preserves the rendered composite but discards the layer, group and region hierarchy, including its names, tags, locks, visibility and separate opacity values; it cannot be reversed from the flattened file. An editor must warn and obtain confirmation before replacing the active document.
 
 ### 8.6 Flagship PIX2 1.1 Structural Reference: `Arch-Lich Grim Reaper 48x48.pix2` (Synthesized by Gemini Argon 4.0)
 

@@ -1,0 +1,116 @@
+const assert = require('node:assert/strict');
+const selection = require('../js/editor-multi-selection.js');
+const tools = require('../js/tools.js');
+const PIX2 = require('../js/pix2-format.js');
+const a = { type: 'region', id: 'a', pixels: { '1,1': '#ff0000', '2,1': '#ffffff' } };
+const b = { type: 'region', id: 'b', pixels: { '1,1': '#0000ff' } };
+const transparent = { type: 'region', id: 't', pixels: { '1,1': '#12345600' } };
+const hidden = { type: 'region', id: 'h', pixels: { '1,1': '#00ff00' } };
+const cell = { id: 'c', layers: [
+  { type: 'layer', id: 'l1', children: [a, b, transparent] },
+  { type: 'layer', id: 'l2', visible: false, children: [hidden] }
+] };
+const doc = { cells: { c: cell } };
+const size = { w: 8, h: 8 };
+const flatCell = { id: 'flat', pixels: { '0,0': '#ff0000' } };
+const flatDoc = { cells: { flat: flatCell } };
+const flatSelection = selection.begin(flatDoc, flatCell, selection.targets(flatCell, true), { x: 0, y: 0, w: 1, h: 1 });
+assert.equal(selection.preview(flatSelection, { x: 1, y: 1 }, size, PIX2)['1,1'], '#ff0000');
+assert.equal(flatCell.pixels['1,1'], undefined, 'flat preview does not mutate source');
+assert.equal(selection.commit(flatSelection, { x: 1, y: 1 }, size), true);
+assert.equal(flatCell.pixels['1,1'], '#ff0000');
+const colorEdit = selection.begin(flatDoc, flatCell, [flatCell], { x: 1, y: 1, w: 1, h: 1 });
+selection.recolor(colorEdit, '#0000ff');
+assert.equal(selection.preview(colorEdit, { x: 1, y: 1 }, size, PIX2)['1,1'], '#0000ff');
+selection.remove(colorEdit);
+assert.equal(Object.keys(selection.preview(colorEdit, { x: 1, y: 1 }, size, PIX2)).length, 0);
+selection.cancel(colorEdit, size);
+assert.equal(flatCell.pixels['1,1'], '#ff0000', 'cancel restores the original after recolor and delete previews');
+const edgeSelection = selection.begin(flatDoc, flatCell, [flatCell], { x: 1, y: 1, w: 1, h: 1 });
+assert.equal(selection.commit(edgeSelection, { x: 9, y: 9 }, size), true);
+assert.deepEqual(flatCell.pixels, {}, 'committing outside the canvas clips the moved pixel');
+const bounds = { x: 1, y: 1, w: 2, h: 1 };
+assert.deepEqual(selection.alignmentOffset(bounds, size, 'center'), { x: 2, y: 2 });
+assert.deepEqual(selection.alignmentOffset(bounds, size, 'right'), { x: 5, y: 0 });
+const sources = selection.targets(cell, true, null, null);
+const gesture = selection.freeGesture(sources, size);
+gesture.start({ x: 1, y: 1 }, true);
+assert.equal(gesture.release(true), null);
+gesture.start({ x: 2, y: 1 }, true);
+assert.equal(gesture.release(true), null);
+assert.deepEqual([...gesture.releaseModifier().mask], ['1,1', '2,1']);
+assert.deepEqual(sources.map(source => source.id), ['a', 'b', 't']);
+assert.equal(selection.begin(doc, cell, sources, { x: 6, y: 6, w: 1, h: 1 }), null, 'empty selections do not create a transaction');
+cell.layers[0].locked = true;
+assert.deepEqual(selection.targets(cell, true, null, null), [], 'locked and hidden ancestors exclude their regions');
+cell.layers[0].locked = false;
+assert.deepEqual(selection.targets(cell, true, null, 'a').map(source => source.id), ['a'], 'isolation limits the source set');
+const mask = selection.addPaintedStroke(new Set(), sources, { x: 0, y: 1 }, { x: 3, y: 1 }, size);
+assert.deepEqual([...mask], ['1,1', '2,1']);
+const edgeMask = selection.addPaintedStroke(new Set(), sources, { x: -2, y: 1 }, { x: 10, y: 1 }, size);
+assert.deepEqual([...edgeMask], ['1,1', '2,1'], 'strokes are clipped to canvas bounds');
+assert.deepEqual(selection.maskBounds(mask), { x: 1, y: 1, w: 2, h: 1 });
+assert.equal(selection.maskBounds(new Set()), null);
+assert.deepEqual(selection.paintedBounds(sources), { x: 1, y: 1, w: 2, h: 1 });
+assert.deepEqual(selection.paintedBounds(sources, new Set(['2,1'])), { x: 2, y: 1, w: 1, h: 1 });
+selection.addPaintedStroke(mask, [{ pixels: { '3,1': '#ff000000' } }], { x: 3, y: 1 }, { x: 3, y: 1 }, size);
+assert.equal(mask.has('3,1'), false, 'fully transparent pixels do not enter the selection');
+const disjointMask = selection.addPaintedStroke(new Set(), sources, { x: 1, y: 1 }, { x: 1, y: 1 }, size);
+selection.addPaintedStroke(disjointMask, sources, { x: 2, y: 1 }, { x: 2, y: 1 }, size);
+assert.deepEqual([...disjointMask], ['1,1', '2,1'], 'separate strokes accumulate in one selection mask');
+const session = selection.begin(doc, cell, sources, bounds, new Set(['1,1']));
+assert.equal(transparent.pixels['1,1'], '#12345600', 'a free-selection mask does not lift transparent source pixels');
+const originalPixels = selection.snapshot(session);
+selection.scale(session, bounds, { ...bounds, w: 4, h: 2 }, originalPixels);
+selection.scale(session, bounds, bounds, originalPixels);
+assert.deepEqual(selection.snapshot(session), originalPixels, 'repeated scale previews use the gesture baseline');
+selection.flip(session, bounds, true);
+assert.equal(session.items[0].pixels['1,0'], '#ff0000');
+assert.equal(session.items[1].pixels['1,0'], '#0000ff');
+selection.flip(session, bounds, true);
+assert.deepEqual(selection.snapshot(session), originalPixels, 'two flips restore all source rasters');
+selection.rotate(session, bounds, Math.PI / 2, originalPixels);
+selection.rotate(session, bounds, 0, originalPixels);
+assert.deepEqual(selection.snapshot(session), originalPixels, 'rotation preview returns to its baseline without losing source ownership');
+assert.equal(a.pixels['1,1'], undefined);
+assert.equal(a.pixels['2,1'], '#ffffff');
+assert.equal(hidden.pixels['1,1'], '#00ff00');
+const preview = selection.preview(session, { ...bounds, x: 3 }, size, PIX2);
+assert.equal(preview['3,1'], '#0000ff', 'the upper source remains above the lower source');
+assert.equal(a.pixels['3,1'], undefined, 'preview never mutates the live document');
+cell.layers[0].opacity = 0.5;
+const translucentPreview = selection.preview(session, { ...bounds, x: 3 }, size, PIX2);
+assert.notEqual(translucentPreview['3,1'], preview['3,1'], 'preview preserves inherited layer opacity');
+delete cell.layers[0].opacity;
+assert.equal(selection.commit(session, { ...bounds, x: 3 }, size), true);
+assert.equal(a.pixels['3,1'], '#ff0000');
+assert.equal(b.pixels['3,1'], '#0000ff');
+const switched = selection.begin(doc, cell, sources, { x: 3, y: 1, w: 1, h: 1 });
+assert.equal(selection.commit(switched, { x: 4, y: 1 }, size, { cells: {} }), false);
+assert.equal(a.pixels['3,1'], '#ff0000', 'document switch restores the source');
+const changedFrame = selection.begin(doc, cell, sources, { x: 3, y: 1, w: 1, h: 1 });
+assert.equal(selection.commit(changedFrame, { x: 4, y: 1 }, size, doc, { id: 'other' }), false);
+assert.equal(a.pixels['3,1'], '#ff0000', 'frame switch restores the source');
+const again = selection.begin(doc, cell, sources, { x: 3, y: 1, w: 1, h: 1 });
+cell.layers[0].locked = true;
+assert.equal(selection.commit(again, { x: 4, y: 1 }, size), false);
+assert.equal(a.pixels['3,1'], '#ff0000');
+assert.equal(b.pixels['3,1'], '#0000ff');
+cell.layers[0].locked = false;
+const hiddenDuringMove = selection.begin(doc, cell, sources, { x: 3, y: 1, w: 1, h: 1 });
+cell.layers[0].visible = false;
+assert.equal(selection.commit(hiddenDuringMove, { x: 4, y: 1 }, size), false);
+assert.equal(a.pixels['3,1'], '#ff0000', 'hidden source is restored after cancellation');
+const whole = { layers: [{ type: 'layer', id: 'whole', children: [
+  { type: 'region', id: 'left', pixels: { '0,0': '#ff0000', '9,9': '#12345600' } },
+  { type: 'region', id: 'right', pixels: { '4,0': '#0000ff' } }
+] }] };
+tools.centerContent(whole, 10, 10, 'both', null, true);
+assert.equal(whole.layers[0].children[0].pixels['2,4'], '#ff0000');
+assert.equal(whole.layers[0].children[1].pixels['6,4'], '#0000ff');
+assert.deepEqual(selection.paintedBounds([
+  { pixels: { '1,1': '#ff0000', '8,8': '#0000ff' } },
+  { pixels: { '2,2': '#00ff00' } }
+], null, { x: 0, y: 0, w: 4, h: 4 }), { x: 1, y: 1, w: 2, h: 2 },
+  'alignment union excludes painted pixels outside the selection rectangle');
+console.log('Multi-source selection preserves ownership, masks and cancellation.');
