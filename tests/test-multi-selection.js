@@ -58,6 +58,12 @@ assert.equal(mask.has('3,1'), false, 'fully transparent pixels do not enter the 
 const disjointMask = selection.addPaintedStroke(new Set(), sources, { x: 1, y: 1 }, { x: 1, y: 1 }, size);
 selection.addPaintedStroke(disjointMask, sources, { x: 2, y: 1 }, { x: 2, y: 1 }, size);
 assert.deepEqual([...disjointMask], ['1,1', '2,1'], 'separate strokes accumulate in one selection mask');
+const translated = selection.translateMask(disjointMask, 3, 2);
+assert.deepEqual([...translated], ['4,3', '5,3'], 'translateMask moves all mask keys by delta');
+const additiveGesture = selection.freeGesture(sources, size, disjointMask);
+additiveGesture.start({ x: 0, y: 0 }, false);
+const accumResult = additiveGesture.release(false);
+assert.ok(accumResult.mask.has('1,1') && accumResult.mask.has('2,1') && accumResult.mask.has('0,0'), 'additive free gesture keeps existing mask');
 const freeBrush = selection.freeGesture(sources, size);
 freeBrush.start({ x: 0, y: 0 }, false);
 freeBrush.move({ x: 2, y: 0 });

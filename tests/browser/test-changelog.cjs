@@ -10,13 +10,13 @@ const { chromium } = require('playwright');
     const releaseCount = require('node:fs').readdirSync(require('node:path').join(__dirname, '../../docs/releases'))
       .filter(name => /^v\d+\.\d+\.\d+(?:-[\w.]+)?\.md$/.test(name)).length;
     assert.equal(await page.locator('.release-entry').count(), releaseCount, 'All versioned release notes are included');
-    assert.equal(await page.locator('.release-entry').first().locator('.release-version').textContent(), 'v2.2.6',
+    assert.equal(await page.locator('.release-entry').first().locator('.release-version').textContent(), 'v2.2.7',
       'The latest stable release appears first');
     assert.equal(await page.locator('.release-entry').first().getAttribute('open'), '');
     assert.equal(await page.locator('.release-entry').nth(1).getAttribute('open'), null,
       'Older releases start collapsed to keep the archive scannable');
     const latestText = await page.locator('.release-entry').first().locator('pre').textContent();
-    const releaseSource = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../docs/releases/v2.2.6.md'), 'utf8');
+    const releaseSource = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../docs/releases/v2.2.7.md'), 'utf8');
     assert.equal(latestText.trim(), releaseSource.trim(), 'Generated page contains the complete current release notes');
 
     const bugLink = page.getByRole('link', { name: 'REPORT A BUG ↗' });

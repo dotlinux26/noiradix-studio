@@ -97,13 +97,34 @@
     return Number.isFinite(minX) ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null;
   }
 
-  function drawMask(context, mask, zoom) {
-    if (!mask) return false;
+  function drawMask(context, mask, zoom, fillStyle = 'rgba(99, 102, 241, 0.45)', strokeStyle = '#a5b4fc') {
+    if (!mask || !(mask.size > 0)) return false;
+    context.save();
+    context.fillStyle = fillStyle;
     for (const key of mask) {
       const [x, y] = key.split(',').map(Number);
       context.fillRect(x * zoom, y * zoom, zoom, zoom);
     }
+    if (strokeStyle) {
+      context.strokeStyle = strokeStyle;
+      context.lineWidth = 1;
+      for (const key of mask) {
+        const [x, y] = key.split(',').map(Number);
+        context.strokeRect(x * zoom + 0.5, y * zoom + 0.5, zoom - 1, zoom - 1);
+      }
+    }
+    context.restore();
     return true;
+  }
+
+  function translateMask(mask, dx, dy) {
+    if (!mask) return null;
+    const translated = new Set();
+    for (const key of mask) {
+      const [x, y] = key.split(',').map(Number);
+      translated.add(`${x + dx},${y + dy}`);
+    }
+    return translated;
   }
 
   function paintedBounds(sources, mask = null, bounds = null) {
@@ -116,10 +137,10 @@
     return maskBounds(coordinates);
   }
 
-  function freeGesture(sources, size) {
-    const mask = new Set();
+  function freeGesture(sources, size, initialMask = null) {
+    const mask = initialMask ? new Set(initialMask) : new Set();
     let previous = null;
-    let waiting = false;
+    let waiting = Boolean(initialMask && initialMask.size > 0);
     function finish() {
       previous = null;
       waiting = false;
@@ -127,7 +148,7 @@
     }
     return {
       start(point, additive) {
-        if (!waiting || !additive) mask.clear();
+        if (!waiting && !additive) mask.clear();
         waiting = Boolean(additive);
         previous = point;
         addStroke(mask, point, point, size);
@@ -226,5 +247,5 @@
       item.pixels = pixels;
     }
   }
-  return { targets, begin, cancel, commit, preview, scale, rotate, flip, snapshot, recolor, remove, addStroke, addPaintedStroke, maskBounds, paintedBounds, alignmentOffset, freeGesture, drawMask };
+  return { targets, begin, cancel, commit, preview, scale, rotate, flip, snapshot, recolor, remove, addStroke, addPaintedStroke, maskBounds, paintedBounds, alignmentOffset, freeGesture, drawMask, translateMask };
 });

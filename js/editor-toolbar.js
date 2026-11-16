@@ -35,7 +35,7 @@ const EditorToolbar = (() => {
         <i class="fa-solid fa-draw-polygon"></i>
       </button>
       <button class="pa-tool-btn" data-tool="select-all-layers" title="Select across visible, unlocked layers — Preserve each region source">
-        <i class="fa-solid fa-layer-group"></i>
+        <i class="fa-solid fa-object-group"></i>
       </button>
       <button class="pa-tool-btn" data-tool="region-select" id="btn-pa-tool-region-select" title="Region Select (R) · Double-click to isolate · Alt+double-click to cycle overlapping regions">
         <i class="fa-solid fa-vector-square"></i>

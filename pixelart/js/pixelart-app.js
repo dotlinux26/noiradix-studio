@@ -807,6 +807,8 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'pa-btn-xs';
+      button.style.marginTop = '12px';
+      button.style.marginBottom = '8px';
       const flat = state.doc.meta.version === '1.0';
       button.textContent = flat ? 'Convert document to PIX2 1.1' : 'Convert document to PIX2 1.0';
       button.addEventListener('click', () => {
@@ -2218,29 +2220,21 @@
   let multiRotationBaseline = null;
   let multiRotationBounds = null;
   let freeDrawing = false;
+  function isInsideSelection(coords, sel) {
+    if (!sel || !coords) return false;
+    if (coords.x < sel.x || coords.x >= sel.x + sel.w ||
+        coords.y < sel.y || coords.y >= sel.y + sel.h) return false;
+    if (sel.mask) return sel.mask.has(`${coords.x},${coords.y}`);
+    return true;
+  }
   function renderFreeSelection() {
     clearPreviewCanvas();
     if (!freeGesture || !dom.ctxPreview) return;
-    const ctx = dom.ctxPreview;
-    const zoom = state.zoom;
-    ctx.save();
-    ctx.fillStyle = 'rgba(99, 102, 241, 0.45)';
-    for (const key of freeGesture.mask) {
-      const [x, y] = key.split(',').map(Number);
-      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-    }
-    ctx.strokeStyle = '#a5b4fc';
-    ctx.lineWidth = 1;
-    for (const key of freeGesture.mask) {
-      const [x, y] = key.split(',').map(Number);
-      ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, zoom - 1, zoom - 1);
-    }
-    ctx.restore();
+    EditorMultiSelection.drawMask(dom.ctxPreview, freeGesture.mask, state.zoom);
   }
   function finishFreeSelection(result) {
     if (!result) return;
     freeGesture = null; freeDrawing = false;
-    selectTool('select');
     state.selection = result.bounds ? { ...result.bounds, mask: result.mask } : null;
     renderSelectionMarquee();
   }
@@ -2285,44 +2279,6 @@
     if (!cell) return;
 
     let { x, y } = getPixelCoord(e);
-    if (state.currentTool === 'free-select') {
-      if (!freeGesture) {
-        if (state.floatingPixels) commitFloatingSelection();
-        state.selection = null;
-        const target = getActiveEditingTarget(cell);
-        freeGesture = EditorMultiSelection.freeGesture(target ? [target] : [], state);
-      }
-      freeGesture.start({ x, y }, e.ctrlKey || e.metaKey);
-      freeDrawing = true;
-      renderFreeSelection();
-      return;
-    }
-    if (state.currentTool === 'region-select') {
-      if (e.altKey) return;
-      const extend = e.shiftKey || e.ctrlKey || e.metaKey;
-      const hit = regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, { x, y }, extend, regionPointerView(e));
-      if (hit && !state.activeLayerId) {
-        state.activeLayerId = hit.layer.id;
-        regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, { x, y }, extend, regionPointerView(e));
-      }
-      if (hit) state.activeRegionId = hit.node.id;
-      renderPaLayersTree();
-      renderSelectionMarquee();
-      return;
-    }
-    state.isDrawing = true;
-    const isStrokeTool = (state.currentTool === 'pen' || state.currentTool === 'eraser');
-    if (isStrokeTool) ({ x, y } = getBrushPoint(e));
-    state.activeStrokeChanges = isStrokeTool ? {} : null;
-    state.brushStrokeChanged = false;
-    state.dragStartX = x;
-    state.dragStartY = y;
-    state.lastX = x;
-    state.lastY = y;
-    state.cachedCanvasRect = dom.canvasMain.getBoundingClientRect();
-    updateRulerHighlight(x, y);
-
-    const activeColor = state.primaryColor;
 
     // Check if clicking on SelectionTransform handles (Rotation or Scale)
     if (state.selection && typeof SelectionTransform !== 'undefined') {
@@ -2382,24 +2338,58 @@
       return;
     }
 
+    const isAdditiveKey = e.ctrlKey || e.metaKey || e.shiftKey;
+
+    // Check if clicking inside active selection -> Move / Drag it!
+    if (state.selection && !isAdditiveKey && isInsideSelection({ x, y }, state.selection)) {
+      state.isMovingSelection = true;
+      resetRotationSession();
+      state.moveStartX = x;
+      state.moveStartY = y;
+      ensureFloatingSelection();
+      renderSelectionMarquee();
+      return;
+    }
+
+    if (state.currentTool === 'free-select') {
+      const additive = isAdditiveKey;
+      if (!freeGesture) {
+        if (!additive && state.selection) {
+          if (state.floatingPixels) commitFloatingSelection();
+          state.selection = null;
+        }
+        const target = getActiveEditingTarget(cell);
+        const existingMask = (additive && state.selection?.mask) ? state.selection.mask : null;
+        freeGesture = EditorMultiSelection.freeGesture(target ? [target] : [], state, existingMask);
+      }
+      freeGesture.start({ x, y }, additive);
+      freeDrawing = true;
+      renderFreeSelection();
+      return;
+    }
+
+    if (state.currentTool === 'region-select') {
+      if (e.altKey) return;
+      const extend = e.shiftKey || e.ctrlKey || e.metaKey;
+      const hit = regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, { x, y }, extend, regionPointerView(e));
+      if (hit && !state.activeLayerId) {
+        state.activeLayerId = hit.layer.id;
+        regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, { x, y }, extend, regionPointerView(e));
+      }
+      if (hit) state.activeRegionId = hit.node.id;
+      renderPaLayersTree();
+      renderSelectionMarquee();
+      return;
+    }
+
     // Selection Tool Handling
     if (state.currentTool === 'select') {
-      // Check if clicking inside active selection -> Move / Drag it!
-      if (state.selection &&
-          x >= state.selection.x && x < state.selection.x + state.selection.w &&
-          y >= state.selection.y && y < state.selection.y + state.selection.h) {
-        state.isMovingSelection = true;
-        resetRotationSession();
-        state.moveStartX = x;
-        state.moveStartY = y;
-        ensureFloatingSelection();
-        renderSelectionMarquee();
-        return;
-      }
-
       // Clicking outside -> Commit floating selection first, then create new marquee
       commitFloatingSelection();
+      state.isDrawing = true;
       state.isSelecting = true;
+      state.dragStartX = x;
+      state.dragStartY = y;
       state.selection = { x, y, w: 1, h: 1 };
       renderSelectionMarquee();
       return;
@@ -2409,6 +2399,20 @@
     if (state.floatingPixels) {
       commitFloatingSelection();
     }
+
+    state.isDrawing = true;
+    const isStrokeTool = (state.currentTool === 'pen' || state.currentTool === 'eraser');
+    if (isStrokeTool) ({ x, y } = getBrushPoint(e));
+    state.activeStrokeChanges = isStrokeTool ? {} : null;
+    state.brushStrokeChanged = false;
+    state.dragStartX = x;
+    state.dragStartY = y;
+    state.lastX = x;
+    state.lastY = y;
+    state.cachedCanvasRect = dom.canvasMain.getBoundingClientRect();
+    updateRulerHighlight(x, y);
+
+    const activeColor = state.primaryColor;
 
     // Picker
     if (state.currentTool === 'picker') {
@@ -2531,6 +2535,9 @@
       state.floatingCurrentY = state.floatingOriginalSel.y + dy;
       state.selection.x = state.floatingCurrentX;
       state.selection.y = state.floatingCurrentY;
+      if (state.floatingOriginalSel.mask) {
+        state.selection.mask = EditorMultiSelection.translateMask(state.floatingOriginalSel.mask, dx, dy);
+      }
       renderSelectionMarquee();
       return;
     }
@@ -2706,6 +2713,21 @@
     if (state.isMovingSelection) {
       state.isMovingSelection = false;
       state.isDrawing = false;
+      const dx = state.floatingCurrentX - state.floatingOriginalSel.x;
+      const dy = state.floatingCurrentY - state.floatingOriginalSel.y;
+      let newMask = null;
+      if (state.floatingOriginalSel.mask) {
+        newMask = EditorMultiSelection.translateMask(state.floatingOriginalSel.mask, dx, dy);
+      }
+      state.floatingOriginalSel = {
+        ...state.floatingOriginalSel,
+        x: state.floatingCurrentX,
+        y: state.floatingCurrentY,
+        ...(newMask ? { mask: newMask } : {})
+      };
+      state.selection = {
+        ...state.floatingOriginalSel
+      };
       renderSelectionMarquee();
       if (isEventOverCanvas(e)) {
         const coords = getPixelCoord(e);

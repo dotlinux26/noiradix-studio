@@ -2763,6 +2763,8 @@
       const flattenButton = document.createElement('button');
       flattenButton.type = 'button';
       flattenButton.className = 'btn btn-xs btn-secondary';
+      flattenButton.style.marginTop = '12px';
+      flattenButton.style.marginBottom = '8px';
       flattenButton.textContent = 'Convert document to PIX2 1.0';
       flattenButton.title = 'Flatten all frames into a PIX2 1.0 document';
       flattenButton.addEventListener('click', () => {
@@ -3206,11 +3208,18 @@
   let multiRotationBaseline = null;
   let multiRotationBounds = null;
 
+  function isInsideSelection(coords, sel) {
+    if (!sel || !coords) return false;
+    if (coords.x < sel.x || coords.x >= sel.x + sel.w ||
+        coords.y < sel.y || coords.y >= sel.y + sel.h) return false;
+    if (sel.mask) return sel.mask.has(`${coords.x},${coords.y}`);
+    return true;
+  }
+
   function finishFreeSelection(result) {
     if (!result) return;
     freeGesture = null;
     isFreeSelecting = false;
-    selectTool('select');
     state.selection = result.bounds ? { ...result.bounds, mask: result.mask } : null;
     renderCellOverlay();
   }
@@ -3219,20 +3228,7 @@
     clearOverlay();
     if (!dom.cellOverlay || !freeGesture) return;
     const ctx = dom.cellOverlay.getContext('2d');
-    const zoom = state.cellZoom;
-    ctx.save();
-    ctx.fillStyle = 'rgba(99, 102, 241, 0.45)';
-    for (const key of freeGesture.mask) {
-      const [x, y] = key.split(',').map(Number);
-      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-    }
-    ctx.strokeStyle = '#a5b4fc';
-    ctx.lineWidth = 1;
-    for (const key of freeGesture.mask) {
-      const [x, y] = key.split(',').map(Number);
-      ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, zoom - 1, zoom - 1);
-    }
-    ctx.restore();
+    EditorMultiSelection.drawMask(ctx, freeGesture.mask, state.cellZoom);
   }
 
   // PIX2 1.1 keeps source pixels in the selected region, while cell.pixels is
@@ -3413,8 +3409,15 @@
     const sw = floatingOriginalSel.w * zoom;
     const sh = floatingOriginalSel.h * zoom;
 
-    ctx.fillStyle = 'rgba(99, 102, 241, 0.16)';
-    ctx.fillRect(sx, sy, sw, sh);
+    if (floatingOriginalSel.mask) {
+      const dx = floatingCurrentX - floatingOriginalSel.x;
+      const dy = floatingCurrentY - floatingOriginalSel.y;
+      const translatedMask = EditorMultiSelection.translateMask(floatingOriginalSel.mask, dx, dy);
+      EditorMultiSelection.drawMask(ctx, translatedMask, zoom);
+    } else {
+      ctx.fillStyle = 'rgba(99, 102, 241, 0.16)';
+      ctx.fillRect(sx, sy, sw, sh);
+    }
 
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
     ctx.lineWidth = 1.5;
@@ -3472,32 +3475,6 @@
     const cell = state.getActiveCell();
     if (!cell) return;
     const tool = state.currentTool;
-    if (tool === 'free-select') {
-      if (!freeGesture) {
-        commitFloatingSelection();
-        state.selection = null;
-        const target = getSelectionTarget(cell);
-        freeGesture = EditorMultiSelection.freeGesture(target ? [target] : [], cell.size || state.doc.meta.cellSize);
-      }
-      freeGesture.start(coords, e.ctrlKey || e.metaKey);
-      isFreeSelecting = true;
-      renderFreeSelectionOverlay();
-      return;
-    }
-    if (tool === 'region-select') {
-      if (e.altKey) return;
-      const view = editorPointerView(e, dom.cellOverlay, state.cellZoom);
-      const hit = regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, coords, e.shiftKey || e.ctrlKey || e.metaKey, view);
-      if (hit && !state.activeLayerId) {
-        state.activeLayerId = hit.layer.id;
-        regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, coords, e.shiftKey || e.ctrlKey || e.metaKey, view);
-      }
-      if (hit) state.activeRegionId = hit.node.id;
-      renderStructureLayersTree();
-      renderCellOverlay();
-      return;
-    }
-
     // Check if clicking on selection transform handles (Rotation or Scale)
     if (state.selection && typeof SelectionTransform !== 'undefined') {
       const rect = dom.cellOverlay.getBoundingClientRect();
@@ -3540,19 +3517,48 @@
       }
     }
 
-    // Check if clicking inside active selection
-    if (state.selection && coords.x >= state.selection.x && coords.x < state.selection.x + state.selection.w &&
-        coords.y >= state.selection.y && coords.y < state.selection.y + state.selection.h) {
-      // User clicked INSIDE active selection -> Start moving/dragging it!
+    const isAdditiveKey = e.ctrlKey || e.metaKey || e.shiftKey;
+
+    // Check if clicking inside active selection -> Move / Drag it!
+    if (state.selection && !isAdditiveKey && isInsideSelection(coords, state.selection)) {
       floatingSession.resetRotation();
       isMovingSelection = true;
       isPointerDown = true;
       moveStartX = coords.x;
       moveStartY = coords.y;
-      // Always use the same lift transaction as scale/rotate so Escape and
-      // pointer cancellation can restore the exact original pixels.
       ensureFloatingSelection();
       renderMovingSelectionOverlay();
+      return;
+    }
+
+    if (tool === 'free-select') {
+      const additive = isAdditiveKey;
+      if (!freeGesture) {
+        if (!additive && state.selection) {
+          commitFloatingSelection();
+          state.selection = null;
+        }
+        const target = getSelectionTarget(cell);
+        const existingMask = (additive && state.selection?.mask) ? state.selection.mask : null;
+        freeGesture = EditorMultiSelection.freeGesture(target ? [target] : [], cell.size || state.doc.meta.cellSize, existingMask);
+      }
+      freeGesture.start(coords, additive);
+      isFreeSelecting = true;
+      renderFreeSelectionOverlay();
+      return;
+    }
+
+    if (tool === 'region-select') {
+      if (e.altKey) return;
+      const view = editorPointerView(e, dom.cellOverlay, state.cellZoom);
+      const hit = regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, coords, e.shiftKey || e.ctrlKey || e.metaKey, view);
+      if (hit && !state.activeLayerId) {
+        state.activeLayerId = hit.layer.id;
+        regionSelection.start(cell, state.activeLayerId, state.isolatedNodeId, coords, e.shiftKey || e.ctrlKey || e.metaKey, view);
+      }
+      if (hit) state.activeRegionId = hit.node.id;
+      renderStructureLayersTree();
+      renderCellOverlay();
       return;
     }
 
@@ -3702,6 +3708,11 @@
       const dy = coords.y - moveStartY;
       floatingCurrentX = floatingOriginalSel.x + dx;
       floatingCurrentY = floatingOriginalSel.y + dy;
+      state.selection.x = floatingCurrentX;
+      state.selection.y = floatingCurrentY;
+      if (floatingOriginalSel.mask) {
+        state.selection.mask = EditorMultiSelection.translateMask(floatingOriginalSel.mask, dx, dy);
+      }
       renderMovingSelectionOverlay();
       return;
     }
@@ -3762,11 +3773,20 @@
 
     if (isMovingSelection) {
       isMovingSelection = false;
-      state.selection = {
+      const dx = floatingCurrentX - floatingOriginalSel.x;
+      const dy = floatingCurrentY - floatingOriginalSel.y;
+      let newMask = null;
+      if (floatingOriginalSel.mask) {
+        newMask = EditorMultiSelection.translateMask(floatingOriginalSel.mask, dx, dy);
+      }
+      floatingOriginalSel = {
+        ...floatingOriginalSel,
         x: floatingCurrentX,
         y: floatingCurrentY,
-        w: floatingOriginalSel.w,
-        h: floatingOriginalSel.h
+        ...(newMask ? { mask: newMask } : {})
+      };
+      state.selection = {
+        ...floatingOriginalSel
       };
       renderMovingSelectionOverlay();
       return;
