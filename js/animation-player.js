@@ -139,12 +139,63 @@ class AnimationPlayer {
     return animName;
   }
 
+  matchesDirection(animId, anim, dirId) {
+    if (!anim || !dirId) return false;
+    const normDir = String(dirId).toLowerCase().trim();
+    if (!normDir) return false;
+
+    // 1. Explicit anim.direction property
+    if (anim.direction && anim.direction !== 'none') {
+      if (String(anim.direction).toLowerCase().trim() === normDir) return true;
+    }
+
+    // 2. animId or anim.name match (e.g. idle_right, walk_right, run-right, right)
+    const cleanId = String(animId || '').toLowerCase().trim();
+    const cleanName = String(anim.name || '').toLowerCase().trim();
+    if (
+      cleanId === normDir ||
+      cleanId.endsWith(`_${normDir}`) ||
+      cleanId.startsWith(`${normDir}_`) ||
+      cleanId.endsWith(`-${normDir}`) ||
+      cleanId.startsWith(`${normDir}-`)
+    ) {
+      return true;
+    }
+    const spacedDir = normDir.replace(/_/g, ' ');
+    if (cleanName.includes(normDir) || cleanName.includes(spacedDir)) {
+      return true;
+    }
+
+    // 3. Inspect frames/cells in anim.frames
+    const state = this.getState();
+    const doc = state && state.doc;
+    if (doc && doc.cells && Array.isArray(anim.frames)) {
+      for (const cellId of anim.frames) {
+        const cell = doc.cells[cellId];
+        if (cell) {
+          if (cell.direction && cell.direction !== 'none' && String(cell.direction).toLowerCase().trim() === normDir) {
+            return true;
+          }
+          if (cell.tag && String(cell.tag).toLowerCase().trim() === normDir) return true;
+          if (Array.isArray(cell.tags) && cell.tags.some(t => String(t).toLowerCase().trim() === normDir)) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   setDirection(dirId) {
-    this.currentDirection = dirId;
+    let effectiveDir = dirId;
+    if (this.currentMode === 'platformer_2dir') {
+      if (String(dirId).includes('left')) effectiveDir = 'left';
+      else if (String(dirId).includes('right')) effectiveDir = 'right';
+    }
+    this.currentDirection = effectiveDir;
     this.currentAction = null;
     this.currentFrameIdx = 0;
 
-    const candidates = this.getAnimationsForDirection(dirId);
+    const candidates = this.getAnimationsForDirection(effectiveDir);
     if (candidates.length > 0) {
       const currentIndex = candidates.findIndex(([name]) => name === this.activeAnimationName);
       const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % candidates.length;
@@ -152,6 +203,34 @@ class AnimationPlayer {
     }
 
     // A direction without tagged clips falls back to legacy row-based playback.
+    const state = this.getState();
+    const doc = state && state.doc;
+    if (doc && doc.meta && doc.meta.grid && doc.meta.grid.rows > 1) {
+      const matchingRows = [];
+      for (let r = 0; r < doc.meta.grid.rows; r++) {
+        let rowDir = null;
+        for (let c = 0; c < doc.meta.grid.cols; c++) {
+          const cell = doc.cells && doc.cells[`cell_${r}_${c}`];
+          if (cell && cell.direction && cell.direction !== 'none') {
+            rowDir = cell.direction;
+            break;
+          }
+        }
+        if (rowDir === effectiveDir) matchingRows.push(r);
+      }
+      if (matchingRows.length > 0) {
+        const curRowIdx = matchingRows.indexOf(this.activeRowIndex !== undefined ? this.activeRowIndex : -1);
+        this.activeRowIndex = matchingRows[(curRowIdx + 1) % matchingRows.length];
+      } else {
+        const d2 = (this.currentMode === 'platformer_2dir')
+          ? this.directions2.find(d => d.id === effectiveDir)
+          : null;
+        this.activeRowIndex = (d2 && d2.row < doc.meta.grid.rows) ? d2.row : 0;
+      }
+    } else {
+      this.activeRowIndex = 0;
+    }
+
     this.activeAnimationName = null;
     this.render();
     this.notifyFrameChange();
@@ -163,10 +242,30 @@ class AnimationPlayer {
     const doc = state && state.doc;
     if (!doc || !doc.animations) return [];
 
-    return Object.entries(doc.animations).filter(([, anim]) =>
-      anim && anim.direction === dirId && Array.isArray(anim.frames) && anim.frames.length > 0 &&
-      anim.frames.every((cellId) => Boolean(doc.cells && doc.cells[cellId]))
+    let effectiveDir = dirId;
+    if (this.currentMode === 'platformer_2dir') {
+      if (String(dirId).includes('left')) effectiveDir = 'left';
+      else if (String(dirId).includes('right')) effectiveDir = 'right';
+    }
+
+    // 1. Clips explicitly or heuristically matching direction/tag
+    const matching = Object.entries(doc.animations).filter(([animId, anim]) =>
+      anim && Array.isArray(anim.frames) && anim.frames.length > 0 &&
+      anim.frames.every((cellId) => Boolean(doc.cells && doc.cells[cellId])) &&
+      this.matchesDirection(animId, anim, effectiveDir)
     );
+    if (matching.length > 0) return matching;
+
+    // 2. In 2-dir platformer, if no clip matched effectiveDir, fall back to any valid clips
+    if (this.currentMode === 'platformer_2dir') {
+      const allValid = Object.entries(doc.animations).filter(([, anim]) =>
+        anim && Array.isArray(anim.frames) && anim.frames.length > 0 &&
+        anim.frames.every((cellId) => Boolean(doc.cells && doc.cells[cellId]))
+      );
+      if (allValid.length > 0) return allValid;
+    }
+
+    return [];
   }
 
   setMode(mode) {
@@ -328,8 +427,11 @@ class AnimationPlayer {
 
     // 3. Fallback: Map direction to row
     if (this.currentMode === 'platformer_2dir') {
-      const d2 = this.directions2.find(d => d.id === this.currentDirection);
-      const targetRow = (d2 && d2.row < doc.meta.grid.rows) ? d2.row : 0;
+      const targetRow = (this.activeRowIndex !== undefined && this.activeRowIndex < doc.meta.grid.rows)
+        ? this.activeRowIndex
+        : ((this.directions2.find(d => d.id === this.currentDirection)?.row < doc.meta.grid.rows)
+          ? this.directions2.find(d => d.id === this.currentDirection).row
+          : 0);
       const rowCells = [];
       for (let c = 0; c < doc.meta.grid.cols; c++) {
         const cid = `cell_${targetRow}_${c}`;

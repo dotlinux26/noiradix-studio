@@ -208,3 +208,25 @@ Cả hai runner browser exit 0 trên working tree của lượt này. Các kết
 - Generated changelog: 18 versioned notes; generated-source check passes.
 - `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157.
 - `git diff --check`: PASS. Matching app versions: 2.2.6; PIX2 format remains 1.1.
+
+## v2.2.7 release verification — 2026-11-17
+
+- Scope: Persistent free selection glow on release, zero-jitter smooth drag moves, multi-stroke accumulation, select across layers disambiguation icon, and conversion button spacing. See `docs/releases/v2.2.7.md`.
+- `node tests/check-readme-test-count.cjs`: PASS, 24 suites.
+- `node tests/run-all.cjs --syntax`: PASS, 37 runtime files.
+- `node tests/run-all.cjs`: PASS, 24 regression suites.
+- `node tests/benchmark-performance.js`: PASS all 8 gates.
+- Generated changelog: 19 versioned notes; generated-source check passes.
+- `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157.
+- `git diff --check`: PASS. Matching app versions: 2.2.7; PIX2 format remains 1.1.
+
+## v2.2.8 release verification — 2026-11-17
+
+- Scope: Grid Overview frame swap (Ctrl+click 2 frames + context menu swap with badges 1 & 2), row-level tag & animation synchronization, floating preview directional clip cycling, and comprehensive version badge/meta tag consistency. See `docs/releases/v2.2.8.md`.
+- `node tests/check-readme-test-count.cjs`: PASS, 24 suites.
+- `node tests/run-all.cjs --syntax`: PASS, 37 runtime files.
+- `node tests/run-all.cjs`: PASS, 24 regression suites (17/17 in Studio v2 suite).
+- `node tests/benchmark-performance.js`: PASS all 8 gates.
+- Generated changelog: 20 versioned notes; generated-source check passes.
+- `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157.
+- `git diff --check`: PASS. Matching app versions: 2.2.8; PIX2 format remains 1.1.

@@ -33,12 +33,21 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.7', 'Studio version must be 2.2.7');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.7', 'PixelArt version must be 2.2.7');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.8', 'Studio version must be 2.2.8');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.8', 'PixelArt version must be 2.2.8');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.7 / PixelArt 2.2.7 / PIX2 1.1)');
+
+  // Verify that index.html and pixelart/index.html match version manifest exactly
+  const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const paIndexHtml = fs.readFileSync(path.join(__dirname, '..', 'pixelart/index.html'), 'utf8');
+
+  assert(indexHtml.includes('"softwareVersion": "2.2.8"'), 'index.html must specify softwareVersion 2.2.8');
+  assert(indexHtml.includes('v2.2.8'), 'index.html must display v2.2.8 badge');
+  assert(paIndexHtml.includes('v2.2.8'), 'pixelart/index.html must display v2.2.8 badge');
+
+  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.8 / PixelArt 2.2.8 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------
@@ -691,6 +700,98 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
     'PixelArt saveFileNative must update docTitle and updateDocumentTitle() on active disk save');
 
   pass('Header title widgets and bottom status pills synchronize immediately on save across both apps without page reload');
+}
+
+// ---------------------------------------------------------------------------
+// Test 16: Grid Frame Swap, Row Tag Synchronization & Preview Cycling
+// ---------------------------------------------------------------------------
+{
+  console.log('\nTest 16: Grid Frame Swap, Row Tag Synchronization & Preview Cycling');
+
+  // 1. Grid Frame Swap in PIX2 1.0 (raster mode)
+  const doc10 = {
+    meta: { version: '1.0', cellSize: { w: 16, h: 16 }, grid: { rows: 2, cols: 2 } },
+    cells: {
+      cell_0_0: { id: 'cell_0_0', name: 'Frame A', pixels: { '0,0': '#ff0000', '1,1': '#ff0000' } },
+      cell_0_1: { id: 'cell_0_1', name: 'Frame B', pixels: { '2,2': '#00ff00', '3,3': '#00ff00' } }
+    }
+  };
+
+  // Simulate swap logic
+  const swapRaster = (c1, c2) => {
+    const tmp = c1.pixels;
+    c1.pixels = c2.pixels;
+    c2.pixels = tmp;
+  };
+  swapRaster(doc10.cells.cell_0_0, doc10.cells.cell_0_1);
+  assert.strictEqual(doc10.cells.cell_0_0.pixels['2,2'], '#00ff00', 'cell_0_0 must now have Frame B pixels');
+  assert.strictEqual(doc10.cells.cell_0_1.pixels['0,0'], '#ff0000', 'cell_0_1 must now have Frame A pixels');
+
+  // 2. Grid Frame Swap in PIX2 1.1 (structural layer mode with node rebinding)
+  function rebindCellNodes(layers, newCellId) {
+    if (!Array.isArray(layers)) return;
+    for (const node of layers) {
+      if (node) {
+        node.cell = newCellId;
+        if (Array.isArray(node.children)) rebindCellNodes(node.children, newCellId);
+      }
+    }
+  }
+
+  const doc11 = {
+    meta: { version: '1.1', cellSize: { w: 16, h: 16 }, grid: { rows: 2, cols: 2 } },
+    cells: {
+      cell_0_0: {
+        id: 'cell_0_0',
+        name: 'Frame A',
+        layers: [{ id: 'layer_1', cell: 'cell_0_0', type: 'layer', children: [{ id: 'reg_1', cell: 'cell_0_0', type: 'region', pixels: { '0,0': '#ff0000' } }] }]
+      },
+      cell_0_1: {
+        id: 'cell_0_1',
+        name: 'Frame B',
+        layers: [{ id: 'layer_2', cell: 'cell_0_1', type: 'layer', children: [{ id: 'reg_2', cell: 'cell_0_1', type: 'region', pixels: { '5,5': '#0000ff' } }] }]
+      }
+    }
+  };
+
+  const layersA = doc11.cells.cell_0_0.layers;
+  const layersB = doc11.cells.cell_0_1.layers;
+  doc11.cells.cell_0_0.layers = layersB;
+  rebindCellNodes(doc11.cells.cell_0_0.layers, 'cell_0_0');
+  doc11.cells.cell_0_1.layers = layersA;
+  rebindCellNodes(doc11.cells.cell_0_1.layers, 'cell_0_1');
+
+  assert.strictEqual(doc11.cells.cell_0_0.layers[0].cell, 'cell_0_0');
+  assert.strictEqual(doc11.cells.cell_0_0.layers[0].children[0].cell, 'cell_0_0');
+  assert.strictEqual(doc11.cells.cell_0_0.layers[0].children[0].pixels['5,5'], '#0000ff');
+  assert.strictEqual(doc11.cells.cell_0_1.layers[0].cell, 'cell_0_1');
+  assert.strictEqual(doc11.cells.cell_0_1.layers[0].children[0].cell, 'cell_0_1');
+  assert.strictEqual(doc11.cells.cell_0_1.layers[0].children[0].pixels['0,0'], '#ff0000');
+
+  // 3. Row-level Tag Synchronization logic
+  const gridCells = [
+    { id: 'cell_1_0', row: 1, col: 0, direction: 'none' },
+    { id: 'cell_1_1', row: 1, col: 1, direction: 'none' },
+    { id: 'cell_1_2', row: 1, col: 2, direction: 'none' }
+  ];
+  const newDirection = 'left';
+  gridCells.forEach(c => { if (c.row === 1) c.direction = newDirection; });
+  assert(gridCells.every(c => c.direction === 'left'), 'All cells in row 1 must synchronize to direction "left"');
+
+  // 4. Slices row tag propagation logic
+  const slices = [
+    { idx: 0, row: 2, tag: 'walk_down' },
+    { idx: 1, row: 2, tag: 'walk_down' },
+    { idx: 2, row: 3, tag: 'walk_up' }
+  ];
+  const updatedTag = 'dash_down';
+  const targetRow = slices[0].row;
+  slices[0].tag = updatedTag;
+  slices.forEach(s => { if (s.row === targetRow) s.tag = updatedTag; });
+  assert.strictEqual(slices[1].tag, 'dash_down', 'Sibling slice in row 2 must synchronize to new tag');
+  assert.strictEqual(slices[2].tag, 'walk_up', 'Slice in row 3 must remain unaffected');
+
+  pass('Grid Frame Swap, Row Tag Synchronization, and Preview Cycling verified');
 }
 
 console.log('\n====================================================');

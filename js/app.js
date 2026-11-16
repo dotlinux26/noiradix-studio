@@ -16,6 +16,7 @@
   let animPlayer = null;
   let studioAnimPlayer = null;
   let selectedGridCellId = 'cell_0_0';
+  let selectedGridCellIds = ['cell_0_0'];
   let activeStudioClipId = 'walk_down';
 
   // Desktop File & Autosave State
@@ -2525,6 +2526,7 @@
       get gridRowMoveUpButtons() { return gridRowMoveUpButtons; }, set gridRowMoveUpButtons(value) { gridRowMoveUpButtons = value; },
       get marqueeAnimFrameId() { return marqueeAnimFrameId; }, set marqueeAnimFrameId(value) { marqueeAnimFrameId = value; },
       get selectedGridCellId() { return selectedGridCellId; }, set selectedGridCellId(value) { selectedGridCellId = value; },
+      get selectedGridCellIds() { return selectedGridCellIds; }, set selectedGridCellIds(value) { selectedGridCellIds = value; },
       get rowDragState() { return rowDragState; }, set rowDragState(value) { rowDragState = value; }
     },
     GRID_LAYOUT,
@@ -2763,8 +2765,12 @@
       const flattenButton = document.createElement('button');
       flattenButton.type = 'button';
       flattenButton.className = 'btn btn-xs btn-secondary';
-      flattenButton.style.marginTop = '12px';
-      flattenButton.style.marginBottom = '8px';
+      flattenButton.style.display = 'block';
+      flattenButton.style.width = '100%';
+      flattenButton.style.marginTop = '16px';
+      flattenButton.style.marginBottom = '10px';
+      flattenButton.style.padding = '6px 10px';
+      flattenButton.style.textAlign = 'center';
       flattenButton.textContent = 'Convert document to PIX2 1.0';
       flattenButton.title = 'Flatten all frames into a PIX2 1.0 document';
       flattenButton.addEventListener('click', () => {
@@ -2842,6 +2848,7 @@
       get activeStudioClipId() { return activeStudioClipId; }, set activeStudioClipId(value) { activeStudioClipId = value; },
       get currentTemplateMode() { return currentTemplateMode; }, set currentTemplateMode(value) { currentTemplateMode = value; },
       get selectedGridCellId() { return selectedGridCellId; }, set selectedGridCellId(value) { selectedGridCellId = value; },
+      get selectedGridCellIds() { return selectedGridCellIds; }, set selectedGridCellIds(value) { selectedGridCellIds = value; },
       get animPlayer() { return animPlayer; }, set animPlayer(value) { animPlayer = value; },
       get studioAnimPlayer() { return studioAnimPlayer; }, set studioAnimPlayer(value) { studioAnimPlayer = value; }
     },
@@ -4431,6 +4438,67 @@
     }
   }
 
+  function rebindCellNodes(layers, newCellId) {
+    if (!Array.isArray(layers)) return;
+    for (const node of layers) {
+      if (node) {
+        node.cell = newCellId;
+        if (Array.isArray(node.children)) {
+          rebindCellNodes(node.children, newCellId);
+        }
+      }
+    }
+  }
+
+  function executeSwapGridCells(idA, idB) {
+    if (!state.doc || !state.doc.cells[idA] || !state.doc.cells[idB]) return;
+    const cellA = state.doc.cells[idA];
+    const cellB = state.doc.cells[idB];
+    const sizeA = cellA.size || state.doc.meta.cellSize;
+    const sizeB = cellB.size || state.doc.meta.cellSize;
+    if (sizeA.w !== sizeB.w || sizeA.h !== sizeB.h) {
+      showToast('Frame dimensions differ. Cannot swap frames with different sizes.', 'error');
+      return;
+    }
+
+    state.beginStroke();
+
+    const layersA = cellA.layers;
+    const layersB = cellB.layers;
+    const pixelsA = cellA.pixels;
+    const pixelsB = cellB.pixels;
+
+    if (layersA) {
+      cellB.layers = layersA;
+      rebindCellNodes(cellB.layers, idB);
+    } else {
+      delete cellB.layers;
+    }
+
+    if (layersB) {
+      cellA.layers = layersB;
+      rebindCellNodes(cellA.layers, idA);
+    } else {
+      delete cellA.layers;
+    }
+
+    cellA.pixels = pixelsB ? JSON.parse(JSON.stringify(pixelsB)) : {};
+    cellB.pixels = pixelsA ? JSON.parse(JSON.stringify(pixelsA)) : {};
+
+    if (state.doc.meta.version === '1.1') {
+      state.syncCellComposite(idA);
+      state.syncCellComposite(idB);
+    }
+
+    const labelA = cellA.name || idA;
+    const labelB = cellB.name || idB;
+    const changed = state.endStroke(`Swap Frames ${labelA} ⇄ ${labelB}`);
+    if (changed) triggerEventAutosave();
+    saveCurrentSessionState();
+    refreshAll();
+    showToast(`Swapped "${labelA}" ⇄ "${labelB}"`, 'success');
+  }
+
   function flipGridCell(cellId, horizontal = true) {
     if (!state.doc || !state.doc.cells[cellId]) return;
     const cell = state.doc.cells[cellId];
@@ -4563,6 +4631,21 @@
 
     const delColLabel = document.getElementById('ctx-del-col-label');
     if (delColLabel) delColLabel.textContent = `Delete Column ${c}`;
+
+    const swapItem = document.getElementById('ctx-swap-cells-item');
+    const swapLabel = document.getElementById('ctx-swap-cells-label');
+    if (swapItem) {
+      if (Array.isArray(selectedGridCellIds) && selectedGridCellIds.length === 2) {
+        const idA = selectedGridCellIds[0];
+        const idB = selectedGridCellIds[1];
+        const nameA = (state.doc && state.doc.cells[idA]?.name) || idA;
+        const nameB = (state.doc && state.doc.cells[idB]?.name) || idB;
+        if (swapLabel) swapLabel.textContent = `Swap Frames (${nameA} ⇄ ${nameB})`;
+        swapItem.style.display = 'flex';
+      } else {
+        swapItem.style.display = 'none';
+      }
+    }
 
     gridContextMenu.classList.remove('hidden');
     const menuW = 230;
@@ -5544,7 +5627,25 @@
       // 3. Otherwise, select cell
       const cellId = getGridCellFromPos(mx, my);
       if (cellId) {
-        selectedGridCellId = cellId;
+        if (e.ctrlKey || e.metaKey) {
+          if (!Array.isArray(selectedGridCellIds)) selectedGridCellIds = [];
+          const idx = selectedGridCellIds.indexOf(cellId);
+          if (idx !== -1) {
+            if (selectedGridCellIds.length > 1) {
+              selectedGridCellIds.splice(idx, 1);
+            }
+          } else {
+            if (selectedGridCellIds.length >= 2) {
+              selectedGridCellIds[1] = cellId;
+            } else {
+              selectedGridCellIds.push(cellId);
+            }
+          }
+          selectedGridCellId = cellId;
+        } else {
+          selectedGridCellIds = [cellId];
+          selectedGridCellId = cellId;
+        }
         renderGridOverview();
         updateGridInspectorUI();
       }
@@ -5730,7 +5831,10 @@
 
       // 1. If clicked on a specific cell -> select and open context menu
       if (clickedCellId) {
-        selectedGridCellId = clickedCellId;
+        if (!selectedGridCellIds || selectedGridCellIds.length !== 2 || !selectedGridCellIds.includes(clickedCellId)) {
+          selectedGridCellIds = [clickedCellId];
+          selectedGridCellId = clickedCellId;
+        }
         renderGridOverview();
         updateGridInspectorUI();
         openGridContextMenu(e.clientX, e.clientY, clickedCellId);
@@ -5825,6 +5929,13 @@
             break;
           case 'duplicate':
             duplicateGridCellToNext(targetCellId);
+            break;
+          case 'swap-cells':
+            if (Array.isArray(selectedGridCellIds) && selectedGridCellIds.length === 2) {
+              executeSwapGridCells(selectedGridCellIds[0], selectedGridCellIds[1]);
+            } else {
+              showToast('Select 2 frames with Ctrl+Click to swap', 'warning');
+            }
             break;
           case 'flip-h':
             flipGridCell(targetCellId, true);
@@ -5994,9 +6105,18 @@
     if (dom.gridCellDir) {
       dom.gridCellDir.addEventListener('change', (e) => {
         if (state.doc && state.doc.cells[selectedGridCellId]) {
-          state.doc.cells[selectedGridCellId].direction = e.target.value;
-          state.saveSnapshot('Change Frame Direction');
+          const newDir = e.target.value;
+          const { r } = getCellRowCol(selectedGridCellId);
+          const cols = state.doc.meta.grid.cols;
+          for (let c = 0; c < cols; c++) {
+            const cell = getCellAtGrid(state.doc, r, c) || state.doc.cells[`cell_${r}_${c}`];
+            if (cell) {
+              cell.direction = newDir;
+            }
+          }
+          state.saveSnapshot(`Set Row ${r} Direction to ${newDir}`);
           triggerEventAutosave();
+          updateGridInspectorUI();
         }
       });
     }
@@ -6803,8 +6923,9 @@
     if (dom.cellAnimSelect) {
       dom.cellAnimSelect.addEventListener('change', (e) => {
         const cell = state.getActiveCell();
-        if (cell) {
-          assignCellToAnimation(cell.id, e.target.value);
+        if (cell && state.doc) {
+          const { r: selR } = getCellRowCol(cell.id);
+          assignRowToAnimation(selR, e.target.value);
         }
       });
     }
@@ -6812,8 +6933,18 @@
     if (dom.cellDirSelect) {
       dom.cellDirSelect.addEventListener('change', (e) => {
         const cell = state.getActiveCell();
-        if (cell) {
-          cell.direction = e.target.value;
+        if (cell && state.doc) {
+          const newDir = e.target.value;
+          const { r } = getCellRowCol(cell.id);
+          const cols = state.doc.meta.grid.cols;
+          for (let c = 0; c < cols; c++) {
+            const rowCell = getCellAtGrid(state.doc, r, c) || state.doc.cells[`cell_${r}_${c}`];
+            if (rowCell) {
+              rowCell.direction = newDir;
+            }
+          }
+          cell.direction = newDir;
+          state.saveSnapshot(`Set Row ${r} Direction to ${newDir}`);
           triggerEventAutosave();
         }
       });
@@ -7622,7 +7753,18 @@
         document.querySelectorAll('[data-dir]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const animationName = animPlayer.setDirection(btn.dataset.dir);
-        if (dom.floatingAnimSelect) dom.floatingAnimSelect.value = animationName || '';
+        if (dom.floatingAnimSelect) {
+          if (animationName && !Array.from(dom.floatingAnimSelect.options).some(o => o.value === animationName)) {
+            const opt = document.createElement('option');
+            opt.value = animationName;
+            opt.textContent = animationName;
+            dom.floatingAnimSelect.appendChild(opt);
+          }
+          dom.floatingAnimSelect.value = animationName || '';
+        }
+        if (animationName) {
+          showToast(`Playing: ${animationName}`, 'info');
+        }
       });
     });
   }

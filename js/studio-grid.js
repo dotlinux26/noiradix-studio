@@ -607,7 +607,9 @@ const StudioGrid = (() => {
 
           const isSelected =
             cellId === view.selectedGridCellId ||
-            (!cell && view.selectedGridCellId === `cell_${r}_${c}`);
+            (!cell && view.selectedGridCellId === `cell_${r}_${c}`) ||
+            (Array.isArray(view.selectedGridCellIds) &&
+              (view.selectedGridCellIds.includes(cellId) || (!cell && view.selectedGridCellIds.includes(`cell_${r}_${c}`))));
 
           // Checkerboard
           ctx.fillStyle = EditorCanvas.checker(ctx, zoom, isDark);
@@ -634,6 +636,30 @@ const StudioGrid = (() => {
             }
             // Restore smoothing for subsequent text rendering
             ctx.imageSmoothingEnabled = true;
+          }
+
+          // Badge numbers if multi-selected for frame swapping (1 and 2)
+          if (Array.isArray(view.selectedGridCellIds) && view.selectedGridCellIds.length === 2) {
+            const rawIdx = view.selectedGridCellIds.indexOf(cellId);
+            const idx = rawIdx !== -1 ? rawIdx : (!cell ? view.selectedGridCellIds.indexOf(`cell_${r}_${c}`) : -1);
+            if (idx !== -1) {
+              const badgeX = cx + 11;
+              const badgeY = cy + 11;
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(badgeX, badgeY, 9, 0, Math.PI * 2);
+              ctx.fillStyle = isDark ? '#6366f1' : '#4f46e5';
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 10px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(String(idx + 1), badgeX, badgeY);
+              ctx.restore();
+            }
           }
 
           // Cell label underneath in high-contrast pill (with 24px margin to next row)

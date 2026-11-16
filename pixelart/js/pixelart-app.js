@@ -807,8 +807,12 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'pa-btn-xs';
-      button.style.marginTop = '12px';
-      button.style.marginBottom = '8px';
+      button.style.display = 'block';
+      button.style.width = '100%';
+      button.style.marginTop = '16px';
+      button.style.marginBottom = '10px';
+      button.style.padding = '6px 10px';
+      button.style.textAlign = 'center';
       const flat = state.doc.meta.version === '1.0';
       button.textContent = flat ? 'Convert document to PIX2 1.1' : 'Convert document to PIX2 1.0';
       button.addEventListener('click', () => {

@@ -660,8 +660,15 @@ const StudioSlice = (() => {
           const frame = importSliceState.frames[idx];
           const tag = input.value.trim();
           if (frame && frame.tag !== tag) {
+            const targetRow = frame.row;
             frame.tag = tag;
-            delete frame.row;
+            if (targetRow !== undefined && Array.isArray(importSliceState.frames)) {
+              importSliceState.frames.forEach((other) => {
+                if (other && other !== frame && other.row === targetRow) {
+                  other.tag = tag;
+                }
+              });
+            }
             renderImportSliceView(false);
           }
         });

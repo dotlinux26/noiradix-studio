@@ -31,6 +31,24 @@
 
     <section class="release-list" aria-label="Release history">
       <details class="release-entry" open>
+  <summary><span class="release-version">v2.2.8</span><span class="release-source">docs/releases/v2.2.8.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.2.8
+
+## Grid Overview &amp; Animation Enhancements
+
+- **Grid Overview Frame Swap**: Added desktop-grade frame swapping in the Grid Overview. Users can `Ctrl`+click (or `Cmd`+click) two frames to multi-select them (displaying high-contrast circular badges `1` and `2` with bright selection outlines), then right-click to choose &quot;Swap Frames&quot; from the context menu. Flawlessly exchanges artwork contents across both PIX2 1.1 (re-binding nested layer/region AST hierarchies to destination cell slots) and PIX2 1.0 (raster pixels), syncs composite layers, updates undo/redo history, and autosaves.
+- **Row-level Tag &amp; Animation Synchronization**: Setting a direction tag (`#grid-cell-dir` or `#cell-dir-select`) on any frame automatically synchronizes all frames in that entire row. Assigning an animation state in the Cell Editor assigns the entire row. In Slices &amp; Tagging, editing a slice tag automatically updates all sibling slices in the same row.
+- **Preview Directional Clip Cycling**: In the floating Animation Studio preview and platformer modes, repeatedly clicking directional compass buttons (or clicking while playing) cycles sequentially through all animation clips tagged with or matching that direction (e.g. `walk_right` → `run_right` → `attack_right`), updating the animation selector and displaying a toast notification.
+- **UI &amp; Layout Spacing Polish**: Separated the &quot;Convert document to PIX2 1.0 / 1.1&quot; action button below the layer tree with dedicated margin and full-width pill styling to avoid crowding against tree elements. Clarified the cross-layer selection tool (`fa-solid fa-object-group`).
+- **Complete Version &amp; Badge Consistency**: Synchronized all version badges, meta tags, and asset caches (`index.html`, `pixelart/index.html`, `js/version.js`) to v2.2.8, backed by comprehensive automated test assertions.
+
+## Verification
+
+- 24 Node regression suites, 37 runtime JavaScript syntax checks, and 10 browser suites passed.
+- Performance benchmarks validated within strict 16ms interactive frame budgets.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.2.8.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
   <summary><span class="release-version">v2.2.7</span><span class="release-source">docs/releases/v2.2.7.md</span></summary>
   <pre># NOIRADIX Studio &amp; PixelArt v2.2.7
 
