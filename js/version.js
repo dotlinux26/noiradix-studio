@@ -18,22 +18,22 @@
     },
     studio: {
       name: 'NOIRADIX Studio',
-      version: '2.2.2',
+      version: '2.2.3',
       channel: 'Stable',
-      displayVersion: 'v2.2.2'
+      displayVersion: 'v2.2.3'
     },
     pixelart: {
       name: 'NOIRADIX PixelArt',
-      version: '2.2.2',
+      version: '2.2.3',
       channel: 'Stable',
-      displayVersion: 'v2.2.2'
+      displayVersion: 'v2.2.3'
     },
     format: {
       name: 'PIX2',
       version: '1.1',
       displayVersion: 'PIX2 v1.1'
     },
-    releaseDate: '2026-11-15',
+    releaseDate: '2026-11-16',
     author: 'Nguyen Duc Canh (dotlinux26)',
     copyright: '© 2026 dotlinux26 (Nguyen Duc Canh).',
     canonicalDomain: 'https://noiradix.me'

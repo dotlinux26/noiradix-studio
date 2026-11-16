@@ -33,12 +33,12 @@ console.log('====================================================\n');
 // -----------------------------------------------------------------------------
 console.log('Test 1: Version Manifest & Domain Verification');
 {
-  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.2', 'Studio version must be 2.2.2');
-  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.2', 'PixelArt version must be 2.2.2');
+  assert.strictEqual(NOIRADIX_VERSION.studio.version, '2.2.3', 'Studio version must be 2.2.3');
+  assert.strictEqual(NOIRADIX_VERSION.pixelart.version, '2.2.3', 'PixelArt version must be 2.2.3');
   assert.strictEqual(NOIRADIX_VERSION.format.version, '1.1', 'Format version must be 1.1');
   assert.strictEqual(NOIRADIX_VERSION.canonicalDomain, 'https://noiradix.me', 'Canonical domain must strictly be https://noiradix.me');
   assert(!JSON.stringify(NOIRADIX_VERSION).includes('.org'), 'Must NEVER contain .org domain');
-  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.2 / PixelArt 2.2.2 / PIX2 1.1)');
+  pass('NOIRADIX 2.2 version manifest verified (Studio 2.2.3 / PixelArt 2.2.3 / PIX2 1.1)');
 }
 
 // -----------------------------------------------------------------------------

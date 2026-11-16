@@ -539,7 +539,7 @@ function zipEntries(bytes) {
     await page.locator('#pix2-code-text').fill(changedCode);
     await page.locator('#btn-apply-code').click();
     await page.waitForFunction(() => state.doc.meta.title === 'QA; source # applied');
-    assert.equal((await page.locator('#pix2-code-viewer .syn-cmt').allTextContents()).some(text => text.includes('source # applied')), false, 'Source highlighting shares parser comment rules');
+    assert.ok((await page.locator('#pix2-code-viewer > pre').textContent()).includes('QA; source # applied'), 'Read-only PIX2 source is rendered as plain text');
     await page.keyboard.press('Control+z');
     assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeSourceApply);
     await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
@@ -547,8 +547,32 @@ function zipEntries(bytes) {
     await page.locator('#pix2-code-text').fill('@pix2 1.1\n@cell c\n p nope #fff');
     await page.locator('#btn-apply-code').click();
     assert.equal(await page.evaluate(() => PIX2.serialize(state.doc)), beforeSourceApply);
+    await page.locator('#pix2-code-text').fill(await page.evaluate(() => PIX2.serialize(state.doc)));
+    await page.locator('#btn-toggle-edit-code').click();
+    await page.evaluate(() => {
+      const doc = PIX2.createDocument('Large source view QA', 1, 1, 64, 64);
+      const region = doc.cells.cell_0_0.layers[0].children[0];
+      for (let y = 0; y < 64; y += 1) {
+        for (let x = 0; x < 64; x += 1) region.pixels[`${x},${y}`] = '#57546f';
+      }
+      state.setDocument(doc);
+    });
+    await page.locator('.studio-tab[data-tab-id="tab-pix2-code"]').click();
+    const sourceDetails = page.locator('#pix2-code-viewer details.code-source-details');
+    await sourceDetails.waitFor({ state: 'visible' });
+    assert.equal(await sourceDetails.evaluate(element => element.open), false, 'Long read-only code starts collapsed');
+    assert.ok(await sourceDetails.locator('summary').textContent().then(text => text.includes('Show PIX2 source')));
+    assert.ok(await page.locator('#pix2-code-viewer').evaluate(element => element.querySelectorAll('*').length <= 3),
+      'Collapsed long source creates only a few DOM elements');
+    await sourceDetails.locator('summary').click();
+    await page.waitForFunction(() => document.querySelector('#pix2-code-viewer pre')?.textContent.length > 24000);
+    await sourceDetails.locator('summary').click();
+    await page.waitForFunction(() => document.querySelector('#pix2-code-viewer pre')?.textContent === '');
+    assert.equal(await page.locator('#pix2-code-viewer pre').textContent(), '', 'Closing the source preview releases its large text node');
+    await page.locator('#btn-toggle-edit-code').click();
+    assert.ok((await page.locator('#pix2-code-text').inputValue()).length > 24000, 'Direct Edit still loads the complete source');
     assert.deepEqual(controllerErrors, []);
-    console.log('Studio PASS Apply Code / Undo / invalid source preserves document');
+    console.log('Studio PASS Apply Code / Undo / invalid source guard / lazy long-source view / full Edit source');
   } finally {
     await browser.close();
   }

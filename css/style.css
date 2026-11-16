@@ -1645,9 +1645,7 @@ body {
   box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.4);
 }
 
-/* ==========================================================================
-   PIX2 SYNTAX HIGHLIGHTED CODE VIEWER
-   ========================================================================== */
+/* Lightweight read-only PIX2 source viewer. Keep source as one text node. */
 .code-viewer-container {
   flex: 1;
   min-height: 0;

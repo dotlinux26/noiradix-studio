@@ -31,6 +31,37 @@
 
     <section class="release-list" aria-label="Release history">
       <details class="release-entry" open>
+  <summary><span class="release-version">v2.2.3</span><span class="release-source">docs/releases/v2.2.3.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.2.3
+
+## Highlights
+
+- Replaced the Studio read-only PIX2 syntax-highlighted view with a plain-text source preview to avoid constructing hundreds of thousands of DOM elements for large projects.
+- Long source previews (over 24,000 characters) start collapsed and render their text only when expanded; collapsing releases the rendered text. Explicit Edit still loads the full canonical PIX2 source, and copy actions remain available independently.
+- Added browser coverage for the large-source preview, expansion/collapse lifecycle, and full-source editing.
+
+## Compatibility
+
+- Studio and PixelArt report version 2.2.3. PIX2 remains at version 1.1, with PIX2 1.0 read compatibility retained.
+- This release does not change the PIX2 grammar or serialized artwork format.
+
+## Verification
+
+- `node tests/check-readme-test-count.cjs` — passed (22 Node regression suites).
+- `node tests/run-all.cjs --syntax` — passed (36 production JavaScript files).
+- `node tests/run-all.cjs` — passed (22 Node regression suites).
+- `node tests/benchmark-performance.js` — passed all 8 gates; highest observed p95 was 5.234 ms on the documented fixtures in this run.
+- `node tests/run-all.cjs --browser` — passed all 8 browser suites in Chrome 157, including both app entry points, reload recovery, 512×512 DPR 2, large-source collapse/expand, and full-source Edit.
+- `node scripts/build-changelog-page.cjs --check` — passed (15 versioned release notes).
+- `git diff --check` — passed.
+
+## Limits
+
+- This change reduces DOM and layout work in the Studio read-only code view. It does not change per-project undo history storage or guarantee a fixed total browser memory footprint.
+- Expanding a long preview still creates a text node containing the full source; Edit mode also loads the full source into the textarea on demand.</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.2.3.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
   <summary><span class="release-version">v2.2.2</span><span class="release-source">docs/releases/v2.2.2.md</span></summary>
   <pre># NOIRADIX Studio &amp; PixelArt v2.2.2
 

@@ -1,7 +1,9 @@
 /** Studio source controller. App supplies document and view ports. */
 const StudioSource = (() => {
   const AI = typeof Pix2AiPrompt !== 'undefined' ? Pix2AiPrompt : null;
-  function create({ state, dom, view, escapeHtml, refreshAll, showToast, triggerEventAutosave }) {
+  const READ_ONLY_COLLAPSE_CHARS = 24000;
+
+  function create({ state, dom, view, refreshAll, showToast, triggerEventAutosave }) {
     let framePatchTargetCellId = null;
 
     function getActiveFrame() {
@@ -203,104 +205,38 @@ const StudioSource = (() => {
       }
     }
 
-    function splitLineComment(rawLine) {
-      if (!rawLine) return { code: '', comment: '' };
-      const code = PIX2.stripComment(rawLine);
-      if (!code) return rawLine.trim() ? { code: '', comment: rawLine } : { code: rawLine, comment: '' };
-      const leading = rawLine.length - rawLine.trimStart().length;
-      const end = leading + code.length;
-      return { code: rawLine.slice(0, end), comment: rawLine.slice(end) };
-    }
+    function renderReadOnlyCode() {
+      if (!dom.codeViewer || !state.doc) return;
+      const serialized = PIX2.serialize(state.doc);
+      dom.codeViewer.replaceChildren();
+      dom.codeViewer.classList.remove('code-viewer-collapsed');
 
-    function highlightPix2Code(code) {
-      if (!code) return '';
-      const lines = code.split('\n');
-      return lines
-        .map((line, idx) => {
-          const { code: codePart, comment: commentPart } = splitLineComment(line);
-
-          let html = escapeHtml(codePart);
-
-          // 1. Strings (mask to avoid token collision)
-          const strMap = [];
-          html = html.replace(/(&quot;.*?&quot;|"[^"]*"|'[^']*')/g, (m) => {
-            strMap.push('<span class="syn-str">' + m + '</span>');
-            return '___PIXSTR_' + (strMap.length - 1) + '___';
-          });
-
-          // 2. Hex colors with color preview dot swatch (mask before number detection to prevent numeric hex like #080610 corruption)
-          const colMap = [];
-          html = html.replace(/(#[0-9a-fA-F]{3,8})\b/g, (m) => {
-            colMap.push(
-              '<span class="syn-color"><span class="syn-swatch" style="background-color:' +
-                m +
-                '"></span>' +
-                m +
-                '</span>',
-            );
-            return '___PIXCOL_' + (colMap.length - 1) + '___';
-          });
-
-          // 3. Section directives (@meta, @grid, @palette, @cell, etc.)
-          html = html.replace(/(@[a-zA-Z0-9_]+)/g, '<span class="syn-dir">$1</span>');
-
-          // 4. Keys followed by colon (key:) - mask to protect key names and colon
-          const keyMap = [];
-          html = html.replace(/\b([a-zA-Z0-9_]+):/g, (_, k) => {
-            keyMap.push('<span class="syn-key">' + k + ':</span>');
-            return '___PIXKEY_' + (keyMap.length - 1) + '___';
-          });
-
-          // 5. Drawing commands & vector macros
-          html = html.replace(
-            /\b(sym_dot|line|rect|fill|pixel|dot)\b/g,
-            '<span class="syn-cmd">$1</span>',
-          );
-          html = html.replace(/(^|\s)(p)(?=\s|$)/g, '$1<span class="syn-cmd">$2</span>');
-
-          // 6. Keywords
-          html = html.replace(
-            /\b(true|false|loop|once|outline|none|down|up|right|left|down_right|down_left|up_right|up_left)\b/g,
-            '<span class="syn-kw">$1</span>',
-          );
-
-          // 7. Numbers, dimensions, coordinates (outside tags & tokens)
-          html = html.replace(
-            /\b(\d+(?:,\d+|\.\d+|x\d+)?)\b(?![^<]*>)/g,
-            '<span class="syn-num">$1</span>',
-          );
-
-          // 8. Restore tokens safely in reverse order
-          html = html.replace(/___PIXKEY_(\d+)___/g, (_, i) => keyMap[i]);
-          html = html.replace(/___PIXCOL_(\d+)___/g, (_, i) => colMap[i]);
-          html = html.replace(/___PIXSTR_(\d+)___/g, (_, i) => strMap[i]);
-
-          if (commentPart) {
-            html += '<span class="syn-cmt">' + escapeHtml(commentPart) + '</span>';
-          }
-
-          const lineNum = '<span class="line-num">' + (idx + 1) + '</span>';
-          return (
-            '<div class="code-line">' +
-            lineNum +
-            '<span class="line-content">' +
-            (html || ' ') +
-            '</span></div>'
-          );
-        })
-        .join('');
+      if (serialized.length > READ_ONLY_COLLAPSE_CHARS) {
+        dom.codeViewer.classList.add('code-viewer-collapsed');
+        const details = document.createElement('details');
+        details.className = 'code-source-details';
+        const summary = document.createElement('summary');
+        const lineCount = serialized.split('\n').length;
+        summary.textContent = `Show PIX2 source (${lineCount.toLocaleString()} lines, ${Math.ceil(serialized.length / 1024)} KB)`;
+        const pre = document.createElement('pre');
+        details.append(summary, pre);
+        details.addEventListener('toggle', () => {
+          pre.textContent = details.open ? PIX2.serialize(state.doc) : '';
+        });
+        dom.codeViewer.appendChild(details);
+      } else {
+        const pre = document.createElement('pre');
+        pre.textContent = serialized;
+        dom.codeViewer.appendChild(pre);
+      }
     }
 
     function renderCodeEditor() {
       if (!state.doc) return;
 
       if (!view.isCodeEditingUnlocked) {
-        const serialized = PIX2.serialize(state.doc);
-        if (dom.codeTextarea) dom.codeTextarea.value = serialized;
-        if (dom.codeViewer) {
-          dom.codeViewer.innerHTML = highlightPix2Code(serialized);
-          dom.codeViewer.classList.remove('hidden');
-        }
+        renderReadOnlyCode();
+        if (dom.codeViewer) dom.codeViewer.classList.remove('hidden');
         if (dom.codeTextarea) {
           dom.codeTextarea.classList.add('hidden');
           dom.codeTextarea.readOnly = true;
@@ -331,9 +267,7 @@ const StudioSource = (() => {
       }
 
       if (dom.codeViewer && state.doc) {
-        const serialized = PIX2.serialize(state.doc);
-        if (dom.codeTextarea) dom.codeTextarea.value = serialized;
-        dom.codeViewer.innerHTML = highlightPix2Code(serialized);
+        renderReadOnlyCode();
         dom.codeViewer.classList.remove('hidden');
       }
 
@@ -405,6 +339,7 @@ const StudioSource = (() => {
         if (!confirmed) return;
 
         view.isCodeEditingUnlocked = true;
+        dom.codeTextarea.value = PIX2.serialize(state.doc);
         if (dom.codeViewer) dom.codeViewer.classList.add('hidden');
         if (dom.codeTextarea) {
           dom.codeTextarea.classList.remove('hidden');

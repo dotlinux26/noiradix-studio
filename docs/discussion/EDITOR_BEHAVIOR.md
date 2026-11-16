@@ -30,6 +30,8 @@ The right-side Preview has −, +, and Fit controls, plus mouse-wheel zoom. When
 
 The floating Animation Studio defaults to Fit so the full frame remains visible, including for large sprites. Fit is recalculated when the preview area changes size; users can still choose a fixed zoom level. Each direction-button press selects the next clip with valid frames tagged for that `direction`, following file order. Changing direction starts with that direction's first clip. If no tagged clip exists for a direction, playback uses the legacy row fallback and never silently plays a clip tagged for another direction.
 
+The Studio PIX2 read-only viewer uses plain text instead of building syntax-colored DOM nodes or inline color swatches. Source longer than 24,000 characters starts collapsed; expanding it creates one text node, and collapsing it releases that node. Direct Edit still loads the complete source into the textarea on demand. Copy actions remain independent of the read-only preview.
+
 ## Code boundaries
 
 | Module | Responsibility |
