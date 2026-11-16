@@ -2221,11 +2221,21 @@
   function renderFreeSelection() {
     clearPreviewCanvas();
     if (!freeGesture || !dom.ctxPreview) return;
-    dom.ctxPreview.fillStyle = 'rgba(99,102,241,0.4)';
+    const ctx = dom.ctxPreview;
+    const zoom = state.zoom;
+    ctx.save();
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.45)';
     for (const key of freeGesture.mask) {
       const [x, y] = key.split(',').map(Number);
-      dom.ctxPreview.fillRect(x * state.zoom, y * state.zoom, state.zoom, state.zoom);
+      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
     }
+    ctx.strokeStyle = '#a5b4fc';
+    ctx.lineWidth = 1;
+    for (const key of freeGesture.mask) {
+      const [x, y] = key.split(',').map(Number);
+      ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, zoom - 1, zoom - 1);
+    }
+    ctx.restore();
   }
   function finishFreeSelection(result) {
     if (!result) return;
@@ -2638,7 +2648,9 @@
   function onPointerUp(e) {
     if (freeDrawing && freeGesture) {
       freeDrawing = false;
-      finishFreeSelection(freeGesture.release(e.ctrlKey || e.metaKey));
+      const finished = freeGesture.release(e.ctrlKey || e.metaKey);
+      if (finished) finishFreeSelection(finished);
+      else renderFreeSelection();
       return;
     }
     state.cachedCanvasRect = null;
@@ -4955,7 +4967,7 @@
   // ===========================================================================
   function bindEvents() {
     const freeButton = document.querySelector('[data-tool="free-select"]');
-    if (freeButton) { freeButton.removeAttribute('disabled'); freeButton.title = 'Free Selection — paint pixels; hold Ctrl to add strokes'; }
+    if (freeButton) { freeButton.removeAttribute('disabled'); freeButton.title = 'Freehand Selection (Brush) — Click or drag to select pixels; hold Ctrl/Cmd to add strokes'; }
     window.addEventListener('keyup', event => {
       if ((event.key === 'Control' || event.key === 'Meta') && freeGesture) finishFreeSelection(freeGesture.releaseModifier());
     });

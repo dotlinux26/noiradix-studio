@@ -47,6 +47,24 @@
     return { doc, cell, bounds: { ...bounds }, items };
   }
 
+  function addStroke(mask, from, to, size) {
+    if (!from || !to) return mask;
+    let x = from.x, y = from.y;
+    const dx = Math.abs(to.x - x), dy = Math.abs(to.y - y);
+    const sx = x < to.x ? 1 : -1, sy = y < to.y ? 1 : -1;
+    let error = dx - dy;
+    while (true) {
+      if (x >= 0 && y >= 0 && x < size.w && y < size.h) {
+        mask.add(`${x},${y}`);
+      }
+      if (x === to.x && y === to.y) break;
+      const twice = 2 * error;
+      if (twice > -dy) { error -= dy; x += sx; }
+      if (twice < dx) { error += dx; y += sy; }
+    }
+    return mask;
+  }
+
   function addPaintedStroke(mask, sources, from, to, size) {
     let x = from.x, y = from.y;
     const dx = Math.abs(to.x - x), dy = Math.abs(to.y - y);
@@ -112,11 +130,11 @@
         if (!waiting || !additive) mask.clear();
         waiting = Boolean(additive);
         previous = point;
-        addPaintedStroke(mask, sources, point, point, size);
+        addStroke(mask, point, point, size);
       },
       move(point) {
         if (!previous) return;
-        addPaintedStroke(mask, sources, previous, point, size);
+        addStroke(mask, previous, point, size);
         previous = point;
       },
       release(additive) {
@@ -208,5 +226,5 @@
       item.pixels = pixels;
     }
   }
-  return { targets, begin, cancel, commit, preview, scale, rotate, flip, snapshot, recolor, remove, addPaintedStroke, maskBounds, paintedBounds, alignmentOffset, freeGesture, drawMask };
+  return { targets, begin, cancel, commit, preview, scale, rotate, flip, snapshot, recolor, remove, addStroke, addPaintedStroke, maskBounds, paintedBounds, alignmentOffset, freeGesture, drawMask };
 });

@@ -197,3 +197,14 @@ Cả hai runner browser exit 0 trên working tree của lượt này. Các kết
 - Browser release rerun and remote publication status are recorded below when observed.
 - `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157, including dense 512×512 DPR 2 editor fixtures, the new Grid roundtrip suite and both-app selection/conversion regressions.
 - `git diff --check`: PASS. Matching app versions: 2.2.5; PIX2 format remains 1.1. Release is published by the existing tag workflow after its independent CI gates.
+
+## v2.2.6 release verification — 2026-11-17
+
+- Scope: Freehand selection brush, real-time highlighted pixel visual feedback on click and drag, multi-stroke Ctrl/Cmd accumulation, and mask operation support. See `docs/releases/v2.2.6.md`.
+- `node tests/check-readme-test-count.cjs`: PASS, 24 suites.
+- `node tests/run-all.cjs --syntax`: PASS, 37 runtime files.
+- `node tests/run-all.cjs`: PASS, 24 regression suites.
+- `node tests/benchmark-performance.js`: PASS all 8 gates (< 16ms interactive budgets).
+- Generated changelog: 18 versioned notes; generated-source check passes.
+- `node tests/run-all.cjs --browser`: PASS all 10 discovered suites in Chrome 157.
+- `git diff --check`: PASS. Matching app versions: 2.2.6; PIX2 format remains 1.1.

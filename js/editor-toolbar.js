@@ -31,7 +31,7 @@ const EditorToolbar = (() => {
       <button class="pa-tool-btn" data-tool="select" title="Selection Marquee (V or M) — Drag to move selection">
         <i class="fa-solid fa-crop-simple"></i>
       </button>
-      <button class="pa-tool-btn" data-tool="free-select" title="Painted-pixel selection — Drag to select; hold Ctrl/Cmd to add strokes">
+      <button class="pa-tool-btn" data-tool="free-select" title="Freehand Selection (Brush) — Click or drag to select pixels; hold Ctrl/Cmd to add strokes">
         <i class="fa-solid fa-draw-polygon"></i>
       </button>
       <button class="pa-tool-btn" data-tool="select-all-layers" title="Select across visible, unlocked layers — Preserve each region source">

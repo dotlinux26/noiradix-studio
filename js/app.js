@@ -3215,6 +3215,26 @@
     renderCellOverlay();
   }
 
+  function renderFreeSelectionOverlay() {
+    clearOverlay();
+    if (!dom.cellOverlay || !freeGesture) return;
+    const ctx = dom.cellOverlay.getContext('2d');
+    const zoom = state.cellZoom;
+    ctx.save();
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.45)';
+    for (const key of freeGesture.mask) {
+      const [x, y] = key.split(',').map(Number);
+      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+    }
+    ctx.strokeStyle = '#a5b4fc';
+    ctx.lineWidth = 1;
+    for (const key of freeGesture.mask) {
+      const [x, y] = key.split(',').map(Number);
+      ctx.strokeRect(x * zoom + 0.5, y * zoom + 0.5, zoom - 1, zoom - 1);
+    }
+    ctx.restore();
+  }
+
   // PIX2 1.1 keeps source pixels in the selected region, while cell.pixels is
   // a composited cache. Keep every selection transaction bound to that source
   // node so changing a tree row mid-transform can never redirect its write.
@@ -3461,6 +3481,7 @@
       }
       freeGesture.start(coords, e.ctrlKey || e.metaKey);
       isFreeSelecting = true;
+      renderFreeSelectionOverlay();
       return;
     }
     if (tool === 'region-select') {
@@ -3578,13 +3599,7 @@
     let coords = getPixelCoords(e);
     if (isFreeSelecting && freeGesture && coords) {
       freeGesture.move(coords);
-      clearOverlay();
-      const ctx = dom.cellOverlay.getContext('2d');
-      ctx.fillStyle = 'rgba(99,102,241,0.4)';
-      for (const key of freeGesture.mask) {
-        const [x, y] = key.split(',').map(Number);
-        ctx.fillRect(x * state.cellZoom, y * state.cellZoom, state.cellZoom, state.cellZoom);
-      }
+      renderFreeSelectionOverlay();
       return;
     }
     updateStatusBarCoords(coords ? coords.x : null, coords ? coords.y : null);
@@ -3621,15 +3636,17 @@
       } else if (hit === 'body') {
         dom.cellOverlay.style.cursor = 'move';
       } else {
-        dom.cellOverlay.style.cursor = (state.currentTool === 'picker') ? 'crosshair' : 'default';
+        dom.cellOverlay.style.cursor = (state.currentTool === 'picker' || state.currentTool === 'free-select') ? 'crosshair' : 'default';
       }
     } else if (coords && state.selection && !isPointerDown) {
       if (coords.x >= state.selection.x && coords.x < state.selection.x + state.selection.w &&
           coords.y >= state.selection.y && coords.y < state.selection.y + state.selection.h) {
         dom.cellOverlay.style.cursor = 'move';
       } else {
-        dom.cellOverlay.style.cursor = (state.currentTool === 'picker') ? 'crosshair' : 'default';
+        dom.cellOverlay.style.cursor = (state.currentTool === 'picker' || state.currentTool === 'free-select') ? 'crosshair' : 'default';
       }
+    } else if (state.currentTool === 'free-select') {
+      dom.cellOverlay.style.cursor = 'crosshair';
     }
 
     if (coords && state.doc && (state.currentTool === 'pen' || state.currentTool === 'eraser')) coords = getBrushPoint(e);
@@ -3709,7 +3726,9 @@
   function handleCellMouseUp(e) {
     if (isFreeSelecting && freeGesture) {
       isFreeSelecting = false;
-      finishFreeSelection(freeGesture.release(e.ctrlKey || e.metaKey));
+      const finished = freeGesture.release(e.ctrlKey || e.metaKey);
+      if (finished) finishFreeSelection(finished);
+      else renderFreeSelectionOverlay();
       return;
     }
     if (state.currentTool === 'region-select' && e.button === 0) {
@@ -5365,7 +5384,7 @@
     const freeButton = document.querySelector('[data-tool="free-select"]');
     if (freeButton) {
       freeButton.removeAttribute('disabled');
-      freeButton.title = 'Free Selection — paint pixels; hold Ctrl to add strokes';
+      freeButton.title = 'Freehand Selection (Brush) — Click or drag to select pixels; hold Ctrl/Cmd to add strokes';
     }
     window.addEventListener('keyup', event => {
       if ((event.key === 'Control' || event.key === 'Meta') && freeGesture) finishFreeSelection(freeGesture.releaseModifier());

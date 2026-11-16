@@ -31,13 +31,33 @@
 
     <section class="release-list" aria-label="Release history">
       <details class="release-entry" open>
+  <summary><span class="release-version">v2.2.6</span><span class="release-source">docs/releases/v2.2.6.md</span></summary>
+  <pre># NOIRADIX Studio &amp; PixelArt v2.2.6
+
+## Editing &amp; Tooling
+
+- Transform the free-selection tool into a full-fidelity Freehand Selection Brush across NOIRADIX Studio and PixelArt.
+- Instant real-time visual feedback: On pointerdown (single pixel click) and pointermove (brush strokes), every selected pixel lights up immediately with a bright indigo/purple fill (`rgba(99, 102, 241, 0.45)`) and a crisp `#a5b4fc` inner border on the canvas overlay.
+- Free selection is no longer restricted to pre-painted pixels; artists can freely brush or click any coordinates within the canvas bounds.
+- Multi-stroke accumulation: Holding `Ctrl`/`Cmd` keeps previous selection strokes illuminated and accumulates multiple clicks and strokes into one unified selection mask upon releasing the modifier.
+- Full selection operation support: Move, Cut (`Ctrl+X`), Copy (`Ctrl+C`), Delete (`Del`), and Recolor accurately preserve the freehand selection mask.
+- Cursor update: Hovering with the freehand selection tool displays a crosshair cursor and brush outline. Pressing `Escape` cleanly cancels pending selection gestures.
+
+## Verification
+
+- 24 Node regression suites, 37 runtime JavaScript syntax checks, and 10 browser suites passed.
+- Browser test cases verify real-time hover, click, drag stroke accumulation, and mask deletion in Chrome 157.
+- All performance benchmarks pass interactive budgets (&lt; 16ms).</pre>
+  <a class="source-link" href="https://github.com/dotlinux26/noiradix-studio/blob/main/docs/releases/v2.2.6.md" target="_blank" rel="noopener noreferrer">Open this release note on GitHub ↗</a>
+</details>
+      <details class="release-entry">
   <summary><span class="release-version">v2.2.5</span><span class="release-source">docs/releases/v2.2.5.md</span></summary>
   <pre># NOIRADIX Studio &amp; PixelArt v2.2.5
 
 ## Editing
 
 - Add a separate selection tool across visible, unlocked source regions in both editors. Move, scale, rotate, flip, recolor and delete retain each pixel&#39;s region ownership. Isolation restricts the eligible subtree. Alignment applies one shared offset to the selected painted union.
-- Add painted-pixel free selection. Drag over existing nontransparent pixels; hold Ctrl/Cmd across strokes and release it to finalize. Empty pixels are excluded, and the resulting mask supports ordinary selection operations.
+- Add freehand selection brush. Click or drag across pixels with real-time highlighted overlay feedback; hold Ctrl/Cmd to accumulate strokes and release to finalize. The resulting mask supports move, cut, copy, recolor, and delete operations.
 - Preserve source region IDs when pasting back into the same project/frame after Undo/Redo. Layered paste into another PIX2 1.1 frame or project copies the hierarchy with unique IDs. Flat raster clipboard behavior remains available.
 - Add explicit document conversion between PIX2 1.0 and 1.1. Flattening warns before discarding layers, groups, regions and their structural metadata. Undo/Redo is supported.
 

@@ -29,7 +29,7 @@ PIX2 version conversion belongs to the document. Flatten warns before discarding
 
 ## SELECT-01: multi-layer and free selection
 
-- Apps: Studio and PixelArt. Expected: preserve source regions; free selection includes painted pixels only and Ctrl adds strokes.
+- Apps: Studio and PixelArt. Expected: preserve source regions; free selection operates like a drawing brush with real-time highlighted pixel feedback and Ctrl adds strokes.
 - Alignment decision: when all layers are selected, calculate one bounding box for the union and apply one shared translation to all selected source regions. Never align each region independently.
 - Grid Overview Center All uses one shared offset per frame across its editable, visible Regions; this preserves their relative positions. Each frame is still centered separately within its own canvas. A Node regression covers two separated regions.
 - Status: incomplete. Studio and PixelArt free-selection create a painted-pixel mask through mouse gestures and Ctrl accumulation; raster extraction, cut/delete/fill honor the mask. Pending gestures cancel on Escape, blur and document switch. Browser regressions cover selecting, deleting and undoing a painted pixel in both apps and Ctrl accumulation in Studio. Both multi-layer adapters remain unwired, and the multi-layer button is still disabled.

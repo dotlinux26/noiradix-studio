@@ -58,6 +58,11 @@ assert.equal(mask.has('3,1'), false, 'fully transparent pixels do not enter the 
 const disjointMask = selection.addPaintedStroke(new Set(), sources, { x: 1, y: 1 }, { x: 1, y: 1 }, size);
 selection.addPaintedStroke(disjointMask, sources, { x: 2, y: 1 }, { x: 2, y: 1 }, size);
 assert.deepEqual([...disjointMask], ['1,1', '2,1'], 'separate strokes accumulate in one selection mask');
+const freeBrush = selection.freeGesture(sources, size);
+freeBrush.start({ x: 0, y: 0 }, false);
+freeBrush.move({ x: 2, y: 0 });
+const strokeResult = freeBrush.release(false);
+assert.deepEqual([...strokeResult.mask], ['0,0', '1,0', '2,0'], 'free gesture selects continuous brush stroke coordinates');
 const session = selection.begin(doc, cell, sources, bounds, new Set(['1,1']));
 assert.equal(transparent.pixels['1,1'], '#12345600', 'a free-selection mask does not lift transparent source pixels');
 const originalPixels = selection.snapshot(session);
