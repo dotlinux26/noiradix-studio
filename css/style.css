@@ -1664,84 +1664,31 @@ body {
   scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 }
 
-.code-line {
-  display: flex;
-  min-height: 20px;
-  padding: 0 16px 0 0;
+.code-viewer-container > pre {
+  margin: 0;
+  padding: 0 16px;
   min-width: max-content;
-  width: fit-content;
-}
-
-.code-line:hover {
-  background-color: rgba(255, 255, 255, 0.04);
-}
-
-.line-num {
-  width: 44px;
-  flex-shrink: 0;
-  text-align: right;
-  padding-right: 14px;
-  color: var(--text-muted, #64748b);
-  user-select: none;
-  font-size: 11px;
-  opacity: 0.6;
-}
-
-.line-content {
-  flex: 1;
   color: var(--code-text, #e2e8f0);
-  white-space: pre;
-  min-width: max-content;
-  flex-shrink: 0;
 }
 
-/* Syntax Color Tokens */
-.syn-dir { color: #c084fc; font-weight: 600; } /* Purple @directive */
-.syn-key { color: #38bdf8; font-weight: 500; } /* Light Blue key: */
-.syn-cmd { color: #f472b6; font-weight: 600; } /* Pink/Magenta drawing commands */
-.syn-str { color: #4ade80; } /* Green strings */
-.syn-kw  { color: #fb923c; font-weight: 500; } /* Orange keywords */
-.syn-num { color: #facc15; } /* Yellow numbers & coordinates */
-.syn-cmt { color: #64748b; font-style: italic; } /* Slate gray comments */
-.syn-color {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #a7f3d0;
-  font-family: var(--font-mono, monospace);
-}
-.syn-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  vertical-align: middle;
-  flex-shrink: 0;
+.code-source-details {
+  min-width: 0;
 }
 
-/* Light Theme Syntax Adjustments */
+.code-source-details > summary {
+  width: fit-content;
+  margin: 0 16px;
+  color: var(--accent-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
 [data-theme="light"] .code-viewer-container {
   background-color: #f8fafc;
 }
-[data-theme="light"] .code-line:hover {
-  background-color: rgba(0, 0, 0, 0.03);
-}
-[data-theme="light"] .line-num {
-  color: #94a3b8;
-}
-[data-theme="light"] .line-content {
+[data-theme="light"] .code-viewer-container > pre {
   color: #1e293b;
 }
-[data-theme="light"] .syn-dir { color: #7c3aed; font-weight: 600; }
-[data-theme="light"] .syn-key { color: #0284c7; font-weight: 500; }
-[data-theme="light"] .syn-cmd { color: #db2777; font-weight: 600; }
-[data-theme="light"] .syn-str { color: #16a34a; }
-[data-theme="light"] .syn-kw  { color: #ea580c; font-weight: 500; }
-[data-theme="light"] .syn-num { color: #b45309; }
-[data-theme="light"] .syn-cmt { color: #94a3b8; font-style: italic; }
-[data-theme="light"] .syn-color { color: #047857; }
-[data-theme="light"] .syn-swatch { border: 1px solid rgba(0, 0, 0, 0.3); }
 
 /* Custom Scrollbars for Code Pane & AI Guide */
 .code-viewer-container::-webkit-scrollbar,
@@ -3850,8 +3797,10 @@ body.dark-theme .export-preview-viewport {
 
 .about-directory-badges img {
   display: block;
-  max-width: min(200px, 100%);
-  height: auto;
+  max-height: 36px;
+  width: auto;
+  max-width: min(180px, 100%);
+  object-fit: contain;
 }
 
 .social-pill-btn {

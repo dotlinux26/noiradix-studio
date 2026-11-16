@@ -7,15 +7,15 @@ const { chromium } = require('playwright');
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto('file://' + process.cwd().replace(/\\/g, '/') + '/changelog.html');
     assert.equal(await page.title(), 'NOIRADIX // CHANGELOG');
-    assert.equal(await page.locator('.release-entry').count(), 15, 'All versioned release notes are included');
-    assert.equal(await page.locator('.release-entry').first().locator('.release-version').textContent(), 'v2.2.3',
+    assert.equal(await page.locator('.release-entry').count(), 16, 'All versioned release notes are included');
+    assert.equal(await page.locator('.release-entry').first().locator('.release-version').textContent(), 'v2.2.4',
       'The latest stable release appears first');
     assert.equal(await page.locator('.release-entry').first().getAttribute('open'), '');
     assert.equal(await page.locator('.release-entry').nth(1).getAttribute('open'), null,
       'Older releases start collapsed to keep the archive scannable');
     const latestText = await page.locator('.release-entry').first().locator('pre').textContent();
     assert.match(latestText, /## Highlights/, 'Release notes are shown as readable raw Markdown text without a parser');
-    assert.match(latestText, /plain-text source preview/, 'Generated page contains current release content');
+    assert.match(latestText, /lightweight Studio PIX2 source preview styling/, 'Generated page contains current release content');
 
     const bugLink = page.getByRole('link', { name: 'REPORT A BUG ↗' });
     assert.equal(await bugLink.getAttribute('href'),
