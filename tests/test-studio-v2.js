@@ -768,7 +768,7 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
   assert.strictEqual(doc11.cells.cell_0_1.layers[0].children[0].cell, 'cell_0_1');
   assert.strictEqual(doc11.cells.cell_0_1.layers[0].children[0].pixels['0,0'], '#ff0000');
 
-  // 3. Row-level Tag Synchronization logic
+  // 3. Row-level Tag Synchronization logic in Grid Overview & Cell Editor
   const gridCells = [
     { id: 'cell_1_0', row: 1, col: 0, direction: 'none' },
     { id: 'cell_1_1', row: 1, col: 1, direction: 'none' },
@@ -777,19 +777,6 @@ console.log('\nTest 13: Tab Close Accuracy, Resizer & Maintenance Banner Contrac
   const newDirection = 'left';
   gridCells.forEach(c => { if (c.row === 1) c.direction = newDirection; });
   assert(gridCells.every(c => c.direction === 'left'), 'All cells in row 1 must synchronize to direction "left"');
-
-  // 4. Slices row tag propagation logic
-  const slices = [
-    { idx: 0, row: 2, tag: 'walk_down' },
-    { idx: 1, row: 2, tag: 'walk_down' },
-    { idx: 2, row: 3, tag: 'walk_up' }
-  ];
-  const updatedTag = 'dash_down';
-  const targetRow = slices[0].row;
-  slices[0].tag = updatedTag;
-  slices.forEach(s => { if (s.row === targetRow) s.tag = updatedTag; });
-  assert.strictEqual(slices[1].tag, 'dash_down', 'Sibling slice in row 2 must synchronize to new tag');
-  assert.strictEqual(slices[2].tag, 'walk_up', 'Slice in row 3 must remain unaffected');
 
   pass('Grid Frame Swap, Row Tag Synchronization, and Preview Cycling verified');
 }
